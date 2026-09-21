@@ -57,6 +57,10 @@ The user's plan is free hosting with a possible delegated host on a friend's
 domain. Choose the actual stable `rpId`, app identifiers, association files and
 test device before creating real passkeys. There is no temporary domain default.
 
+The [passkey setup guide](PASSKEY_SETUP.md) provides validated host configuration
+and local generation of Android/iOS association files once real signing details
+are available. This preparation does not enable authentication.
+
 ## Optional browser layout check
 
 Browser dependencies are development-only. Enable browser rendering explicitly
