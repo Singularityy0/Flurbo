@@ -1,6 +1,8 @@
 # Fixed-point units and conservative quote rounding
 
-This phase implements the unit/rounding boundary, not the LMSR cost evaluator.
+The unit/rounding boundary is now accompanied by a bounded, small-state LMSR
+cost evaluator in `LmsrCost.sol`. See [the error derivation](COST_ERROR_BOUND.md)
+for its domain, pinned dependency, analytical allowance and verification.
 `contracts/src/QuoteMath.sol` is an internal library. Its inputs must eventually
 come from verified bounds computed by the pool, never caller-supplied prices.
 No deployment or executable market is provided by this scaffold.
@@ -50,14 +52,15 @@ are later pool-layer checks.
 These guarantees are conditional on valid cost bounds. Validating interval order
 cannot prove that an interval contains the actual LMSR cost. The production cost
 evaluator must supply that proof and account for every intermediate rounding step.
-For a proven absolute cost error `E`, an approximation can be enclosed by
-`[max(0, estimate-E), estimate+E]`, with checked upper arithmetic. The value of `E`
-has not been derived or chosen in this phase. No arbitrary epsilon is certified.
+For an absolute cost error `E`, an approximation can be enclosed by
+`[max(0, estimate-E), estimate+E]`, with checked upper arithmetic.
+`LmsrCost` derives E over its declared enumerated domain; this does not establish
+the error budget of the future factored evaluator.
 
 ## Numerical release gates
 
-1. Pin an exp/log implementation and source revision. [PRBMath](https://github.com/PaulRBerg/prb-math)
-   provides 18-decimal exp/log primitives and is a candidate, not yet a dependency.
+1. PRBMath 4.1.0 is pinned with its npm integrity hash and source checks. Any update
+   requires revisiting [the error derivation](COST_ERROR_BOUND.md).
 2. Specify bounded `b`, quantities, liability range, graph width and state count
    for the cost evaluator. The Rust oracle's domain is a testing baseline, not
    proof that the same limits are safe in fixed-point Solidity.
@@ -74,10 +77,12 @@ milestones remain required as recorded in the README and integration checklist.
 
 ## Local validation
 
-Foundry configuration pins Solidity 0.8.28 and the Cancun EVM target. Tests need
-no Solidity package dependencies and write build artifacts under ignored `target/`.
+Foundry configuration pins Solidity 0.8.28 and the Cancun EVM target. Install the
+locked PRBMath dependency first; build artifacts remain under ignored `target/`.
 
 ```sh
+npm ci --prefix contracts --ignore-scripts
+python scripts/verify_prb_constants.py
 forge test
 forge fmt --check
 python scripts/quote_bounds_fixtures.py
