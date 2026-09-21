@@ -8,7 +8,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/network.test.ts",
+    "test": "node --experimental-strip-types --test src/network.test.ts scripts/passkey-config.test.cjs",
+    "passkeys:association": "node scripts/generate-passkey-association.cjs",
     "export:native": "expo export --platform all",
     "prebuild": "expo prebuild --no-install"
   },
