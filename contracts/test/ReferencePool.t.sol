@@ -146,7 +146,9 @@ contract ReferencePoolTest is PoolTestBase {
         uint8 decimals_ = precisions[decimalSeed % 3];
         uint128 unit = uint128(10 ** uint256(decimals_));
         MockCollateral otherToken = new MockCollateral(decimals_);
-        ReferencePool other = new ReferencePool(address(otherToken), events_, 100 * unit, uint64(block.timestamp + 1));
+        ReferencePool other = new ReferencePool(
+            address(otherToken), events_, 100 * unit, uint64(block.timestamp + 1), address(this), RULES_HASH
+        );
         otherToken.mint(address(this), 1000 * unit);
         otherToken.approve(address(other), type(uint256).max);
         other.fund();
@@ -166,7 +168,7 @@ contract ReferencePoolTest is PoolTestBase {
     }
 
     function badConfiguration(address t, uint8 events_, uint128 b, uint64 close, bytes4 expected) private {
-        try new ReferencePool(t, events_, b, close) {
+        try new ReferencePool(t, events_, b, close, address(this), RULES_HASH) {
             assert(false);
         } catch (bytes memory reason) {
             assert(reason.length >= 4 && bytes4(reason) == expected);

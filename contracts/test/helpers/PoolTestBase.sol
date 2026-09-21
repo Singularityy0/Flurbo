@@ -7,18 +7,22 @@ import {MockCollateral} from "./MockCollateral.sol";
 interface PoolVm {
     function prank(address sender) external;
     function warp(uint256 timestamp) external;
+    function expectEmit(bool topic1, bool topic2, bool topic3, bool data, address emitter) external;
 }
 
 abstract contract PoolTestBase {
     PoolVm internal constant vm = PoolVm(address(uint160(uint256(keccak256("hevm cheat code")))));
     address internal constant ALICE = address(0xA11CE);
     address internal constant BOB = address(0xB0B);
+    bytes32 internal constant RULES_HASH = keccak256(
+        "Flurbo reference rules v1: event i is bit i; outcomes are test inputs supplied by the fixed resolver after close; binary only; final once; no cancellation."
+    );
     MockCollateral internal token;
     ReferencePool internal pool;
 
     function setUp() public {
         token = new MockCollateral(6);
-        pool = new ReferencePool(address(token), 2, 100e6, uint64(block.timestamp + 1 days));
+        pool = new ReferencePool(address(token), 2, 100e6, uint64(block.timestamp + 1 days), address(this), RULES_HASH);
         prepare(address(this));
         prepare(ALICE);
         prepare(BOB);
@@ -59,13 +63,21 @@ abstract contract PoolTestBase {
             assert(q[state] == expected);
             if (expected > maximum) maximum = expected;
         }
-        assert(pool.requiredCollateral() == maximum);
-        assert(token.balanceOf(address(pool)) >= maximum);
+        uint256 required = pool.resolved() ? q[pool.resolvedState()] : maximum;
+        assert(pool.requiredCollateral() == required);
+        assert(token.balanceOf(address(pool)) >= required);
     }
 
     function snapshot() internal view returns (bytes32 hash) {
         hash = keccak256(
-            abi.encode(pool.funded(), pool.liabilities(), token.balanceOf(address(pool)), token.totalSupply())
+            abi.encode(
+                pool.funded(),
+                pool.resolved(),
+                pool.resolvedState(),
+                pool.liabilities(),
+                token.balanceOf(address(pool)),
+                token.totalSupply()
+            )
         );
         address[3] memory traders = [ALICE, BOB, address(this)];
         for (uint256 i; i < traders.length; i++) {

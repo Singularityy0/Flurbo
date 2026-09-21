@@ -9,7 +9,7 @@ import {LmsrCost} from "./LmsrCost.sol";
 import {LmsrQuote} from "./LmsrQuote.sol";
 import {QuoteMath} from "./QuoteMath.sol";
 
-/// @notice Local-test reference pool. No settlement or redemption yet; do not fund with real assets.
+/// @notice Local-test reference pool with trusted resolution; do not fund with real assets.
 /// @dev One immutable, enumerated cluster. Claims are internal balances, not transferable tokens.
 contract ReferencePool is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -22,27 +22,43 @@ contract ReferencePool is ReentrancyGuard {
     error InsufficientHoldings();
     error UnsupportedTransfer();
     error UncoveredLiability();
+    error UnauthorizedResolver();
+    error NotClosed();
+    error AlreadyResolved();
+    error NotResolved();
+    error InvalidOutcome();
 
     IERC20 public immutable collateral;
     uint8 public immutable collateralDecimals;
     uint128 public immutable liquidity;
     uint128 public immutable requiredFunding;
     uint64 public immutable closesAt;
+    address public immutable resolver;
+    bytes32 public immutable settlementRulesHash;
     bool public funded;
+    bool public resolved;
+    uint8 public resolvedState;
     uint128[] private stateLiabilities;
     mapping(address => mapping(uint256 => uint128)) public holdings;
 
     event Funded(address indexed sponsor, uint128 amount);
     event Traded(address indexed trader, uint256 indexed mask, bool isBuy, uint128 quantity, uint128 collateralAmount);
+    event Resolved(uint8 indexed terminalState, bytes32 indexed rulesHash);
+    event Redeemed(address indexed holder, uint256 indexed mask, uint128 quantity, uint128 collateralAmount);
 
-    constructor(address token, uint8 events_, uint128 b, uint64 closeTime) {
-        if (token.code.length == 0 || events_ == 0 || events_ > 3 || closeTime <= block.timestamp) {
+    constructor(address token, uint8 events_, uint128 b, uint64 closeTime, address resolver_, bytes32 rulesHash) {
+        if (
+            token.code.length == 0 || events_ == 0 || events_ > 3 || closeTime <= block.timestamp
+                || resolver_ == address(0) || rulesHash == bytes32(0)
+        ) {
             revert InvalidConfiguration();
         }
         collateral = IERC20(token);
         collateralDecimals = IERC20Metadata(token).decimals();
         liquidity = b;
         closesAt = closeTime;
+        resolver = resolver_;
+        settlementRulesHash = rulesHash;
         uint256 n = uint256(1) << events_;
         stateLiabilities = new uint128[](n);
         QuoteMath.CostBounds memory initial = LmsrCost.bounds(new uint256[](n), QuoteMath.toWad(b, collateralDecimals));
@@ -64,6 +80,7 @@ contract ReferencePool is ReentrancyGuard {
     }
 
     function requiredCollateral() public view returns (uint128 required) {
+        if (resolved) return stateLiabilities[resolvedState];
         for (uint256 i; i < stateLiabilities.length; i++) {
             if (stateLiabilities[i] > required) required = stateLiabilities[i];
         }
@@ -114,13 +131,47 @@ contract ReferencePool is ReentrancyGuard {
         emit Traded(msg.sender, mask, false, quantity, received);
     }
 
+    /// @notice Finalize all base-event bits at once; the resolver is trusted to follow the committed rules.
+    /// @dev Recording the outcome does not move funds or hide a collateral shortfall.
+    function resolve(uint8 terminalState) external nonReentrant {
+        if (msg.sender != resolver) revert UnauthorizedResolver();
+        if (!funded) revert NotFunded();
+        if (resolved) revert AlreadyResolved();
+        if (block.timestamp < closesAt) revert NotClosed();
+        if (terminalState >= stateLiabilities.length) revert InvalidOutcome();
+        resolvedState = terminalState;
+        resolved = true;
+        emit Resolved(terminalState, settlementRulesHash);
+    }
+
+    /// @notice Burn owned units for their final payout. Losing units burn without a token transfer.
+    /// @dev Quantity may exceed the trading size limit, but cannot exceed this caller's holdings.
+    function redeem(uint256 mask, uint128 quantity) external nonReentrant returns (uint128 paid) {
+        if (!resolved) revert NotResolved();
+        uint256 n = stateLiabilities.length;
+        if (mask == 0 || mask >= (uint256(1) << n) - 1) revert LmsrQuote.InvalidMask();
+        if (quantity == 0) revert LmsrQuote.InvalidQuantity();
+        if (holdings[msg.sender][mask] < quantity) revert InsufficientHoldings();
+        requireCovered();
+        holdings[msg.sender][mask] -= quantity;
+        for (uint256 i; i < n; i++) {
+            if (mask & (uint256(1) << i) != 0) stateLiabilities[i] -= quantity;
+        }
+        if (mask & (uint256(1) << resolvedState) != 0) {
+            paid = quantity;
+            transferExact(msg.sender, paid, false);
+        }
+        requireCovered();
+        emit Redeemed(msg.sender, mask, quantity, paid);
+    }
+
     function market() private view returns (LmsrQuote.Market memory) {
         return LmsrQuote.Market(stateLiabilities, liquidity, collateralDecimals);
     }
 
     function requireOpen() private view {
         if (!funded) revert NotFunded();
-        if (block.timestamp >= closesAt) revert Closed();
+        if (resolved || block.timestamp >= closesAt) revert Closed();
     }
 
     function requireTrading(uint256 deadline) private view {
