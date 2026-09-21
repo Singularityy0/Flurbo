@@ -58,9 +58,10 @@ holdings updates and terminal-liability coverage checks. A quote is not a
 reservation. The pure library itself implements no wallet approval, settlement,
 token transfer, or withdrawal.
 
-The funded reference pool is tested with mock collateral; settlement and redemption
-remain the next slice. This is a small-state validation path; factored inference,
-conditional securities, Kuru anchoring and partner milestones remain required.
+The funded reference pool is tested with mock collateral, including local
+[resolution and redemption](SETTLEMENT.md). This is a small-state validation path;
+authenticated CRE resolution, factored inference, conditional securities, Kuru
+anchoring and partner milestones remain required.
 
 ## Checks
 

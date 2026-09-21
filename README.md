@@ -71,8 +71,12 @@ payouts and numerically unquotable sizes. See [the quoting specification](docs/Q
 holdings, and exact ERC-20 buy/sell transfers. Base and composed claims share one
 liability ledger, with execution-time pricing, slippage/deadline checks and actual
 collateral coverage checks. Local tests cover normal and adversarial collateral.
-**Settlement and redemption are absent: do not fund this reference pool with real
-assets.** See [pool behavior and limits](docs/REFERENCE_POOL.md).
+The pool now supports one-time resolution after closing by an immutable resolver,
+committed settlement rules, and partial redemption with exact winning payouts.
+Losing claims burn for zero; coverage protects all remaining winners.
+**Local tests only: the resolver is trusted and CRE is not integrated. Do not fund
+this reference pool with real assets.** See [pool behavior](docs/REFERENCE_POOL.md)
+and [settlement rules and limits](docs/SETTLEMENT.md).
 
 `ReferenceLmsr` uses whole collateral units and floating-point math. Its bounded
 input domain is documented in the API. It enforces nonnegative simulated state
@@ -131,5 +135,6 @@ instruction.** Avoid `git add .`; keep unrelated user files out of each change.
    matched-claim quote comparisons, independent usage, and submission artifacts.
    Kimi structure proposals remain stretch scope as specified in the idea.
 
-Next code slice: explicit resolution and redemption for the Solidity reference
-pool, with declared settlement authority and rules and local payout tests.
+Next settlement slice: the required CRE integration, beginning with source-of-record
+rules and an authenticated report receiver. Kuru anchoring, factored inference,
+and tradable conditionals remain required product milestones.
