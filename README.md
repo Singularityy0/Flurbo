@@ -63,6 +63,12 @@ This is a small-state validation engine; it is not the final factored engine or
 an executable funded pool. See [the numerics specification](docs/NUMERICS.md) and
 [cost error derivation](docs/COST_ERROR_BOUND.md) for guarantees and remaining gates.
 
+`LmsrQuote` now converts atomic-unit market snapshots into validated, fee-free
+buy/sell quotes and fresh liability arrays. It checks claim masks, quantities,
+before/after numerical domains and inclusive slippage limits. It rejects zero
+payouts and numerically unquotable sizes. See [the quoting specification](docs/QUOTING.md).
+Ownership, funding and token execution still belong to the upcoming pool layer.
+
 `ReferenceLmsr` uses whole collateral units and floating-point math. Its bounded
 input domain is documented in the API. It enforces nonnegative simulated state
 liabilities, but does not check ownership, token balances, or funded solvency.
@@ -120,5 +126,5 @@ instruction.** Avoid `git add .`; keep unrelated user files out of each change.
    matched-claim quote comparisons, independent usage, and submission artifacts.
    Kimi structure proposals remain stretch scope as specified in the idea.
 
-Next code slice: compose bounded before/after costs into validated buy/sell quotes,
-with explicit mask, quantity, domain and slippage constraints.
+Next code slice: a minimal funded Solidity reference pool joining validated quotes
+to integer holdings and collateral coverage, tested locally with mock collateral.
