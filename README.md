@@ -55,6 +55,12 @@ from floating-point LMSR. Pricing and accounting remain separate reference tools
 until conservative fixed-point quoting and contract enforcement are implemented.
 Transfers, split/merge accounting, and final settlement remain later work.
 
+The first Solidity slice adds `QuoteMath`: exact atomic-unit/WAD conversions and
+conservative buy/sell rounding from cost intervals, with Foundry fuzz tests and
+independent Decimal fixtures. This is not yet an on-chain LMSR evaluator; proving
+exp/log error bounds is the next numerical gate. See [the numerics specification](docs/NUMERICS.md)
+for units, rounding guarantees, remaining gates and local test commands.
+
 `ReferenceLmsr` uses whole collateral units and floating-point math. Its bounded
 input domain is documented in the API. It enforces nonnegative simulated state
 liabilities, but does not check ownership, token balances, or funded solvency.
@@ -112,5 +118,5 @@ instruction.** Avoid `git add .`; keep unrelated user files out of each change.
    matched-claim quote comparisons, independent usage, and submission artifacts.
    Kimi structure proposals remain stretch scope as specified in the idea.
 
-Next code slice: specify conservative fixed-point quote bounds and rounding,
-then scaffold Solidity numerics and differential checks against the reference.
+Next code slice: pin the exp/log dependency and establish bounded cost-evaluation
+errors before connecting Solidity quotes to the funded ledger.
