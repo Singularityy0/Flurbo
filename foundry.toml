@@ -4,6 +4,7 @@ test = "contracts/test"
 out = "target/foundry/out"
 cache_path = "target/foundry/cache"
 libs = []
+remappings = ["@prb/math/=contracts/node_modules/@prb/math/"]
 solc = "0.8.28"
 evm_version = "cancun"
 optimizer = true

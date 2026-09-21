@@ -1,0 +1,7 @@
+{
+  "name": "flurbo-contracts",
+  "private": true,
+  "dependencies": {
+    "@prb/math": "4.1.0"
+  }
+}
