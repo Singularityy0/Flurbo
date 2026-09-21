@@ -1,6 +1,6 @@
-//! Canonical Boolean payoffs for one to three binary events.
-//! This module models payout identities, not token ownership or cluster identity.
+//! Payoff algebra, reference pricing, and integer accounting for small event clusters.
 
+pub mod accounting;
 pub mod pricing;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -41,6 +41,20 @@ validation. Phase 2a adds an enumerated LMSR reference model: shared probabiliti
 conditional-probability analytics, and fee-free buy/sell simulations checked
 against independent 80-digit Decimal fixtures. Neither phase executes trades.
 
+Phase 2b adds `ReferenceLedger`, an unresolved single-cluster accounting model.
+It records buys/sells in `u128` atomic units, tracks each owner's canonical claim
+holdings, and enforces `collateral >= max(terminal liabilities)` after every
+accepted operation. One claim quantity unit pays one collateral atomic unit in
+a winning state. Overselling, overflow, zero quantities, and uncovered payouts
+are rejected without changing state. Headroom is coverage surplus, not profit.
+
+The ledger accepts separately authorized integer collateral receipts/payouts;
+it does not compute or validate trade prices, authenticate users, check wallet
+balances, or move tokens. Initial funding is supplied explicitly, not calculated
+from floating-point LMSR. Pricing and accounting remain separate reference tools
+until conservative fixed-point quoting and contract enforcement are implemented.
+Transfers, split/merge accounting, and final settlement remain later work.
+
 `ReferenceLmsr` uses whole collateral units and floating-point math. Its bounded
 input domain is documented in the API. It enforces nonnegative simulated state
 liabilities, but does not check ownership, token balances, or funded solvency.
@@ -98,4 +112,5 @@ instruction.** Avoid `git add .`; keep unrelated user files out of each change.
    matched-claim quote comparisons, independent usage, and submission artifacts.
    Kimi structure proposals remain stretch scope as specified in the idea.
 
-Next code slice: exact-unit reference ownership and liability accounting.
+Next code slice: specify conservative fixed-point quote bounds and rounding,
+then scaffold Solidity numerics and differential checks against the reference.
