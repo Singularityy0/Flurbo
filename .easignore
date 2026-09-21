@@ -1,0 +1,35 @@
+# EAS archives the Git root. Include only the mobile build inputs and shared RPC config.
+/*
+!/apps
+/apps/*
+!/apps/mobile
+/apps/mobile/*
+!/apps/mobile/App.tsx
+!/apps/mobile/index.ts
+!/apps/mobile/app.json
+!/apps/mobile/app.config.js
+!/apps/mobile/eas.json
+!/apps/mobile/package.json
+!/apps/mobile/package-lock.json
+!/apps/mobile/metro.config.js
+!/apps/mobile/tsconfig.json
+!/apps/mobile/src
+!/apps/mobile/scripts
+/apps/mobile/scripts/*
+!/apps/mobile/scripts/passkey-config.cjs
+!/config
+/config/*
+!/config/monad-readiness.json
+
+# These exclusions also apply to any future files within included source folders.
+node_modules/
+.env*
+credentials.json
+*.jks
+*.keystore
+*.p8
+*.p12
+*.pem
+*.key
+*.mobileprovision
+*.test.*

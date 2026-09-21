@@ -1,7 +1,18 @@
 {
+  "cli": {
+    "version": "24.7.0",
+    "requireCommit": false,
+    "appVersionSource": "local"
+  },
   "build": {
     "development": {
+      "node": "24.13.0",
       "developmentClient": true,
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
+    "preview": {
+      "node": "24.13.0",
       "distribution": "internal",
       "android": { "buildType": "apk" }
     }

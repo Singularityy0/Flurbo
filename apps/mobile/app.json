@@ -7,13 +7,22 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "backgroundColor": "#F5F3EC",
-    "platforms": ["ios", "android"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "dev.flurbo.preview"
     },
     "android": {
       "package": "dev.flurbo.preview"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f8b90478-5afc-472b-91ca-67e5437e87e8"
+      }
+    },
+    "owner": "singuu"
   }
 }
