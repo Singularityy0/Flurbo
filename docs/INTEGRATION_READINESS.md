@@ -127,16 +127,18 @@ generation from the configured app IDs. No real host or signing identity has
 been supplied, and no association file has been deployed. Android is the selected
 first test device, using EAS cloud. APK profiles and the minimal upload inputs are
 prepared and locally checked. Expo login, project linking and EAS Android signing
-setup are complete. The first preview build was submitted; its result, phone
-installation and Mera integration remain pending.
+setup are complete. The [first Android preview build](https://expo.dev/accounts/singuu/projects/flurbo-mobile/builds/1e365827-9c5e-4092-a8a2-4569b158a534)
+finished successfully and produced an APK. Phone installation, device checks and
+Mera integration remain pending.
 
 ## Next small tasks
 
 1. Configure Alchemy locally and rerun the probe against that account endpoint.
-2. Configure a native device build and stable passkey domain, then integrate Mera.
-3. Choose source-of-record rules and implement/simulate the CRE workflow. The
-   [authenticated receiver](CRE_RECEIVER.md) now passes local tests; verified CRE
-   delivery and source validation are still pending.
+2. Install/test the Android APK and configure a stable passkey domain, then integrate Mera.
+3. Choose real source-of-record rules and add API retrieval to the
+   [synthetic CRE workflow](../workflows/cre/README.md), which now passes CLI
+   simulation for unsigned payload preparation. The [authenticated receiver](CRE_RECEIVER.md)
+   passes local tests; verified CRE delivery and official source validation remain pending.
 4. Add backed base-event tokens, then perform the Kuru deploy/order/cancel spike.
 
 The factored engine, tradable conditionals and every remaining

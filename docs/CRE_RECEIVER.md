@@ -2,7 +2,8 @@
 
 `CreSettlementReceiver` delivers one authenticated terminal state to one
 `ReferencePool`. Its local tests use a deliberately unauthenticated mock
-transport. No workflow has run in the CRE CLI, no DON signatures have been
+transport. A separate [synthetic workflow](../workflows/cre/README.md) has now run
+in the CRE CLI and prepared unsigned ABI payloads. No DON signatures have been
 verified by these tests, and no receiver or pool has been deployed.
 
 ## Deployment and authority
@@ -57,8 +58,9 @@ The final observation must be at or after trading close, no later than the curre
 block, and at most `maxReportAge` seconds old (inclusive). This is when the workflow
 observed the complete final result, not a replacement for each event's observation
 time in the committed rules. Evidence must be retained separately; a hash proves
-neither availability nor truth. The pending workflow must fetch, validate and
-canonically encode that evidence before producing a report.
+neither availability nor truth. The synthetic workflow publishes deterministic
+fixture rules/evidence preimages; actual source retrieval and verification remain
+pending before it can produce a live settlement report.
 
 ## Finality, retries and limits
 
@@ -79,10 +81,12 @@ dispute window, void outcome, timeout refund or authority recovery in this slice
 
 - Agree on ordered events, sources, observation windows, finality, binary mapping,
   evidence encoding and failure policy; publish the exact rules-hash preimage.
-- Implement the CRE workflow and verify the chosen chain's actual forwarder and
-  workflow metadata. Never substitute an invented or mock deployment address.
-- Run the CRE CLI simulation and test verified report delivery. The documented
-  simulation MockForwarder omits identity metadata, so it cannot call this strict
+- Extend the synthetic workflow with official source retrieval and verify the
+  chosen chain's actual forwarder and workflow metadata. Never substitute an
+  invented or mock deployment address.
+- Synthetic report preparation now passes CRE CLI simulation; test verified
+  report delivery separately. The documented simulation MockForwarder omits
+  identity metadata, so it cannot call this strict
   receiver successfully. Use a separate test harness for simulation; do not add
   an authentication-off mode to the funded receiver to make a demo pass.
 - Test real collateral and complete deployment-to-redemption before claiming the

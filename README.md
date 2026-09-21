@@ -145,6 +145,8 @@ instruction.** Avoid `git add .`; keep unrelated user files out of each change.
 
 The [CRE receiver boundary](docs/CRE_RECEIVER.md) is now locally tested with fixed
 forwarder/workflow authentication, report domain and freshness checks, and one-time
-settlement. The next slice is source-of-record rules and a CRE workflow simulation;
-verified network delivery remains pending. Kuru anchoring, factored inference,
-and tradable conditionals remain required product milestones.
+settlement. A [synthetic CRE workflow](workflows/cre/README.md) now validates fixture
+observations and prepares unsigned settlement payloads in the actual CRE CLI.
+Official source rules, API retrieval and verified network delivery remain pending.
+Kuru anchoring, factored inference and tradable conditionals remain required
+product milestones.

@@ -1,0 +1,7 @@
+synthetic:
+  user-workflow:
+    workflow-name: flurbo-synthetic-settlement
+  workflow-artifacts:
+    workflow-path: ./src/main.ts
+    config-path: ./fixtures/config.json
+    secrets-path: ""

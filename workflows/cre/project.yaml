@@ -1,0 +1,5 @@
+# CLI requires an RPC entry even though this workflow makes no blockchain calls.
+synthetic:
+  rpcs:
+    - chain-name: monad-testnet
+      url: https://testnet-rpc.monad.xyz
