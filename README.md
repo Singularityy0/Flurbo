@@ -6,18 +6,19 @@ cost function, with tradable conditional claims as a planned extension.
 
 ## Product direction
 
-This README records the user's reaffirmed direction and takes precedence over
-the routing-first positioning in [the competition strategy](FLURBO_COMPETITION_STRATEGY.md).
-That document remains a reference for supporting integrations. The accounting
-and numerical-safety requirements in [the mechanism review](FLURBO_REVIEW_AND_BUILD_PLAN.md)
-still apply.
+The product source is the user's `flurboidea.md`, currently located at
+`tmp/flurboidea.md` (a local, ignored planning file). Its shared on-chain maker,
+factored inference, tradable conditionals, and Kuru anchoring remain the target.
+The previous routing-first strategy does not supersede it. See
+[integration milestones and open requirements](docs/INTEGRATIONS.md).
 
 - **One shared pool per event cluster:** base and composed claims draw on the
   same funded liquidity and joint-state liability ledger. Composing a new claim
   inside that cluster does not require funding a separate pool.
 - **Coherent multi-leg pricing:** arbitrary AND/OR/NOT combinations within the
   supported event set compile to canonical payoffs and use the same cost function.
-  Begin with two events, then three; unlimited event counts are not an MVP promise.
+  Begin reference tests with two events, then three. This enumeration is an oracle
+  for validating the planned bounded-treewidth engine, not a replacement for it.
 - **On-chain execution:** contracts compute and enforce executable pool prices
   from current state, with user slippage limits. Rust supplies reference calculations
   and simulations. Trading against the pool must work without RFQ responses or Kuru.
@@ -25,8 +26,9 @@ still apply.
   not implement a tradable claim. First specify the payout/collateral behavior
   when B is false, fungibility, and settlement; then prove accounting and implement
   it as a separate milestone. Phase 1 covers Boolean claims only.
-- **Kuru supports the core:** external liquidity and optional routing can improve
-  execution, while the shared market maker remains the primary mechanism.
+- **Kuru anchoring is required:** base-event ERC-20 claims trade on its CLOB; a
+  keeper compares executable depth against pool prices. Transformation routing
+  can follow, but does not replace the two-tier mechanism in the idea document.
 
 The first end-to-end gate is a funded on-chain pool that quotes, buys, sells,
 and settles base and multi-leg claims from the same state while preserving
@@ -34,9 +36,16 @@ collateral coverage. Kuru integration follows that gate.
 
 ## Current phase
 
-Phase 1 implements a dependency-free Rust payoff algebra. It supports one to
-three binary events, canonical terminal-state masks, Boolean composition, and
-validation of two-child split/merge identities. It does not execute trades yet.
+Phase 1 provides payoff algebra for one to three binary events and split/merge
+validation. Phase 2a adds an enumerated LMSR reference model: shared probabilities,
+conditional-probability analytics, and fee-free buy/sell simulations checked
+against independent 80-digit Decimal fixtures. Neither phase executes trades.
+
+`ReferenceLmsr` uses whole collateral units and floating-point math. Its bounded
+input domain is documented in the API. It enforces nonnegative simulated state
+liabilities, but does not check ownership, token balances, or funded solvency.
+Production settlement will use exact integer amounts and conservative fixed-point
+quotes. A conditional probability is not yet a tradable conditional contract.
 
 Event `i` is bit `i` of the terminal-state index. Bit `x` of a claim mask is
 its payout in terminal state `x`. For two events, A is `0b1010`, B is `0b1100`,
@@ -53,31 +62,40 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
+Regenerate the independent numerical fixtures with Python 3.11 or newer:
+
+```sh
+python scripts/reference_quotes.py
+```
+
 ## Build phases
 
-Each phase is a milestone made of small commits. Keep each commit focused on
-one behavior with its relevant checks; finish and review a phase before starting
-the next. Record completed work here.
+Each phase consists of small, reviewable tasks. Finish the task and its checks,
+then give the user explicit `git add`, `git commit`, and `git push` commands.
+**Agents must not stage, commit, or push unless the user explicitly changes this
+instruction.** Avoid `git add .`; keep unrelated user files out of each change.
 
 1. **Payoff foundation:** workspace, masks, Boolean operations, partition
    validation, and exhaustive conservation tests.
 2. **Reference pricing and accounting:** stable exact-state LMSR, owned inventory,
    liability tracking, and independent numerical fixtures. Separate commits for
    pricing and accounting; floating-point results are reference calculations only.
-3. **Contracts:** ledger first, then funded pool and bounded arithmetic, followed
-   by settlement/redemption. Gate: direct on-chain base and multi-leg trading,
-   coherent quotes, conservation, and collateral coverage through settlement.
-4. **Supporting Kuru execution:** split/merge, wrappers, compatibility spike,
-   bounded Rust route candidates, then atomic executor. Gate: a real parent purchase delivers the exact child claim,
-   sells the residual, and respects gross funding and net-spend constraints.
-5. **Product:** scenario entry and quotes, then Envio positions and execution
-   receipts, followed by settlement UI. Start with two events; expand to three
-   after the full lifecycle works.
-6. **Evidence and release:** reproducible route comparisons, failure cases,
-   usability feedback, and deployment/demo instructions. CRE remains optional.
+3. **Week-one integration checks:** Alchemy/Monad connectivity, verified AUSD
+   collateral configuration, Expo/React Native with Mera feasibility, and Kuru
+   pair deployment plus order placement/cancellation. See the partner checklist.
+4. **On-chain mechanism:** integer ledger, fixed-point pricing, factored state,
+   supported trade language and structure-preserving updates. Differential-test
+   against enumeration. Specify conditional payouts and false-condition behavior
+   before implementing conditional trades. Gate: coherent executable quotes and
+   collateral coverage; reject unsupported claims rather than silently approximate.
+5. **Two-tier market:** backed base-event ERC-20 tokens on Kuru, funded books,
+   and an executable-price arbitrage keeper. Gate: real orders, fills, and
+   measured alignment after fees, depth, inventory requirements, and gas.
+6. **Settlement and product:** CRE orchestration, Envio history/positions/coverage,
+   Expo leg builder, Mera sessions and recovery, AUSD balances and redemption,
+   plus the separate MetaMask Agent Wallet plugin. Verify each partner flow.
+7. **Evidence:** gas/scaling limits, maker loss and collateral accounting,
+   matched-claim quote comparisons, independent usage, and submission artifacts.
+   Kimi structure proposals remain stretch scope as specified in the idea.
 
-Separate extension milestone: specify and implement tradable conditional claims,
-with explicit false-condition settlement and verified collateral accounting.
-The Boolean MVP does not complete this part of the longer-term product vision.
-
-Next slice: reference pricing and deterministic quote fixtures.
+Next code slice: exact-unit reference ownership and liability accounting.
