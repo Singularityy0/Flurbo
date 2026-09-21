@@ -1,6 +1,8 @@
 //! Canonical Boolean payoffs for one to three binary events.
 //! This module models payout identities, not token ownership or cluster identity.
 
+pub mod pricing;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PayoffError {
     UnsupportedEventCount,
