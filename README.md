@@ -34,6 +34,10 @@ The first end-to-end gate is a funded on-chain pool that quotes, buys, sells,
 and settles base and multi-leg claims from the same state while preserving
 collateral coverage. Kuru integration follows that gate.
 
+Public Monad/AUSD/Kuru infrastructure checks and the Expo/Mera setup requirements
+are recorded in [integration readiness](docs/INTEGRATION_READINESS.md), with a
+repeatable read-only probe. These checks do not constitute completed integrations.
+
 ## Current phase
 
 Phase 1 provides payoff algebra for one to three binary events and split/merge

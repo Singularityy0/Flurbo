@@ -2,7 +2,11 @@
 
 Source: `tmp/flurboidea.md`, read September 20, 2026, and the supplied `resources/`
 files. This checklist preserves the idea's integrations; it is not evidence of
-completed integration or verified eligibility. No partner is implemented yet.
+completed integration or verified eligibility. No end-to-end partner integration
+is complete. [The September 21 readiness checkpoint](INTEGRATION_READINESS.md)
+records successful public RPC, AUSD decimals and contract-presence checks on
+Monad mainnet/testnet, plus Kuru and Mera source inspection. Alchemy account access,
+real Kuru orders, and native mobile authentication remain unverified.
 The user will provide the missing Agora, Mera, and community bounty details later.
 
 ## Required integration milestones
