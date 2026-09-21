@@ -95,8 +95,8 @@ This is inspected source metadata, not an installed or tested mobile dependency 
 Its [React Native recipe](https://github.com/category-labs/mera/blob/a3102f4fa7b89ce4e58e843a2d6da2201035ff25/docs/src/content/docs/recipes/use-mera-with-react-native.md)
 uses `expo-crypto` for Hermes randomness and native WebAuthn. Use an
 [Expo development build](https://docs.expo.dev/develop/development-builds/introduction/)
-for native libraries. The next mobile slice should scaffold Expo/TypeScript,
-pin compatible dependencies, and validate a build before claiming authentication.
+for native libraries. The Expo/TypeScript scaffold and dependency checks are now
+complete; a native device build remains required before claiming authentication.
 Node 24.13.0 is available locally; `adb`, `java`, and `keytool` were not found on
 PATH. This does not prove those tools are absent elsewhere.
 
@@ -112,10 +112,19 @@ and an actual signed test transaction. Native passkey support alone is not proof
 of PRF compatibility. Domain/account setup and device validation will require
 human involvement. Agora/Mera/community bounty details remain pending as agreed.
 
+## Mobile scaffold follow-up
+
+[The Expo client scaffold](../apps/mobile/README.md) now exists with pinned SDK 57
+dependencies, an internal development-build profile, Crypto bootstrap, and a
+read-only testnet connection action. TypeScript, connection tests, Android project
+generation, and Android/iOS Hermes exports pass. Browser layout verification is
+recorded separately. No APK/IPA, native device session or Mera integration is
+complete; the domain and device requirements above still apply.
+
 ## Next small tasks
 
 1. Configure Alchemy locally and rerun the probe against that account endpoint.
-2. Scaffold the Expo development app and settle domain/device requirements.
+2. Configure a native device build and stable passkey domain, then integrate Mera.
 3. Implement the authenticated CRE report receiver and choose source-of-record rules.
 4. Add backed base-event tokens, then perform the Kuru deploy/order/cancel spike.
 
