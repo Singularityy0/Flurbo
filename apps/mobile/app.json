@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Flurbo",
+    "slug": "flurbo-mobile",
+    "version": "0.1.0",
+    "scheme": "flurbo",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F5F3EC",
+    "platforms": ["ios", "android"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.flurbo.preview"
+    },
+    "android": {
+      "package": "dev.flurbo.preview"
+    }
+  }
+}
