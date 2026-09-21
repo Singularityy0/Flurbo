@@ -134,7 +134,9 @@ installation and Mera integration remain pending.
 
 1. Configure Alchemy locally and rerun the probe against that account endpoint.
 2. Configure a native device build and stable passkey domain, then integrate Mera.
-3. Implement the authenticated CRE report receiver and choose source-of-record rules.
+3. Choose source-of-record rules and implement/simulate the CRE workflow. The
+   [authenticated receiver](CRE_RECEIVER.md) now passes local tests; verified CRE
+   delivery and source validation are still pending.
 4. Add backed base-event tokens, then perform the Kuru deploy/order/cancel spike.
 
 The factored engine, tradable conditionals and every remaining

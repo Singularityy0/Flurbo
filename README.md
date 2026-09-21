@@ -143,6 +143,8 @@ instruction.** Avoid `git add .`; keep unrelated user files out of each change.
    matched-claim quote comparisons, independent usage, and submission artifacts.
    Kimi structure proposals remain stretch scope as specified in the idea.
 
-Next settlement slice: the required CRE integration, beginning with source-of-record
-rules and an authenticated report receiver. Kuru anchoring, factored inference,
+The [CRE receiver boundary](docs/CRE_RECEIVER.md) is now locally tested with fixed
+forwarder/workflow authentication, report domain and freshness checks, and one-time
+settlement. The next slice is source-of-record rules and a CRE workflow simulation;
+verified network delivery remains pending. Kuru anchoring, factored inference,
 and tradable conditionals remain required product milestones.

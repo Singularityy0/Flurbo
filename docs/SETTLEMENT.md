@@ -1,8 +1,9 @@
 # Reference resolution and redemption
 
-This is the local, enumerated settlement model. The pool's fixed resolver is a
-trusted test authority, **not a Chainlink CRE integration**. Production resolution
-must implement the CRE workflow required by `flurboidea.md` section 8.5. No live
+This is the local, enumerated settlement model. The pool's fixed resolver remains
+a trusted authority. New test pools can use the [CRE receiver](CRE_RECEIVER.md),
+but **the end-to-end Chainlink CRE integration is not complete**. Production resolution
+still needs the workflow required by `flurboidea.md` section 8.5. No live
 deployment, data-source verification, or real collateral is part of this slice.
 
 ## Immutable rules and state encoding
@@ -68,15 +69,16 @@ balance changes revert the burn, liabilities, and token movements atomically.
 There is no redemption fee, expiry, allowance requirement, operator redemption,
 collateral sweep, sponsor withdrawal, or allocation of remaining surplus.
 
-## CRE boundary still to implement
+## CRE receiver and remaining workflow
 
 The final integration must fetch and validate each base event's source-of-record
-observation and construct the terminal bits deterministically. Its receiver must
-authenticate the authorized CRE workflow/report path and bind the result to the
-intended chain, pool, rules, and observation context before calling `resolve`.
-A plain resolver address check does not perform any of these validations.
+observation and construct the terminal bits deterministically. `CreSettlementReceiver`
+now checks its fixed forwarder and workflow identity and binds the report to the
+chain, pool, rules, and observation context before calling `resolve`. Local tests
+cover authentication and replay rejection; the [receiver specification](CRE_RECEIVER.md)
+defines its ABI, trust assumptions, deployment order and simulation limitations.
 
-Workflow simulation, report authentication/replay tests, and verified network
+Workflow simulation, verified-forwarder delivery, and verified network
 configuration are required before claiming partner completion. The user still
 needs to choose real event definitions and sources; access credentials must be
 configured locally when needed. See [partner requirements](INTEGRATIONS.md).
