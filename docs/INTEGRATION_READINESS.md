@@ -124,8 +124,11 @@ complete; the domain and device requirements above still apply.
 The [passkey domain setup](../apps/mobile/PASSKEY_SETUP.md) now supports explicit
 host configuration, iOS associated domains and local platform association-file
 generation from the configured app IDs. No real host or signing identity has
-been supplied, and no association file has been deployed. Device selection,
-native tooling/build and Mera integration remain pending.
+been supplied, and no association file has been deployed. Android is the selected
+first test device, using EAS cloud. APK profiles and the minimal upload inputs are
+prepared and locally checked. Expo login, project linking and EAS Android signing
+setup are complete. The first preview build was submitted; its result, phone
+installation and Mera integration remain pending.
 
 ## Next small tasks
 

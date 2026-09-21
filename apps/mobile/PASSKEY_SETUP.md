@@ -61,8 +61,10 @@ fingerprints and the Apple prefix are not included in Expo's public config.
 
 ## Native validation still required
 
-Select Android or iPhone first. Android needs a local SDK/JDK and device or a
-configured EAS account/build. iOS local builds require a Mac with Xcode; EAS
+Android is the selected first test platform, using an EAS cloud build. Account
+login, project linking and EAS signing setup are complete; build and installation
+results still need verification. Android local
+builds would need an SDK/JDK. iOS local builds require a Mac with Xcode; EAS
 internal iPhone distribution requires Apple provisioning and device registration.
 See [Expo internal distribution](https://docs.expo.dev/build/internal-distribution/).
 

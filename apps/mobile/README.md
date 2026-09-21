@@ -26,8 +26,48 @@ configure an emulator or connected device, then run `npm run android`. For iOS,
 use `npm run ios` on a Mac with Xcode. After installing a development client,
 `npm start` runs Metro for it. See Expo's
 [development build setup](https://docs.expo.dev/develop/development-builds/introduction/).
-`eas.json` also declares an internal development build profile, but no EAS project,
-account, signing credentials, or cloud build has been configured or created.
+`eas.json` also declares internal development and preview APK profiles. The app
+is linked to [singuu/flurbo-mobile](https://expo.dev/accounts/singuu/projects/flurbo-mobile),
+with Android signing credentials managed by EAS.
+
+### Android cloud build (selected test path)
+
+The first test phone is Android, using EAS cloud builds. EAS CLI 24.7.0 is pinned
+in `eas.json`; invoke it with `npx.cmd --yes eas-cli@24.7.0` on Windows. Sign in
+from your own terminal, without sharing the password:
+
+```bash
+# Git Bash on this Windows machine:
+cd /c/Users/anany/Flurbo/apps/mobile
+npx.cmd --yes eas-cli@24.7.0 login
+```
+
+PowerShell accepts `cd C:/Users/anany/Flurbo/apps/mobile` instead. The initial
+project link and Android signing setup are complete. Subsequent builds use
+`npx.cmd --yes eas-cli@24.7.0 build --platform android --profile preview`.
+The `preview` profile produces an internally distributed APK with bundled
+JavaScript for a phone test without Metro. The `development` profile remains
+available for native debugging with Metro. Both use Node 24.13.0. No domain is
+needed for the existing read-only screen; passkey sign-in remains disabled.
+
+The repository-root `.easignore` limits the cloud archive to the mobile build
+inputs and `config/monad-readiness.json`, retaining the relative paths used by
+Metro. Native folders are excluded so EAS regenerates them. Update the inclusion
+rules when adding build inputs such as assets or config plugins. EAS's local copy
+routine was checked against exactly 14 required files; local outputs, research,
+credentials and dependencies are excluded. Both Android profiles passed the
+pinned CLI's schema/profile validation. Login succeeded, the project was linked,
+and EAS generated the Android keystore. The 63.1 KB archive was uploaded for
+[the first preview build](https://expo.dev/accounts/singuu/projects/flurbo-mobile/builds/1e365827-9c5e-4092-a8a2-4569b158a534).
+Its build result and installation still need verification.
+
+For the first phone test, download the APK from the successful build page and
+install it. Open Flurbo, check that the screen renders, and tap the Monad testnet
+connection check. Record the phone model, Android version, and any error text.
+Passkey sign-in should remain disabled; this build does not trade or move funds.
+
+`cli.requireCommit` is false: EAS does not require a new commit before building.
+The user still stages, commits and pushes all repository changes.
 
 Generated `android/`, `ios/`, `.expo/`, `dist*`, credentials and `.env*` files are
 ignored locally. Change app configuration/plugins and regenerate native projects;
@@ -87,6 +127,6 @@ biometric prompts, PRF support, safe-area behavior on hardware, or mobile signin
   remained disabled, and no browser console errors were observed.
 
 No APK/IPA was compiled or installed. Android SDK/JDK tools were not found in the
-checked local paths, and the target phone is still unspecified. Physical-device
+checked local paths; Android via EAS cloud is the selected test path. Physical-device
 verification and Mera authentication remain required. No deployment, passkey,
 wallet, token approval, or transaction was created.
