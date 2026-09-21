@@ -59,15 +59,20 @@ Solidity now includes `QuoteMath` for exact conversion and interval rounding and
 `LmsrCost` for bounded, enumerated cost evaluation using pinned PRBMath 4.1.0.
 The cost error allowance is derived for 2/4/8 states and a declared parameter
 range, with exact-rational source-constant checks and independent Decimal fixtures.
-This is a small-state validation engine; it is not the final factored engine or
-an executable funded pool. See [the numerics specification](docs/NUMERICS.md) and
+This is a small-state validation engine, not the final factored engine.
+See [the numerics specification](docs/NUMERICS.md) and
 [cost error derivation](docs/COST_ERROR_BOUND.md) for guarantees and remaining gates.
 
 `LmsrQuote` now converts atomic-unit market snapshots into validated, fee-free
 buy/sell quotes and fresh liability arrays. It checks claim masks, quantities,
 before/after numerical domains and inclusive slippage limits. It rejects zero
 payouts and numerically unquotable sizes. See [the quoting specification](docs/QUOTING.md).
-Ownership, funding and token execution still belong to the upcoming pool layer.
+`ReferencePool` now joins these quotes to fixed initial funding, per-owner claim
+holdings, and exact ERC-20 buy/sell transfers. Base and composed claims share one
+liability ledger, with execution-time pricing, slippage/deadline checks and actual
+collateral coverage checks. Local tests cover normal and adversarial collateral.
+**Settlement and redemption are absent: do not fund this reference pool with real
+assets.** See [pool behavior and limits](docs/REFERENCE_POOL.md).
 
 `ReferenceLmsr` uses whole collateral units and floating-point math. Its bounded
 input domain is documented in the API. It enforces nonnegative simulated state
@@ -126,5 +131,5 @@ instruction.** Avoid `git add .`; keep unrelated user files out of each change.
    matched-claim quote comparisons, independent usage, and submission artifacts.
    Kimi structure proposals remain stretch scope as specified in the idea.
 
-Next code slice: a minimal funded Solidity reference pool joining validated quotes
-to integer holdings and collateral coverage, tested locally with mock collateral.
+Next code slice: explicit resolution and redemption for the Solidity reference
+pool, with declared settlement authority and rules and local payout tests.

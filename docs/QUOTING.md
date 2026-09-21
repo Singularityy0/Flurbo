@@ -27,7 +27,7 @@ All states are validated, including those not selected by the claim.
 
 A buy adds quantity to every selected state. A sell subtracts it and rejects
 underflow. **Sufficient aggregate liability is not proof of seller ownership.**
-The future pool must separately verify the caller owns the exact claim units.
+`ReferencePool` separately verifies the caller owns the exact claim units.
 
 ## Pricing, numerical uncertainty, and limits
 
@@ -51,16 +51,16 @@ an unguarded floating-point price. The selected trade quantity is never reduced.
 ## Boundary to execution
 
 This is an internal, pure quoting library, not a funded pool or RFQ service.
-The eventual contract must load authenticated cluster state, recompute the quote
-at execution, enforce caller ownership and collateral balances, check the deadline
-and lifecycle, transfer/burn/mint safely, and preserve exact terminal-liability
-coverage. A quote is not a reservation. No fee policy, wallet approval, settlement,
-token transfer, or withdrawal is implemented here.
+The [reference pool](REFERENCE_POOL.md) loads its stored cluster state, recomputes
+the quote at execution, enforces caller ownership and collateral balances, checks
+the deadline and trading lifecycle, and transfers collateral atomically with
+holdings updates and terminal-liability coverage checks. A quote is not a
+reservation. The pure library itself implements no wallet approval, settlement,
+token transfer, or withdrawal.
 
-The next slice is a minimal funded Solidity reference pool connecting these
-quotes to integer accounting with mock collateral and local lifecycle tests.
-That remains a small-state validation path; factored inference, conditional
-securities, Kuru anchoring and partner milestones remain required.
+The funded reference pool is tested with mock collateral; settlement and redemption
+remain the next slice. This is a small-state validation path; factored inference,
+conditional securities, Kuru anchoring and partner milestones remain required.
 
 ## Checks
 
