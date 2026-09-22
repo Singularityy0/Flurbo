@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {FactoredLogMath as M} from "./FactoredLogMath.sol";
 import {QuoteMath} from "./QuoteMath.sol";
 
-/// @notice Bounded-width variable elimination for one global LMSR cost enclosure.
+/// @notice Bounded-width evaluation of one global LMSR cost and exact maximum liability.
 /// @dev Snapshot evaluator only. No quotes, ownership, transfers or settlement.
 library FactoredCost {
     error InvalidEventCount();
@@ -25,6 +25,35 @@ library FactoredCost {
         uint32 scope;
         bool active;
         M.LogBounds[] values;
+    }
+
+    struct ExactTable {
+        uint32 scope;
+        bool active;
+        uint256[] values;
+    }
+
+    /// @dev Exact max_x sum_f q_f(x), in collateral WAD, within the same validated domain.
+    /// b selects the domain only; no normalization, rounding, balances or ownership checks.
+    function maxLiability(uint8 events, uint256 b, Factor[] memory factors, uint8[] memory order)
+        internal
+        pure
+        returns (uint256 total)
+    {
+        validate(events, b, factors, order);
+        ExactTable[] memory tables = new ExactTable[](factors.length + events);
+        uint256 count = factors.length;
+        for (uint256 i; i < count; i++) {
+            // Input values are read only; active flags live in separate table structs.
+            tables[i] = ExactTable(factors[i].scope, true, factors[i].values);
+        }
+        for (uint256 i; i < events; i++) {
+            tables[count] = eliminateMax(tables, count, uint32(1) << order[i]);
+            count++;
+        }
+        for (uint256 i; i < count; i++) {
+            if (tables[i].active) total += tables[i].values[0];
+        }
     }
 
     function bounds(uint8 events, uint256 b, Factor[] memory factors, uint8[] memory order)
@@ -128,6 +157,41 @@ library FactoredCost {
         for (uint256 i; i < count; i++) {
             if (tables[i].active && tables[i].scope & bit != 0) {
                 total = M.add(total, tables[i].values[project(tables[i].scope, state)]);
+            }
+        }
+    }
+
+    function eliminateMax(ExactTable[] memory tables, uint256 count, uint32 bit)
+        private
+        pure
+        returns (ExactTable memory)
+    {
+        uint32 joined = bit;
+        for (uint256 i; i < count; i++) {
+            if (tables[i].active && tables[i].scope & bit != 0) joined |= tables[i].scope;
+        }
+        uint32 remaining = joined & ~bit;
+        uint256[] memory values = new uint256[](uint256(1) << popcount(remaining));
+        for (uint256 local; local < values.length; local++) {
+            uint32 state = expand(remaining, local);
+            uint256 no = exactBucketSum(tables, count, bit, state);
+            uint256 yes = exactBucketSum(tables, count, bit, state | bit);
+            values[local] = no > yes ? no : yes;
+        }
+        for (uint256 i; i < count; i++) {
+            if (tables[i].scope & bit != 0) tables[i].active = false;
+        }
+        return ExactTable(remaining, true, values);
+    }
+
+    function exactBucketSum(ExactTable[] memory tables, uint256 count, uint32 bit, uint32 state)
+        private
+        pure
+        returns (uint256 total)
+    {
+        for (uint256 i; i < count; i++) {
+            if (tables[i].active && tables[i].scope & bit != 0) {
+                total += tables[i].values[project(tables[i].scope, state)];
             }
         }
     }

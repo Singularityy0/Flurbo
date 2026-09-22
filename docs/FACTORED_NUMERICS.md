@@ -4,8 +4,9 @@
 engine. It provides normalization, addition, binary log-sum-exp, and final cost
 scaling. It does not validate or traverse graphs, calculate probabilities,
 update liabilities, quote trades, or connect to `ReferencePool`.
-`FactoredCost` now supplies graph validation and variable elimination on top of
-this arithmetic, returning the cost enclosure for one shared distribution.
+`FactoredCost` supplies graph validation and variable elimination on top of this
+arithmetic, returning the cost enclosure for one shared distribution. It also
+computes exact maximum liabilities using a separate integer max-sum pass.
 
 ## Units and domain
 
@@ -48,6 +49,36 @@ There are at most 96 input/message table slots, at most eight entries per input
 table, and at most four per reduced table. Bucket scans and bit projections are
 bounded but not optimized; there is no global `2^events` array. No graph data is
 persisted, and this library has no probability, trade, or settlement endpoint.
+
+## Exact maximum liability
+
+`FactoredCost.maxLiability(events, b, factors, order)` returns
+`max_x sum_f q_f(x)` as an exact uint256 collateral-WAD amount. It uses the same
+validator and domain as cost evaluation; b selects that domain but does not
+enter the calculation. No normalization, exponentiation, division or rounding
+occurs. Values differing by one WAD integer unit remain distinct even at the
+largest supported liability magnitudes.
+
+For each eliminated event and each remaining local assignment, the evaluator
+sums the matching entries of its active bucket for the false and true branches,
+then retains the larger sum. It consumes those tables and appends the message.
+At the end it adds the remaining scalar messages and constants exactly once.
+An event with no bucket contributes zero to maximum liability, even though it
+contributes ln(2) to the log partition. Input value arrays are read only.
+
+This procedure optimizes one shared terminal outcome. It does not sum the
+independent maxima of overlapping factors: three pairwise inequality claims
+around a triangle cannot all win together. Disconnected components can be
+maximized independently because their event sets do not overlap. All partial
+sums and messages are bounded by the validated sum of factor maxima, at most
+`100*bWad <= 1e29`, so checked uint256 additions cannot overflow on valid inputs.
+The graph/table caps and supplied-order restrictions are identical to cost
+evaluation, including rejection of declared zero-valued scopes that exceed width.
+
+This returns outstanding payout liability, not the LMSR subsidy, maker profit,
+or collateral headroom. It does not read token balances, verify ownership,
+convert WAD to collateral atoms, or enforce funding. Those responsibilities
+remain with the future factored quote/ledger integration.
 
 ## Scalar binary reduction
 
@@ -132,10 +163,17 @@ constant-factor translation and unchanged input arrays. Rejection tests cover
 malformed orders/tables, unsupported scopes, aggregate liability limits, and
 fill-in even for zero-valued factors.
 
-The general evaluator's local chain fixture used about 4.53 million gas; the
-64-factor width-two fixture used about 11.48 million, including graph creation,
-an explicit validation call, evaluation and assertions. These are measured
+The same graph fixtures check maximum liabilities against independent Python
+integer enumeration and 32-event closed forms. Fuzz tests require exact equality
+with enumerated maxima and verify constant translation. Dedicated tests cover
+incompatible factor maxima, noncontiguous scopes, duplicate scopes, single-WAD
+differences above floating-point precision, empty models, and 64 constants with
+32 disconnected events. Every malformed-input rejection is checked through both
+cost and maximum-liability entry points.
+
+The combined cost-and-liability chain fixture used about 6.63 million gas; the
+64-factor width-two fixture used about 17.53 million, including graph creation,
+an explicit validation call, both evaluations and assertions. These are measured
 examples, not worst-case limits or deployed trade costs. Cost differences need
 two snapshots and further accounting. Gas optimization remains a deployment
-gate. Next: exact factored maximum liabilities, then conservative trade quotes
-and shared-pool accounting.
+gate. Next: conservative factored trade quotes and shared-pool accounting.

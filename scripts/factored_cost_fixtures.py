@@ -7,7 +7,7 @@ from factored_log_fixtures import stable
 U = 10**18
 
 
-def cost(events, b, scopes, seed):
+def liabilities(events, b, scopes, seed):
     liabilities = []
     for state in range(1 << events):
         total = 0
@@ -16,7 +16,11 @@ def cost(events, b, scopes, seed):
             local = sum(((state >> event) & 1) << bit for bit, event in enumerate(bits))
             total += ((seed + i*7 + local*13) % 43) * b // 10
         liabilities.append(total)
-    return sum((D(q)/b).exp() for q in liabilities).ln() * b
+    return liabilities
+
+
+def cost(events, b, scopes, seed):
+    return sum((D(q)/b).exp() for q in liabilities(events, b, scopes, seed)).ln() * b
 
 
 def render():
@@ -33,9 +37,10 @@ def render():
               (1, 10**12, [], [0], 0)]
     for i, (events, b, scopes, order, seed) in enumerate(cases):
         lo, hi = stable(lambda: cost(events, b, scopes, seed))
+        maximum = max(liabilities(events, b, scopes, seed))
         lines += [f'    function test_graph_{i}() public pure {{',
                   f'        check({events}, {b}, hex"{"".join(f"{s:02x}" for s in scopes)}", '
-                  f'hex"{"".join(f"{e:02x}" for e in order)}", {seed}, {lo}, {hi});', '    }']
+                  f'hex"{"".join(f"{e:02x}" for e in order)}", {seed}, {lo}, {hi}, {maximum});', '    }']
     for width, count in [(1, 31), (2, 64)]:
         # Independent parity coordinates: width free initial bits; each later bit
         # is uniquely determined by its predecessor bits and that window's parity.
@@ -55,8 +60,9 @@ def render():
                   '        QuoteMath.CostBounds memory result = F.bounds(32, 10e18, factors, order);',
                   f'        assert(result.lowerWad <= {lo} && result.upperWad >= {hi});',
                   '        assert(result.upperWad - result.lowerWad <= 2 * (64 + 32 * 2562) * 10 + 2);',
+                  f'        assert(F.maxLiability(32, 10e18, factors, order) == {count}e18);',
                   '    }']
-    lines += ['    function check(uint8 events, uint256 b, bytes memory scopes, bytes memory permutation, uint256 seed, uint256 lo, uint256 hi) private pure {',
+    lines += ['    function check(uint8 events, uint256 b, bytes memory scopes, bytes memory permutation, uint256 seed, uint256 lo, uint256 hi, uint256 maximum) private pure {',
               '        F.Factor[] memory factors = new F.Factor[](scopes.length);',
               '        for (uint256 i; i < scopes.length; i++) {',
               '            uint32 scope = uint8(scopes[i]);',
@@ -71,6 +77,7 @@ def render():
               '        for (uint256 i; i < order.length; i++) order[i] = uint8(permutation[i]);',
               '        QuoteMath.CostBounds memory result = F.bounds(events, b, factors, order);',
               '        assert(result.lowerWad <= lo && result.upperWad >= hi);',
+              '        assert(F.maxLiability(events, b, factors, order) == maximum);',
               '    }', '}']
     return '\n'.join(lines) + '\n'
 

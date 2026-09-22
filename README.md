@@ -52,8 +52,9 @@ the resulting graph and numeric domain, and reuse exact-scope factor tables.
 Owner accounting and fixed-point factored execution remain pending.
 The [Solidity factored evaluator](docs/FACTORED_NUMERICS.md) now validates graph
 width and computes a conservative cost enclosure using bounded tables, with an
-explicit error propagation budget. Exact factored maximum liabilities, trade
-quotes, gas optimization and pool integration remain pending.
+explicit error propagation budget. It also computes exact maximum liabilities
+over the shared outcome space. Factored trade quotes, gas optimization and pool
+integration remain pending.
 
 Phase 1 provides payoff algebra for one to three binary events and split/merge
 validation. Phase 2a adds an enumerated LMSR reference model: shared probabilities,

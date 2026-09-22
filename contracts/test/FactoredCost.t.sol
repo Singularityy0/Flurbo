@@ -6,6 +6,14 @@ import {LmsrCost} from "../src/LmsrCost.sol";
 import {QuoteMath} from "../src/QuoteMath.sol";
 
 contract FactoredCostHarness {
+    function maxLiability(uint8 events, uint256 b, F.Factor[] memory factors, uint8[] memory order)
+        external
+        pure
+        returns (uint256)
+    {
+        return F.maxLiability(events, b, factors, order);
+    }
+
     function bounds(uint8 events, uint256 b, F.Factor[] memory factors, uint8[] memory order)
         external
         pure
@@ -31,6 +39,7 @@ contract FactoredCostTest {
         uint8[] memory order = permutation(hex"020001");
         bytes32 before_ = keccak256(abi.encode(factors, order));
         QuoteMath.CostBounds memory result = F.bounds(3, b, factors, order);
+        uint256 maximum = F.maxLiability(3, b, factors, order);
         assert(keccak256(abi.encode(factors, order)) == before_);
         // Full enumeration is test-only and uses an independent indexing loop.
         uint256[] memory q = new uint256[](8);
@@ -48,9 +57,15 @@ contract FactoredCostTest {
         }
         QuoteMath.CostBounds memory enumerated = LmsrCost.bounds(q, b);
         assert(result.lowerWad <= enumerated.upperWad && enumerated.lowerWad <= result.upperWad);
+        uint256 enumeratedMaximum;
+        for (uint256 i; i < q.length; i++) {
+            if (q[i] > enumeratedMaximum) enumeratedMaximum = q[i];
+        }
+        assert(maximum == enumeratedMaximum && maximum <= result.upperWad);
         factors[3].values[0] += b;
         QuoteMath.CostBounds memory shifted = F.bounds(3, b, factors, order);
         assert(shifted.lowerWad == result.lowerWad + b && shifted.upperWad == result.upperWad + b);
+        assert(F.maxLiability(3, b, factors, order) == maximum + b);
     }
 
     function testRejectsInvalidDomainsBeforeEvaluation() public {
@@ -101,11 +116,54 @@ contract FactoredCostTest {
         rejects(4, 1e18, clique, leavesFirst, F.WidthExceeded.selector);
     }
 
+    function testIncompatibleMaximaUseOneSharedOutcome() public pure {
+        F.Factor[] memory factors = new F.Factor[](4);
+        uint32[3] memory scopes = [uint32(5), 12, 9];
+        for (uint256 i; i < 3; i++) {
+            factors[i] = factor(scopes[i], 4);
+            factors[i].values[1] = 10e18 + 1;
+            factors[i].values[2] = 10e18 + 1;
+        }
+        factors[3] = factor(0, 1);
+        factors[3].values[0] = 7e18;
+        // Three pairwise inequalities around a triangle cannot all hold at once.
+        // Event 1 is disconnected; noncontiguous scopes still map bits canonically.
+        assert(F.maxLiability(4, 10e18, factors, permutation(hex"03010200")) == 27e18 + 2);
+        assert(F.maxLiability(4, 10e18, factors, permutation(hex"00020301")) == 27e18 + 2);
+    }
+
+    function testDuplicateScopesAndLargeValuesRemainExact() public pure {
+        F.Factor[] memory factors = new F.Factor[](2);
+        factors[0] = factor(1, 2);
+        factors[1] = factor(1, 2);
+        factors[0].values[0] = 1e28 + 1;
+        factors[1].values[1] = 1e28;
+        assert(F.maxLiability(1, 1e27, factors, permutation(hex"00")) == 1e28 + 1);
+        factors[1].values[0] = 1;
+        assert(F.maxLiability(1, 1e27, factors, permutation(hex"00")) == 1e28 + 2);
+    }
+
+    function testEmptyModelAndSixtyFourConstantsAcrossThirtyTwoEvents() public pure {
+        uint8[] memory order = new uint8[](32);
+        for (uint8 i; i < 32; i++) {
+            order[i] = 31 - i;
+        }
+        assert(F.maxLiability(32, 1e27, new F.Factor[](0), order) == 0);
+        F.Factor[] memory factors = new F.Factor[](64);
+        for (uint256 i; i < 64; i++) {
+            factors[i] = factor(0, 1);
+            factors[i].values[0] = 1e27 + i;
+        }
+        assert(F.maxLiability(32, 1e27, factors, order) == 64e27 + 2016);
+    }
+
     function rejects(uint8 events, uint256 b, F.Factor[] memory factors, uint8[] memory order, bytes4 expected)
         private
     {
         (bool ok, bytes memory data) =
             address(harness).call(abi.encodeCall(harness.bounds, (events, b, factors, order)));
+        assert(!ok && data.length == 4 && bytes4(data) == expected);
+        (ok, data) = address(harness).call(abi.encodeCall(harness.maxLiability, (events, b, factors, order)));
         assert(!ok && data.length == 4 && bytes4(data) == expected);
     }
 
