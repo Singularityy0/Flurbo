@@ -18,6 +18,8 @@ interface ForkVm {
     function warp(uint256 timestamp) external;
     function prank(address sender) external;
     function expectCall(address callee, bytes calldata data) external;
+    function snapshotState() external returns (uint256);
+    function revertToState(uint256 snapshotId) external returns (bool);
 }
 
 interface TestAusdFaucet {

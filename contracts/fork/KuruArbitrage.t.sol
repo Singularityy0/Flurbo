@@ -11,6 +11,46 @@ contract KuruArbitrageTest is KuruLifecycleFixture {
     uint32 private constant SCOPE = 128;
     event log_named_uint(string key, uint256 value);
 
+    function testScannerSellQuoteMatchesAtomicExecution() public {
+        uint40 id = bid(2e6, 900000);
+        Arb arb = runner();
+        bytes32 before_ = snapshot(arb, id);
+        uint256 saved = vm.snapshotState();
+        // eth_call discards writes. The snapshot reproduces that boundary inside a fork test.
+        vm.prank(address(0));
+        (bool ok, bytes memory data) =
+            address(market).call(abi.encodePacked(bytes4(0x532c46db), abi.encode(uint96(1e6), uint256(0), false, true)));
+        assert(ok);
+        uint256 quote = abi.decode(data, (uint256));
+        assert(vm.revertToState(saved) && snapshot(arb, id) == before_);
+        Arb.Plan memory p = poolFirstPlan();
+        p.minReceive = uint128(quote);
+        bytes memory exactCalldata = abi.encodePacked(
+            bytes4(0xac02cbfd),
+            abi.encode(true, p.quantity, p.maxSpend, p.minReceive, p.gasAllowance, p.minProfit, p.deadline)
+        );
+        assert(keccak256(exactCalldata) == keccak256(abi.encodeCall(arb.execute, (true, p))));
+        (ok, data) = address(arb).call(exactCalldata);
+        assert(ok && abi.decode(data, (Arb.Result)).received == quote && quote == 897300);
+    }
+
+    function testScannerBuyQuoteMatchesAtomicExecution() public {
+        uint40 id = ask(2e6, 500000);
+        Arb arb = runner();
+        bytes32 before_ = snapshot(arb, id);
+        uint256 saved = vm.snapshotState();
+        vm.prank(address(0));
+        (bool ok, bytes memory data) = address(market)
+            .call(abi.encodePacked(bytes4(0x7c51d6cf), abi.encode(uint96(500000), uint256(0), false, true)));
+        assert(ok);
+        uint256 units = abi.decode(data, (uint256));
+        assert(vm.revertToState(saved) && snapshot(arb, id) == before_);
+        Arb.Plan memory p = kuruFirstPlan();
+        assert(p.quantity == units && units == 997000);
+        Arb.Result memory r = arb.execute(false, p);
+        assert(r.received == p.minReceive && r.spent == 500000);
+    }
+
     function prepareReceipt() internal override {
         uint8[] memory order = new uint8[](8);
         for (uint8 i; i < 8; i++) {
