@@ -44,7 +44,25 @@
         <p class="caption">Boolean claims only in this preview. Tradable conditionals are a separate upcoming milestone.</p>
       </section>
       <div class="right-column">
-        <section class="card quote-card" aria-labelledby="quote-title"><p class="eyebrow">02 / ON-CHAIN PRICE</p><h2 id="quote-title">A price for your view.</h2><p class="muted">Computed by the pool's cost function.</p><div id="quote-result" aria-live="polite"><p class="quote-empty">Build a claim, then request a quote.</p></div><div class="quote-footer">Quote preview only. Wallet signing and trading controls are the next phase.</div></section>
+        <section class="card quote-card" aria-labelledby="quote-title"><p class="eyebrow">02 / ON-CHAIN PRICE</p><h2 id="quote-title">A price for your view.</h2><p class="muted">Computed by the pool's cost function.</p><div id="quote-result" aria-live="polite"><p class="quote-empty">Build a claim, then request a quote.</p></div><div class="quote-footer">Review the quote below to approve AUSD or trade through your connected wallet. Local test assets only.</div></section>
+        <section class="card trading" aria-labelledby="trade-title">
+          <p class="eyebrow">WALLET & EXECUTION</p><h2 id="trade-title">Make your move.</h2>
+          <p class="caption">Every approval and trade requires a separate confirmation in your wallet. The server stays read-only.</p>
+          <label for="wallet-provider">Browser wallet</label><select id="wallet-provider" disabled><option value="" disabled selected>No wallet detected</option></select>
+          <div class="wallet-actions"><button id="connect-wallet" class="button secondary" disabled>Connect wallet</button><button id="disconnect-wallet" class="button quiet" disabled>Disconnect</button></div>
+          <p id="signer-status" class="caption" role="status">Discovering browser wallets…</p>
+          <details class="wallet-help"><summary>Local network setup</summary><p>Use a dedicated test account with local AUSD and MON. Set the wallet RPC to <code>http://127.0.0.1:18545</code>, chain ID <code>10143</code>, currency <code>MON</code>. Public Monad testnet uses the same ID; the block-hash check must match this fork.</p><p>Wallet signing here is a local development flow. Mera mobile and the MetaMask Agent Wallet integration remain separate milestones.</p></details>
+          <label for="slippage">Slippage limit</label><select id="slippage"><option value="0">0%</option><option value="50" selected>0.5%</option><option value="100">1%</option><option value="300">3%</option><option value="500">5%</option></select>
+          <button id="review-trade" class="button primary wide" disabled>Review next step ↗</button>
+          <div id="review-details" class="review-details" hidden></div>
+          <button id="confirm-trade" class="button primary wide" hidden disabled>Confirm in wallet</button>
+          <button id="cancel-review" class="button quiet" hidden>Cancel review</button>
+          <p id="execution-status" class="caption" role="status">Connect a wallet and request a pool quote to begin.</p>
+          <p id="execution-hash" class="caption hash"></p>
+          <div id="replacement-area" hidden><label for="replacement-hash">Wallet transaction / replacement hash</label><input id="replacement-hash" placeholder="0x…" maxlength="66" autocomplete="off" spellcheck="false"></div>
+          <button id="check-execution" class="button secondary" hidden>Check submitted transaction</button>
+          <button id="clear-tracking" class="button quiet" hidden>Clear tracking after wallet check</button>
+        </section>
         <section class="card book" aria-labelledby="book-title"><div class="section-heading"><h2 id="book-title">The base market</h2><span class="pill">KURU</span></div><p class="muted">Event H · YES receipt / AUSD</p><div class="book-prices"><div><span class="eyebrow">BEST BID</span><strong id="bid">—</strong></div><div><span class="eyebrow">BEST ASK</span><strong id="ask">—</strong></div></div><p class="caption">Indicative top of book. Depth, fees and gas are needed for an executable route. This local book uses synthetic operator liquidity.</p><p id="receipt-backing" class="backing">Receipt backing: checking…</p></section>
       </div>
     </div>

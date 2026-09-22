@@ -1,0 +1,81 @@
+// Exercise the controller's asynchronous wallet lifecycle; these are not extension UI tests.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import { mountTrading } from './trading-ui.mjs';
+
+const account = '0x' + '11'.repeat(20), pool = '0x' + '22'.repeat(20), cash = '0x' + '33'.repeat(20);
+const hash = '0x' + 'aa'.repeat(32), txHash = '0x' + 'bb'.repeat(32), key = 'flurbo.local.pending.v1';
+async function harness(run, saved) {
+  const previous = Object.fromEntries(['window', 'document', 'sessionStorage', 'setInterval'].map(k => [k, globalThis[k]]));
+  const nodes = new Map(), storage = new Map(saved ? [[key, JSON.stringify(saved)]] : []), intervals = [];
+  function node() { return { textContent: '', value: '', hidden: false, disabled: false, children: [], handlers: {},
+    addEventListener(type, fn) { this.handlers[type] = fn; }, append(child) { this.children.push(child); }, replaceChildren(...children) { this.children = children; } }; }
+  const get = id => { if (!nodes.has(id)) nodes.set(id, node()); return nodes.get(id); };
+  class Provider extends EventEmitter {
+    calls = []; resolve; reject;
+    async request({ method, params }) {
+      this.calls.push({ method, params });
+      if (method === 'eth_sendTransaction') return new Promise((resolve, reject) => { this.resolve = resolve; this.reject = reject; });
+      return { eth_requestAccounts: [account], eth_accounts: [account], eth_chainId: '0x279f', eth_getBlockByNumber: { hash },
+        eth_call: '0x' + BigInt(250001).toString(16).padStart(64, '0'), eth_estimateGas: '0x186a0', eth_gasPrice: '0x3b9aca00' }[method];
+    }
+  }
+  const provider = new Provider();
+  const now = Math.floor(Date.now() / 1000);
+  const snapshot = { environment: 'local_fork', chain_id: 10143, trading_available: true, snapshot: { timestamp: now, stale: false, block_number: 100, block_hash: hash },
+    contracts: { pool, cash }, cluster: { closes_at: now + 1000 }, wallet: { address: account, ausd_atoms: '10000000', native_balance_wei: '1000000000000000000', pool_allowance_atoms: '1000000', positions: [] } };
+  const quote = { environment: 'local_fork', chain_id: 10143, snapshot: snapshot.snapshot, quote: { side: 'buy', scope: 3, mask: 8, quantity_atoms: '1000000', collateral_atoms: '250001', valid_until: now + 30 } };
+  const state = { tx: { status: 'unknown', confirmations: 0 }, refreshes: 0 };
+  try {
+    globalThis.document = { getElementById: get, createElement: node };
+    globalThis.window = Object.assign(new EventTarget(), { ethereum: provider, confirm: () => true });
+    globalThis.sessionStorage = { getItem: k => storage.get(k) || null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) };
+    globalThis.setInterval = fn => { intervals.push(fn); return 1; };
+    get('slippage').value = '50';
+    const controller = mountTrading({ getQuote: () => quote, readSnapshot: async () => snapshot, accountChanged() {},
+      readTransaction: async () => ({ transaction: state.tx }), invalidateQuote() {}, refresh() { state.refreshes++; } });
+    const click = id => get(id).handlers.click();
+    await run({ get, storage, provider, click, state, controller });
+  } finally { for (const [k, value] of Object.entries(previous)) { if (value === undefined) delete globalThis[k]; else globalThis[k] = value; } }
+}
+async function submitting(f) {
+  await f.click('connect-wallet'); await f.click('review-trade');
+  const task = f.click('confirm-trade');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(typeof f.provider.resolve, 'function');
+  return { task };
+}
+test('pending request is recorded before wallet returns, blocks duplicate clicks, and survives account changes', async () => harness(async f => {
+  const { task } = await submitting(f);
+  assert.equal(JSON.parse(f.storage.get(key)).hash, null);
+  await f.click('confirm-trade');
+  f.provider.emit('chainChanged', '0x1');
+  f.provider.resolve(txHash); await task;
+  assert.equal(f.provider.calls.filter(c => c.method === 'eth_sendTransaction').length, 1);
+  assert.equal(JSON.parse(f.storage.get(key)).hash, txHash);
+  assert.equal(f.get('review-trade').disabled, true);
+}));
+test('explicit rejection releases tracking while uncertain wallet errors keep it locked', async () => {
+  for (const code of [4001, -32603]) await harness(async f => {
+    const { task } = await submitting(f);
+    f.provider.reject(Object.assign(new Error('remote detail'), { code })); await task;
+    assert.equal(f.storage.has(key), code !== 4001);
+    assert.equal(f.get('execution-status').textContent.includes('remote detail'), false);
+  });
+});
+test('confirmation requires two canonical confirmations and exact event before balances refresh', async () => harness(async f => {
+  const { task } = await submitting(f); f.provider.resolve(txHash); await task;
+  const plan = JSON.parse(f.storage.get(key)).plan;
+  f.state.tx = { status: 'succeeded', confirmations: 1, sender: account, to: pool, input: plan.tx.data, value_wei: '0',
+    events: [{ kind: 'trade', trader: account, scope: 3, mask: '8', is_buy: true, quantity_atoms: '1000000', collateral_atoms: '250001' }] };
+  await f.click('check-execution'); assert.equal(f.storage.has(key), true);
+  f.state.tx.confirmations = 2;
+  await f.click('check-execution'); assert.equal(f.storage.has(key), false);
+  assert.equal(f.state.refreshes, 1); assert.match(f.get('execution-status').textContent, /Trade confirmed/);
+}));
+test('restored unresolved wallet requests lock new actions and are never automatically resubmitted', async () => harness(async f => {
+  assert.equal(f.controller.busy, true);
+  assert.equal(f.get('connect-wallet').disabled, true);
+  assert.equal(f.provider.calls.length, 0);
+}, { hash: null, plan: { account, tx: { data: '0x1234' } } }));

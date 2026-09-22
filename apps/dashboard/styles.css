@@ -176,3 +176,11 @@ h1{font-size:40px}
 .truth-table{grid-template-columns:1fr}
 }
 
+.wallet-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.wallet-help{font-size:12px;line-height:1.7;margin:18px 0;color:var(--muted)}
+.wallet-help summary{cursor:pointer;font-weight:600;color:var(--ink)}
+.wallet-help code,.hash,#signer-status{overflow-wrap:anywhere}
+.trading .wide{margin-top:14px}
+.review-details{padding:15px;margin-top:18px;border:1px solid var(--line);border-radius:10px;background:var(--soft);font-size:12px;line-height:1.7;overflow-wrap:anywhere}
+.review-details p{margin:8px 0}
+#replacement-area{margin:18px 0}

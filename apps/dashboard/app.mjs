@@ -1,4 +1,5 @@
 import { compileClaim, claimLabel, parseUnits, formatUnits, snapshotFresh } from './claims.mjs';
+import { mountTrading } from './trading-ui.mjs';
 
 const $ = id => document.getElementById(id);
 const text = (id, value) => { $(id).textContent = value; };
@@ -13,6 +14,7 @@ let data = null, wallet = null, stateBusy = false, quoteBusy = false, quote = nu
 let stateGeneration = 0, quoteGeneration = 0, txGeneration = 0;
 let stateController, quoteController, txController;
 let lastFailure = '', selectedLabels = new Map();
+let trading;
 
 async function request(path, controller) {
   const timeout = setTimeout(() => controller.abort(), 20000);
@@ -29,6 +31,7 @@ async function request(path, controller) {
 }
 
 function emptyQuote(message = 'Build a claim, then request a quote.') {
+  trading?.invalidate();
   quote = null;
   $('quote-result').replaceChildren(el('p', message, 'quote-empty'));
 }
@@ -111,7 +114,7 @@ function renderComposer() {
 function tick() {
   const fresh = data && snapshotFresh(data.snapshot);
   const usable = fresh && data.trading_available && Date.now() / 1000 < data.cluster.closes_at;
-  $('quote-button').disabled = !composed || !quantityValid || !usable || stateBusy || quoteBusy;
+  $('quote-button').disabled = !composed || !quantityValid || !usable || stateBusy || quoteBusy || Boolean(trading?.busy);
   $('quote-button').textContent = quoteBusy ? 'Reading the pool…' : 'Get pool quote ↗';
   $('refresh').disabled = stateBusy;
   $('refresh').textContent = stateBusy ? 'Reading…' : 'Refresh data ↻';
@@ -122,10 +125,11 @@ function tick() {
   text('notice', lastFailure || (!data ? 'Loading the verified deployment. No wallet is connected.' : !fresh
     ? 'Showing the last snapshot. Quotes are disabled until fresh chain data arrives. For the local fork, run the local block helper described in the dashboard guide.'
     : !usable ? 'Pool quotes are unavailable: the market is closed, resolved, unfunded or has a backing shortfall.'
-    : `${data.environment === 'local_fork' ? 'Local Monad fork' : 'Monad testnet'} · Synthetic events · Read-only preview. Quotes use the pool contract; nothing here submits a trade.`));
+    : `${data.environment === 'local_fork' ? 'Local Monad fork' : 'Monad testnet'} · Synthetic events · Pool quotes are on-chain. Local trades require your connected wallet's approval.`));
   if (quote && (!snapshotFresh(quote.snapshot) || Date.now() / 1000 >= quote.quote.valid_until || !usable)) {
     invalidateQuote('Quote expired or chain data became stale. Refresh and request a new quote.');
   } else if (quote) text('quote-expiry', `${Math.max(0, Math.ceil(quote.quote.valid_until - Date.now() / 1000))}s remaining`);
+  trading?.update();
 }
 
 function clearState() {
@@ -265,7 +269,20 @@ $('tx-form').addEventListener('submit', async event => {
   finally { if (generation === txGeneration) $('tx-button').disabled = false; }
 });
 
+trading = mountTrading({
+  getQuote: () => quote ? structuredClone(quote) : null,
+  readSnapshot: (account, selected = composed || { scope: 128, mask: 2 }) => request('/api/state?' + new URLSearchParams({ wallet: account, claims: `${selected.scope}:${selected.mask}` }), new AbortController()),
+  readTransaction: hash => request('/api/transaction?' + new URLSearchParams({ hash }), new AbortController()),
+  invalidateQuote,
+  refresh,
+  accountChanged: account => {
+    invalidateQuote('Wallet changed. Request a fresh quote.');
+    wallet = account; $('wallet').value = account || '';
+    if (!account) text('wallet-message', 'No wallet selected.');
+    refresh();
+  },
+});
 renderComposer(); preview(); refresh();
 setInterval(tick, 1000);
-setInterval(() => { if (!document.hidden && !stateBusy && !quoteBusy) refresh(); }, 15000);
+setInterval(() => { if (!document.hidden && !stateBusy && !quoteBusy && !trading.busy) refresh(); }, 15000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { tick(); refresh(); } });
