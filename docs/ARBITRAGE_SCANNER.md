@@ -99,7 +99,8 @@ FOUNDRY_PROFILE=kuru_fork forge test --fork-url https://testnet-rpc.monad.xyz -v
 ## Next delivery target: manual test dashboard
 
 Prioritize a usable manual testnet surface over more scanner features. The next
-implementation slices are (the first is now complete locally):
+implementation slices are (deployment and the [data layer](DASHBOARD_DATA.md)
+are now complete locally):
 
 1. Reproducible demo deployment and address manifest, with a documented funding
    requirement and synthetic event rules; verify scanner HTTP operation there.

@@ -71,7 +71,9 @@ bounds and complete rollback. A [read-only scanner](docs/ARBITRAGE_SCANNER.md) n
 implements candidate selection, gas conversion and full-route simulation checks.
 Its [persistent local deployment](docs/DEMO_DEPLOYMENT.md) now passes manifest
 verification and HTTP scanning. Public deployment and live anchoring remain
-pending; the next delivery target is the manual dashboard data layer.
+pending. The [manual dashboard data layer](docs/DASHBOARD_DATA.md) now serves
+live state, executable pool quotes, requested wallet positions and transaction
+status. The visible dashboard screen is next.
 The [gas optimizations](docs/FACTORED_GAS.md) reduce measured large-graph quote
 costs by 35–38% cumulatively with unchanged outputs. The latest changes also cut
 the measured pool buy/sell costs by about 9%; deployment gas limits remain a gate.

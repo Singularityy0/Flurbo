@@ -21,8 +21,9 @@ including fees, a synthetic gas allowance and second-leg rollback. Automated
 candidate selection is implemented in a [read-only scanner](ARBITRAGE_SCANNER.md)
 with offline/fork validation. [Persistent local deployment](DEMO_DEPLOYMENT.md),
 manifest checks and HTTP scanning now pass. Public deployment, live anchoring
-and public trading evidence remain open. The next delivery target is the manual
-test dashboard, followed by the remaining consumer/partner flows.
+and public trading evidence remain open. The [manual dashboard data layer](DASHBOARD_DATA.md)
+now reads live quotes, coverage, wallet holdings and transaction status; the screen
+and user-authorized transaction controls are next, followed by remaining partner flows.
 CRE adapters still target the enumerated pool and require a separate port.
 
 ## Required integration milestones

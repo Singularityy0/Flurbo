@@ -124,9 +124,9 @@ and reads no private-key environment variable. A public dry run can use the same
 script with the selected sender and RPC, omitting `--broadcast`; signing/broadcast
 commands should be finalized after that concrete dry run and funding check.
 
-The next implementation task is the dashboard data layer using this manifest:
-cluster definitions, live quotes, balances/positions, collateral coverage and
-transaction status. Then build the screen, connect user-authorized transactions
+The [dashboard data layer](DASHBOARD_DATA.md) now uses this manifest for cluster
+definitions, live quotes, balances/positions, collateral coverage and transaction
+status, with offline tests and a real local HTTP rehearsal. Next build the screen, connect user-authorized transactions
 and perform manual testing/hosting. Public wallet setup can proceed alongside
 those local implementation steps. Mera/CRE/Envio and other partner flows retain
 their separate completion gates.
