@@ -75,7 +75,7 @@ interface KuruMarket {
 }
 
 /// @dev Fork only: no broadcast/signing cheatcodes, mocked Kuru code or storage balance overrides.
-contract KuruOrderLifecycleTest {
+abstract contract KuruLifecycleFixture {
     ForkVm internal constant vm = ForkVm(address(uint160(uint256(keccak256("hevm cheat code")))));
     IERC20Metadata internal ausd;
     ReferencePool private pool;
@@ -159,65 +159,12 @@ contract KuruOrderLifecycleTest {
         );
     }
 
-    function testPostOnlyBuyCancelWithdraw() public {
-        uint256 wallet = ausd.balanceOf(address(this));
-        uint256 custody = ausd.balanceOf(address(margin));
-        bytes32 backing = backingSnapshot();
-        deposit(address(ausd), 2e6);
-        assert(ausd.balanceOf(address(this)) == wallet - 2e6);
-        assert(ausd.balanceOf(address(margin)) == custody + 2e6);
-        uint40 id = place(true, pricePrecision / 2, sizePrecision);
-        assert(margin.getBalance(address(this), address(ausd)) == 1500000);
-        cancel(id);
-        assert(margin.getBalance(address(this), address(ausd)) == 2e6);
-        margin.withdraw(2e6, address(ausd));
-        assert(margin.getBalance(address(this), address(ausd)) == 0);
-        assert(ausd.balanceOf(address(this)) == wallet && ausd.balanceOf(address(margin)) == custody);
-        assert(backingSnapshot() == backing);
-    }
-
-    function testPostOnlySellCancelWithdrawThenRedeemBacking() public {
-        uint256 wallet = receipt.balanceOf(address(this));
-        uint256 custody = receipt.balanceOf(address(margin));
-        bytes32 backing = backingSnapshot();
-        deposit(address(receipt), 3e6);
-        assert(receipt.balanceOf(address(this)) == wallet - 3e6);
-        uint40 id = place(false, pricePrecision / 2, sizePrecision);
-        assert(margin.getBalance(address(this), address(receipt)) == 2e6);
-        cancel(id);
-        assert(margin.getBalance(address(this), address(receipt)) == 3e6);
-        margin.withdraw(3e6, address(receipt));
-        assert(margin.getBalance(address(this), address(receipt)) == 0);
-        assert(receipt.balanceOf(address(this)) == wallet && receipt.balanceOf(address(margin)) == custody);
-        assert(backingSnapshot() == backing);
-        uint256 cash = ausd.balanceOf(address(this));
-        redeemBacking();
-        assert(ausd.balanceOf(address(this)) == cash + 10e6);
-        assert(receipt.totalSupply() == 0);
-    }
-
     function redeemBacking() internal virtual {
         vm.warp(pool.closesAt());
         pool.resolve(1);
         pool.unwrapBase(0, true, 10e6);
         assert(pool.redeem(10, 10e6) == 10e6);
         assert(pool.requiredCollateral() == 0 && pool.holdings(address(receipt), 10) == 0);
-    }
-
-    function testCrossingPostOnlyOrderRevertsWithoutConsumingMargin() public {
-        deposit(address(receipt), 2e6);
-        deposit(address(ausd), 2e6);
-        uint40 ask = place(false, pricePrecision / 2, sizePrecision);
-        bytes32 backing = backingSnapshot();
-        (bool ok, bytes memory reason) =
-            address(market).call(abi.encodeCall(market.addBuyOrder, (pricePrecision / 2, sizePrecision, true)));
-        assert(!ok && bytes4(reason) == bytes4(keccak256("PostOnlyError()")));
-        assert(margin.getBalance(address(this), address(ausd)) == 2e6);
-        assert(margin.getBalance(address(this), address(receipt)) == 1e6);
-        assert(market.s_orders(ask).size == sizePrecision && backingSnapshot() == backing);
-        cancel(ask);
-        margin.withdraw(2e6, address(receipt));
-        margin.withdraw(2e6, address(ausd));
     }
 
     function deposit(address asset, uint256 amount) internal {
@@ -269,5 +216,60 @@ contract KuruOrderLifecycleTest {
                 ausd.balanceOf(address(pool))
             )
         );
+    }
+}
+
+contract KuruOrderLifecycleTest is KuruLifecycleFixture {
+    function testPostOnlyBuyCancelWithdraw() public {
+        uint256 wallet = ausd.balanceOf(address(this));
+        uint256 custody = ausd.balanceOf(address(margin));
+        bytes32 backing = backingSnapshot();
+        deposit(address(ausd), 2e6);
+        assert(ausd.balanceOf(address(this)) == wallet - 2e6);
+        assert(ausd.balanceOf(address(margin)) == custody + 2e6);
+        uint40 id = place(true, pricePrecision / 2, sizePrecision);
+        assert(margin.getBalance(address(this), address(ausd)) == 1500000);
+        cancel(id);
+        assert(margin.getBalance(address(this), address(ausd)) == 2e6);
+        margin.withdraw(2e6, address(ausd));
+        assert(margin.getBalance(address(this), address(ausd)) == 0);
+        assert(ausd.balanceOf(address(this)) == wallet && ausd.balanceOf(address(margin)) == custody);
+        assert(backingSnapshot() == backing);
+    }
+
+    function testPostOnlySellCancelWithdrawThenRedeemBacking() public {
+        uint256 wallet = receipt.balanceOf(address(this));
+        uint256 custody = receipt.balanceOf(address(margin));
+        bytes32 backing = backingSnapshot();
+        deposit(address(receipt), 3e6);
+        assert(receipt.balanceOf(address(this)) == wallet - 3e6);
+        uint40 id = place(false, pricePrecision / 2, sizePrecision);
+        assert(margin.getBalance(address(this), address(receipt)) == 2e6);
+        cancel(id);
+        assert(margin.getBalance(address(this), address(receipt)) == 3e6);
+        margin.withdraw(3e6, address(receipt));
+        assert(margin.getBalance(address(this), address(receipt)) == 0);
+        assert(receipt.balanceOf(address(this)) == wallet && receipt.balanceOf(address(margin)) == custody);
+        assert(backingSnapshot() == backing);
+        uint256 cash = ausd.balanceOf(address(this));
+        redeemBacking();
+        assert(ausd.balanceOf(address(this)) == cash + 10e6);
+        assert(receipt.totalSupply() == 0);
+    }
+
+    function testCrossingPostOnlyOrderRevertsWithoutConsumingMargin() public {
+        deposit(address(receipt), 2e6);
+        deposit(address(ausd), 2e6);
+        uint40 ask = place(false, pricePrecision / 2, sizePrecision);
+        bytes32 backing = backingSnapshot();
+        (bool ok, bytes memory reason) =
+            address(market).call(abi.encodeCall(market.addBuyOrder, (pricePrecision / 2, sizePrecision, true)));
+        assert(!ok && bytes4(reason) == bytes4(keccak256("PostOnlyError()")));
+        assert(margin.getBalance(address(this), address(ausd)) == 2e6);
+        assert(margin.getBalance(address(this), address(receipt)) == 1e6);
+        assert(market.s_orders(ask).size == sizePrecision && backingSnapshot() == backing);
+        cancel(ask);
+        margin.withdraw(2e6, address(receipt));
+        margin.withdraw(2e6, address(ausd));
     }
 }
