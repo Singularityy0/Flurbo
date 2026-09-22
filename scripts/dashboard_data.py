@@ -9,6 +9,9 @@ from check_kuru_readiness import words
 from scan_arbitrage import abi, address, block_info
 from verify_demo import RULES, RULES_HASH
 
+TRADED = "0xfafd4a382ead0cb54fe827af5995137a1a8b433ebfd5a8d13def35a83adfb9b5"
+APPROVAL = "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925"
+
 
 class DashboardRpc(Rpc):
     allowed_methods = Rpc.allowed_methods | {"eth_getBalance", "eth_getTransactionByHash", "eth_getTransactionReceipt"}
@@ -186,6 +189,10 @@ class Dashboard:
                 raise CheckError("Transaction response mismatch")
             item.update(status="pending" if tx.get("blockNumber") is None else "awaiting_receipt",
                         sender=address(tx["from"]), to=address(tx["to"]) if tx.get("to") else None)
+            tx_input = tx.get("input", "0x")
+            if not isinstance(tx_input, str) or not re.fullmatch(r"0x(?:[0-9a-fA-F]{2}){0,32768}", tx_input):
+                raise CheckError("Malformed transaction input")
+            item.update(input=tx_input.lower(), value_wei=str(quantity(tx.get("value", "0x0"))))
             item["targets_demo"] = item["to"] in [self.m[k] for k in ("pool", "receipt", "market", "cash", "margin", "executor")]
         if receipt is not None:
             if not isinstance(receipt, dict) or hash32(receipt.get("transactionHash")) != tx_hash:
@@ -199,4 +206,30 @@ class Dashboard:
                 raise CheckError("Invalid transaction status")
             item.update(status="succeeded" if status else "reverted", confirmations=self.number - block + 1,
                         block_number=block, gas_used=str(quantity(receipt.get("gasUsed"))))
+            item["events"] = self.receipt_events(receipt, tx_hash)
         return self.finish(result)
+
+    def receipt_events(self, receipt, tx_hash):
+        result = []
+        for log in receipt.get("logs", []):
+            origin = address(log.get("address"))
+            topics = log.get("topics", [])
+            if not topics or (origin, topics[0]) not in ((self.m["pool"], TRADED), (self.m["cash"], APPROVAL)):
+                continue
+            if log.get("removed") or hash32(log.get("blockHash")) != hash32(receipt["blockHash"]) or hash32(log.get("transactionHash")) != tx_hash:
+                raise CheckError("Event is outside the canonical transaction receipt")
+            indexed = [int(hash32(topic), 16) for topic in topics[1:]]
+            if topics[0] == TRADED:
+                values = words(log.get("data"), 3)
+                if len(indexed) != 3 or indexed[0] >= 2**160 or indexed[1] >= 2**32 or values[0] not in (0, 1) or max(values[1:]) >= 2**128:
+                    raise CheckError("Malformed trade event")
+                result.append({"kind": "trade", "trader": f"0x{indexed[0]:040x}", "scope": indexed[1],
+                               "mask": str(indexed[2]), "is_buy": bool(values[0]), "quantity_atoms": str(values[1]),
+                               "collateral_atoms": str(values[2])})
+            else:
+                values = words(log.get("data"), 1)
+                if len(indexed) != 2 or max(indexed) >= 2**160:
+                    raise CheckError("Malformed approval event")
+                result.append({"kind": "approval", "owner": f"0x{indexed[0]:040x}",
+                               "spender": f"0x{indexed[1]:040x}", "amount_atoms": str(values[0])})
+        return result

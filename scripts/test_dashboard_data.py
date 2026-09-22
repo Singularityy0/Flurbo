@@ -4,7 +4,7 @@ import copy
 import unittest
 
 from check_monad_readiness import CheckError
-from dashboard_data import Dashboard, DashboardRpc
+from dashboard_data import Dashboard, DashboardRpc, TRADED, APPROVAL
 from scan_arbitrage import abi
 from serve_dashboard import route
 from test_demo_manifest import FakeRpc as ManifestRpc, fixture, NETWORK
@@ -147,6 +147,23 @@ class DashboardTests(unittest.TestCase):
         for method in ("eth_sendTransaction", "eth_sendRawTransaction", "eth_sign", "eth_estimateGas", "anvil_setBalance"):
             with self.assertRaises(CheckError): rpc(method, [])
         self.assertEqual(rpc.counter, 0)
+
+    def test_receipt_decodes_only_canonical_pool_trade_and_cash_approval(self):
+        model, rpc, m = setup()
+        topic = lambda value: "0x" + f"{value:064x}"
+        common = {"blockHash": "0x" + "aa" * 32, "transactionHash": TX, "removed": False}
+        approval = {**common, "address": m["cash"], "topics": [APPROVAL, topic(int(m["operator"], 16)), topic(int(m["pool"], 16))], "data": topic(251252)}
+        trade = {**common, "address": m["pool"], "topics": [TRADED, topic(int(m["operator"], 16)), topic(3), topic(8)], "data": "0x" + "".join(f"{n:064x}" for n in (1, 1000000, 250001))}
+        rpc.tx = {"hash": TX, "from": m["operator"], "to": m["pool"], "blockNumber": "0x64", "input": "0x12345678", "value": "0x0"}
+        rpc.receipt = {"transactionHash": TX, "blockNumber": "0x64", "blockHash": common["blockHash"], "status": "0x1", "gasUsed": "0x5208", "logs": [approval, trade, {**trade, "address": m["executor"]}]}
+        tx = model.transaction(TX)["transaction"]
+        self.assertEqual(tx["input"], "0x12345678")
+        self.assertEqual(tx["value_wei"], "0")
+        self.assertEqual(len(tx["events"]), 2)
+        self.assertEqual(tx["events"][0]["amount_atoms"], "251252")
+        self.assertEqual(tx["events"][1]["mask"], "8")
+        trade["removed"] = True
+        with self.assertRaises(CheckError): model.transaction(TX)
 
 
 if __name__ == "__main__": unittest.main()
