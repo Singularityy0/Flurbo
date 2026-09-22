@@ -97,8 +97,9 @@ remain unverified. The fork uses a trusted local resolver; it does not deliver a
 signed CRE report. Successful cancellation is not trading-volume evidence.
 
 Read-only candidate selection and full-route simulation are now implemented;
-persistent-deployment HTTP validation is next as part of the manual dashboard
-delivery path. The CRE adapter still targets the
+persistent local deployment and HTTP validation now pass as documented in the
+[deployment rehearsal](DEMO_DEPLOYMENT.md). Dashboard data integration is next.
+The CRE adapter still targets the
 enumerated pool and needs its own port. Public testnet execution can follow a review of
 the exact transactions and dedicated wallet/test MON/AUSD funding setup. Mera,
 official settlement sources and the remaining partner milestones remain required.

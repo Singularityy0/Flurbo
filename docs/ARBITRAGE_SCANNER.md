@@ -13,7 +13,8 @@ Copy `config/arbitrage-scan.example.json` to an ignored local file such as
 `target/arbitrage-scan.json`. Configure the executor, pool, market, receipt, AUSD
 and operator addresses; singleton scope/local mask; finite candidate amounts;
 and risk/freshness settings. Address and market-price fields are deliberately
-empty in the example. There is no public Flurbo deployment to populate them yet.
+empty in the example. A [verified local deployment](DEMO_DEPLOYMENT.md) now exists
+under ignored `target/deployments/`; there is no public Flurbo deployment yet.
 
 The current executor is the local experiment in
 `contracts/fork/helpers/FactoredArbitrage.sol`. It must already exist and hold
@@ -29,6 +30,8 @@ million AUSD atoms per token and 10^18 wei per MON.
 
 ```sh
 python scripts/scan_arbitrage.py --config target/arbitrage-scan.json --provider public
+# Persistent local demo, fixed loopback RPC http://127.0.0.1:18545:
+python scripts/scan_arbitrage.py --config target/deployments/local-scan.json --provider local
 # Or use the existing locally configured Alchemy endpoint:
 python scripts/scan_arbitrage.py --config target/arbitrage-scan.json --provider alchemy
 ```
@@ -80,10 +83,11 @@ identity mismatches and prohibition of signing/broadcast RPCs. Two additional
 fork tests validate the exact scanner selectors against Kuru's zero-sender path,
 discard quote-side writes, then compare normal atomic execution and calldata.
 
-The full fork suite now passes 29 tests. These tests and offline scanner tests
-are separate evidence: the Python scanner has not yet completed an HTTP scan
-against a persistently deployed Flurbo executor. That end-to-end check belongs
-to the deployment step, alongside estimating real transaction costs.
+The full fork suite passes 29 tests. The subsequent [deployment rehearsal](DEMO_DEPLOYMENT.md)
+also completed a real HTTP scan against persistent local contracts: two of six
+candidates passed using a labeled synthetic conversion input. This closes the
+local HTTP integration check; public deployments and real conversion data remain
+separate gates.
 
 Run:
 
@@ -95,7 +99,7 @@ FOUNDRY_PROFILE=kuru_fork forge test --fork-url https://testnet-rpc.monad.xyz -v
 ## Next delivery target: manual test dashboard
 
 Prioritize a usable manual testnet surface over more scanner features. The next
-five implementation slices are:
+implementation slices are (the first is now complete locally):
 
 1. Reproducible demo deployment and address manifest, with a documented funding
    requirement and synthetic event rules; verify scanner HTTP operation there.

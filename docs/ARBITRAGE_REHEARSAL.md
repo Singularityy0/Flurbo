@@ -107,8 +107,9 @@ forge fmt --check contracts/fork/KuruOrderLifecycle.t.sol contracts/fork/Factore
 
 A [read-only candidate scanner](ARBITRAGE_SCANNER.md) now evaluates configured
 sizes in both directions using matching-engine quotes, gas conversion, full
-calldata simulation and stale/unprofitable rejection. Its HTTP integration still
-needs a persistent deployment. The next delivery target is a manual test dashboard.
+calldata simulation and stale/unprofitable rejection. Its HTTP integration now
+passes against a [persistent local deployment](DEMO_DEPLOYMENT.md). The next
+delivery target is a manual test dashboard.
 Repeated trading, multiple makers/levels,
 inventory policies, market upgrades, MEV and deployment gas remain open. The
 factored CRE port, actual conditional securities, mobile/Mera/AUSD, Envio,
