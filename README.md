@@ -58,8 +58,11 @@ over the shared outcome space. [Factored buy/sell quotes](docs/FACTORED_QUOTES.m
 now apply local Boolean trades, round collateral conservatively, and return
 the exact resulting maximum liability. The [funded factored pool](docs/FACTORED_POOL.md)
 now integrates owner holdings, conservative execution, exact collateral coverage,
-trusted resolution and redemption in local tests. Gas optimization, public
-deployment and porting partner adapters remain pending.
+trusted resolution and redemption in local tests. Its [base-event ERC-20
+receipts](docs/FACTORED_BASE_TOKENS.md) now support backed wrapping, transfers and
+unwrapping using factored scope/mask keys. Further gas optimization, public
+deployment and porting partner adapters remain pending; the existing Kuru fork
+rehearsal still targets the enumerated reference pool.
 The [gas optimizations](docs/FACTORED_GAS.md) reduce measured large-graph quote
 costs by 35–38% cumulatively with unchanged outputs. The latest changes also cut
 the measured pool buy/sell costs by about 9%; deployment gas limits remain a gate.

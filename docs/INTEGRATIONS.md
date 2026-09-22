@@ -10,9 +10,10 @@ real Kuru orders, and native mobile authentication remain unverified.
 The user will provide the missing Agora, Mera, and community bounty details later.
 
 The [factored pool's local lifecycle](FACTORED_POOL.md) now covers funded trades,
-owner accounting and redemption, including 32-event tests. Existing Kuru receipts
-and CRE adapters still target the enumerated reference pool; porting them is an
-explicit remaining integration gate, not completed by this local milestone.
+owner accounting and redemption, including 32-event tests. [Base-event
+receipts](FACTORED_BASE_TOKENS.md) are now ported to factored scope/mask keys and
+locally tested. The Kuru fork rehearsal and CRE adapters still target the
+enumerated reference pool; porting those flows is an explicit remaining gate.
 
 ## Required integration milestones
 

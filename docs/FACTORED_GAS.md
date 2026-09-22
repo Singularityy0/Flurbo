@@ -62,13 +62,21 @@ forge test
 forge fmt --check
 ```
 
-The complete suite passes 217 Solidity tests, including independent Decimal
+The optimization checkpoint passed 217 Solidity tests, including independent Decimal
 enclosures, exact enumerated maxima, unchanged input checks, graph rejection,
 funded trades, redemptions, and adversarial collateral behavior. The existing
-32-event pool lifecycle fixture now uses 6,690,412 gas, including deployment and
+32-event pool lifecycle fixture used 6,690,412 gas, including deployment and
 other lifecycle calls, versus 6,804,367 after the first optimization. Concrete
 runtime size increases from 19,196 to 19,609 bytes for the combined API and storage
 logic; this is the code-size tradeoff for reduced execution work.
+
+The subsequent [receipt port](FACTORED_BASE_TOKENS.md) passes 225 Solidity tests.
+It adds a factory deployment to the pool constructor: the same 32-event lifecycle
+now uses 8,015,173 gas, and pool runtime is 21,333 bytes (creation bytecode 35,318
+bytes before constructor arguments). Factory and receipt runtimes are 4,708 and
+2,448 bytes. The buy measurement remains 987,426 gas; sell is 986,262, 22 gas above
+the optimization checkpoint after the new entry points changed dispatch. Charges,
+payouts, pure quote outputs and existing gas budgets remain unchanged.
 
 ## Remaining execution limits
 

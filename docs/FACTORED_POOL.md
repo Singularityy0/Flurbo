@@ -18,7 +18,8 @@ real-asset use has been performed or approved.
    slippage limits and deadlines, owner debits/credits and cached exact maximum
    liability. This layer is also abstract and is not a standalone deployable pool.
 4. `FactoredPool`: the concrete contract adds immutable resolver/rules, one-time
-   finalization and partial or full redemption of winning and losing claims.
+   finalization and partial or full redemption of winning and losing claims,
+   plus a canonical base-token registry and backed wrap/unwrap conversions.
 5. End-to-end adversarial tests and documentation check these pieces together.
 
 ## Creation and funding
@@ -63,7 +64,14 @@ checked after transfers and liability updates.
 Every accepted transfer must change both pool and counterparty balances by the
 signed amount. False-return, reverting, receiver-tax and extra-sender-fee tokens
 are rejected; exact-transfer tokens that return no value are supported through
-SafeERC20. All fund/trade/resolve/redeem mutations share one reentrancy guard.
+SafeERC20. All fund/trade/resolve/redeem and receipt mutations share one
+reentrancy guard.
+
+[Base-event receipts](FACTORED_BASE_TOKENS.md) convert caller-owned YES/NO claims
+into transferable ERC-20 units. The pool credits an internal escrow holding at
+the receipt address, which is counted once in the same factor liabilities.
+Unwrapping burns receipts and restores that exact claim to the caller. Neither
+conversion changes factor values, collateral requirements, cash or quotes.
 
 ## Resolution and redemption
 
@@ -84,7 +92,8 @@ withdrawal during a shortfall. No more trading is possible after close.
 Before resolution, the cached maximum is updated only from the exact evaluator
 on an accepted trade. After resolution, remaining payout decreases only by actual
 winning redemption amounts; the old unresolved maximum is no longer used.
-There are no extra credit, factor mutation, mint, or payout entry points.
+Receipt conversions only move existing claims between a holder and token escrow;
+they create no additional liability or payout rights.
 
 ## Evidence and remaining gates
 
@@ -96,18 +105,21 @@ resolution state around failures; verify rollback, callbacks, no-return tokens,
 losing burns, stale limits, and shortfall recovery. Precision checks cover
 0/6/18 decimals, and a 32-event lifecycle exercises event 31 through redemption.
 
-With solc 0.8.28 and 200 optimizer runs, the local concrete runtime is 19,609
-bytes. The 32-event lifecycle test used about 6.69 million gas including deployment,
-funding, one trade and redemption; it is not a dense-graph trade benchmark.
+With solc 0.8.28 and 200 optimizer runs, the local concrete runtime is 21,333
+bytes. The existing 32-event lifecycle test uses about 8.02 million gas including
+deployment of the pool and its receipt factory, funding, one trade and redemption;
+it is not a dense-graph trade benchmark. The 225-test Solidity suite includes
+separate receipt backing, transfer, high-bit settlement and adversarial checks.
 Large graph execution remains expensive and requires optimization and explicit
 deployment gas limits. Run `forge test` and `forge fmt --check` before committing.
 The [gas checkpoints](FACTORED_GAS.md) preserve complete pure quote outputs and
 now include measured pool execution and stable-order storage regression checks.
 
-The existing enumerated `ReferencePool`, its base-event receipts, Kuru fork
-rehearsal and CRE receiver remain separate reference integrations. Their adapters
-must be ported to factored scope/mask keys and uint32 outcomes before claiming
-this pool completes those partner flows. Kuru anchoring, actual conditional
+The existing enumerated `ReferencePool`, its Kuru fork rehearsal and CRE receiver
+remain separate reference integrations. Factored base-event receipts are now
+implemented; the Kuru rehearsal and CRE adapter must still be ported to factored
+scope/mask keys and uint32 outcomes before claiming this pool completes those
+partner flows. Kuru anchoring, actual conditional
 securities, mobile/Mera/AUSD trades, Envio indexing, deployment verification and
 the other [partner milestones](INTEGRATIONS.md) remain required. Missing bounty
 criteria and the passkey domain still require user input when those steps resume.

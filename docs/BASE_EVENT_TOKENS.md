@@ -1,5 +1,9 @@
 # Base-event ERC-20 receipts
 
+This page describes the enumerated reference pool. The separate
+[factored receipt implementation](FACTORED_BASE_TOKENS.md) supports 1–32 events
+with scope/local-mask keys and has its own local backing tests.
+
 `ReferencePool` can now issue one canonical YES and NO token per base event.
 These are transferable receipts for existing claims in the same shared pool,
 intended as the assets for Kuru pairs. They are **locally tested only**: no public pair,
