@@ -22,8 +22,11 @@ candidate selection is implemented in a [read-only scanner](ARBITRAGE_SCANNER.md
 with offline/fork validation. [Persistent local deployment](DEMO_DEPLOYMENT.md),
 manifest checks and HTTP scanning now pass. Public deployment, live anchoring
 and public trading evidence remain open. The [manual dashboard data layer](DASHBOARD_DATA.md)
-now reads live quotes, coverage, wallet holdings and transaction status; the screen
-and user-authorized transaction controls are next, followed by remaining partner flows.
+now reads live quotes, coverage, wallet holdings and transaction status. The
+[local screen](DASHBOARD_SCREEN.md) adds a Boolean composer, exact pool quotes,
+wallet inspection and transaction checks. User-authorized transaction controls
+are next, followed by remaining partner flows. This engineering test surface does
+not replace the Expo/Mera/AUSD consumer app or establish partner completion.
 CRE adapters still target the enumerated pool and require a separate port.
 
 ## Required integration milestones

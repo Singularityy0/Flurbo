@@ -2,8 +2,8 @@
 
 `scripts/dashboard_data.py` supplies live, read-only data from the verified demo
 manifest. `scripts/serve_dashboard.py` exposes it as a loopback HTTP API. This is
-the data-layer milestone; the interactive screen and user-signed transactions
-are the next tasks. It does not sign, approve, trade, resolve, mine blocks or
+the data-layer milestone; the [interactive screen](DASHBOARD_SCREEN.md) now runs
+on the same service. User-signed transactions are next. The API does not sign, approve, trade, resolve, mine blocks or
 publish a site.
 
 ## Start and inspect
@@ -102,6 +102,6 @@ rejection. Evidence is saved locally as `target/deployments/dashboard-http-check
 python -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-Next: build the visible screen on this API, then add user-authorized transaction
-controls and perform manual testing/hosting. Expo/Mera accounts, CRE settlement,
+The [visible screen and local clock helper](DASHBOARD_SCREEN.md) are now available.
+Next add user-authorized transaction controls and perform manual testing/hosting. Expo/Mera accounts, CRE settlement,
 Envio history and other required partner flows keep their own completion gates.

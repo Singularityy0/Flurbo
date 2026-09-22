@@ -126,7 +126,9 @@ commands should be finalized after that concrete dry run and funding check.
 
 The [dashboard data layer](DASHBOARD_DATA.md) now uses this manifest for cluster
 definitions, live quotes, balances/positions, collateral coverage and transaction
-status, with offline tests and a real local HTTP rehearsal. Next build the screen, connect user-authorized transactions
-and perform manual testing/hosting. Public wallet setup can proceed alongside
+status, with offline tests and a real local HTTP rehearsal. The [local dashboard
+screen](DASHBOARD_SCREEN.md) now supports manual read/quote testing, with a
+separate loopback-only block helper to keep the fork fresh. Next connect
+user-authorized transactions and perform full manual testing/hosting. Public wallet setup can proceed alongside
 those local implementation steps. Mera/CRE/Envio and other partner flows retain
 their separate completion gates.
