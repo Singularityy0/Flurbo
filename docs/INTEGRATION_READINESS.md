@@ -63,14 +63,14 @@ code on both chains. Inspection of
 [Router source at 2060bb2](https://github.com/Kuru-Labs/Kuru-contracts-dex-public/blob/2060bb2736080c175d80d568bfdb6226bb5abd04/contracts/Router.sol)
 shows public `deployProxy` with no caller allowlist or owner modifier. This supports
 permissionless market creation at the source level. We have not matched that
-source to the live proxy implementations or executed a deployment, and exchange
+source to the live proxy implementations or executed a public deployment, and exchange
 UI listing/access is a separate question still requiring confirmation.
 
 Use the [Router market deployment path](https://docs.kuru.io/sdk/deploy-market)
 for two existing ERC-20 assets (`NO_NATIVE`): a backed Flurbo base-event token and
 AUSD. Do not use the generic token launcher to create unbacked outcome supply.
 Flurbo now has locally tested [backed base-event ERC-20 receipts](BASE_EVENT_TOKENS.md).
-Verified token deployments and Kuru pair/order execution remain pending.
+Public token deployments and Kuru pair/order execution remain pending.
 Check precision/tick/minimum-size/fees for prices spanning 0–1.
 
 The [order SDK](https://docs.kuru.io/sdk/orderbook-sdk) documents margin deposits,
@@ -78,14 +78,16 @@ The [order SDK](https://docs.kuru.io/sdk/orderbook-sdk) documents margin deposit
 SDK compatible with the actual deployment, deposit test inventory, place a
 post-only order, capture its ID, cancel it, and reconcile balances/events. A fill
 requires a separate controlled test. Neither placement nor cancellation happened
-in this checkpoint. Funded inventory, signing setup and network choice are still
+in the initial read-only checkpoint. Public funded inventory and signing setup are still
 needed. Keeper profitability must account for executable depth, fees and gas.
 
 The [September 22 Kuru draft](KURU_TESTNET_PLAN.md) now supplies exact six-decimal
 price/size planning, unsigned order/cancel encoding and a read-only interface
 probe. The live factory links, AUSD decimals and reference-market return layout
-passed at block 64,729,226. Source/bytecode equivalence, new pair deployment and
-order execution remain unverified; the next gate is a local fork rehearsal.
+passed at block 64,729,226. The [fork rehearsal](KURU_FORK_REHEARSAL.md) now passes
+pair deployment, margin funding, buy/sell placement and cancellation, withdrawal,
+and Flurbo receipt redemption using that chain snapshot. Source/bytecode equivalence,
+public deployment, fills and executable arbitrage remain unverified.
 
 The supplied legacy testnet docs URL did not load; current official docs and
 the public source were used instead. Kuru's organization also lists a newer
@@ -149,8 +151,9 @@ sign-in, AUSD balances, signed transactions and recovery remain unverified.
    simulation for unsigned payload preparation. The [authenticated receiver](CRE_RECEIVER.md)
    passes local tests, including generated payloads through multi-owner redemption;
    verified CRE delivery and official source validation remain pending.
-4. Rehearse the drafted Kuru pair/order configuration against a local testnet fork,
-   then perform the funded public deploy/order/cancel/fill spike with account setup.
+4. Prepare the funded public Kuru deploy/order/cancel/fill spike with account setup;
+   the local fork rehearsal has passed. Prioritize factored pricing and conditional
+   payout semantics for the next core implementation slices.
 
 The factored engine, tradable conditionals and every remaining
 [partner milestone](INTEGRATIONS.md) stay in scope. This checkpoint does not replace them.

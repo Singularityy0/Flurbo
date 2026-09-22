@@ -89,7 +89,9 @@ and [settlement rules and limits](docs/SETTLEMENT.md).
 [Base-event ERC-20 receipts](docs/BASE_EVENT_TOKENS.md) now wrap existing YES/NO
 holdings without changing shared-pool liabilities or quotes. Holders can transfer,
 unwrap, sell before close or redeem after resolution. Local tests cover backing
-and payouts; actual Kuru pairs, orders and arbitrage anchoring remain pending.
+and payouts. A [Kuru fork rehearsal](docs/KURU_FORK_REHEARSAL.md) now passes pair
+deployment, order cancellation and withdrawal using deployed Kuru/AUSD code in a
+local fork. Public pairs, fills and arbitrage anchoring remain pending.
 
 `ReferenceLmsr` uses whole collateral units and floating-point math. Its bounded
 input domain is documented in the API. It enforces nonnegative simulated state

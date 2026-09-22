@@ -95,9 +95,10 @@ fingerprints do not establish identical implementations, and getters do not
 prove source/bytecode equivalence or deployment/order compatibility. No Kuru SDK
 version has been installed or declared compatible based on this probe.
 
-Next: rehearse new pair deployment and a funded post-only order/cancel/withdraw
-against a local testnet fork using the actual Kuru code and Flurbo receipts.
-Then review public testnet transaction parameters and funding needs with the user.
+The [local fork rehearsal](KURU_FORK_REHEARSAL.md) now passes pair deployment,
+post-only buy/sell cancellation, withdrawals and receipt redemption using actual
+Kuru/AUSD code at this snapshot. Public execution remains a separate step: review
+transaction parameters and funding needs with the user before proceeding.
 Live execution needs a dedicated test wallet, test MON and test AUSD, deployed
 Flurbo contracts and wrapped inventory. Keys stay local. Listing access, actual
 fills, price anchoring and partner eligibility remain separate evidence gates.

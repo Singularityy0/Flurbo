@@ -2,7 +2,7 @@
 
 `ReferencePool` can now issue one canonical YES and NO token per base event.
 These are transferable receipts for existing claims in the same shared pool,
-intended as the assets for Kuru pairs. They are **locally tested only**: no pair,
+intended as the assets for Kuru pairs. They are **locally tested only**: no public pair,
 listing, order, fill or live collateral integration has been completed.
 
 ## Issuance and backing
@@ -70,10 +70,10 @@ The 256-case fuzz test varies event, YES/NO side, terminal state and quantity,
 reconstructs liabilities including escrow, and checks both owners' final payouts.
 
 The [Kuru testnet draft](KURU_TESTNET_PLAN.md) now plans exact order units and
-checks live read interfaces. Next, rehearse the registered token and verified
-AUSD address as an existing-asset pair on a local fork. Verify network/ABI,
-tick/lot units, token decimals, listing access,
-margin deposits/withdrawals and real order/cancel/fill behavior. An executable
+checks live read interfaces. A [local fork rehearsal](KURU_FORK_REHEARSAL.md) now
+passes receipt/AUSD pair deployment, margin deposits/withdrawals, post-only
+buy/sell cancellation and subsequent receipt redemption. Public deployment,
+listing access and fills remain pending. An executable
 arbitrage path must account for inventory, fees, depth, gas and transaction
 atomicity. ERC-20 compatibility alone does not establish Kuru integration or
 price anchoring. The final factored engine and tradable conditionals remain required.
