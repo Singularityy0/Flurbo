@@ -61,8 +61,10 @@ now integrates owner holdings, conservative execution, exact collateral coverage
 trusted resolution and redemption in local tests. Its [base-event ERC-20
 receipts](docs/FACTORED_BASE_TOKENS.md) now support backed wrapping, transfers and
 unwrapping using factored scope/mask keys. Further gas optimization, public
-deployment and porting partner adapters remain pending; the existing Kuru fork
-rehearsal still targets the enumerated reference pool.
+deployment and porting partner adapters remain pending. The [Kuru fork
+rehearsal](docs/KURU_FORK_REHEARSAL.md) now passes with both enumerated and factored
+receipts, including a 32-event pool and subsequent shared-pool sale/redemption.
+Fills, fee reconciliation and executable arbitrage anchoring remain pending.
 The [gas optimizations](docs/FACTORED_GAS.md) reduce measured large-graph quote
 costs by 35–38% cumulatively with unchanged outputs. The latest changes also cut
 the measured pool buy/sell costs by about 9%; deployment gas limits remain a gate.

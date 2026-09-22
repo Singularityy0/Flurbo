@@ -2,7 +2,6 @@
 pragma solidity 0.8.28;
 
 import {ReferencePool} from "../src/ReferencePool.sol";
-import {BaseEventToken} from "../src/BaseEventToken.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 interface ForkVm {
@@ -66,14 +65,14 @@ interface KuruMarket {
 
 /// @dev Fork only: no broadcast/signing cheatcodes, mocked Kuru code or storage balance overrides.
 contract KuruOrderLifecycleTest {
-    ForkVm private constant vm = ForkVm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    IERC20Metadata private ausd;
+    ForkVm internal constant vm = ForkVm(address(uint160(uint256(keccak256("hevm cheat code")))));
+    IERC20Metadata internal ausd;
     ReferencePool private pool;
-    BaseEventToken private receipt;
-    KuruMargin private margin;
-    KuruMarket private market;
-    uint32 private pricePrecision;
-    uint96 private sizePrecision;
+    IERC20Metadata internal receipt;
+    KuruMargin internal margin;
+    KuruMarket internal market;
+    uint32 internal pricePrecision;
+    uint96 internal sizePrecision;
 
     function setUp() public {
         require(block.chainid == 10143 && block.number == 64729226, "use the pinned Monad testnet fork");
@@ -85,6 +84,13 @@ contract KuruOrderLifecycleTest {
         TestAusdFaucet(vm.parseJsonAddress(network, ".networks.testnet.contracts.ausd_faucet"))
             .requestFunds(address(this));
         require(ausd.balanceOf(address(this)) >= 1000e6, "fork faucet funding insufficient");
+        prepareReceipt();
+        market = KuruMarket(deployPair(router));
+        assert(address(market).code.length > 0 && margin.verifiedMarket(address(market)));
+    }
+
+    // Both pool implementations exercise the identical deployed Kuru interfaces and assertions.
+    function prepareReceipt() internal virtual {
         pool = new ReferencePool(
             address(ausd),
             2,
@@ -96,10 +102,8 @@ contract KuruOrderLifecycleTest {
         ausd.approve(address(pool), 1000e6);
         pool.fund();
         pool.buy(10, 10e6, 10e6, block.timestamp);
-        receipt = pool.createBaseToken(0, true);
+        receipt = IERC20Metadata(address(pool.createBaseToken(0, true)));
         pool.wrapBase(0, true, 10e6);
-        market = KuruMarket(deployPair(router));
-        assert(address(market).code.length > 0 && margin.verifiedMarket(address(market)));
         assert(address(pool.baseTokens(10)) == address(receipt));
     }
 
@@ -175,13 +179,18 @@ contract KuruOrderLifecycleTest {
         assert(margin.getBalance(address(this), address(receipt)) == 0);
         assert(receipt.balanceOf(address(this)) == wallet && receipt.balanceOf(address(margin)) == custody);
         assert(backingSnapshot() == backing);
+        uint256 cash = ausd.balanceOf(address(this));
+        redeemBacking();
+        assert(ausd.balanceOf(address(this)) == cash + 10e6);
+        assert(receipt.totalSupply() == 0);
+    }
+
+    function redeemBacking() internal virtual {
         vm.warp(pool.closesAt());
         pool.resolve(1);
         pool.unwrapBase(0, true, 10e6);
-        uint256 cash = ausd.balanceOf(address(this));
         assert(pool.redeem(10, 10e6) == 10e6);
-        assert(ausd.balanceOf(address(this)) == cash + 10e6);
-        assert(receipt.totalSupply() == 0 && pool.requiredCollateral() == 0);
+        assert(pool.requiredCollateral() == 0 && pool.holdings(address(receipt), 10) == 0);
     }
 
     function testCrossingPostOnlyOrderRevertsWithoutConsumingMargin() public {
@@ -200,13 +209,13 @@ contract KuruOrderLifecycleTest {
         margin.withdraw(2e6, address(ausd));
     }
 
-    function deposit(address asset, uint256 amount) private {
+    function deposit(address asset, uint256 amount) internal {
         IERC20Metadata(asset).approve(address(margin), amount);
         margin.deposit(address(this), asset, amount);
         assert(margin.getBalance(address(this), asset) == amount);
     }
 
-    function place(bool isBuy, uint32 price, uint96 size) private returns (uint40 id) {
+    function place(bool isBuy, uint32 price, uint96 size) internal returns (uint40 id) {
         vm.recordLogs();
         if (isBuy) market.addBuyOrder(price, size, true);
         else market.addSellOrder(price, size, true);
@@ -231,14 +240,14 @@ contract KuruOrderLifecycleTest {
         assert(order.owner == address(this) && order.size == size && order.price == price && order.isBuy == isBuy);
     }
 
-    function cancel(uint40 id) private {
+    function cancel(uint40 id) internal {
         uint40[] memory ids = new uint40[](1);
         ids[0] = id;
         market.batchCancelOrders(ids);
         assert(market.s_orders(id).owner == address(0));
     }
 
-    function backingSnapshot() private view returns (bytes32) {
+    function backingSnapshot() internal view virtual returns (bytes32) {
         assert(receipt.totalSupply() == pool.holdings(address(receipt), 10));
         return keccak256(
             abi.encode(

@@ -4,8 +4,9 @@
 holdings. The receipts use the same shared collateral and factor ledger as all
 composed claims. They do not create another pool or change executable prices.
 This is a local implementation milestone toward the idea's required Kuru tier.
-The Kuru fork rehearsal still uses `ReferencePool`; factored receipts have not
-yet been exercised against Kuru, deployed publicly, or connected to mobile trades.
+The [Kuru fork rehearsal](KURU_FORK_REHEARSAL.md) now exercises factored receipts
+against deployed Kuru/AUSD code at a pinned historical block. Factored receipts
+have not been deployed publicly or connected to mobile trades.
 
 ## Identity and creation
 
@@ -83,7 +84,9 @@ pinned solc 0.8.28 configuration. Runtime sizes are 21,333 bytes for the pool,
 35,318 bytes before constructor arguments. These measurements do not establish
 deployment affordability or a production security review.
 
-Next: port the existing Kuru local fork rehearsal to these scope/mask receipts,
-checking pair assets, deposit/order/cancel/withdraw and subsequent redemption.
-Fills, executable arbitrage anchoring, public deployment and usage evidence remain
-separate required milestones. See [partner delivery](INTEGRATIONS.md).
+The subsequent Kuru fork suite passes four factored and three reference tests:
+pair assets, deposit/order/cancel/withdraw, post-only rejection, subsequent
+redemption and a factored shared-pool sale/composed-claim lifecycle. Next are local
+fills and fee reconciliation, then executable arbitrage anchoring. Public
+deployment and usage evidence remain separate required milestones. See
+[partner delivery](INTEGRATIONS.md).

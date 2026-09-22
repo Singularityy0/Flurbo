@@ -115,11 +115,11 @@ deployment gas limits. Run `forge test` and `forge fmt --check` before committin
 The [gas checkpoints](FACTORED_GAS.md) preserve complete pure quote outputs and
 now include measured pool execution and stable-order storage regression checks.
 
-The existing enumerated `ReferencePool`, its Kuru fork rehearsal and CRE receiver
-remain separate reference integrations. Factored base-event receipts are now
-implemented; the Kuru rehearsal and CRE adapter must still be ported to factored
-scope/mask keys and uint32 outcomes before claiming this pool completes those
-partner flows. Kuru anchoring, actual conditional
+The [Kuru fork rehearsal](KURU_FORK_REHEARSAL.md) now exercises factored receipts
+alongside the enumerated reference fixture, including a 32-event high-bit asset,
+order cancellation, withdrawal and shared-pool sale/redemption. Fills, fee
+reconciliation and arbitrage remain outstanding. The CRE receiver still targets
+the enumerated pool and must be ported to uint32 outcomes. Kuru anchoring, actual conditional
 securities, mobile/Mera/AUSD trades, Envio indexing, deployment verification and
 the other [partner milestones](INTEGRATIONS.md) remain required. Missing bounty
 criteria and the passkey domain still require user input when those steps resume.
