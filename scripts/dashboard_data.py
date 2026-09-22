@@ -1,0 +1,202 @@
+"""Read-only dashboard model. Amounts are decimal strings safe for JavaScript BigInt."""
+
+import hashlib
+import re
+import time
+
+from check_monad_readiness import CheckError, Rpc, quantity
+from check_kuru_readiness import words
+from scan_arbitrage import abi, address, block_info
+from verify_demo import RULES, RULES_HASH
+
+
+class DashboardRpc(Rpc):
+    allowed_methods = Rpc.allowed_methods | {"eth_getBalance", "eth_getTransactionByHash", "eth_getTransactionReceipt"}
+
+
+def claim(scope, mask):
+    if type(scope) is not int or not 0 < scope < 256 or not 1 <= scope.bit_count() <= 3:
+        raise ValueError("Select one to three events from this eight-event cluster")
+    full = (1 << (1 << scope.bit_count())) - 1
+    if type(mask) is not int or not 0 < mask < full:
+        raise ValueError("Payoff mask must be nonconstant and fit the selected events")
+    return scope, mask
+
+
+def hash32(value):
+    if not isinstance(value, str) or not re.fullmatch(r"0x[0-9a-fA-F]{64}", value):
+        raise ValueError("Expected a 32-byte transaction/block hash")
+    return value.lower()
+
+
+class Dashboard:
+    def __init__(self, manifest, network, rpc, environment, clock=time.time):
+        self.m = dict(manifest)
+        self.rpc, self.clock = rpc, clock
+        m = self.m
+        if m.get("status") != "verified_snapshot" or m.get("manifest_version") != 1:
+            raise CheckError("Dashboard requires a verified deployment manifest")
+        if m.get("environment") != environment or m.get("chain_id") != 10143:
+            raise CheckError("Manifest environment differs from selected RPC")
+        for key in ("pool", "receipt", "market", "executor", "cash", "margin", "operator", "resolver"):
+            m[key] = address(m.get(key))
+        if m["cash"] != address(network["contracts"]["ausd"]) or m["margin"] != address(network["contracts"]["kuru_margin"]):
+            raise CheckError("Unexpected network assets")
+        if m.get("rules_hash") != RULES_HASH or m.get("rules") != RULES:
+            raise CheckError("Unsupported synthetic settlement rules")
+        if (m.get("scope"), m.get("mask"), m.get("event_count"), m.get("liquidity_atoms")) != (128, 2, 8, 10000000):
+            raise CheckError("Unsupported demo manifest")
+
+    def begin(self):
+        m = self.m
+        if quantity(self.rpc("eth_chainId", [])) != 10143:
+            raise CheckError("Wrong RPC chain")
+        baseline = self.rpc("eth_getBlockByNumber", [hex(m["verified_block"]), False])
+        if block_info(baseline)[2] != hash32(m["verified_block_hash"]):
+            raise CheckError("Deployment checkpoint changed; verify the manifest again")
+        self.number, self.timestamp, self.block_hash = block_info(self.rpc("eth_getBlockByNumber", ["latest", False]))
+        self.tag = hex(self.number)
+        for key in ("pool", "receipt", "market", "executor", "cash", "margin"):
+            code = self.rpc("eth_getCode", [m[key], self.tag])
+            if not isinstance(code, str) or not re.fullmatch(r"0x(?:[0-9a-fA-F]{2})+", code):
+                raise CheckError("Deployed contract code is unavailable")
+            if hashlib.sha256(bytes.fromhex(code[2:])).hexdigest() != m["code_sha256"].get(key):
+                raise CheckError("Deployed contract code changed; verify the manifest again")
+        expected = {"71be2e4a": 8, "1a686502": 10000000, "ec9c6c30": 6,
+                    "04f3bcec": int(m["resolver"], 16), "03a79426": int(RULES_HASH, 16),
+                    "39a3a99a": m["closes_at"], "d8dfeb45": int(m["cash"], 16)}
+        if any(self.call("pool", sig)[0] != value for sig, value in expected.items()):
+            raise CheckError("Pool configuration differs from verified manifest")
+        if self.call("pool", "7220c660", 128, 2)[0] != int(m["receipt"], 16):
+            raise CheckError("Receipt registry changed")
+        pair = self.call("market", "90c9427c", count=11)
+        if pair != [1000000, 1000000, int(m["receipt"], 16), 6, int(m["cash"], 16), 6, 100, 10000, 100000000, 30, 10]:
+            raise CheckError("Kuru pair configuration changed")
+
+    def call(self, key, selector, *args, count=1):
+        return words(self.rpc("eth_call", [{"to": self.m[key], "data": abi(selector, *args)}, self.tag]), count)
+
+    def balance(self, asset, owner):
+        return self.call(asset, "70a08231", int(owner, 16))[0]
+
+    def state(self):
+        funded = self.call("pool", "f3a504f2")[0]
+        resolved = self.call("pool", "3f6fa655")[0]
+        if funded not in (0, 1) or resolved not in (0, 1):
+            raise CheckError("Malformed pool state")
+        outcome = self.call("pool", "1bb51c6a")[0] if resolved else None
+        if outcome is not None and outcome >= 256:
+            raise CheckError("Resolved state is outside the cluster")
+        balance = self.balance("cash", self.m["pool"])
+        required = self.call("pool", "b53105a3")[0]
+        supply = self.call("receipt", "18160ddd")[0]
+        escrow = self.call("pool", "90fc2c7b", int(self.m["receipt"], 16), 128, 2)[0]
+        covered = balance >= required
+        backed = supply == escrow
+        phase = "resolved" if resolved else "closed" if self.timestamp >= self.m["closes_at"] else "open" if funded else "unfunded"
+        return {"phase": phase, "funded": bool(funded), "resolved": bool(resolved), "resolved_state": outcome, "covered": covered, "receipt_backed": backed,
+                "pool_collateral_atoms": str(balance), "required_collateral_atoms": str(required),
+                "coverage_surplus_atoms": str(balance - required), "receipt_supply_atoms": str(supply),
+                "receipt_escrow_atoms": str(escrow), "executor_collateral_atoms": str(self.balance("cash", self.m["executor"]))}
+
+    def finish(self, payload):
+        if block_info(self.rpc("eth_getBlockByNumber", [self.tag, False])) != (self.number, self.timestamp, self.block_hash):
+            raise CheckError("Snapshot reorganized; retry")
+        head, _, _ = block_info(self.rpc("eth_getBlockByNumber", ["latest", False]))
+        age = int(self.clock()) - self.timestamp
+        stale = not 0 <= age <= 30 or not self.number <= head <= self.number + 2
+        payload.update(read_only=True, environment=self.m["environment"], chain_id=10143,
+                       snapshot={"block_number": self.number, "block_hash": self.block_hash,
+                                 "timestamp": self.timestamp, "age_seconds": age, "stale": stale})
+        expired = payload.get("quote") is not None and int(self.clock()) >= payload["quote"]["valid_until"]
+        if (stale or expired) and "quote" in payload:
+            payload["quote"] = None
+            payload["quote_status"] = "unavailable"
+            payload["reason"] = "Snapshot or quote window expired; refresh before requesting a quote"
+        return payload
+
+    def snapshot(self, wallet=None, claims=None):
+        if wallet is not None:
+            try:
+                wallet = address(wallet)
+            except CheckError:
+                raise ValueError("Invalid wallet address") from None
+        claims = [(1 << i, side) for i in range(8) for side in (1, 2)] if claims is None else claims
+        if not isinstance(claims, list) or not 1 <= len(claims) <= 16:
+            raise ValueError("Request 1–16 claim balances")
+        claims = list(dict.fromkeys(claim(*item) for item in claims))
+        self.begin()
+        state = self.state()
+        bid, ask = self.call("market", "b4de8b70", count=2)
+        result = {"cluster": {"events": [{"index": i, "label": f"Synthetic event {chr(65+i)}"} for i in range(8)],
+                              "rules": RULES, "closes_at": self.m["closes_at"], "liquidity_atoms": "10000000",
+                              "collateral_decimals": 6, "collateral_symbol": "AUSD", "resolver": self.m["resolver"]},
+                  "contracts": {key: self.m[key] for key in ("pool", "receipt", "market", "cash", "margin", "executor")},
+                  "pool": state, "wallet": None,
+                  "kuru": {"best_bid_wad": None if bid == 2**256 - 1 else str(bid),
+                           "best_ask_wad": None if ask == 0 else str(ask),
+                           "price_scale": str(10**18), "quote_type": "indicative_top_of_book_not_execution"}}
+        if wallet:
+            w = int(wallet, 16)
+            result["wallet"] = {"address": wallet, "native_balance_wei": str(quantity(self.rpc("eth_getBalance", [wallet, self.tag]))),
+                                "ausd_atoms": str(self.balance("cash", wallet)), "receipt_atoms": str(self.balance("receipt", wallet)),
+                                "pool_allowance_atoms": str(self.call("cash", "dd62ed3e", w, int(self.m["pool"], 16))[0]),
+                                "margin_available_ausd_atoms": str(self.call("margin", "d4fac45d", w, int(self.m["cash"], 16))[0]),
+                                "margin_available_receipt_atoms": str(self.call("margin", "d4fac45d", w, int(self.m["receipt"], 16))[0]),
+                                "positions_scope": "requested_claims_only",
+                                "positions": [{"scope": s, "mask": p, "quantity_atoms": str(self.call("pool", "90fc2c7b", w, s, p)[0])} for s, p in claims]}
+        result = self.finish(result)
+        result["trading_available"] = (state["phase"] == "open" and state["covered"] and state["receipt_backed"]
+                                       and not result["snapshot"]["stale"] and int(self.clock()) < self.m["closes_at"])
+        return result
+
+    def quote(self, side, scope, mask, amount):
+        scope, mask = claim(scope, mask)
+        if side not in ("buy", "sell") or type(amount) is not int or not 0 < amount < 2**128:
+            raise ValueError("Provide buy/sell and a positive uint128 quantity in collateral atoms")
+        self.begin()
+        state = self.state()
+        result = {"quote": None, "quote_status": "unavailable"}
+        if state["phase"] != "open" or not state["covered"] or not state["receipt_backed"]:
+            result["reason"] = "Pool is not open and fully backed for trading"
+        elif not 0 <= int(self.clock()) - self.timestamp <= 30:
+            result["reason"] = "Snapshot is stale"
+        else:
+            try:
+                value = self.call("pool", "a6a83dde" if side == "buy" else "f29d0ba9", scope, mask, amount)[0]
+                if not 0 < value <= amount:
+                    raise CheckError("Quote exceeds supported payoff bounds")
+                result.update(quote_status="available", quote={"side": side, "scope": scope, "mask": mask,
+                              "quantity_atoms": str(amount), "collateral_atoms": str(value),
+                              "valid_until": min(self.timestamp + 30, self.m["closes_at"] - 1),
+                              "requires_execution_recheck": True, "ownership_checked": False})
+            except CheckError:
+                result["reason"] = "Pool quote unavailable or rejected; no fallback price is supplied"
+        return self.finish(result)
+
+    def transaction(self, tx_hash):
+        tx_hash = hash32(tx_hash)
+        self.begin()
+        receipt = self.rpc("eth_getTransactionReceipt", [tx_hash])
+        tx = self.rpc("eth_getTransactionByHash", [tx_hash])
+        result = {"transaction": {"hash": tx_hash, "status": "unknown", "confirmations": 0}}
+        item = result["transaction"]
+        if tx is not None:
+            if not isinstance(tx, dict) or hash32(tx.get("hash")) != tx_hash:
+                raise CheckError("Transaction response mismatch")
+            item.update(status="pending" if tx.get("blockNumber") is None else "awaiting_receipt",
+                        sender=address(tx["from"]), to=address(tx["to"]) if tx.get("to") else None)
+            item["targets_demo"] = item["to"] in [self.m[k] for k in ("pool", "receipt", "market", "cash", "margin", "executor")]
+        if receipt is not None:
+            if not isinstance(receipt, dict) or hash32(receipt.get("transactionHash")) != tx_hash:
+                raise CheckError("Receipt response mismatch")
+            block = quantity(receipt.get("blockNumber"))
+            canonical = block_info(self.rpc("eth_getBlockByNumber", [hex(block), False]))[2]
+            if canonical != hash32(receipt.get("blockHash")) or block > self.number:
+                raise CheckError("Receipt is outside the pinned canonical snapshot; retry")
+            status = quantity(receipt.get("status"))
+            if status not in (0, 1):
+                raise CheckError("Invalid transaction status")
+            item.update(status="succeeded" if status else "reverted", confirmations=self.number - block + 1,
+                        block_number=block, gas_used=str(quantity(receipt.get("gasUsed"))))
+        return self.finish(result)
