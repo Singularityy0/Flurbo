@@ -75,7 +75,10 @@ pending. The [manual dashboard data layer](docs/DASHBOARD_DATA.md) now serves
 live state, executable pool quotes, requested wallet positions and transaction
 status. The [local dashboard screen](docs/DASHBOARD_SCREEN.md) now runs at
 `http://127.0.0.1:18765/` with a Boolean claim composer, pool quotes, wallet
-inspection and transaction checks. User-authorized transaction controls are next.
+inspection and transaction checks. [Local wallet trading](docs/DASHBOARD_TRADING.md)
+now adds bounded approvals, buy/sell, slippage/deadline checks and event-confirmed
+tracking. A seven-transaction disposable-fork rehearsal passes; the user's
+Firefox/MetaMask signing test and full manual lifecycle validation remain next.
 The [gas optimizations](docs/FACTORED_GAS.md) reduce measured large-graph quote
 costs by 35–38% cumulatively with unchanged outputs. The latest changes also cut
 the measured pool buy/sell costs by about 9%; deployment gas limits remain a gate.

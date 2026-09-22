@@ -6,9 +6,9 @@ uses the [dashboard API](DASHBOARD_DATA.md) against the persistent local Monad
 fork. No package install, frontend build, wallet connection or hosting account
 is needed for this screen.
 
-This is a read-only manual test surface. It does not approve AUSD, buy, sell,
-place Kuru orders, resolve a market or redeem. Those transaction controls are the
-next phase. It does not replace the Expo/Mera mobile product or complete any
+The original read-only screen now also has [local wallet transaction controls](DASHBOARD_TRADING.md)
+for AUSD approvals and pool buy/sell. Kuru orders, resolution and redemption
+controls remain upcoming. It does not replace the Expo/Mera mobile product or complete any
 partner bounty. Tradable conditionals remain a separate accounting milestone.
 
 ## What to try
@@ -109,7 +109,10 @@ stale data stays labelled as a last snapshot and quotes become unavailable.
 An unreachable API clears live values. Inputs invalidate pending quote responses,
 and editing a wallet address clears the previous wallet view. Quote expiry is
 checked locally every second even without a new server response. A new snapshot
-also invalidates an earlier quote. No address or quote is stored in browser storage.
+also invalidates an earlier quote. Pending wallet requests are now recorded in
+same-tab session storage for recovery, as described in the trading guide; ordinary
+address inspection and quotes are not persisted. Automatic state refresh pauses
+while a review, wallet request or submitted transaction is active.
 
 Static assets are explicitly allowlisted. No arbitrary files, directories or
 RPC URLs are served. Same-origin/host checks, a restrictive content security
@@ -130,6 +133,6 @@ node --test apps/dashboard/claims.test.mjs
 node --check apps/dashboard/app.mjs
 ```
 
-Next: user-authorized transaction controls, then full manual lifecycle testing
+Next: the user's Firefox/MetaMask signing test, full manual lifecycle testing
 and a hosting decision. Public deployment and the Mera/CRE/Envio/Alchemy/MetaMask
 partner work retain their own completion gates in [the integration checklist](INTEGRATIONS.md).

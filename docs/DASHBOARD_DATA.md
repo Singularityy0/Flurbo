@@ -3,7 +3,8 @@
 `scripts/dashboard_data.py` supplies live, read-only data from the verified demo
 manifest. `scripts/serve_dashboard.py` exposes it as a loopback HTTP API. This is
 the data-layer milestone; the [interactive screen](DASHBOARD_SCREEN.md) now runs
-on the same service. User-signed transactions are next. The API does not sign, approve, trade, resolve, mine blocks or
+on the same service, with [browser-wallet signing](DASHBOARD_TRADING.md) handled
+by the client. The API does not sign, approve, trade, resolve, mine blocks or
 publish a site.
 
 ## Start and inspect
@@ -72,8 +73,9 @@ executable quantity quote or an RFQ.
 Transaction inclusion is checked against its canonical block. Confirmation count
 does not assert finality. `targets_demo` distinguishes configured contract targets
 from unrelated transactions; this field is not proof that a particular user
-action or amount succeeded. Event-specific reconciliation comes with transaction
-controls.
+action or amount succeeded. The API now includes calldata/native value and decoded
+canonical pool `Traded` and AUSD `Approval` events. The local wallet controls use
+these to match the reviewed transaction before reporting action success.
 
 ## Consistency and validation
 
@@ -103,5 +105,6 @@ python -m unittest discover -s scripts -p 'test_*.py'
 ```
 
 The [visible screen and local clock helper](DASHBOARD_SCREEN.md) are now available.
-Next add user-authorized transaction controls and perform manual testing/hosting. Expo/Mera accounts, CRE settlement,
+Local wallet controls now have a disposable-clone rehearsal; next verify the user
+signing flow and perform full manual lifecycle testing/hosting. Expo/Mera accounts, CRE settlement,
 Envio history and other required partner flows keep their own completion gates.
