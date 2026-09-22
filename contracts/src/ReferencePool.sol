@@ -8,9 +8,11 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {LmsrCost} from "./LmsrCost.sol";
 import {LmsrQuote} from "./LmsrQuote.sol";
 import {QuoteMath} from "./QuoteMath.sol";
+import {BaseEventToken} from "./BaseEventToken.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @notice Local-test reference pool with trusted resolution; do not fund with real assets.
-/// @dev One immutable, enumerated cluster. Claims are internal balances, not transferable tokens.
+/// @dev One immutable, enumerated cluster. Base claims can be wrapped into canonical ERC-20 receipts.
 contract ReferencePool is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -27,6 +29,8 @@ contract ReferencePool is ReentrancyGuard {
     error AlreadyResolved();
     error NotResolved();
     error InvalidOutcome();
+    error InvalidBaseEvent();
+    error BaseTokenNotCreated();
 
     IERC20 public immutable collateral;
     uint8 public immutable collateralDecimals;
@@ -40,11 +44,15 @@ contract ReferencePool is ReentrancyGuard {
     uint8 public resolvedState;
     uint128[] private stateLiabilities;
     mapping(address => mapping(uint256 => uint128)) public holdings;
+    mapping(uint256 => BaseEventToken) public baseTokens;
 
     event Funded(address indexed sponsor, uint128 amount);
     event Traded(address indexed trader, uint256 indexed mask, bool isBuy, uint128 quantity, uint128 collateralAmount);
     event Resolved(uint8 indexed terminalState, bytes32 indexed rulesHash);
     event Redeemed(address indexed holder, uint256 indexed mask, uint128 quantity, uint128 collateralAmount);
+    event BaseTokenCreated(uint8 indexed eventIndex, bool outcome, uint256 indexed mask, address indexed token);
+    event BaseWrapped(address indexed owner, uint256 indexed mask, uint128 quantity);
+    event BaseUnwrapped(address indexed owner, uint256 indexed mask, uint128 quantity);
 
     constructor(address token, uint8 events_, uint128 b, uint64 closeTime, address resolver_, bytes32 rulesHash) {
         if (
@@ -77,6 +85,58 @@ contract ReferencePool is ReentrancyGuard {
 
     function liabilities() external view returns (uint128[] memory) {
         return stateLiabilities;
+    }
+
+    /// @notice Permissionless, idempotent creation of this pool's canonical YES/NO receipt.
+    function createBaseToken(uint8 eventIndex, bool outcome) external nonReentrant returns (BaseEventToken token) {
+        uint256 mask = baseMask(eventIndex, outcome);
+        token = baseTokens[mask];
+        if (address(token) != address(0)) return token;
+        string memory index = Strings.toString(eventIndex);
+        token = new BaseEventToken(
+            mask,
+            collateralDecimals,
+            string.concat("Flurbo event ", index, outcome ? " YES" : " NO"),
+            string.concat("FLB", index, outcome ? "Y" : "N")
+        );
+        baseTokens[mask] = token;
+        emit BaseTokenCreated(eventIndex, outcome, mask, address(token));
+    }
+
+    /// @notice Move owned base claims into escrow and mint equal transferable receipt units.
+    /// @dev Conversion moves no collateral and changes no terminal liability or quote.
+    function wrapBase(uint8 eventIndex, bool outcome, uint128 quantity) external nonReentrant {
+        uint256 mask = baseMask(eventIndex, outcome);
+        BaseEventToken token = baseTokens[mask];
+        if (address(token) == address(0)) revert BaseTokenNotCreated();
+        if (quantity == 0) revert LmsrQuote.InvalidQuantity();
+        if (holdings[msg.sender][mask] < quantity) revert InsufficientHoldings();
+        holdings[msg.sender][mask] -= quantity;
+        holdings[address(token)][mask] += quantity;
+        token.mint(msg.sender, quantity);
+        emit BaseWrapped(msg.sender, mask, quantity);
+    }
+
+    /// @notice Burn caller-owned receipts and restore equal internal claims for selling/redemption.
+    /// @dev Available after close/resolution too; conversion cannot withdraw collateral.
+    function unwrapBase(uint8 eventIndex, bool outcome, uint128 quantity) external nonReentrant {
+        uint256 mask = baseMask(eventIndex, outcome);
+        BaseEventToken token = baseTokens[mask];
+        if (address(token) == address(0)) revert BaseTokenNotCreated();
+        if (quantity == 0) revert LmsrQuote.InvalidQuantity();
+        token.burn(msg.sender, quantity);
+        holdings[address(token)][mask] -= quantity;
+        holdings[msg.sender][mask] += quantity;
+        emit BaseUnwrapped(msg.sender, mask, quantity);
+    }
+
+    function baseMask(uint8 eventIndex, bool outcome) public view returns (uint256 mask) {
+        uint256 bit = uint256(1) << eventIndex;
+        uint256 n = stateLiabilities.length;
+        if (bit >= n) revert InvalidBaseEvent();
+        for (uint256 state; state < n; ++state) {
+            if (((state & bit) != 0) == outcome) mask |= uint256(1) << state;
+        }
     }
 
     function requiredCollateral() public view returns (uint128 required) {

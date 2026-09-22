@@ -69,8 +69,9 @@ UI listing/access is a separate question still requiring confirmation.
 Use the [Router market deployment path](https://docs.kuru.io/sdk/deploy-market)
 for two existing ERC-20 assets (`NO_NATIVE`): a backed Flurbo base-event token and
 AUSD. Do not use the generic token launcher to create unbacked outcome supply.
-Flurbo currently has internal claim balances, so transferable base tokens remain
-a prerequisite. Check precision/tick/minimum-size/fees for prices spanning 0–1.
+Flurbo now has locally tested [backed base-event ERC-20 receipts](BASE_EVENT_TOKENS.md).
+Verified token deployments and Kuru pair/order execution remain pending.
+Check precision/tick/minimum-size/fees for prices spanning 0–1.
 
 The [order SDK](https://docs.kuru.io/sdk/orderbook-sdk) documents margin deposits,
 `GTC.placeLimit`, and `OrderCanceler.cancelOrders`. The upcoming spike must pin an
@@ -142,7 +143,8 @@ sign-in, AUSD balances, signed transactions and recovery remain unverified.
    simulation for unsigned payload preparation. The [authenticated receiver](CRE_RECEIVER.md)
    passes local tests, including generated payloads through multi-owner redemption;
    verified CRE delivery and official source validation remain pending.
-4. Add backed base-event tokens, then perform the Kuru deploy/order/cancel spike.
+4. Verify the Kuru pair configuration for the new backed base-event tokens, then
+   perform the funded deploy/order/cancel/fill spike with the required account setup.
 
 The factored engine, tradable conditionals and every remaining
 [partner milestone](INTEGRATIONS.md) stay in scope. This checkpoint does not replace them.

@@ -86,6 +86,11 @@ Losing claims burn for zero; coverage protects all remaining winners.
 this reference pool with real assets.** See [pool behavior](docs/REFERENCE_POOL.md)
 and [settlement rules and limits](docs/SETTLEMENT.md).
 
+[Base-event ERC-20 receipts](docs/BASE_EVENT_TOKENS.md) now wrap existing YES/NO
+holdings without changing shared-pool liabilities or quotes. Holders can transfer,
+unwrap, sell before close or redeem after resolution. Local tests cover backing
+and payouts; actual Kuru pairs, orders and arbitrage anchoring remain pending.
+
 `ReferenceLmsr` uses whole collateral units and floating-point math. Its bounded
 input domain is documented in the API. It enforces nonnegative simulated state
 liabilities, but does not check ownership, token balances, or funded solvency.

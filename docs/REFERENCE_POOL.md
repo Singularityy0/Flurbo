@@ -9,7 +9,7 @@ not depend on an RFQ or externally supplied price.
 Winning claims can now redeem after resolution, but this contract must not be
 deployed with real assets. It is the small-state reference implementation, not
 the final factored engine or a completed partner integration. Subsidy withdrawal
-and transferable claim tokens remain absent.
+remains absent. Base claims now have optional [ERC-20 receipts](BASE_EVENT_TOKENS.md).
 
 ## Configuration and funding
 
@@ -48,8 +48,9 @@ Holdings are keyed by caller and canonical mask inside this pool. A seller must
 own the exact mask and quantity; owning a superset or another user's liability
 does not authorize a sale. Successful buys credit holdings and increase every
 selected terminal liability; sales reverse those entries. A winning claim unit
-represents one collateral atomic unit. No transferable ERC-20/1155 claim token,
-split/merge accounting, or conditional security is implemented in this slice.
+represents one collateral atomic unit. Base YES/NO claims can now be wrapped into
+canonical ERC-20 receipts; their escrow remains in this ledger. Composed claims
+remain internal balances. Split/merge accounting and conditional securities are pending.
 
 Each `Traded` event includes the trader, mask, direction, claim quantity, and
 executed collateral amount. These events are groundwork for indexing, not an
