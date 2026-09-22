@@ -17,8 +17,9 @@ The previous routing-first strategy does not supersede it. See
   inside that cluster does not require funding a separate pool.
 - **Coherent multi-leg pricing:** arbitrary AND/OR/NOT combinations within the
   supported event set compile to canonical payoffs and use the same cost function.
-  Begin reference tests with two events, then three. This enumeration is an oracle
-  for validating the planned bounded-treewidth engine, not a replacement for it.
+  Small two- and three-event enumeration remains an oracle for validating the
+  bounded-treewidth engine; the factored trade language currently supports
+  Boolean claims over at most three selected events in a cluster of up to 32.
 - **On-chain execution:** contracts compute and enforce executable pool prices
   from current state, with user slippage limits. Rust supplies reference calculations
   and simulations. Trading against the pool must work without RFQ responses or Kuru.
@@ -49,14 +50,16 @@ LMSR cost, conjunction probabilities and maximum liabilities for up to 32 binary
 events under a validated elimination order of width at most two. Buy/sell
 simulations support Boolean claims over up to three selected events, revalidate
 the resulting graph and numeric domain, and reuse exact-scope factor tables.
-Owner accounting and fixed-point factored execution remain pending.
+These Rust simulations remain reference tools.
 The [Solidity factored evaluator](docs/FACTORED_NUMERICS.md) now validates graph
 width and computes a conservative cost enclosure using bounded tables, with an
 explicit error propagation budget. It also computes exact maximum liabilities
 over the shared outcome space. [Factored buy/sell quotes](docs/FACTORED_QUOTES.md)
 now apply local Boolean trades, round collateral conservatively, and return
-the exact resulting maximum liability. Gas optimization and pool integration
-remain pending.
+the exact resulting maximum liability. The [funded factored pool](docs/FACTORED_POOL.md)
+now integrates owner holdings, conservative execution, exact collateral coverage,
+trusted resolution and redemption in local tests. Gas optimization, public
+deployment and porting partner adapters remain pending.
 
 Phase 1 provides payoff algebra for one to three binary events and split/merge
 validation. Phase 2a adds an enumerated LMSR reference model: shared probabilities,

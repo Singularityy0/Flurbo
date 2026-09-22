@@ -64,10 +64,11 @@ including a 32-event claim containing event 31. Run the fixture generator with
 ## Execution boundary
 
 `ReferencePool` still uses the enumerated adapter. The factored quote module
-does not authenticate snapshots, hold funds, track owners, reserve a price,
-enforce deadlines, or transfer collateral. Execution must load stored state,
-recompute the quote, enforce owner holdings and collateral coverage, then update
-holdings and factors atomically. Settlement and actual conditional claims remain
-separate gates. A quote computes two costs and one exact maximum with repeated
-validation; large graph gas optimization remains necessary before deployment.
+itself does not authenticate snapshots, hold funds, track owners, reserve a price,
+enforce deadlines, or transfer collateral. The [local factored pool](FACTORED_POOL.md)
+now loads stored state, recomputes the quote, enforces owner holdings and coverage,
+and updates factors and holdings atomically. It includes trusted resolution and
+redemption; actual conditional claims remain a separate gate. A quote computes
+two costs and one exact maximum with repeated validation; large graph gas
+optimization remains necessary before deployment.
 Kuru anchoring and the other [partner requirements](INTEGRATIONS.md) remain required.

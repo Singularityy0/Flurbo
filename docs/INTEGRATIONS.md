@@ -9,6 +9,11 @@ Monad mainnet/testnet, plus Kuru and Mera source inspection. Alchemy account acc
 real Kuru orders, and native mobile authentication remain unverified.
 The user will provide the missing Agora, Mera, and community bounty details later.
 
+The [factored pool's local lifecycle](FACTORED_POOL.md) now covers funded trades,
+owner accounting and redemption, including 32-event tests. Existing Kuru receipts
+and CRE adapters still target the enumerated reference pool; porting them is an
+explicit remaining integration gate, not completed by this local milestone.
+
 ## Required integration milestones
 
 | Partner / source | Role and completion evidence | Human input / verification still needed |

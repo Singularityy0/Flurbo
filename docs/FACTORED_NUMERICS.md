@@ -78,7 +78,7 @@ evaluation, including rejection of declared zero-valued scopes that exceed width
 This returns outstanding payout liability, not the LMSR subsidy, maker profit,
 or collateral headroom. It does not read token balances, verify ownership,
 convert WAD to collateral atoms, or enforce funding. Those responsibilities
-remain with the factored ledger integration. The [quote adapter](FACTORED_QUOTES.md)
+belong to the [funded factored pool](FACTORED_POOL.md). The [quote adapter](FACTORED_QUOTES.md)
 now converts atom-aligned amounts and returns this maximum with each simulated trade.
 
 ## Scalar binary reduction
@@ -178,4 +178,5 @@ an explicit validation call, both evaluations and assertions. These are measured
 examples, not worst-case limits or deployed trade costs. Cost differences need
 two snapshots and further accounting. Gas optimization remains a deployment
 gate. [Conservative factored trade quotes](FACTORED_QUOTES.md) are now implemented;
-shared-pool accounting and execution remain pending.
+the [funded factored pool](FACTORED_POOL.md) now integrates owner accounting,
+coverage, execution and trusted settlement in local tests.

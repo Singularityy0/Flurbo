@@ -102,7 +102,8 @@ rejections and a 32-event round trip. The [fixed-point evaluator and error
 specification](FACTORED_NUMERICS.md) now implement graph validation, cost
 enclosures and exact maximum liabilities in Solidity. The [factored quoting
 adapter](FACTORED_QUOTES.md) now applies local Boolean trades with conservative
-collateral rounding. Accounting integration remains a gate before pool execution.
+collateral rounding. The [local factored pool](FACTORED_POOL.md) now integrates
+owner accounting, funding, execution, coverage checks and trusted settlement.
 
 The inference method follows [variable elimination](https://ermongroup.github.io/cs228-notes/inference/ve/).
 [Pennock and Xia](https://arxiv.org/abs/1202.3756) motivate distinguishing tractable
