@@ -182,13 +182,14 @@ def scan(config, rpc, now=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--provider", choices=("public", "alchemy"), default="public")
+    parser.add_argument("--provider", choices=("public", "alchemy", "local"), default="public")
     args = parser.parse_args()
     try:
         config = json.loads(args.config.read_text())
         validate(config, int(time.time()))
         network = json.loads(CONFIG.read_text())["networks"]["testnet"]
         report = scan(config, ScanRpc(rpc_endpoint(network, args.provider, os.environ)))
+        report["environment"] = "local_fork" if args.provider == "local" else "public_testnet"
     except (CheckError, ValueError, OSError) as error:
         report = {"read_only": True, "status": "blocked", "error": str(error) if isinstance(error, CheckError) else "Invalid or unavailable local configuration"}
     except Exception:

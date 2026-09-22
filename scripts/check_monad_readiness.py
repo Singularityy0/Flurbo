@@ -24,6 +24,8 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def rpc_endpoint(network, provider, environment):
+    if provider == "local":
+        return "http://127.0.0.1:18545"
     url = network["public_rpc"] if provider == "public" else environment.get(network["alchemy_env"], "")
     if not url:
         raise CheckError(f"Set {network['alchemy_env']} locally; do not paste keys into chat")
