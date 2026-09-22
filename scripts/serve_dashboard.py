@@ -1,4 +1,4 @@
-"""Loopback-only read API for the upcoming manual dashboard. No signing or transaction writes."""
+"""Local dashboard and read API. No signing or transaction writes."""
 
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -9,6 +9,10 @@ from urllib.parse import parse_qs, urlsplit
 
 from check_monad_readiness import CONFIG, CheckError, rpc_endpoint
 from dashboard_data import Dashboard, DashboardRpc
+
+STATIC_ROOT = Path(__file__).resolve().parents[1] / "apps" / "dashboard"
+STATIC = {"/": ("index.html", "text/html"), "/styles.css": ("styles.css", "text/css"),
+          "/app.mjs": ("app.mjs", "text/javascript"), "/claims.mjs": ("claims.mjs", "text/javascript")}
 
 
 def route(model, path):
@@ -34,11 +38,21 @@ def route(model, path):
 def handler(factory):
     class Handler(BaseHTTPRequestHandler):
         def reply(self, status, payload):
-            data = json.dumps(payload).encode()
+            self.send_data(status, json.dumps(payload).encode(), "application/json")
+
+        def send_data(self, status, data, content_type):
+            try:
+                self.write_data(status, data, content_type)
+            except ConnectionError:
+                pass  # Input changes cancel in-flight browser reads; do not retry the closed socket.
+
+        def write_data(self, status, data, content_type):
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", content_type + "; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+            self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -53,7 +67,12 @@ def handler(factory):
                 self.reply(400, {"error": "Request is too long"})
                 return
             try:
-                if self.path == "/api/health":
+                if self.path in STATIC:
+                    name, mime = STATIC[self.path]
+                    self.send_data(200, (STATIC_ROOT / name).read_bytes(), mime)
+                elif not self.path.startswith("/api/"):
+                    self.reply(404, {"error": "Not found"})
+                elif self.path == "/api/health":
                     self.reply(200, {"service": "dashboard_data", "read_only": True, "chain_state": "not_checked"})
                 else:
                     self.reply(200, route(factory(), self.path))
@@ -88,7 +107,7 @@ def main():
                          "local_fork" if args.provider == "local" else "public_testnet")
 
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler(factory))
-    print(f"Read-only dashboard API: http://127.0.0.1:{args.port}/api/health", flush=True)
+    print(f"Local dashboard: http://127.0.0.1:{args.port}/", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
