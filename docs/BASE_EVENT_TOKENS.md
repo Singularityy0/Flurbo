@@ -69,8 +69,10 @@ sales, double-spend prevention, failure rollback, reentrancy and shortfall handl
 The 256-case fuzz test varies event, YES/NO side, terminal state and quantity,
 reconstructs liabilities including escrow, and checks both owners' final payouts.
 
-Next, use the registered token and verified AUSD address as an existing-asset
-Kuru pair. Verify network/ABI, tick/lot units, token decimals, listing access,
+The [Kuru testnet draft](KURU_TESTNET_PLAN.md) now plans exact order units and
+checks live read interfaces. Next, rehearse the registered token and verified
+AUSD address as an existing-asset pair on a local fork. Verify network/ABI,
+tick/lot units, token decimals, listing access,
 margin deposits/withdrawals and real order/cancel/fill behavior. An executable
 arbitrage path must account for inventory, fees, depth, gas and transaction
 atomicity. ERC-20 compatibility alone does not establish Kuru integration or

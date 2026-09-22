@@ -81,6 +81,12 @@ requires a separate controlled test. Neither placement nor cancellation happened
 in this checkpoint. Funded inventory, signing setup and network choice are still
 needed. Keeper profitability must account for executable depth, fees and gas.
 
+The [September 22 Kuru draft](KURU_TESTNET_PLAN.md) now supplies exact six-decimal
+price/size planning, unsigned order/cancel encoding and a read-only interface
+probe. The live factory links, AUSD decimals and reference-market return layout
+passed at block 64,729,226. Source/bytecode equivalence, new pair deployment and
+order execution remain unverified; the next gate is a local fork rehearsal.
+
 The supplied legacy testnet docs URL did not load; current official docs and
 the public source were used instead. Kuru's organization also lists a newer
 `ts-sdk`, so do not silently assume every published SDK targets the same contracts.
@@ -143,8 +149,8 @@ sign-in, AUSD balances, signed transactions and recovery remain unverified.
    simulation for unsigned payload preparation. The [authenticated receiver](CRE_RECEIVER.md)
    passes local tests, including generated payloads through multi-owner redemption;
    verified CRE delivery and official source validation remain pending.
-4. Verify the Kuru pair configuration for the new backed base-event tokens, then
-   perform the funded deploy/order/cancel/fill spike with the required account setup.
+4. Rehearse the drafted Kuru pair/order configuration against a local testnet fork,
+   then perform the funded public deploy/order/cancel/fill spike with account setup.
 
 The factored engine, tradable conditionals and every remaining
 [partner milestone](INTEGRATIONS.md) stay in scope. This checkpoint does not replace them.
