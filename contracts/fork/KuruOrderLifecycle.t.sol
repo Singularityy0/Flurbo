@@ -16,6 +16,8 @@ interface ForkVm {
     function recordLogs() external;
     function getRecordedLogs() external returns (Log[] memory);
     function warp(uint256 timestamp) external;
+    function prank(address sender) external;
+    function expectCall(address callee, bytes calldata data) external;
 }
 
 interface TestAusdFaucet {
@@ -61,6 +63,15 @@ interface KuruMarket {
     function addSellOrder(uint32 price, uint96 size, bool postOnly) external;
     function batchCancelOrders(uint40[] calldata ids) external;
     function s_orders(uint40 id) external view returns (Order memory);
+    function placeAndExecuteMarketBuy(uint96 quoteSize, uint256 minOut, bool isMargin, bool fillOrKill)
+        external
+        payable
+        returns (uint256);
+    function placeAndExecuteMarketSell(uint96 size, uint256 minOut, bool isMargin, bool fillOrKill)
+        external
+        payable
+        returns (uint256);
+    function collectFees() external;
 }
 
 /// @dev Fork only: no broadcast/signing cheatcodes, mocked Kuru code or storage balance overrides.

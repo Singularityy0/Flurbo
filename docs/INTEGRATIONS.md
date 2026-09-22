@@ -14,7 +14,9 @@ owner accounting and redemption, including 32-event tests. [Base-event
 receipts](FACTORED_BASE_TOKENS.md) are now ported to factored scope/mask keys and
 locally tested. The [Kuru fork rehearsal](KURU_FORK_REHEARSAL.md) now passes with
 factored receipts: pair deployment, order/cancel/withdraw and subsequent
-sale/redemption. Fills, fee reconciliation and executable arbitrage remain open.
+sale/redemption. [Local fills](KURU_FILL_ACCOUNTING.md) also pass with separate
+maker/taker accounts, exact fees, rounding remainders and failure rollback.
+Executable arbitrage and public trading evidence remain open.
 CRE adapters still target the enumerated pool and require a separate port.
 
 ## Required integration milestones

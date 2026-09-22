@@ -84,9 +84,10 @@ pinned solc 0.8.28 configuration. Runtime sizes are 21,333 bytes for the pool,
 35,318 bytes before constructor arguments. These measurements do not establish
 deployment affordability or a production security review.
 
-The subsequent Kuru fork suite passes four factored and three reference tests:
+The subsequent Kuru fork suite passes 11 factored and three reference tests:
 pair assets, deposit/order/cancel/withdraw, post-only rejection, subsequent
-redemption and a factored shared-pool sale/composed-claim lifecycle. Next are local
-fills and fee reconciliation, then executable arbitrage anchoring. Public
+redemption and a factored shared-pool sale/composed-claim lifecycle, plus [local
+fills and fee reconciliation](KURU_FILL_ACCOUNTING.md). Receipt fees and dust
+retained in Kuru remain backed after user redemption. Next is executable arbitrage anchoring. Public
 deployment and usage evidence remain separate required milestones. See
 [partner delivery](INTEGRATIONS.md).

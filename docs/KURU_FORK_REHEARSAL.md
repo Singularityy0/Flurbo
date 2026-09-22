@@ -1,8 +1,8 @@
 # Kuru order lifecycle on a local Monad testnet fork
 
-The opt-in suite passed **seven tests** at Monad testnet block **64,729,226** on
+The opt-in suite passed **14 tests** at Monad testnet block **64,729,226** on
 September 22, 2026: three for `KuruOrderLifecycleTest` (enumerated reference pool)
-and four for `FactoredKuruOrderLifecycleTest` (32-event factored pool).
+and 11 for `FactoredKuruOrderLifecycleTest` (32-event factored pool).
 Foundry fetched that block's chain state and
 executed every mutation locally. No public transaction, wallet signing, public
 faucet claim, listing or live order was performed.
@@ -37,6 +37,11 @@ the order book with explicitly deposited margin.
 Both pool fixtures run the first three tests through shared Kuru operations and
 assertions. The fourth runs only on the factored fixture. This retains the
 small-state reference regression while testing the factored asset lifecycle.
+
+Seven more factored tests cover two local counterparties' market buys/sells,
+partial and full fills, maker rebates, protocol credits, rounding remainders,
+withdrawal/redemption and slippage/fill-or-kill rollback. See the exact amounts
+and limits in [fill accounting](KURU_FILL_ACCOUNTING.md).
 
 Order IDs come from actual `OrderCreated` logs emitted by the local-fork Kuru
 market. Owner, size, price and side are also checked against order storage.
@@ -78,14 +83,13 @@ equivalence, current deployment readiness or realistic transaction gas budgets.
 
 ## Remaining work
 
-Public deployment, independent counterparties/fills, partial-fill fee/rounding
-reconciliation, listing access, AMM liquidity and executable-price arbitrage
+Public deployment, independent customers/live fills, broader fee/rounding
+reconciliation across multiple makers/price levels, listing access, AMM liquidity and executable-price arbitrage
 remain unverified. The fork uses a trusted local resolver; it does not deliver a
 signed CRE report. Successful cancellation is not trading-volume evidence.
 
-The next Kuru slice is two local counterparties executing fills, including
-partial fills and exact fee/rounding reconciliation, followed by an executable
-arbitrage loop against the factored pool. The CRE adapter still targets the
+The next Kuru slice is a local executable arbitrage rehearsal against the
+factored pool, including net fees, rounding, depth and slippage. The CRE adapter still targets the
 enumerated pool and needs its own port. Public testnet execution can follow a review of
 the exact transactions and dedicated wallet/test MON/AUSD funding setup. Mera,
 official settlement sources and the remaining partner milestones remain required.

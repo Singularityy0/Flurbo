@@ -117,8 +117,10 @@ now include measured pool execution and stable-order storage regression checks.
 
 The [Kuru fork rehearsal](KURU_FORK_REHEARSAL.md) now exercises factored receipts
 alongside the enumerated reference fixture, including a 32-event high-bit asset,
-order cancellation, withdrawal and shared-pool sale/redemption. Fills, fee
-reconciliation and arbitrage remain outstanding. The CRE receiver still targets
+order cancellation, withdrawal and shared-pool sale/redemption. [Local fill
+accounting](KURU_FILL_ACCOUNTING.md) covers partial/full buys, partial sells,
+fees, rounding and remaining escrow backing; executable arbitrage remains
+outstanding. The CRE receiver still targets
 the enumerated pool and must be ported to uint32 outcomes. Kuru anchoring, actual conditional
 securities, mobile/Mera/AUSD trades, Envio indexing, deployment verification and
 the other [partner milestones](INTEGRATIONS.md) remain required. Missing bounty
