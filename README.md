@@ -46,9 +46,10 @@ balances and trading are not connected; native-device validation remains pending
 
 A [factored pricing reference](docs/FACTORED_PRICING.md) now evaluates one global
 LMSR cost, conjunction probabilities and maximum liabilities for up to 32 binary
-events under a validated elimination order of width at most two. It also checks
-whether an added factor scope preserves that bound. This Rust snapshot model
-has no trade updates yet; fixed-point factored execution remains pending.
+events under a validated elimination order of width at most two. Buy/sell
+simulations support Boolean claims over up to three selected events, revalidate
+the resulting graph and numeric domain, and reuse exact-scope factor tables.
+Owner accounting and fixed-point factored execution remain pending.
 
 Phase 1 provides payoff algebra for one to three binary events and split/merge
 validation. Phase 2a adds an enumerated LMSR reference model: shared probabilities,

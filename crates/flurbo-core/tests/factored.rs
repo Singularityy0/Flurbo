@@ -297,3 +297,210 @@ fn rejects_invalid_domains_and_capacity_without_mutating_snapshots() {
         FactoredError::InvalidValues
     );
 }
+
+#[test]
+fn every_local_boolean_trade_matches_enumerated_quotes_and_updated_distribution() {
+    for scope_bits in 1_u8..8 {
+        let scope: Vec<_> = (0..3).filter(|i| scope_bits & (1 << i) != 0).collect();
+        let states = 1_usize << scope.len();
+        let full = ((1_u16 << states) - 1) as u8;
+        for b in [1e-6, 100.0, 1e9] {
+            let factors = vec![
+                Factor {
+                    scope: scope.clone(),
+                    values: (0..states).map(|i| b * (2.0 + i as f64 / 4.0)).collect(),
+                },
+                Factor {
+                    scope: vec![0, 2],
+                    values: vec![0.0, b / 2.0, b, b / 4.0],
+                },
+            ];
+            let liabilities = enumerate(3, &factors);
+            let oracle = ReferenceLmsr::new(3, b, liabilities.clone()).unwrap();
+            let model = FactoredLmsr::new(3, b, factors, vec![2, 0, 1]).unwrap();
+            for mask in 1..full {
+                let global_mask = (0..8).fold(0, |global, state| {
+                    let local = scope.iter().enumerate().fold(0, |index, (bit, event)| {
+                        index | (((state >> event) & 1) << bit)
+                    });
+                    global
+                        | if mask & (1 << local) != 0 {
+                            1 << state
+                        } else {
+                            0
+                        }
+                });
+                let claim = Payoff::new(3, global_mask).unwrap();
+                for quantity in [-b, -b / 1e9, 0.0, b / 1e9, b] {
+                    let (expected, oracle_after) = oracle.simulate_trade(claim, quantity).unwrap();
+                    let (paid, after) = model.simulate_trade(&scope, mask, quantity).unwrap();
+                    close(paid, expected);
+                    close(after.cost(), oracle_after.cost());
+                    if quantity.abs() == b {
+                        close(paid, oracle_after.cost() - oracle.cost());
+                    }
+                    let maximum = liabilities
+                        .iter()
+                        .enumerate()
+                        .map(|(state, q)| {
+                            q + if global_mask & (1 << state) != 0 {
+                                quantity
+                            } else {
+                                0.0
+                            }
+                        })
+                        .fold(0.0, f64::max);
+                    close(after.max_liability(), maximum);
+                    for state in 0..8 {
+                        let evidence: Vec<_> = (0..3)
+                            .map(|event| (event, state & (1 << event) != 0))
+                            .collect();
+                        close(
+                            after.probability(&evidence).unwrap(),
+                            oracle_after.distribution()[state],
+                        );
+                    }
+                    let (refund, restored) = after.simulate_trade(&scope, mask, -quantity).unwrap();
+                    close(paid, -refund);
+                    close(restored.cost(), model.cost());
+                    close(restored.max_liability(), model.max_liability());
+                }
+            }
+            close(model.cost(), oracle.cost());
+        }
+    }
+}
+
+#[test]
+fn trade_scope_reuse_merges_duplicates_and_does_not_spend_capacity() {
+    let mut factors = vec![
+        Factor {
+            scope: vec![],
+            values: vec![0.0]
+        };
+        62
+    ];
+    for _ in 0..2 {
+        factors.push(Factor {
+            scope: vec![0],
+            values: vec![0.0, 0.5],
+        });
+    }
+    let model = FactoredLmsr::new(2, 10.0, factors, vec![0, 1]).unwrap();
+    assert_eq!(
+        model.check_additional_scope(&[0]),
+        Err(FactoredError::TooManyFactors)
+    );
+    assert_eq!(
+        model.simulate_trade(&[1], 2, 1.0).unwrap_err(),
+        FactoredError::TooManyFactors
+    );
+    // Selling consumes the aggregate of both exact-scope tables.
+    let (_, sold) = model.simulate_trade(&[0], 2, -1.0).unwrap();
+    close(sold.cost(), 10.0 * 4_f64.ln());
+    let (_, bought) = sold.simulate_trade(&[1], 2, 1.0).unwrap();
+    let mut current = bought;
+    for _ in 0..80 {
+        current = current.simulate_trade(&[1], 2, 0.1).unwrap().1;
+    }
+    close(current.max_liability(), 9.0);
+}
+
+#[test]
+fn rejected_trades_preserve_snapshot_and_enforce_local_selling_limits() {
+    let model = FactoredLmsr::new(
+        4,
+        1.0,
+        (1..4)
+            .map(|i| Factor {
+                scope: vec![0, i],
+                values: vec![1.0; 4],
+            })
+            .collect(),
+        vec![1, 2, 3, 0],
+    )
+    .unwrap();
+    let before = model.cost();
+    assert_eq!(
+        model.simulate_trade(&[1, 2, 3], 128, 1.0).unwrap_err(),
+        FactoredError::WidthExceeded
+    );
+    // Global q is positive, but there is no exact-scope table to sell from.
+    assert_eq!(
+        model.simulate_trade(&[1], 2, -1.0).unwrap_err(),
+        FactoredError::InvalidValues
+    );
+    for (scope, mask) in [
+        (vec![], 1),
+        (vec![1, 0], 2),
+        (vec![0, 0], 2),
+        (vec![4], 2),
+        (vec![0, 1, 2, 3], 2),
+        (vec![0], 0),
+        (vec![0], 3),
+        (vec![0], 4),
+    ] {
+        assert!(model.simulate_trade(&scope, mask, 1.0).is_err());
+        assert!(model.simulate_trade(&scope, mask, 0.0).is_err());
+    }
+    for quantity in [
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        1.01,
+        -1.01,
+        1e-10,
+        -1e-10,
+    ] {
+        assert_eq!(
+            model.simulate_trade(&[0], 2, quantity).unwrap_err(),
+            FactoredError::InvalidQuantity
+        );
+    }
+    close(model.cost(), before);
+    assert_eq!(model.induced_width(), 1);
+    // No-op does not add an otherwise unsupported scope.
+    let (paid, after) = model.simulate_trade(&[1, 2, 3], 128, 0.0).unwrap();
+    assert_eq!(paid, 0.0);
+    close(after.cost(), before);
+    assert_eq!(after.induced_width(), 1);
+    let (_, after) = model.simulate_trade(&[1, 2], 8, 1.0).unwrap();
+    assert_eq!(after.induced_width(), 2);
+
+    let limit = FactoredLmsr::new(
+        1,
+        1.0,
+        vec![Factor {
+            scope: vec![0],
+            values: vec![0.0, 100.0],
+        }],
+        vec![0],
+    )
+    .unwrap();
+    assert_eq!(
+        limit.simulate_trade(&[0], 2, 1.0).unwrap_err(),
+        FactoredError::InvalidValues
+    );
+    close(limit.max_liability(), 100.0);
+}
+
+#[test]
+fn thirty_two_event_trade_roundtrip_preserves_bounded_tables() {
+    let model = FactoredLmsr::new(32, 10.0, vec![], (0..32).collect()).unwrap();
+    let (paid, after) = model.simulate_trade(&[0, 15, 31], 128, 10.0).unwrap();
+    close(paid, 10.0 * (0.125 * 1_f64.exp_m1()).ln_1p());
+    close(after.max_liability(), 10.0);
+    assert_eq!(after.peak_table_entries(), 8);
+    close(
+        after
+            .probability(&[(0, true), (15, true), (31, true)])
+            .unwrap(),
+        1_f64.exp() / (7.0 + 1_f64.exp()),
+    );
+    let (refund, restored) = after.simulate_trade(&[0, 15, 31], 128, -10.0).unwrap();
+    close(refund, -paid);
+    close(restored.cost(), model.cost());
+    assert_eq!(restored.max_liability(), 0.0);
+    // Zero tables retain their declared graph; trading never silently rewrites it.
+    assert_eq!(restored.peak_table_entries(), 8);
+}

@@ -16,6 +16,8 @@ pub enum FactoredError {
     InvalidValues,
     InvalidOrder,
     InvalidEvidence,
+    InvalidClaim,
+    InvalidQuantity,
     TooManyFactors,
     WidthExceeded,
 }
@@ -134,6 +136,80 @@ impl FactoredLmsr {
             evidence[usize::from(event)] = Some(value);
         }
         Ok((self.eliminate(&evidence, true) - self.eliminate(&[None; 32], true)).exp())
+    }
+
+    /// Simulate a local Boolean claim: mask bit x pays one in local state x.
+    /// Scope must be sorted, nonempty and contain at most three events; constants are rejected.
+    /// Positive quantity buys, negative sells; returns signed collateral paid and a new snapshot.
+    /// Nonzero quantities require b/1e9 <= abs(quantity) <= b. Zero is an unchanged no-op.
+    /// Exact-scope factors are merged; selling cannot make that local table negative, even
+    /// when liabilities on other scopes would keep global q nonnegative. No ownership,
+    /// fees, balances, or solvency checks. Floating-point results never authorize transfers.
+    pub fn simulate_trade(
+        &self,
+        scope: &[u8],
+        mask: u8,
+        quantity: f64,
+    ) -> Result<(f64, Self), FactoredError> {
+        let candidate = scope_mask(self.events, scope)?;
+        if scope.is_empty() {
+            return Err(FactoredError::InvalidScope);
+        }
+        let states = 1_usize << scope.len();
+        let full = ((1_u16 << states) - 1) as u8;
+        if mask == 0 || mask == full || mask & !full != 0 {
+            return Err(FactoredError::InvalidClaim);
+        }
+        if !quantity.is_finite()
+            || (quantity != 0.0 && !(self.b / 1e9..=self.b).contains(&quantity.abs()))
+        {
+            return Err(FactoredError::InvalidQuantity);
+        }
+        if quantity == 0.0 {
+            return Ok((0.0, self.clone()));
+        }
+
+        let mut factors = Vec::with_capacity(self.factors.len() + 1);
+        let mut values = vec![0.0; states];
+        for table in &self.factors {
+            if table.scope == candidate {
+                for (total, value) in values.iter_mut().zip(&table.values) {
+                    *total += value;
+                }
+            } else {
+                factors.push(Factor {
+                    scope: (0..self.events)
+                        .filter(|event| table.scope & (1_u32 << event) != 0)
+                        .collect(),
+                    values: table.values.clone(),
+                });
+            }
+        }
+        for (state, value) in values.iter_mut().enumerate() {
+            if mask & (1 << state) != 0 {
+                *value += quantity;
+            }
+        }
+        factors.push(Factor {
+            scope: scope.to_vec(),
+            values,
+        });
+        // Revalidate the entire post-trade graph and numerical domain before quoting.
+        let after = Self::new(self.events, self.b, factors, self.order.clone())?;
+        let mut probability = 0.0;
+        for state in 0..states {
+            if mask & (1 << state) != 0 {
+                let evidence: Vec<_> = scope
+                    .iter()
+                    .enumerate()
+                    .map(|(bit, &event)| (event, state & (1 << bit) != 0))
+                    .collect();
+                probability += self.probability(&evidence)?;
+            }
+        }
+        // C(q+s*f)-C(q), avoiding subtraction of nearly equal global costs.
+        let collateral = self.b * (probability * (quantity / self.b).exp_m1()).ln_1p();
+        Ok((collateral, after))
     }
 
     fn eliminate(&self, evidence: &[Option<bool>; 32], log_sum: bool) -> f64 {

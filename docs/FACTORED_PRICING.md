@@ -49,12 +49,43 @@ clamp evidence without adding graph edges.
 the fixed width bound and factor capacity. For example, a star centered on A
 with leaves B, C, D supports the query `B AND C AND D`. Adding a factor over
 those three leaves creates a four-node clique and is rejected. Zero table values
-do not remove declared edges. Existing scopes are not merged in this phase.
+do not remove declared edges. This append-only check does not account for scope
+reuse; the simulator below merges exact-scope tables instead.
 
 This structural check does not validate quantities or mutate liabilities.
-Finite buy/sell quotes, trade updates, arbitrary Boolean claim compilation,
-actual conditional securities, exact accounting, and the fixed-point on-chain
-port remain subsequent milestones. No floating-point result authorizes transfers
+
+## Finite-size trade simulation
+
+`simulate_trade(scope, mask, quantity)` returns signed collateral paid to the
+pool and a new snapshot, preserving the original on both success and rejection.
+Positive quantity buys; negative quantity sells. The scope has one to three
+sorted, distinct events; mask bit `x` is the unit payout in local state `x`.
+For `[A, B]`, AND is `0b1000`, OR is `0b1110`, and NOT A is `0b0101`.
+Zero/full payout masks and bits outside the local state space are rejected.
+
+Nonzero quantities satisfy `b/1e9 <= abs(quantity) <= b`. Zero quantity validates
+the claim but returns an unchanged snapshot without adding or merging factors.
+For a nonzero trade, exact-scope tables are summed into one table and quantity
+is added to every winning entry. A new scope consumes one factor slot; reuse
+does not. All post-trade table, capacity, width and numeric checks run again.
+Scopes are literal: equivalent payouts expressed with redundant events do not
+automatically share a table or a selling allowance.
+
+Sells require each resulting entry of that exact-scope table to remain
+nonnegative. This can reject a sale even if liabilities on other scopes would
+keep global `q(x)` nonnegative. It is a conservative representation constraint,
+not an ownership check. Duplicate tables on the same scope contribute to the
+available aggregate. Zeroed tables retain their scope and factor slot.
+
+The fee-free signed quote is `b * ln1p(p * expm1(quantity/b))`, where `p` is the
+current probability of the mask's winning local assignments. This equals the
+global cost difference mathematically while avoiding cancellation for tiny
+trades. The probability is evaluated from at most seven disjoint conjunctions;
+no global terminal-state enumeration is introduced.
+
+Arbitrary Boolean expression compilation, cross-scope sell handling, actual
+conditional securities, exact accounting, and the fixed-point on-chain port
+remain subsequent milestones. No floating-point result authorizes transfers
 or carries a conservative rounding guarantee. Kuru anchoring and the other
 partner requirements remain in [the integration plan](INTEGRATIONS.md).
 
@@ -64,8 +95,11 @@ partner requirements remain in [the integration plan](INTEGRATIONS.md).
 three-event elimination orders and conjunctions, independent four-event cycle
 enumeration, rare probabilities, invalid domains, and graph rejection. A
 32-event chain agrees with closed-form cost, liability and endpoint probabilities
-while using four-entry joined tables. Next: coherent finite-size trade simulations
-that preserve these bounds and leave rejected snapshots unchanged.
+while using four-entry joined tables. Trade tests cover every nonconstant local
+Boolean mask on every subset of three events, positive/negative size boundaries,
+post-trade costs, distributions and liabilities, reversals, scope/capacity
+rejections and a 32-event round trip. Next: conservative fixed-point factored
+inference and its numerical error specification before contract execution.
 
 The inference method follows [variable elimination](https://ermongroup.github.io/cs228-notes/inference/ve/).
 [Pennock and Xia](https://arxiv.org/abs/1202.3756) motivate distinguishing tractable
