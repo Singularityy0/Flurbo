@@ -64,6 +64,7 @@ additional reconciliation before generalizing the result.
   matching payout obligation.
 
 Run the full opt-in suite using the commands in [the fork rehearsal](KURU_FORK_REHEARSAL.md).
-Next is a local executable-price arbitrage rehearsal with net fees, integer
-rounding, slippage and available depth included. Public counterparties, live
+The subsequent [local atomic arbitrage rehearsal](ARBITRAGE_REHEARSAL.md) passes
+both directions with fees, rounding, slippage and depth checks. Automated
+candidate selection remains open. Public counterparties, live
 fills, deployment limits, AMM liquidity and usage evidence remain open gates.

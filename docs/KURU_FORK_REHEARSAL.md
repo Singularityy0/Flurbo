@@ -1,8 +1,9 @@
 # Kuru order lifecycle on a local Monad testnet fork
 
-The opt-in suite passed **14 tests** at Monad testnet block **64,729,226** on
-September 22, 2026: three for `KuruOrderLifecycleTest` (enumerated reference pool)
-and 11 for `FactoredKuruOrderLifecycleTest` (32-event factored pool).
+The opt-in suite passed **27 tests** at Monad testnet block **64,729,226** on
+September 22, 2026: three for `KuruOrderLifecycleTest` (enumerated reference pool),
+11 for `FactoredKuruOrderLifecycleTest` (32-event factored pool), and 13 for
+`KuruArbitrageTest` (eight-event local atomic execution).
 Foundry fetched that block's chain state and
 executed every mutation locally. No public transaction, wallet signing, public
 faucet claim, listing or live order was performed.
@@ -43,6 +44,11 @@ partial and full fills, maker rebates, protocol credits, rounding remainders,
 withdrawal/redemption and slippage/fill-or-kill rollback. See the exact amounts
 and limits in [fill accounting](KURU_FILL_ACCOUNTING.md).
 
+The [arbitrage suite](ARBITRAGE_REHEARSAL.md) adds both route directions, exact
+profit/allowance checks, gas measurements, and atomic rollback on stale quotes,
+insufficient depth and output mismatches. Its gas allowance is synthetic, not a
+current MON/AUSD conversion or evidence of live net profitability.
+
 Order IDs come from actual `OrderCreated` logs emitted by the local-fork Kuru
 market. Owner, size, price and side are also checked against order storage.
 Cancellation must delete the order and restore the expected margin balance.
@@ -71,7 +77,7 @@ The normal suite remains separate and offline:
 ```sh
 forge test --offline
 forge fmt --check
-forge fmt --check contracts/fork/KuruOrderLifecycle.t.sol contracts/fork/FactoredKuruOrderLifecycle.t.sol
+forge fmt --check contracts/fork/KuruOrderLifecycle.t.sol contracts/fork/FactoredKuruOrderLifecycle.t.sol contracts/fork/KuruArbitrage.t.sol contracts/fork/helpers/FactoredArbitrage.sol
 ```
 
 Verified with Foundry 1.5.0, Solidity 0.8.28, Cancun EVM settings and the repository's
@@ -84,12 +90,12 @@ equivalence, current deployment readiness or realistic transaction gas budgets.
 ## Remaining work
 
 Public deployment, independent customers/live fills, broader fee/rounding
-reconciliation across multiple makers/price levels, listing access, AMM liquidity and executable-price arbitrage
+reconciliation across multiple makers/price levels, listing access, AMM liquidity and live arbitrage
 remain unverified. The fork uses a trusted local resolver; it does not deliver a
 signed CRE report. Successful cancellation is not trading-volume evidence.
 
-The next Kuru slice is a local executable arbitrage rehearsal against the
-factored pool, including net fees, rounding, depth and slippage. The CRE adapter still targets the
+The next Kuru slice is read-only candidate selection and full-route simulation,
+including current gas cost conversion, depth and freshness rules. The CRE adapter still targets the
 enumerated pool and needs its own port. Public testnet execution can follow a review of
 the exact transactions and dedicated wallet/test MON/AUSD funding setup. Mera,
 official settlement sources and the remaining partner milestones remain required.

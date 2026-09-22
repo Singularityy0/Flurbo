@@ -65,8 +65,9 @@ deployment and porting partner adapters remain pending. The [Kuru fork
 rehearsal](docs/KURU_FORK_REHEARSAL.md) now passes with both enumerated and factored
 receipts, including a 32-event pool and subsequent shared-pool sale/redemption.
 [Local fill tests](docs/KURU_FILL_ACCOUNTING.md) now verify both directions,
-partial fills, fees, rounding remainders and redemption. Executable arbitrage
-anchoring remains pending.
+partial fills, fees, rounding remainders and redemption. An [atomic arbitrage
+rehearsal](docs/ARBITRAGE_REHEARSAL.md) now passes both directions with conservative
+bounds and complete rollback. Autonomous scanning and live anchoring remain pending.
 The [gas optimizations](docs/FACTORED_GAS.md) reduce measured large-graph quote
 costs by 35–38% cumulatively with unchanged outputs. The latest changes also cut
 the measured pool buy/sell costs by about 9%; deployment gas limits remain a gate.

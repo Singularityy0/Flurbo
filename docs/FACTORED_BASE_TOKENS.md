@@ -88,6 +88,7 @@ The subsequent Kuru fork suite passes 11 factored and three reference tests:
 pair assets, deposit/order/cancel/withdraw, post-only rejection, subsequent
 redemption and a factored shared-pool sale/composed-claim lifecycle, plus [local
 fills and fee reconciliation](KURU_FILL_ACCOUNTING.md). Receipt fees and dust
-retained in Kuru remain backed after user redemption. Next is executable arbitrage anchoring. Public
+retained in Kuru remain backed after user redemption. [Local atomic arbitrage](ARBITRAGE_REHEARSAL.md)
+also passes both directions; automated scanning and live anchoring remain pending. Public
 deployment and usage evidence remain separate required milestones. See
 [partner delivery](INTEGRATIONS.md).
