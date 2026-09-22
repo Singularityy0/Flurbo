@@ -96,3 +96,8 @@ dispute window, void outcome, timeout refund or authority recovery in this slice
 Validation: 14 receiver tests, including a literal 64-byte metadata fixture,
 authentication/domain/freshness rejection, replay and rollback cases, overlapping
 claim redemption, and 256 randomized terminal-state/report-ID combinations.
+Seven additional [workflow payload tests](../workflows/cre/README.md#local-workflow-to-redemption-test)
+deliver generated TypeScript ABI bytes unchanged to local contracts, exercise all
+four two-event outcomes and exact multi-owner redemption, and reject replay,
+wrong-chain, stale and direct unsigned delivery. No production authentication
+or contract behavior was changed for this harness.

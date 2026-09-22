@@ -96,15 +96,16 @@ Its [React Native recipe](https://github.com/category-labs/mera/blob/a3102f4fa7b
 uses `expo-crypto` for Hermes randomness and native WebAuthn. Use an
 [Expo development build](https://docs.expo.dev/develop/development-builds/introduction/)
 for native libraries. The Expo/TypeScript scaffold and dependency checks are now
-complete; a native device build remains required before claiming authentication.
+complete; the Android preview now runs on a phone, but authentication remains unverified.
 Node 24.13.0 is available locally; `adb`, `java`, and `keytool` were not found on
 PATH. This does not prove those tools are absent elsewhere.
 
 The user plans free hosting, potentially with a friend's custom domain. No domain
 is chosen yet. Use a stable delegated host for `rpId` and serve the native
 association files: Apple `apple-app-site-association` and Android `assetlinks.json`.
-Exact host, native app identifiers, signing fingerprints/team ID and target test
-device remain pending. Do not mint real passkeys against a temporary preview URL.
+Android is the selected test device and its EAS signing setup is complete.
+The exact host, Android association fingerprint and any iOS signing/team setup
+remain to be verified for passkeys. Do not mint real passkeys against a temporary preview URL.
 Hosting choice can wait; control of that host and its association files is required.
 
 Physical-device checks must cover PRF support, account recovery, session expiry,
@@ -118,27 +119,29 @@ human involvement. Agora/Mera/community bounty details remain pending as agreed.
 dependencies, an internal development-build profile, Crypto bootstrap, and a
 read-only testnet connection action. TypeScript, connection tests, Android project
 generation, and Android/iOS Hermes exports pass. Browser layout verification is
-recorded separately. No APK/IPA, native device session or Mera integration is
-complete; the domain and device requirements above still apply.
+recorded separately. The Android APK now launches on the user's phone; Mera
+authentication and the remaining domain/device checks above still apply.
 
 The [passkey domain setup](../apps/mobile/PASSKEY_SETUP.md) now supports explicit
 host configuration, iOS associated domains and local platform association-file
-generation from the configured app IDs. No real host or signing identity has
-been supplied, and no association file has been deployed. Android is the selected
+generation from the configured app IDs. No real host has been supplied and no
+association file has been deployed. Android is the selected
 first test device, using EAS cloud. APK profiles and the minimal upload inputs are
 prepared and locally checked. Expo login, project linking and EAS Android signing
 setup are complete. The [first Android preview build](https://expo.dev/accounts/singuu/projects/flurbo-mobile/builds/1e365827-9c5e-4092-a8a2-4569b158a534)
-finished successfully and produced an APK. Phone installation, device checks and
-Mera integration remain pending.
+finished successfully and produced an APK. The user's screenshot confirms phone
+installation, app launch and a successful Monad testnet connection check. Mera
+sign-in, AUSD balances, signed transactions and recovery remain unverified.
 
 ## Next small tasks
 
 1. Configure Alchemy locally and rerun the probe against that account endpoint.
-2. Install/test the Android APK and configure a stable passkey domain, then integrate Mera.
+2. Configure a stable passkey domain and integrate Mera in the working Android preview.
 3. Choose real source-of-record rules and add API retrieval to the
    [synthetic CRE workflow](../workflows/cre/README.md), which now passes CLI
    simulation for unsigned payload preparation. The [authenticated receiver](CRE_RECEIVER.md)
-   passes local tests; verified CRE delivery and official source validation remain pending.
+   passes local tests, including generated payloads through multi-owner redemption;
+   verified CRE delivery and official source validation remain pending.
 4. Add backed base-event tokens, then perform the Kuru deploy/order/cancel spike.
 
 The factored engine, tradable conditionals and every remaining

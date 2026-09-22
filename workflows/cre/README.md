@@ -79,10 +79,46 @@ does not establish truth or availability.
 1. Select real events and official sources, publish observation windows, finality,
    binary mapping, revisions/outages policy and a separately versioned rules
    preimage before creating a live pool. Add API retrieval and CRE consensus.
-2. Test report preparation through local receiver resolution and redemption;
-   verify the real forwarder and workflow identity before any live delivery.
+2. Local payload-to-redemption tests now pass (see below). Verify the real
+   forwarder and workflow identity before any live delivery.
    CRE's simulation MockForwarder omits the identity metadata required by our
    receiver. Use a separate test harness; preserve receiver authentication.
 3. Retain reproducible external-data and authenticated-chain-delivery evidence
    before marking CRE integration complete. This slice does not alter shared-pool
    pricing, or replace the required factored engine, conditionals or Kuru anchoring.
+
+## Local workflow-to-redemption test
+
+`scripts/settlement-fixtures.ts` calls the same `prepareSettlement` function as
+the CRE handler and generates four Solidity payload fixtures, one per two-event
+terminal state. They use the test creator's predicted CREATE address at nonce 1,
+so the pool address can be included in the rules hash before deploying the pool.
+This is a local test address, not a testnet deployment. The CLI example retains
+its separately labelled placeholder address.
+
+`CreWorkflowSettlement.t.sol` deploys real receiver/pool code inside Foundry,
+checks the predicted address, funds with mock collateral and buys A, B and A AND B
+for two owners. It delivers the generated report bytes unchanged through the
+explicitly unauthenticated local forwarder. Seven tests check all four outcomes,
+partial redemption, zero-payout losing burns, exact owner/pool balance changes,
+remaining collateral requirements, complete liability cleanup, same/changed-report
+replays, wrong-chain/stale rejection and rejection of direct unsigned delivery.
+
+From the repository root, after installing the contract and workflow dependencies:
+
+```sh
+cd workflows/cre
+bun run fixtures:check
+cd ../..
+forge test --match-contract CreWorkflowSettlementTest
+```
+
+After an intentional workflow encoding change, run `bun run fixtures` from
+`workflows/cre`, review the generated Solidity diff, then rerun the check/tests.
+The freshness check detects stale checked-in payloads without requiring Foundry
+FFI, filesystem permissions or network access. The generator uses Bun's host
+runtime; it is not bundled into the CRE WASM workflow.
+
+This proves compatibility between the TypeScript report preparation and local
+Solidity settlement/accounting. It does not exercise DON signing, production
+forwarder verification, official APIs, actual AUSD or public-chain execution.
