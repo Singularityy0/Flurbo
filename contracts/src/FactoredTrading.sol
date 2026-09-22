@@ -1,0 +1,95 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.8.28;
+import {FactoredFunding} from "./FactoredFunding.sol";
+import {FactoredPositions as P} from "./FactoredPositions.sol";
+import {FactoredQuote as Q} from "./FactoredQuote.sol";
+
+/// @dev Abstract trading layer: only the final pool with settlement is deployable outside tests.
+abstract contract FactoredTrading is FactoredFunding {
+    using P for P.Book;
+    error ExpiredDeadline();
+    P.Book internal positions;
+    Q.Factor[] internal storedFactors;
+    event Traded(
+        address indexed trader,
+        uint32 indexed scope,
+        uint256 indexed mask,
+        bool isBuy,
+        uint128 quantity,
+        uint128 collateralAmount
+    );
+
+    constructor(address token, uint8 events_, uint128 b, uint64 closeTime, uint8[] memory order_)
+        FactoredFunding(token, events_, b, closeTime, order_)
+    {}
+
+    function holdings(address owner, uint32 scope, uint256 mask) external view returns (uint128) {
+        return positions.balance(owner, scope, mask);
+    }
+
+    function factors() external view returns (Q.Factor[] memory) {
+        return storedFactors;
+    }
+
+    function quoteBuy(uint32 scope, uint256 mask, uint128 quantity) external view returns (uint128) {
+        requireOpen();
+        requireCovered();
+        return Q.buy(market(), scope, mask, quantity, type(uint128).max).collateral;
+    }
+
+    function quoteSell(uint32 scope, uint256 mask, uint128 quantity) external view returns (uint128) {
+        requireOpen();
+        requireCovered();
+        return Q.sell(market(), scope, mask, quantity, 0).collateral;
+    }
+
+    function buy(uint32 scope, uint256 mask, uint128 quantity, uint128 maxCost, uint256 deadline)
+        external
+        nonReentrant
+        returns (uint128 paid)
+    {
+        requireTrading(deadline);
+        Q.Quote memory quote = Q.buy(market(), scope, mask, quantity, maxCost);
+        positions.credit(msg.sender, scope, mask, quantity);
+        applyQuote(quote);
+        paid = quote.collateral;
+        transferExact(msg.sender, paid, true);
+        requireCovered();
+        emit Traded(msg.sender, scope, mask, true, quantity, paid);
+    }
+
+    function sell(uint32 scope, uint256 mask, uint128 quantity, uint128 minProceeds, uint256 deadline)
+        external
+        nonReentrant
+        returns (uint128 received)
+    {
+        requireTrading(deadline);
+        positions.debit(msg.sender, scope, mask, quantity);
+        Q.Quote memory quote = Q.sell(market(), scope, mask, quantity, minProceeds);
+        applyQuote(quote);
+        received = quote.collateral;
+        transferExact(msg.sender, received, false);
+        requireCovered();
+        emit Traded(msg.sender, scope, mask, false, quantity, received);
+    }
+
+    function market() private view returns (Q.Market memory) {
+        return Q.Market(eventCount, liquidity, collateralDecimals, storedFactors, order);
+    }
+
+    function requireTrading(uint256 deadline) private view {
+        requireOpen();
+        if (block.timestamp > deadline) revert ExpiredDeadline();
+        requireCovered();
+    }
+
+    function applyQuote(Q.Quote memory quote) private {
+        delete storedFactors;
+        for (uint256 i; i < quote.factorsAfter.length; i++) {
+            storedFactors.push();
+            storedFactors[i].scope = quote.factorsAfter[i].scope;
+            storedFactors[i].values = quote.factorsAfter[i].values;
+        }
+        maximumLiability = quote.maxLiabilityAfter;
+    }
+}
