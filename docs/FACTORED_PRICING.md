@@ -98,9 +98,10 @@ enumeration, rare probabilities, invalid domains, and graph rejection. A
 while using four-entry joined tables. Trade tests cover every nonconstant local
 Boolean mask on every subset of three events, positive/negative size boundaries,
 post-trade costs, distributions and liabilities, reversals, scope/capacity
-rejections and a 32-event round trip. The first [fixed-point arithmetic component
-and error specification](FACTORED_NUMERICS.md) are now implemented in Solidity.
-Graph traversal and validation remain the next gate before contract execution.
+rejections and a 32-event round trip. The [fixed-point evaluator and error
+specification](FACTORED_NUMERICS.md) now implement graph validation and cost
+enclosures in Solidity. Exact factored maximum liabilities and trade integration
+remain subsequent gates before pool execution.
 
 The inference method follows [variable elimination](https://ermongroup.github.io/cs228-notes/inference/ve/).
 [Pennock and Xia](https://arxiv.org/abs/1202.3756) motivate distinguishing tractable

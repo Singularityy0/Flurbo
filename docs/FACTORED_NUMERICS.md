@@ -4,6 +4,8 @@
 engine. It provides normalization, addition, binary log-sum-exp, and final cost
 scaling. It does not validate or traverse graphs, calculate probabilities,
 update liabilities, quote trades, or connect to `ReferencePool`.
+`FactoredCost` now supplies graph validation and variable elimination on top of
+this arithmetic, returning the cost enclosure for one shared distribution.
 
 ## Units and domain
 
@@ -16,10 +18,36 @@ reduction also validate their output, rejecting enclosures outside this range.
 This can reject a true value just below the cap when its upper enclosure exceeds
 the cap. It never clamps away uncertainty to accept such a value.
 
-The eventual graph evaluator must additionally validate the Rust prototype's
-global domain: at most 64 factors, 32 binary events, fixed induced width <=2,
-nonnegative contributions, and `sum_f max(q_f)/b <= 100`. The arithmetic kernel
-alone does not establish these conditions or reject unsupported securities.
+`FactoredCost` additionally validates the Rust prototype's global domain: at
+most 64 factors, 1–32 binary events, fixed induced width <=2, nonnegative
+contributions, and `sum_f max(q_f) <= 100*b` using exact integer inputs. The
+arithmetic kernel alone does not establish these conditions or reject
+unsupported securities.
+
+## Graph representation and evaluation
+
+`FactoredCost.bounds(events, b, factors, order)` accepts `Factor` structs with
+a uint32 scope bitmap and WAD liability tables. Ascending set bits determine
+local state bit order: scope `0b101` refers to events 0 and 2. A scope has at
+most three bits, all below `events`, and exactly `2^popcount(scope)` entries.
+Scope zero has one constant entry. Duplicate scopes are accepted and summed.
+No factor is removed merely because its entries are zero.
+
+The supplied order must contain every event exactly once. A symbolic pass checks
+fill-in before any logarithm or exponential: join scopes containing each event,
+reject more than three joined variables, consume those scopes, and append the
+remaining scope. This validates the supplied order, not minimum treewidth.
+
+The numerical pass normalizes each input table, consumes each active bucket
+once, and appends its reduced message. Each output entry combines the two values
+of the eliminated event with `FactoredLogMath.logSumExp`. An event with no bucket
+still contributes ln(2); constants and disconnected scalar messages are added
+once at the end. All original input arrays are left unchanged.
+
+There are at most 96 input/message table slots, at most eight entries per input
+table, and at most four per reduced table. Bucket scans and bit projections are
+bounded but not optimized; there is no global `2^events` array. No graph data is
+persisted, and this library has no probability, trade, or settlement endpoint.
 
 ## Scalar binary reduction
 
@@ -54,15 +82,16 @@ its sensitivity to endpoint perturbations is at most their maximum, in the
 infinity norm. A reduction therefore adds at most 2562 to the maximum incoming
 one-sided endpoint error. Addition sums its operands' errors.
 
-For a future variable-elimination evaluator that consumes each factor exactly
-once, a message must track disjoint input-factor and eliminated-variable
-ancestry. Joining consumes its input messages; they must not also be added
-again elsewhere. A resulting entry has one-sided error bounded by
+The evaluator consumes each input factor or active message at most once. Its
+active messages therefore have disjoint input-factor and eliminated-variable
+ancestry; those ancestry sets are a proof device, not stored metadata. Joining
+consumes its input messages before appending the output. A resulting entry has
+one-sided error bounded by
 `F + 2562*R`, with F contributing input factors and R eliminated variables.
 Binary branches use the maximum incoming error, not their sum. Under the stated
 prototype caps the final log-partition endpoint allowance is therefore at most
-`64 + 32*2562 = 82048` log-WAD units. This is a composition argument, conditional
-on correct graph traversal, not a proof of an as-yet unimplemented evaluator.
+`64 + 32*2562 = 82048` log-WAD units. This analytical composition argument and
+the traversal invariant are not machine-checked proofs of the Solidity code.
 
 With nonnegative factors, each true intermediate log is at most
 `100 + 32*ln(2) < 123`. Adding this error budget stays below the kernel's 128 cap.
@@ -89,5 +118,24 @@ not the source of the analytical error allowance.
 
 The local chain test used approximately 1.8 million gas with solc 0.8.28 and
 200 optimizer runs, including test assertions. This is not a deployed trade
-benchmark or a width-two worst-case gas bound. Next: a bounded graph evaluator,
-independent graph fixtures, and measured resource limits before pool integration.
+benchmark or a width-two worst-case gas bound. The graph fixtures below measure
+the general evaluator separately.
+
+`scripts/factored_cost_fixtures.py` adds independent full-state Decimal checks
+for every three-event elimination order at three liquidity values, a four-event
+cycle, disconnected and constant factors, and an empty uniform model. Closed
+forms check a 32-event chain and a 32-event width-two graph with 64 factors.
+Their parity-window coordinates are independent with respectively one and two
+free initial bits, allowing validation without enumerating 2^32 states. Fuzz
+tests compare intervals with the existing enumerated engine and verify exact
+constant-factor translation and unchanged input arrays. Rejection tests cover
+malformed orders/tables, unsupported scopes, aggregate liability limits, and
+fill-in even for zero-valued factors.
+
+The general evaluator's local chain fixture used about 4.53 million gas; the
+64-factor width-two fixture used about 11.48 million, including graph creation,
+an explicit validation call, evaluation and assertions. These are measured
+examples, not worst-case limits or deployed trade costs. Cost differences need
+two snapshots and further accounting. Gas optimization remains a deployment
+gate. Next: exact factored maximum liabilities, then conservative trade quotes
+and shared-pool accounting.
