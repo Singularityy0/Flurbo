@@ -50,6 +50,9 @@ events under a validated elimination order of width at most two. Buy/sell
 simulations support Boolean claims over up to three selected events, revalidate
 the resulting graph and numeric domain, and reuse exact-scope factor tables.
 Owner accounting and fixed-point factored execution remain pending.
+The first [Solidity factored arithmetic component](docs/FACTORED_NUMERICS.md)
+now encloses normalization, factor addition and binary elimination, with an
+explicit error propagation budget. General graph traversal is the next gate.
 
 Phase 1 provides payoff algebra for one to three binary events and split/merge
 validation. Phase 2a adds an enumerated LMSR reference model: shared probabilities,
