@@ -42,13 +42,14 @@ def rpc_endpoint(network, provider, environment):
 
 
 class Rpc:
+    allowed_methods = frozenset(READ_METHODS)
     def __init__(self, url):
         self.url = url
         self.counter = 0
         self.opener = build_opener(NoRedirect())
 
     def __call__(self, method, params):
-        if method not in READ_METHODS:
+        if method not in self.allowed_methods:
             raise CheckError("Only readiness read methods are allowed")
         self.counter += 1
         payload = {"jsonrpc": "2.0", "id": self.counter, "method": method, "params": params}

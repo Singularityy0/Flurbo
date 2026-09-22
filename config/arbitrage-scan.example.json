@@ -1,0 +1,23 @@
+{
+  "chain_id": 10143,
+  "executor": null,
+  "pool": null,
+  "market": null,
+  "receipt": null,
+  "cash": null,
+  "operator": null,
+  "scope": 128,
+  "mask": 2,
+  "pool_buy_sizes": [100000, 500000, 1000000],
+  "kuru_buy_budgets": [50000, 250000, 500000],
+  "mon_ausd_price_e6": null,
+  "price_observed_at": null,
+  "max_price_age_seconds": 120,
+  "max_block_age_seconds": 30,
+  "max_head_advance": 2,
+  "max_fee_per_gas_wei": null,
+  "gas_headroom_bps": 12500,
+  "max_gas": 1500000,
+  "min_profit_atoms": 10000,
+  "deadline_seconds": 30
+}
