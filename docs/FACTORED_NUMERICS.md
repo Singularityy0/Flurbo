@@ -46,8 +46,9 @@ still contributes ln(2); constants and disconnected scalar messages are added
 once at the end. All original input arrays are left unchanged.
 
 There are at most 96 input/message table slots, at most eight entries per input
-table, and at most four per reduced table. Bucket scans and bit projections are
-bounded but not optimized; there is no global `2^events` array. No graph data is
+table, and at most four per reduced table. Each event's active bucket is collected
+once and reused across local assignments; bit projections and validation still
+have optimization opportunities. There is no global `2^events` array. No graph data is
 persisted, and this library has no probability, trade, or settlement endpoint.
 
 ## Exact maximum liability
@@ -172,11 +173,13 @@ differences above floating-point precision, empty models, and 64 constants with
 32 disconnected events. Every malformed-input rejection is checked through both
 cost and maximum-liability entry points.
 
-The combined cost-and-liability chain fixture used about 6.63 million gas; the
-64-factor width-two fixture used about 17.53 million, including graph creation,
+The combined cost-and-liability chain fixture used about 4.39 million gas; the
+64-factor width-two fixture used about 10.55 million, including graph creation,
 an explicit validation call, both evaluations and assertions. These are measured
 examples, not worst-case limits or deployed trade costs. Cost differences need
 two snapshots and further accounting. Gas optimization remains a deployment
 gate. [Conservative factored trade quotes](FACTORED_QUOTES.md) are now implemented;
 the [funded factored pool](FACTORED_POOL.md) now integrates owner accounting,
 coverage, execution and trusted settlement in local tests.
+The [gas checkpoint](FACTORED_GAS.md) records baseline comparisons and separate
+quote measurements after eliminating repeated full-table scans.

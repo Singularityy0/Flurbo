@@ -89,11 +89,13 @@ resolution state around failures; verify rollback, callbacks, no-return tokens,
 losing burns, stale limits, and shortfall recovery. Precision checks cover
 0/6/18 decimals, and a 32-event lifecycle exercises event 31 through redemption.
 
-With solc 0.8.28 and 200 optimizer runs, the local concrete runtime is 19,252
-bytes. The 32-event lifecycle test used about 7.94 million gas including deployment,
+With solc 0.8.28 and 200 optimizer runs, the local concrete runtime is 19,196
+bytes. The 32-event lifecycle test used about 6.80 million gas including deployment,
 funding, one trade and redemption; it is not a dense-graph trade benchmark.
 Large graph execution remains expensive and requires optimization and explicit
 deployment gas limits. Run `forge test` and `forge fmt --check` before committing.
+The [first gas optimization](FACTORED_GAS.md) reduces the two large-graph quote
+benchmarks by about 29% and 34% while preserving their complete outputs.
 
 The existing enumerated `ReferencePool`, its base-event receipts, Kuru fork
 rehearsal and CRE receiver remain separate reference integrations. Their adapters

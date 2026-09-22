@@ -60,6 +60,8 @@ the exact resulting maximum liability. The [funded factored pool](docs/FACTORED_
 now integrates owner holdings, conservative execution, exact collateral coverage,
 trusted resolution and redemption in local tests. Gas optimization, public
 deployment and porting partner adapters remain pending.
+The [first gas optimization](docs/FACTORED_GAS.md) reduces the measured large-graph
+quote costs by 29–34% with unchanged outputs; deployment gas limits remain a gate.
 
 Phase 1 provides payoff algebra for one to three binary events and split/merge
 validation. Phase 2a adds an enumerated LMSR reference model: shared probabilities,

@@ -133,31 +133,34 @@ library FactoredCost {
 
     function eliminate(Table[] memory tables, uint256 count, uint32 bit) private pure returns (Table memory) {
         uint32 joined = bit;
+        uint256[] memory bucket = new uint256[](count);
+        uint256 size;
         for (uint256 i; i < count; i++) {
-            if (tables[i].active && tables[i].scope & bit != 0) joined |= tables[i].scope;
+            if (tables[i].active && tables[i].scope & bit != 0) {
+                joined |= tables[i].scope;
+                bucket[size++] = i;
+                tables[i].active = false;
+            }
         }
         uint32 remaining = joined & ~bit;
         M.LogBounds[] memory values = new M.LogBounds[](uint256(1) << popcount(remaining));
         for (uint256 local; local < values.length; local++) {
             uint32 state = expand(remaining, local);
             values[local] =
-                M.logSumExp(bucketSum(tables, count, bit, state), bucketSum(tables, count, bit, state | bit));
-        }
-        for (uint256 i; i < count; i++) {
-            if (tables[i].scope & bit != 0) tables[i].active = false;
+                M.logSumExp(bucketSum(tables, bucket, size, state), bucketSum(tables, bucket, size, state | bit));
         }
         return Table(remaining, true, values);
     }
 
-    function bucketSum(Table[] memory tables, uint256 count, uint32 bit, uint32 state)
+    function bucketSum(Table[] memory tables, uint256[] memory bucket, uint256 size, uint32 state)
         private
         pure
         returns (M.LogBounds memory total)
     {
-        for (uint256 i; i < count; i++) {
-            if (tables[i].active && tables[i].scope & bit != 0) {
-                total = M.add(total, tables[i].values[project(tables[i].scope, state)]);
-            }
+        // Indices retain original table order; only irrelevant scans are removed.
+        for (uint256 i; i < size; i++) {
+            Table memory table = tables[bucket[i]];
+            total = M.add(total, table.values[project(table.scope, state)]);
         }
     }
 
@@ -167,32 +170,34 @@ library FactoredCost {
         returns (ExactTable memory)
     {
         uint32 joined = bit;
+        uint256[] memory bucket = new uint256[](count);
+        uint256 size;
         for (uint256 i; i < count; i++) {
-            if (tables[i].active && tables[i].scope & bit != 0) joined |= tables[i].scope;
+            if (tables[i].active && tables[i].scope & bit != 0) {
+                joined |= tables[i].scope;
+                bucket[size++] = i;
+                tables[i].active = false;
+            }
         }
         uint32 remaining = joined & ~bit;
         uint256[] memory values = new uint256[](uint256(1) << popcount(remaining));
         for (uint256 local; local < values.length; local++) {
             uint32 state = expand(remaining, local);
-            uint256 no = exactBucketSum(tables, count, bit, state);
-            uint256 yes = exactBucketSum(tables, count, bit, state | bit);
+            uint256 no = exactBucketSum(tables, bucket, size, state);
+            uint256 yes = exactBucketSum(tables, bucket, size, state | bit);
             values[local] = no > yes ? no : yes;
-        }
-        for (uint256 i; i < count; i++) {
-            if (tables[i].scope & bit != 0) tables[i].active = false;
         }
         return ExactTable(remaining, true, values);
     }
 
-    function exactBucketSum(ExactTable[] memory tables, uint256 count, uint32 bit, uint32 state)
+    function exactBucketSum(ExactTable[] memory tables, uint256[] memory bucket, uint256 size, uint32 state)
         private
         pure
         returns (uint256 total)
     {
-        for (uint256 i; i < count; i++) {
-            if (tables[i].active && tables[i].scope & bit != 0) {
-                total += tables[i].values[project(tables[i].scope, state)];
-            }
+        for (uint256 i; i < size; i++) {
+            ExactTable memory table = tables[bucket[i]];
+            total += table.values[project(table.scope, state)];
         }
     }
 
