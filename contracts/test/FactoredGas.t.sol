@@ -45,7 +45,7 @@ contract FactoredGasTest {
             : bytes32(0x4e09d014a12fa3c333b95c3064dbc20eeb1058d1e9bf7ce6d9b80372a43904dc);
         assert(keccak256(abi.encode(result)) == expected);
         // Small headroom over measured gas; revisit deliberately when changing compiler or evaluator.
-        assert(used <= (width == 1 ? 8200000 : 20000000));
+        assert(used <= (width == 1 ? 7600000 : 18700000));
         emit log_named_uint("quote gas", used);
         emit log_named_uint("collateral atoms", result.collateral);
         emit log_named_bytes32("complete quote hash", keccak256(abi.encode(result)));

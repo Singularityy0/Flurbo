@@ -6,6 +6,14 @@ import {LmsrCost} from "../src/LmsrCost.sol";
 import {QuoteMath} from "../src/QuoteMath.sol";
 
 contract FactoredCostHarness {
+    function boundsAndMax(uint8 events, uint256 b, F.Factor[] memory factors, uint8[] memory order)
+        external
+        pure
+        returns (QuoteMath.CostBounds memory, uint256)
+    {
+        return F.boundsAndMax(events, b, factors, order);
+    }
+
     function maxLiability(uint8 events, uint256 b, F.Factor[] memory factors, uint8[] memory order)
         external
         pure
@@ -40,6 +48,10 @@ contract FactoredCostTest {
         bytes32 before_ = keccak256(abi.encode(factors, order));
         QuoteMath.CostBounds memory result = F.bounds(3, b, factors, order);
         uint256 maximum = F.maxLiability(3, b, factors, order);
+        (QuoteMath.CostBounds memory combined, uint256 combinedMaximum) = F.boundsAndMax(3, b, factors, order);
+        assert(
+            combined.lowerWad == result.lowerWad && combined.upperWad == result.upperWad && combinedMaximum == maximum
+        );
         assert(keccak256(abi.encode(factors, order)) == before_);
         // Full enumeration is test-only and uses an independent indexing loop.
         uint256[] memory q = new uint256[](8);
@@ -164,6 +176,8 @@ contract FactoredCostTest {
             address(harness).call(abi.encodeCall(harness.bounds, (events, b, factors, order)));
         assert(!ok && data.length == 4 && bytes4(data) == expected);
         (ok, data) = address(harness).call(abi.encodeCall(harness.maxLiability, (events, b, factors, order)));
+        assert(!ok && data.length == 4 && bytes4(data) == expected);
+        (ok, data) = address(harness).call(abi.encodeCall(harness.boundsAndMax, (events, b, factors, order)));
         assert(!ok && data.length == 4 && bytes4(data) == expected);
     }
 

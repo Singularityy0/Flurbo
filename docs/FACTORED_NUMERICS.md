@@ -7,6 +7,9 @@ update liabilities, quote trades, or connect to `ReferencePool`.
 `FactoredCost` supplies graph validation and variable elimination on top of this
 arithmetic, returning the cost enclosure for one shared distribution. It also
 computes exact maximum liabilities using a separate integer max-sum pass.
+`boundsAndMax` validates one snapshot before calling both private calculation
+workers; separate `bounds` and `maxLiability` calls still validate independently.
+There is no unchecked evaluator exposed to calling libraries or contracts.
 
 ## Units and domain
 

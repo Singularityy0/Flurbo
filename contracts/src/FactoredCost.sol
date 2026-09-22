@@ -41,6 +41,14 @@ library FactoredCost {
         returns (uint256 total)
     {
         validate(events, b, factors, order);
+        return evaluateMax(events, factors, order);
+    }
+
+    function evaluateMax(uint8 events, Factor[] memory factors, uint8[] memory order)
+        private
+        pure
+        returns (uint256 total)
+    {
         ExactTable[] memory tables = new ExactTable[](factors.length + events);
         uint256 count = factors.length;
         for (uint256 i; i < count; i++) {
@@ -62,6 +70,24 @@ library FactoredCost {
         returns (QuoteMath.CostBounds memory)
     {
         validate(events, b, factors, order);
+        return evaluateBounds(events, b, factors, order);
+    }
+
+    /// @dev Validate this snapshot once for both calculations. Unvalidated workers stay private.
+    function boundsAndMax(uint8 events, uint256 b, Factor[] memory factors, uint8[] memory order)
+        internal
+        pure
+        returns (QuoteMath.CostBounds memory cost, uint256 maximum)
+    {
+        validate(events, b, factors, order);
+        return (evaluateBounds(events, b, factors, order), evaluateMax(events, factors, order));
+    }
+
+    function evaluateBounds(uint8 events, uint256 b, Factor[] memory factors, uint8[] memory order)
+        private
+        pure
+        returns (QuoteMath.CostBounds memory)
+    {
         Table[] memory tables = new Table[](factors.length + events);
         uint256 count = factors.length;
         for (uint256 i; i < count; i++) {

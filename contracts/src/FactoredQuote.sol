@@ -60,7 +60,7 @@ library FactoredQuote {
         uint256 scale = QuoteMath.scale(market.decimals);
         uint256 b = uint256(market.liquidity) * scale;
         F.Factor[] memory beforeWad = toWad(market.factors, scale);
-        F.validate(market.events, b, beforeWad, market.order);
+        QuoteMath.CostBounds memory before_ = F.bounds(market.events, b, beforeWad, market.order);
         uint256 size;
         for (uint32 s = scope; s != 0; s &= s - 1) {
             size++;
@@ -71,23 +71,23 @@ library FactoredQuote {
         if (mask == 0 || mask >= full) revert InvalidMask();
 
         quote.factorsAfter = update(market.factors, scope, mask, quantity, states, isBuy);
-        price(market, beforeWad, quote, isBuy);
+        price(market, before_, quote, isBuy);
         if (quote.collateral == 0 || (isBuy && quote.collateral > quantity)) revert UnquotableTrade();
     }
 
-    function price(Market memory market, F.Factor[] memory beforeWad, Quote memory quote, bool isBuy) private pure {
+    function price(Market memory market, QuoteMath.CostBounds memory before_, Quote memory quote, bool isBuy)
+        private
+        pure
+    {
         uint256 scale = QuoteMath.scale(market.decimals);
         uint256 b = uint256(market.liquidity) * scale;
         F.Factor[] memory afterWad = toWad(quote.factorsAfter, scale);
-        // Evaluate the proposed state first so unsupported updates fail before pricing the old state.
-        QuoteMath.CostBounds memory after_ = F.bounds(market.events, b, afterWad, market.order);
-        QuoteMath.CostBounds memory before_ = F.bounds(market.events, b, beforeWad, market.order);
+        (QuoteMath.CostBounds memory after_, uint256 maximum) = F.boundsAndMax(market.events, b, afterWad, market.order);
         quote.collateral = isBuy
             ? QuoteMath.buyFromBounds(before_, after_, market.decimals)
             : QuoteMath.sellFromBounds(before_, after_, market.decimals);
         // Atom-aligned input sums/maxima remain atom-aligned; this conversion is exact.
-        quote.maxLiabilityAfter =
-            QuoteMath.fromWadUp(F.maxLiability(market.events, b, afterWad, market.order), market.decimals);
+        quote.maxLiabilityAfter = QuoteMath.fromWadUp(maximum, market.decimals);
     }
 
     function update(Factor[] memory factors, uint32 scope, uint256 mask, uint128 quantity, uint256 states, bool isBuy)

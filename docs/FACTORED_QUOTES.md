@@ -69,6 +69,9 @@ enforce deadlines, or transfer collateral. The [local factored pool](FACTORED_PO
 now loads stored state, recomputes the quote, enforces owner holdings and coverage,
 and updates factors and holdings atomically. It includes trusted resolution and
 redemption; actual conditional claims remain a separate gate. A quote computes
-two costs and one exact maximum with repeated validation; large graph gas
+two costs and one exact maximum, validating each snapshot once. The combined
+post-trade evaluator validates internally and keeps unvalidated workers private.
+The pool stores tables in stable insertion order and updates only the traded
+scope, while pure quote output continues to append the changed scope. Large graph gas
 optimization remains necessary before deployment.
 Kuru anchoring and the other [partner requirements](INTEGRATIONS.md) remain required.

@@ -51,7 +51,7 @@ abstract contract FactoredTrading is FactoredFunding {
         requireTrading(deadline);
         Q.Quote memory quote = Q.buy(market(), scope, mask, quantity, maxCost);
         positions.credit(msg.sender, scope, mask, quantity);
-        applyQuote(quote);
+        applyQuote(quote, scope);
         paid = quote.collateral;
         transferExact(msg.sender, paid, true);
         requireCovered();
@@ -66,7 +66,7 @@ abstract contract FactoredTrading is FactoredFunding {
         requireTrading(deadline);
         positions.debit(msg.sender, scope, mask, quantity);
         Q.Quote memory quote = Q.sell(market(), scope, mask, quantity, minProceeds);
-        applyQuote(quote);
+        applyQuote(quote, scope);
         received = quote.collateral;
         transferExact(msg.sender, received, false);
         requireCovered();
@@ -83,13 +83,30 @@ abstract contract FactoredTrading is FactoredFunding {
         requireCovered();
     }
 
-    function applyQuote(Q.Quote memory quote) private {
-        delete storedFactors;
-        for (uint256 i; i < quote.factorsAfter.length; i++) {
-            storedFactors.push();
-            storedFactors[i].scope = quote.factorsAfter[i].scope;
-            storedFactors[i].values = quote.factorsAfter[i].values;
+    function applyQuote(Q.Quote memory quote, uint32 scope) private {
+        // Quotes append the sole changed scope. Pool state starts empty and keeps one table per scope.
+        Q.Factor memory changed = quote.factorsAfter[quote.factorsAfter.length - 1];
+        assert(changed.scope == scope);
+        uint256 index = storedFactors.length;
+        for (uint256 i; i < storedFactors.length; i++) {
+            if (storedFactors[i].scope == scope) {
+                index = i;
+                break;
+            }
         }
+        if (index == storedFactors.length) {
+            storedFactors.push();
+            storedFactors[index].scope = scope;
+            storedFactors[index].values = changed.values;
+        } else {
+            assert(storedFactors[index].values.length == changed.values.length);
+            for (uint256 j; j < changed.values.length; j++) {
+                if (storedFactors[index].values[j] != changed.values[j]) {
+                    storedFactors[index].values[j] = changed.values[j];
+                }
+            }
+        }
+        assert(storedFactors.length == quote.factorsAfter.length);
         maximumLiability = quote.maxLiabilityAfter;
     }
 }

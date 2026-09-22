@@ -46,6 +46,13 @@ exact-scope selling restriction follow [factored quotes](FACTORED_QUOTES.md).
 The pool stores the quotes' resulting factors and their exact maximum liability;
 there is no enumeration of all global outcomes in execution.
 
+Stored factors retain insertion order. Each quote changes only its requested
+scope; the pool locates that scope, writes its changed entries, or appends a new
+table. Other scopes are left untouched. Zeroed tables stay in place. This relies
+on the pool starting empty and maintaining one table per scope through its only
+trade entry points. Pure quotes still return unchanged scopes followed by the
+changed scope; compare tables by scope, not by array position across these APIs.
+
 Quotes are views, not reservations. Execution reads stored state and recomputes
 the quote. Sales require the caller's exact claim holdings; another scope or a
 logically equivalent claim cannot replace them. A sell debits ownership before
@@ -89,13 +96,13 @@ resolution state around failures; verify rollback, callbacks, no-return tokens,
 losing burns, stale limits, and shortfall recovery. Precision checks cover
 0/6/18 decimals, and a 32-event lifecycle exercises event 31 through redemption.
 
-With solc 0.8.28 and 200 optimizer runs, the local concrete runtime is 19,196
-bytes. The 32-event lifecycle test used about 6.80 million gas including deployment,
+With solc 0.8.28 and 200 optimizer runs, the local concrete runtime is 19,609
+bytes. The 32-event lifecycle test used about 6.69 million gas including deployment,
 funding, one trade and redemption; it is not a dense-graph trade benchmark.
 Large graph execution remains expensive and requires optimization and explicit
 deployment gas limits. Run `forge test` and `forge fmt --check` before committing.
-The [first gas optimization](FACTORED_GAS.md) reduces the two large-graph quote
-benchmarks by about 29% and 34% while preserving their complete outputs.
+The [gas checkpoints](FACTORED_GAS.md) preserve complete pure quote outputs and
+now include measured pool execution and stable-order storage regression checks.
 
 The existing enumerated `ReferencePool`, its base-event receipts, Kuru fork
 rehearsal and CRE receiver remain separate reference integrations. Their adapters
