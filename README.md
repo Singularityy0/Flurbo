@@ -53,8 +53,10 @@ Owner accounting and fixed-point factored execution remain pending.
 The [Solidity factored evaluator](docs/FACTORED_NUMERICS.md) now validates graph
 width and computes a conservative cost enclosure using bounded tables, with an
 explicit error propagation budget. It also computes exact maximum liabilities
-over the shared outcome space. Factored trade quotes, gas optimization and pool
-integration remain pending.
+over the shared outcome space. [Factored buy/sell quotes](docs/FACTORED_QUOTES.md)
+now apply local Boolean trades, round collateral conservatively, and return
+the exact resulting maximum liability. Gas optimization and pool integration
+remain pending.
 
 Phase 1 provides payoff algebra for one to three binary events and split/merge
 validation. Phase 2a adds an enumerated LMSR reference model: shared probabilities,

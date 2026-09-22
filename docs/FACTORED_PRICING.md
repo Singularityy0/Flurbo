@@ -100,8 +100,9 @@ Boolean mask on every subset of three events, positive/negative size boundaries,
 post-trade costs, distributions and liabilities, reversals, scope/capacity
 rejections and a 32-event round trip. The [fixed-point evaluator and error
 specification](FACTORED_NUMERICS.md) now implement graph validation, cost
-enclosures and exact maximum liabilities in Solidity. Factored trade quotes
-and accounting integration remain subsequent gates before pool execution.
+enclosures and exact maximum liabilities in Solidity. The [factored quoting
+adapter](FACTORED_QUOTES.md) now applies local Boolean trades with conservative
+collateral rounding. Accounting integration remains a gate before pool execution.
 
 The inference method follows [variable elimination](https://ermongroup.github.io/cs228-notes/inference/ve/).
 [Pennock and Xia](https://arxiv.org/abs/1202.3756) motivate distinguishing tractable
