@@ -67,7 +67,10 @@ receipts, including a 32-event pool and subsequent shared-pool sale/redemption.
 [Local fill tests](docs/KURU_FILL_ACCOUNTING.md) now verify both directions,
 partial fills, fees, rounding remainders and redemption. An [atomic arbitrage
 rehearsal](docs/ARBITRAGE_REHEARSAL.md) now passes both directions with conservative
-bounds and complete rollback. Autonomous scanning and live anchoring remain pending.
+bounds and complete rollback. A [read-only scanner](docs/ARBITRAGE_SCANNER.md) now
+implements candidate selection, gas conversion and full-route simulation checks.
+Its persistent-deployment HTTP validation and live anchoring remain pending;
+the next delivery target is a manual testnet dashboard.
 The [gas optimizations](docs/FACTORED_GAS.md) reduce measured large-graph quote
 costs by 35–38% cumulatively with unchanged outputs. The latest changes also cut
 the measured pool buy/sell costs by about 9%; deployment gas limits remain a gate.

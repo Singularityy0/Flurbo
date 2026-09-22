@@ -1,8 +1,8 @@
 # Kuru order lifecycle on a local Monad testnet fork
 
-The opt-in suite passed **27 tests** at Monad testnet block **64,729,226** on
+The opt-in suite passed **29 tests** at Monad testnet block **64,729,226** on
 September 22, 2026: three for `KuruOrderLifecycleTest` (enumerated reference pool),
-11 for `FactoredKuruOrderLifecycleTest` (32-event factored pool), and 13 for
+11 for `FactoredKuruOrderLifecycleTest` (32-event factored pool), and 15 for
 `KuruArbitrageTest` (eight-event local atomic execution).
 Foundry fetched that block's chain state and
 executed every mutation locally. No public transaction, wallet signing, public
@@ -47,7 +47,9 @@ and limits in [fill accounting](KURU_FILL_ACCOUNTING.md).
 The [arbitrage suite](ARBITRAGE_REHEARSAL.md) adds both route directions, exact
 profit/allowance checks, gas measurements, and atomic rollback on stale quotes,
 insufficient depth and output mismatches. Its gas allowance is synthetic, not a
-current MON/AUSD conversion or evidence of live net profitability.
+current MON/AUSD conversion or evidence of live net profitability. Two of its
+tests now check the [scanner's](ARBITRAGE_SCANNER.md) zero-sender quote selectors
+and static calldata against normal atomic execution.
 
 Order IDs come from actual `OrderCreated` logs emitted by the local-fork Kuru
 market. Owner, size, price and side are also checked against order storage.
@@ -94,8 +96,9 @@ reconciliation across multiple makers/price levels, listing access, AMM liquidit
 remain unverified. The fork uses a trusted local resolver; it does not deliver a
 signed CRE report. Successful cancellation is not trading-volume evidence.
 
-The next Kuru slice is read-only candidate selection and full-route simulation,
-including current gas cost conversion, depth and freshness rules. The CRE adapter still targets the
+Read-only candidate selection and full-route simulation are now implemented;
+persistent-deployment HTTP validation is next as part of the manual dashboard
+delivery path. The CRE adapter still targets the
 enumerated pool and needs its own port. Public testnet execution can follow a review of
 the exact transactions and dedicated wallet/test MON/AUSD funding setup. Mera,
 official settlement sources and the remaining partner milestones remain required.

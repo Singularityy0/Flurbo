@@ -18,7 +18,10 @@ sale/redemption. [Local fills](KURU_FILL_ACCOUNTING.md) also pass with separate
 maker/taker accounts, exact fees, rounding remainders and failure rollback.
 [Atomic arbitrage](ARBITRAGE_REHEARSAL.md) now passes locally in both directions,
 including fees, a synthetic gas allowance and second-leg rollback. Automated
-candidate selection, live anchoring and public trading evidence remain open.
+candidate selection is implemented in a [read-only scanner](ARBITRAGE_SCANNER.md)
+with offline/fork validation. Persistent-deployment HTTP validation, live anchoring
+and public trading evidence remain open. The next delivery target is the manual
+test dashboard, followed by the remaining consumer/partner flows.
 CRE adapters still target the enumerated pool and require a separate port.
 
 ## Required integration milestones
