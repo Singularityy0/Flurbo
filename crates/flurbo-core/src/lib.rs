@@ -1,6 +1,7 @@
 //! Payoff algebra, reference pricing, and integer accounting for small event clusters.
 
 pub mod accounting;
+pub mod factored;
 pub mod pricing;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
