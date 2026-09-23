@@ -45,6 +45,15 @@ balances and trading are not connected; native-device validation remains pending
 
 ## Current phase
 
+An offline [ParlayMarket learning comparison](docs/PARLAY_COMPARISON.md) now adds
+an exact pairwise model, cross-entropy gradient updates and explicit virtual
+shadow books. It compares synthetic learning and order flow with the existing
+Flurbo reference and accepts normalized historical replay inputs. This is the
+user-selected comparison-first phase: it does not change executable pool prices.
+Published historical results have not been reproduced; the authors' dataset is
+unavailable. No statistical loss guarantees are claimed. Run
+`python scripts/parlay_report.py` for the reproducible report and trajectories.
+
 A [factored pricing reference](docs/FACTORED_PRICING.md) now evaluates one global
 LMSR cost, conjunction probabilities and maximum liabilities for up to 32 binary
 events under a validated elimination order of width at most two. Buy/sell

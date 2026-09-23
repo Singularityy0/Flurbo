@@ -78,6 +78,13 @@ must be configured locally, not requested in chat or written to the repository.
 
 ## Research and access notes
 
+The user subsequently requested ParlayMarket learning and experiments, choosing
+comparison first and execution integration afterward. The
+[learning comparison](PARLAY_COMPARISON.md) implements v3's pairwise model and
+gradient equations with explicit virtual shadow books. It leaves the shared
+on-chain maker and partner architecture intact. Exact historical reproduction
+remains pending source data; no statistical loss guarantees are claimed.
+
 Read the two papers requested in the idea before the pricing slice. Reviewed
 their mechanism and scope: [ParlayMarket](https://arxiv.org/html/2603.22596v2)
 uses a shared pairwise model with learning/error analysis; its statistical loss
