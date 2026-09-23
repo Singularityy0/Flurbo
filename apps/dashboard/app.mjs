@@ -16,10 +16,10 @@ let stateController, quoteController, txController;
 let lastFailure = '', selectedLabels = new Map();
 let trading;
 
-async function request(path, controller) {
+async function request(path, controller, options = {}) {
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-    const response = await fetch(path, { signal: controller.signal, cache: 'no-store', credentials: 'omit' });
+    const response = await fetch(path, { ...options, signal: controller.signal, cache: 'no-store', credentials: 'omit' });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Data is unavailable. Try refreshing.');
     return result;
@@ -270,6 +270,8 @@ $('tx-form').addEventListener('submit', async event => {
 });
 
 trading = mountTrading({
+  readHealth: () => request('/api/health', new AbortController()),
+  fundLocal: wallet => request('/api/local-wallet-setup', new AbortController(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallet }) }),
   getQuote: () => quote ? structuredClone(quote) : null,
   readSnapshot: (account, selected = composed || { scope: 128, mask: 2 }) => request('/api/state?' + new URLSearchParams({ wallet: account, claims: `${selected.scope}:${selected.mask}` }), new AbortController()),
   readTransaction: hash => request('/api/transaction?' + new URLSearchParams({ hash }), new AbortController()),

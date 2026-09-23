@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makePlan, prepare, assertContext, sendReviewed, reconcile, encode, boundFor, walletMessage } from './wallet.mjs';
+import { makePlan, prepare, assertContext, sendReviewed, reconcile, setupLocalWallet, encode, boundFor, walletMessage } from './wallet.mjs';
 
 const ACCOUNT = '0x' + '11'.repeat(20), POOL = '0x' + '22'.repeat(20), CASH = '0x' + '33'.repeat(20);
 function fixture() {
@@ -27,6 +27,35 @@ test('buy calldata uses factored scope/mask, capped integer slippage and contrac
   assert.equal(p.tx.chainId, '0x279f'); assert.equal(p.tx.value, '0x0');
   assert.equal(p.deadline, snapshot.snapshot.timestamp + 180);
   assert.equal(boundFor({ ...quoted.quote, collateral_atoms: '1000000' }, 500), 1000000n);
+});
+
+test('automatic setup requests exact local network configuration and funds only after fork verification', async () => {
+  const f = fixture(); let switched = false, funded = false;
+  f.overrides.eth_requestAccounts = () => [ACCOUNT];
+  f.overrides.eth_getBlockByNumber = () => ({ hash: switched ? f.snapshot.snapshot.block_hash : '0x' + 'bb'.repeat(32) });
+  f.overrides.wallet_addEthereumChain = params => {
+    assert.equal(params[0].chainId, '0x279f'); assert.deepEqual(params[0].rpcUrls, ['http://127.0.0.1:18545']); return null;
+  };
+  f.overrides.wallet_switchEthereumChain = () => { switched = true; return null; };
+  const owner = await setupLocalWallet(f.provider, {
+    readHealth: async () => ({ local_wallet_setup: true }), readSnapshot: async () => f.snapshot,
+    fundLocal: async candidate => { assert.equal(candidate, ACCOUNT); assert.equal(switched, true); funded = true; f.snapshot.wallet.native_balance_wei = '10000000000000000000'; },
+  });
+  assert.equal(owner, ACCOUNT); assert.equal(funded, true);
+  assert.equal(f.calls.some(c => c.method === 'eth_sendTransaction'), false);
+});
+test('setup never funds on rejected prompts, unchanged public RPC, or changed account', async () => {
+  for (const reason of ['rejected', 'wrong_fork', 'account_changed', 'disabled']) {
+    const f = fixture(); let funded = false;
+    f.overrides.eth_requestAccounts = () => [ACCOUNT];
+    f.overrides.eth_getBlockByNumber = () => ({ hash: '0x' + 'bb'.repeat(32) });
+    f.overrides.wallet_addEthereumChain = () => { if (reason === 'rejected') throw Object.assign(new Error(), { code: 4001 }); return null; };
+    f.overrides.wallet_switchEthereumChain = () => { if (reason === 'account_changed') f.overrides.eth_accounts = () => [CASH]; return null; };
+    await assert.rejects(setupLocalWallet(f.provider, { readHealth: async () => ({ local_wallet_setup: reason !== 'disabled' }),
+      readSnapshot: async () => f.snapshot, fundLocal: async () => { funded = true; } }));
+    assert.equal(funded, false);
+    if (reason === 'disabled') assert.equal(f.calls.length, 0);
+  }
 });
 test('approvals are exact and a nonzero insufficient allowance is reset in a separate transaction', () => {
   const { snapshot, quoted } = fixture(); snapshot.wallet.pool_allowance_atoms = '0';

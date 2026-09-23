@@ -47,8 +47,10 @@
         <section class="card quote-card" aria-labelledby="quote-title"><p class="eyebrow">02 / ON-CHAIN PRICE</p><h2 id="quote-title">A price for your view.</h2><p class="muted">Computed by the pool's cost function.</p><div id="quote-result" aria-live="polite"><p class="quote-empty">Build a claim, then request a quote.</p></div><div class="quote-footer">Review the quote below to approve AUSD or trade through your connected wallet. Local test assets only.</div></section>
         <section class="card trading" aria-labelledby="trade-title">
           <p class="eyebrow">WALLET & EXECUTION</p><h2 id="trade-title">Make your move.</h2>
-          <p class="caption">Every approval and trade requires a separate confirmation in your wallet. The server stays read-only.</p>
+          <p class="caption">Every approval and trade requires a separate confirmation in your wallet. Automatic setup only funds local test balances.</p>
           <label for="wallet-provider">Browser wallet</label><select id="wallet-provider" disabled><option value="" disabled selected>No wallet detected</option></select>
+          <button id="setup-wallet" class="button primary wide" disabled>Set up local wallet ↗</button>
+          <p id="setup-status" class="caption" role="status">Choose a dedicated test account in MetaMask. Setup requests the local network and tops up to 10 test AUSD and 10 MON; it never creates or exports a private key.</p>
           <div class="wallet-actions"><button id="connect-wallet" class="button secondary" disabled>Connect wallet</button><button id="disconnect-wallet" class="button quiet" disabled>Disconnect</button></div>
           <p id="signer-status" class="caption" role="status">Discovering browser wallets…</p>
           <details class="wallet-help"><summary>Local network setup</summary><p>Use a dedicated test account with local AUSD and MON. Set the wallet RPC to <code>http://127.0.0.1:18545</code>, chain ID <code>10143</code>, currency <code>MON</code>. Public Monad testnet uses the same ID; the block-hash check must match this fork.</p><p>Wallet signing here is a local development flow. Mera mobile and the MetaMask Agent Wallet integration remain separate milestones.</p></details>

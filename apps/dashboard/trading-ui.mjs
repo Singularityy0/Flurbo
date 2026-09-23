@@ -1,4 +1,4 @@
-import { address, assertContext, prepare, sendReviewed, reconcile, walletMessage, WalletError } from './wallet.mjs';
+import { address, assertContext, prepare, sendReviewed, reconcile, setupLocalWallet, walletMessage, WalletError } from './wallet.mjs';
 import { formatUnits } from './claims.mjs';
 
 const KEY = 'flurbo.local.pending.v1';
@@ -31,6 +31,7 @@ export function mountTrading(hooks) {
   function update() {
     const locked = operation || Boolean(pending);
     $('connect-wallet').disabled = locked || providers.length === 0 || Boolean(account);
+    $('setup-wallet').disabled = locked || providers.length === 0;
     $('disconnect-wallet').disabled = locked || !account;
     $('wallet-provider').disabled = locked || Boolean(account) || providers.length === 0;
     $('review-trade').disabled = locked || !account || !hooks.getQuote()?.quote;
@@ -73,6 +74,29 @@ export function mountTrading(hooks) {
   addProvider(window.ethereum, 'Browser wallet (injected)');
   if (!providers.length) text('signer-status', 'No browser wallet detected. Open this URL in a desktop browser with your wallet extension, then reload. The in-app browser may not provide a wallet.');
 
+  function connected(selected, candidate) {
+    removeListeners(); provider = selected; account = candidate;
+    const changed = () => disconnect('Wallet account or network changed. Reconnect and review again. Any open wallet request must be handled in the wallet.');
+    for (const name of ['accountsChanged', 'chainChanged', 'disconnect']) selected.on(name, changed);
+    removeListeners = () => { for (const name of ['accountsChanged', 'chainChanged', 'disconnect']) selected.removeListener(name, changed); };
+    text('signer-status', `Connected ${account} · local fork verified`);
+    hooks.accountChanged(account);
+  }
+  $('setup-wallet').addEventListener('click', async () => {
+    if (operation || pending) return;
+    const selected = providers[Number($('wallet-provider').value)]?.provider;
+    if (!selected) return;
+    disconnect('Setting up your selected test account…');
+    operation = true; update();
+    text('setup-status', 'Approve account/network prompts in MetaMask. Verifying the local fork before topping up test balances…');
+    try {
+      const owner = await setupLocalWallet(selected, hooks);
+      connected(selected, owner);
+      text('setup-status', 'Ready: local fork verified, with at least 10 local test AUSD and 10 local MON. Request a quote to begin.');
+    } catch (error) { text('setup-status', walletMessage(error)); }
+    finally { operation = false; update(); }
+  });
+
   $('connect-wallet').addEventListener('click', async () => {
     operation = true; update();
     try {
@@ -83,12 +107,7 @@ export function mountTrading(hooks) {
       const candidate = address(accounts[0]);
       const state = await hooks.readSnapshot(candidate);
       await assertContext(selected, state, candidate);
-      provider = selected; account = candidate;
-      const changed = () => disconnect('Wallet account or network changed. Reconnect and review again. Any open wallet request must be handled in the wallet.');
-      for (const name of ['accountsChanged', 'chainChanged', 'disconnect']) selected.on(name, changed);
-      removeListeners = () => { for (const name of ['accountsChanged', 'chainChanged', 'disconnect']) selected.removeListener(name, changed); };
-      text('signer-status', `Connected ${account} · local fork verified`);
-      hooks.accountChanged(account);
+      connected(selected, candidate);
     } catch (error) { text('signer-status', walletMessage(error)); }
     finally { operation = false; update(); }
   });

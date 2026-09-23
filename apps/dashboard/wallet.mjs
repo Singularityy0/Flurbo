@@ -16,6 +16,35 @@ const word = value => {
 };
 export const encode = (selector, ...args) => '0x' + selector + args.map(word).join('');
 export class WalletError extends Error {}
+export async function setupLocalWallet(provider, hooks) {
+  const health = await hooks.readHealth();
+  if (!health.local_wallet_setup) throw new WalletError('Automatic local setup is disabled. Start the local server with --enable-local-wallet-setup.');
+  const accounts = await provider.request({ method: 'eth_requestAccounts' });
+  if (!Array.isArray(accounts) || !accounts.length) throw new WalletError('Choose your dedicated test account in MetaMask.');
+  const owner = address(accounts[0]);
+  let state = await hooks.readSnapshot(owner);
+  if (state.environment !== 'local_fork' || state.chain_id !== 10143 || !snapshotFresh(state.snapshot)) throw new WalletError('A fresh local demo is required before wallet setup.');
+  let matches = false;
+  try { await assertContext(provider, state, owner); matches = true; } catch { /* Request configuration only when it is needed. */ }
+  if (!matches) {
+    try {
+      await provider.request({ method: 'wallet_addEthereumChain', params: [{ chainId: CHAIN_ID, chainName: 'Flurbo local fork',
+        nativeCurrency: { name: 'Monad', symbol: 'MON', decimals: 18 }, rpcUrls: ['http://127.0.0.1:18545'] }] });
+      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: CHAIN_ID }] });
+    } catch (error) {
+      if (error?.code === 4001) throw error;
+      throw new WalletError('MetaMask could not apply the local RPC automatically. Select http://127.0.0.1:18545 in its chain-10143 RPC settings, then retry setup.');
+    }
+    state = await hooks.readSnapshot(owner);
+  }
+  // Same chain ID is not enough; never fund an account before wallet/fork identity matches.
+  await assertContext(provider, state, owner);
+  await hooks.fundLocal(owner);
+  state = await hooks.readSnapshot(owner);
+  await assertContext(provider, state, owner);
+  if (BigInt(state.wallet.ausd_atoms) < 10000000n || BigInt(state.wallet.native_balance_wei) < 10000000000000000000n) throw new WalletError('Local funding is not yet visible. Check balances before retrying.');
+  return owner;
+}
 export function walletMessage(error) {
   if (error?.code === 4001) return 'You rejected the wallet request. Nothing was submitted by this request.';
   if (error?.code === -32002) return 'A request is already open in your wallet. Complete or reject it there.';
