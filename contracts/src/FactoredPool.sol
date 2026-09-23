@@ -87,7 +87,7 @@ contract FactoredPool is FactoredTrading {
         emit BaseUnwrapped(msg.sender, scope, mask, quantity);
     }
 
-    function requiredCollateral() public view override returns (uint128) {
+    function requiredCollateral() public view virtual override returns (uint128) {
         return resolved ? remainingPayout : maximumLiability;
     }
 

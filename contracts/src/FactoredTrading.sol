@@ -34,13 +34,15 @@ abstract contract FactoredTrading is FactoredFunding {
     function quoteBuy(uint32 scope, uint256 mask, uint128 quantity) external view returns (uint128) {
         requireOpen();
         requireCovered();
-        return Q.buy(market(), scope, mask, quantity, type(uint128).max).collateral;
+        (Q.Quote memory quote,) = priceTrade(scope, mask, quantity, type(uint128).max, true);
+        return quote.collateral;
     }
 
     function quoteSell(uint32 scope, uint256 mask, uint128 quantity) external view returns (uint128) {
         requireOpen();
         requireCovered();
-        return Q.sell(market(), scope, mask, quantity, 0).collateral;
+        (Q.Quote memory quote,) = priceTrade(scope, mask, quantity, 0, false);
+        return quote.collateral;
     }
 
     function buy(uint32 scope, uint256 mask, uint128 quantity, uint128 maxCost, uint256 deadline)
@@ -49,9 +51,10 @@ abstract contract FactoredTrading is FactoredFunding {
         returns (uint128 paid)
     {
         requireTrading(deadline);
-        Q.Quote memory quote = Q.buy(market(), scope, mask, quantity, maxCost);
+        (Q.Quote memory quote, uint128 reserve) = priceTrade(scope, mask, quantity, maxCost, true);
         positions.credit(msg.sender, scope, mask, quantity);
         applyQuote(quote, scope);
+        afterTrade(reserve);
         paid = quote.collateral;
         transferExact(msg.sender, paid, true);
         requireCovered();
@@ -65,17 +68,30 @@ abstract contract FactoredTrading is FactoredFunding {
     {
         requireTrading(deadline);
         positions.debit(msg.sender, scope, mask, quantity);
-        Q.Quote memory quote = Q.sell(market(), scope, mask, quantity, minProceeds);
+        (Q.Quote memory quote, uint128 reserve) = priceTrade(scope, mask, quantity, minProceeds, false);
         applyQuote(quote, scope);
+        afterTrade(reserve);
         received = quote.collateral;
         transferExact(msg.sender, received, false);
         requireCovered();
         emit Traded(msg.sender, scope, mask, false, quantity, received);
     }
 
-    function market() private view returns (Q.Market memory) {
+    function market() internal view returns (Q.Market memory) {
         return Q.Market(eventCount, liquidity, collateralDecimals, storedFactors, order);
     }
+
+    function priceTrade(uint32 scope, uint256 mask, uint128 quantity, uint128 limit, bool isBuy)
+        internal
+        view
+        virtual
+        returns (Q.Quote memory quote, uint128 reserve)
+    {
+        quote = isBuy ? Q.buy(market(), scope, mask, quantity, limit) : Q.sell(market(), scope, mask, quantity, limit);
+        reserve = 0; // The existing uniform pool checks its exact payout liability.
+    }
+
+    function afterTrade(uint128) internal virtual {}
 
     function requireTrading(uint256 deadline) private view {
         requireOpen();

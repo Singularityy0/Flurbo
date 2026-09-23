@@ -1,6 +1,7 @@
 # Funded repricing reference
 
-Status: **offline accounting prototype, not enabled in the dashboard or contracts**.
+Status: **offline accounting reference, not enabled in the dashboard**. A separate
+[integer contract implementation](FUNDED_FACTORED_POOL.md) now passes local tests.
 This is the next step after [the ParlayMarket comparison](PARLAY_COMPARISON.md).
 It connects a learned joint distribution to hypothetical finite-size LMSR fills,
 while keeping actual customer payouts separate from learning/shadow state.
@@ -108,7 +109,12 @@ holdings or enforce an epoch budget. `max_funding` is an explicitly supplied
 simulation input, not evidence of deposited funds. The adversarial test maintains
 a cumulative budget separately and stops accepting updates when it is exhausted.
 
-Before contract integration:
+The following requirements guided the local contract phase. Integer accounting,
+direct updater authentication, limits and contract tests are now implemented as
+described in [the contract status](FUNDED_FACTORED_POOL.md). Automatic learner
+proposal generation and persistent/local-dashboard rollout remain pending.
+
+Execution requirements:
 
 - Port separate bias factors and the reserve calculation to conservative integer
   intervals. Price fills with the combined bias/payout graph; compute actual
