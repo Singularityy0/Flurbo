@@ -70,6 +70,12 @@ pool. It does not assert wallet ownership or gas sufficiency; wallet review chec
 both. Canonical transaction events now also include the pool's `Redeemed` event
 for exact owner/claim/quantity/payout reconciliation. See [redemption](DASHBOARD_REDEMPTION.md).
 
+`conversion_available` requires a fresh snapshot and backed canonical receipts,
+but does not require an open market or collateral coverage: conversion transfers
+ownership without paying collateral. Receipt events now include `wrap`/`unwrap`
+with owner, scope, mask and quantity. [Wallet conversion](DASHBOARD_RECEIPTS.md)
+is currently restricted to the H YES receipt used by the demo Kuru pair.
+
 Pool collateral and required collateral are distinct. Their difference is
 coverage surplus, not LP profit or withdrawable balance. Receipt total supply
 must equal the pool's escrow holding. Shortfall or escrow mismatch is visible

@@ -12,6 +12,8 @@ from verify_demo import RULES, RULES_HASH
 TRADED = "0xfafd4a382ead0cb54fe827af5995137a1a8b433ebfd5a8d13def35a83adfb9b5"
 APPROVAL = "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925"
 REDEEMED = "0x3e24bbc5ae535f3f571a815b8ba9fc70c94ad494d812f0210c3da99fad2173ae"
+WRAPPED = "0x1678e1ca0a6fe8c67ed99c47dfc6bfbd624dde9b4ea6888c388819b92bdcf9af"
+UNWRAPPED = "0x3cba585a603da842c7ea575bdf8506be18538491b5751a625b119ca1432d5db3"
 
 
 def wins(scope, mask, outcome):
@@ -167,6 +169,8 @@ class Dashboard:
         result["trading_available"] = (state["phase"] == "open" and state["covered"] and state["receipt_backed"]
                                        and not result["snapshot"]["stale"] and int(self.clock()) < self.m["closes_at"])
         result["redemption_available"] = bool(state["resolved"] and state["covered"] and state["receipt_backed"] and not result["snapshot"]["stale"])
+        # Conversion moves ownership, never collateral. It can remain available after resolution or shortfall.
+        result["conversion_available"] = bool(state["receipt_backed"] and not result["snapshot"]["stale"])
         return result
 
     def quote(self, side, scope, mask, amount):
@@ -230,7 +234,7 @@ class Dashboard:
         for log in receipt.get("logs", []):
             origin = address(log.get("address"))
             topics = log.get("topics", [])
-            if not topics or (origin, topics[0]) not in ((self.m["pool"], TRADED), (self.m["pool"], REDEEMED), (self.m["cash"], APPROVAL)):
+            if not topics or (origin, topics[0]) not in ((self.m["pool"], TRADED), (self.m["pool"], REDEEMED), (self.m["pool"], WRAPPED), (self.m["pool"], UNWRAPPED), (self.m["cash"], APPROVAL)):
                 continue
             if log.get("removed") or hash32(log.get("blockHash")) != hash32(receipt["blockHash"]) or hash32(log.get("transactionHash")) != tx_hash:
                 raise CheckError("Event is outside the canonical transaction receipt")
@@ -251,6 +255,12 @@ class Dashboard:
                     raise CheckError("Unexpected redemption payout")
                 result.append({"kind": "redemption", "owner": f"0x{indexed[0]:040x}", "scope": indexed[1],
                                "mask": str(indexed[2]), "quantity_atoms": str(values[0]), "collateral_atoms": str(values[1])})
+            elif topics[0] in (WRAPPED, UNWRAPPED):
+                values = words(log.get("data"), 1)
+                if len(indexed) != 3 or indexed[0] >= 2**160 or not 0 < indexed[1] < 256 or indexed[1].bit_count() != 1 or indexed[2] not in (1, 2) or not 0 < values[0] < 2**128:
+                    raise CheckError("Malformed base conversion event")
+                result.append({"kind": "wrap" if topics[0] == WRAPPED else "unwrap", "owner": f"0x{indexed[0]:040x}",
+                               "scope": indexed[1], "mask": str(indexed[2]), "quantity_atoms": str(values[0])})
             else:
                 values = words(log.get("data"), 1)
                 if len(indexed) != 2 or max(indexed) >= 2**160:

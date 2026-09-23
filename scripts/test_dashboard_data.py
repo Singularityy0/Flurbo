@@ -4,7 +4,7 @@ import copy
 import unittest
 
 from check_monad_readiness import CheckError
-from dashboard_data import Dashboard, DashboardRpc, TRADED, APPROVAL, REDEEMED, wins
+from dashboard_data import Dashboard, DashboardRpc, TRADED, APPROVAL, REDEEMED, WRAPPED, UNWRAPPED, wins
 from scan_arbitrage import abi
 from serve_dashboard import route
 from test_demo_manifest import FakeRpc as ManifestRpc, fixture, NETWORK
@@ -54,6 +54,39 @@ def setup(clock=lambda: 1000):
 
 
 class DashboardTests(unittest.TestCase):
+    def test_conversion_remains_available_after_resolution_and_shortfall_but_not_stale_or_unbacked(self):
+        model, rpc, m = setup()
+        self.assertTrue(model.snapshot()['conversion_available'])
+        rpc.values[(m['pool'], '3f6fa655')] = [1]
+        rpc.values[(m['pool'], 'b53105a3')] = [999999999]
+        result = model.snapshot()
+        self.assertTrue(result['conversion_available'])
+        self.assertFalse(result['redemption_available'])
+        model.clock = lambda: 1031
+        self.assertFalse(model.snapshot()['conversion_available'])
+        model.clock = lambda: 1000
+        rpc.values[(m['pool'], '90fc2c7b')] = [1]
+        self.assertFalse(model.snapshot()['conversion_available'])
+
+    def test_conversion_events_require_canonical_pool_singleton_and_positive_quantity(self):
+        model, _, m = setup()
+        topic = lambda n: '0x' + f'{n:064x}'
+        receipt = {'blockHash': '0x' + 'aa' * 32}
+        log = {'address': m['pool'], 'blockHash': receipt['blockHash'], 'transactionHash': TX,
+               'topics': [WRAPPED, topic(int(m['operator'], 16)), topic(128), topic(2)], 'data': abi('', 500000)}
+        receipt['logs'] = [log]
+        self.assertEqual(model.receipt_events(receipt, TX)[0]['kind'], 'wrap')
+        log['topics'][0] = UNWRAPPED
+        self.assertEqual(model.receipt_events(receipt, TX)[0]['kind'], 'unwrap')
+        log['address'] = m['executor']
+        self.assertEqual(model.receipt_events(receipt, TX), [])
+        log['address'] = m['pool']; log['topics'][2] = topic(3)
+        with self.assertRaises(CheckError): model.receipt_events(receipt, TX)
+        log['topics'][2] = topic(128); log['data'] = abi('', 0)
+        with self.assertRaises(CheckError): model.receipt_events(receipt, TX)
+        log['data'] = abi('', 500000); log['removed'] = True
+        with self.assertRaises(CheckError): model.receipt_events(receipt, TX)
+
     def test_settlement_payouts_project_nonadjacent_events_and_preserve_pending(self):
         model, rpc, m = setup()
         pending = model.snapshot(m['operator'], [(129, 8), (129, 1)])
