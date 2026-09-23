@@ -1,8 +1,47 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makePlan, prepare, assertContext, sendReviewed, reconcile, setupLocalWallet, encode, boundFor, walletMessage } from './wallet.mjs';
+import { makePlan, prepare, makeRedemptionPlan, prepareRedemption, assertContext, sendReviewed, reconcile, setupLocalWallet, encode, boundFor, walletMessage } from './wallet.mjs';
 
 const ACCOUNT = '0x' + '11'.repeat(20), POOL = '0x' + '22'.repeat(20), CASH = '0x' + '33'.repeat(20);
+function settled() {
+  const f = fixture();
+  f.snapshot.redemption_available = true; f.snapshot.trading_available = false;
+  f.snapshot.pool = { resolved: true, resolved_state: 129, covered: true, receipt_backed: true };
+  f.snapshot.wallet.positions = [{ scope: 129, mask: 8, quantity_atoms: '1000000' }, { scope: 129, mask: 1, quantity_atoms: '1000000' }];
+  return f;
+}
+test('redemption projects sparse scopes, supports partial winners and zero-payout losers without approval', async () => {
+  for (const [mask, payout] of [[8, '500000'], [1, '0']]) {
+    const f = settled(); f.overrides.eth_call = () => encode('', payout);
+    const plan = await prepareRedemption(f.provider, f.snapshot, { scope: 129, mask }, ACCOUNT, '500000');
+    assert.equal(plan.kind, 'redeem'); assert.equal(plan.payout, payout);
+    assert.equal(plan.tx.data, encode('df992423', 129, mask, 500000));
+    await sendReviewed(f.provider, plan, f.snapshot);
+    assert.equal(f.calls.filter(c => c.method === 'eth_sendTransaction').length, 1);
+    const tx = { status: 'succeeded', sender: ACCOUNT, to: POOL, input: plan.tx.data, value_wei: '0', events: [
+      { kind: 'redemption', owner: ACCOUNT, scope: 129, mask: String(mask), quantity_atoms: '500000', collateral_atoms: payout }] };
+    assert.equal(reconcile(plan, tx), 'matched');
+    tx.events[0].collateral_atoms = '1'; assert.equal(reconcile(plan, tx), 'mismatch');
+    tx.events[0].collateral_atoms = payout; tx.events.push({ ...tx.events[0] }); assert.equal(reconcile(plan, tx), 'mismatch');
+  }
+});
+test('redemption rejects stale unresolved shortfall wrong-owner and excessive quantities, and rechecks outcome', async () => {
+  for (const change of [f => f.snapshot.pool.resolved = false, f => f.snapshot.pool.covered = false,
+    f => f.snapshot.pool.receipt_backed = false, f => f.snapshot.snapshot.stale = true,
+    f => f.snapshot.wallet.address = CASH, f => f.snapshot.wallet.positions = [], f => f.snapshot.environment = 'public_testnet']) {
+    const f = settled(); change(f);
+    assert.throws(() => makeRedemptionPlan(f.snapshot, { scope: 129, mask: 8 }, ACCOUNT, '500000'));
+  }
+  const f = settled();
+  for (const quantity of ['0', '-1', '1000001']) assert.throws(() => makeRedemptionPlan(f.snapshot, { scope: 129, mask: 8 }, ACCOUNT, quantity));
+  f.overrides.eth_call = () => encode('', 1);
+  await assert.rejects(prepareRedemption(f.provider, f.snapshot, { scope: 129, mask: 8 }, ACCOUNT, '500000'), /Simulation/);
+  f.overrides.eth_call = () => encode('', 500000);
+  const plan = await prepareRedemption(f.provider, f.snapshot, { scope: 129, mask: 8 }, ACCOUNT, '500000');
+  f.snapshot.pool.resolved_state = 0;
+  await assert.rejects(sendReviewed(f.provider, plan, f.snapshot), /Settlement changed/);
+  assert.equal(f.calls.some(c => c.method === 'eth_sendTransaction'), false);
+});
 function fixture() {
   const now = Math.floor(Date.now() / 1000);
   const snapshot = { environment: 'local_fork', chain_id: 10143, snapshot: { timestamp: now, stale: false, block_number: 100, block_hash: '0x' + 'aa'.repeat(32) },

@@ -2,7 +2,7 @@
 import { compileClaim, snapshotFresh } from './claims.mjs';
 
 export const CHAIN_ID = '0x279f';
-export const SELECTORS = { buy: '3e6b6cde', sell: 'c39849c5', approve: '095ea7b3' };
+export const SELECTORS = { buy: '3e6b6cde', sell: 'c39849c5', approve: '095ea7b3', redeem: 'df992423' };
 const MAX128 = (1n << 128n) - 1n;
 export const address = value => {
   if (!/^0x[0-9a-fA-F]{40}$/.test(value)) throw new Error('Invalid wallet or contract address.');
@@ -122,14 +122,49 @@ export async function simulate(provider, plan) {
   const output = await provider.request({ method: 'eth_call', params: [plan.tx, 'latest'] });
   if (!/^0x[0-9a-fA-F]{64}$/.test(output)) throw new WalletError('Unexpected contract simulation result.');
   const amount = BigInt(output);
-  if (plan.kind === 'approve' ? amount !== 1n : plan.kind === 'buy' ? amount > BigInt(plan.limit) : amount < BigInt(plan.limit)) {
-    throw new WalletError('Simulation did not satisfy the reviewed approval or price limit.');
+  if (plan.kind === 'redeem' ? amount !== BigInt(plan.payout) : plan.kind === 'approve' ? amount !== 1n : plan.kind === 'buy' ? amount > BigInt(plan.limit) : amount < BigInt(plan.limit)) {
+    throw new WalletError('Simulation did not satisfy the reviewed approval, price limit or redemption payout.');
   }
 }
 
 export async function prepare(provider, snapshot, quoted, account, bps) {
   const plan = makePlan(snapshot, quoted, account, bps);
-  await assertContext(provider, snapshot, account);
+  return preparePlan(provider, snapshot, plan);
+}
+
+export function makeRedemptionPlan(snapshot, selected, account, quantity) {
+  account = address(account);
+  if (snapshot.environment !== 'local_fork' || snapshot.chain_id !== 10143 || !snapshotFresh(snapshot.snapshot) ||
+      !snapshot.redemption_available || !snapshot.pool?.resolved || !snapshot.pool.covered || !snapshot.pool.receipt_backed) {
+    throw new WalletError('Redemption requires a fresh, resolved and fully backed local pool.');
+  }
+  const outcome = snapshot.pool.resolved_state;
+  if (!Number.isInteger(outcome) || outcome < 0 || outcome > 255) throw new WalletError('Invalid settlement outcome.');
+  const { scope, mask } = selected;
+  if (!Number.isInteger(scope) || scope < 1 || scope > 255) throw new WalletError('Invalid claim scope.');
+  const legs = Array.from({ length: 8 }, (_, index) => ({ index, yes: true })).filter(l => scope & (1 << l.index));
+  const canonical = compileClaim(legs, 'custom', mask);
+  if (canonical.scope !== scope || canonical.mask !== mask) throw new WalletError('Unsupported redemption claim.');
+  const qty = BigInt(quantity);
+  const w = snapshot.wallet;
+  const holding = w?.positions.find(p => p.scope === scope && p.mask === mask);
+  if (!w || address(w.address) !== account || qty <= 0n || qty > MAX128 || !holding || BigInt(holding.quantity_atoms) < qty) {
+    throw new WalletError('Choose a positive quantity within your connected wallet’s internal claim holdings. Wrapped receipts must be unwrapped separately.');
+  }
+  const projected = legs.reduce((value, leg, i) => value | (((outcome >> leg.index) & 1) << i), 0);
+  const payout = mask & (1 << projected) ? qty : 0n;
+  const pool = address(snapshot.contracts.pool), cash = address(snapshot.contracts.cash);
+  return { kind: 'redeem', account, pool, cash, scope, mask, quantity: qty.toString(), payout: payout.toString(), outcome,
+    quoteExpiry: snapshot.snapshot.timestamp + 30,
+    tx: { from: account, to: pool, data: encode(SELECTORS.redeem, scope, mask, qty), value: '0x0', chainId: CHAIN_ID } };
+}
+
+export async function prepareRedemption(provider, snapshot, selected, account, quantity) {
+  return preparePlan(provider, snapshot, makeRedemptionPlan(snapshot, selected, account, quantity));
+}
+
+async function preparePlan(provider, snapshot, plan) {
+  await assertContext(provider, snapshot, plan.account);
   await simulate(provider, plan);
   const estimate = BigInt(await provider.request({ method: 'eth_estimateGas', params: [plan.tx] }));
   const gas = (estimate * 120n + 99n) / 100n;
@@ -138,14 +173,18 @@ export async function prepare(provider, snapshot, quoted, account, bps) {
   if (BigInt(snapshot.wallet.native_balance_wei) < gas * gasPrice) throw new WalletError('Not enough local MON for the reviewed gas budget.');
   plan.tx.gas = hex(gas); plan.tx.gasPrice = hex(gasPrice);
   plan.gasBudget = (gas * gasPrice).toString();
-  if (Date.now() / 1000 >= plan.quoteExpiry) throw new WalletError('Quote expired during review. Request a new quote.');
+  if (Date.now() / 1000 >= plan.quoteExpiry) throw new WalletError(plan.kind === 'redeem' ? 'Snapshot expired during review. Refresh and review redemption again.' : 'Quote expired during review. Request a new quote.');
   return plan;
 }
 
 export async function sendReviewed(provider, plan, snapshot, stillCurrent = () => true, onSubmit = () => {}) {
   const guard = () => {
     if (!stillCurrent()) throw new WalletError('Inputs or wallet changed. Review again.');
-    if (!snapshot.trading_available || Date.now() / 1000 >= plan.quoteExpiry) throw new WalletError('Review expired. Request a new quote.');
+    if (Date.now() / 1000 >= plan.quoteExpiry) throw new WalletError('Review expired. Refresh and review again.');
+    if (plan.kind === 'redeem') {
+      const checked = makeRedemptionPlan(snapshot, plan, plan.account, plan.quantity);
+      if (checked.outcome !== plan.outcome || checked.payout !== plan.payout || checked.tx.data !== plan.tx.data) throw new WalletError('Settlement changed. Review redemption again.');
+    } else if (!snapshot.trading_available) throw new WalletError('Pool is not available for trading.');
     if (address(snapshot.contracts.pool) !== plan.pool || address(snapshot.contracts.cash) !== plan.cash) throw new WalletError('Deployment changed. Review again.');
   };
   guard(); await assertContext(provider, snapshot, plan.account); guard();
@@ -162,6 +201,7 @@ export function reconcile(plan, tx) {
   if (tx.status === 'reverted') return 'reverted';
   const matches = (tx.events || []).filter(event => plan.kind === 'approve'
     ? event.kind === 'approval' && event.owner === plan.account && event.spender === plan.pool && event.amount_atoms === plan.approval
+    : plan.kind === 'redeem' ? event.kind === 'redemption' && event.owner === plan.account && event.scope === plan.scope && event.mask === String(plan.mask) && event.quantity_atoms === plan.quantity && event.collateral_atoms === plan.payout
     : event.kind === 'trade' && event.trader === plan.account && event.scope === plan.scope && event.mask === String(plan.mask) && event.is_buy === (plan.kind === 'buy') && event.quantity_atoms === plan.quantity &&
       (plan.kind === 'buy' ? BigInt(event.collateral_atoms) <= BigInt(plan.limit) : BigInt(event.collateral_atoms) >= BigInt(plan.limit)));
   return matches.length === 1 ? 'matched' : 'mismatch';

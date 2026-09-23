@@ -1,5 +1,5 @@
-import { address, assertContext, prepare, sendReviewed, reconcile, setupLocalWallet, walletMessage, WalletError } from './wallet.mjs';
-import { formatUnits } from './claims.mjs';
+import { address, assertContext, prepare, prepareRedemption, sendReviewed, reconcile, setupLocalWallet, walletMessage, WalletError } from './wallet.mjs';
+import { formatUnits, snapshotFresh } from './claims.mjs';
 
 const KEY = 'flurbo.local.pending.v1';
 const $ = id => document.getElementById(id);
@@ -32,8 +32,17 @@ export function mountTrading(hooks) {
     const locked = operation || Boolean(pending);
     const quote = hooks.getQuote()?.quote;
     const side = quote?.side === 'sell' ? 'sell' : 'buy';
+    const state = hooks.getState?.(), selection = hooks.getSelection?.();
+    const owned = state?.wallet?.address === account ? state.wallet.positions.find(p => p.scope === selection?.scope && p.mask === selection?.mask) : null;
+    const resolved = state?.pool?.resolved;
+    text('settlement-status', !state ? 'Settlement data unavailable.' : !resolved
+      ? (state.pool.phase === 'closed' ? 'Trading has closed. Awaiting the resolver’s outcome; redemption is not available yet.' : 'Market open. Payouts become redeemable after close and resolution.')
+      : `Resolved: ${state.cluster.events.map(e => `${String.fromCharCode(65 + e.index)} ${state.pool.resolved_state & (1 << e.index) ? 'YES' : 'NO'}`).join(' · ')}. ${owned ? `${selection.label || 'Selected claim'}: ${owned.settlement}; ${formatUnits(owned.redeemable_atoms)} AUSD redeemable across your held units.` : 'Connect your wallet and select a held claim.'}`);
+    $('review-redeem').disabled = locked || !account || !selection || !state?.redemption_available || !snapshotFresh(state.snapshot) || !owned || BigInt(owned.quantity_atoms) < BigInt(selection.quantity) || BigInt(selection.quantity) <= 0n;
+    text('review-redeem', owned?.settlement === 'losing' ? 'Review clearing losing units (0 AUSD)' : 'Review redeem winnings');
     text('review-trade', quote ? `Review ${side} →` : 'Get a quote to review');
     text('execution-help', !account ? 'Connect your test wallet, then get a pool quote.'
+      : resolved ? 'Trading has ended. Select your claim and quantity, then review redemption below.'
       : !quote ? 'Wallet connected. Get a fresh pool quote to enable the buy or sell review.'
       : review ? 'Click the confirmation button below to open MetaMask.'
       : `Click Review ${side} to check funding and show the confirmation button. Reviewing does not open MetaMask; confirming does.`);
@@ -122,6 +131,27 @@ export function mountTrading(hooks) {
   $('disconnect-wallet').addEventListener('click', () => disconnect());
   $('slippage').addEventListener('change', () => invalidate('Slippage changed. Review again.'));
   $('cancel-review').addEventListener('click', () => invalidate('Review cancelled. Nothing submitted.'));
+  $('review-redeem').addEventListener('click', async () => {
+    const selection = hooks.getSelection?.();
+    if (!provider || !account || !selection || pending || operation) return;
+    const current = ++generation, signer = provider, owner = account;
+    review = null; operation = true; update(); text('execution-status', 'Checking settlement, ownership, payout and gas…');
+    try {
+      const state = await hooks.readSnapshot(owner, selection);
+      const plan = await prepareRedemption(signer, state, selection, owner, selection.quantity);
+      if (current !== generation || signer !== provider || owner !== account) throw new WalletError('Inputs or wallet changed. Review again.');
+      review = plan;
+      const lines = [`${plan.payout === '0' ? 'Clear losing' : 'Redeem winning'} units: ${formatUnits(plan.quantity)} · ${selection.label || `scope ${plan.scope}, mask ${plan.mask}`}`,
+        `From: ${plan.account}`, `Contract: ${plan.pool}`, `Exact payout: ${formatUnits(plan.payout)} AUSD. These internal claim units will be burned.`,
+        plan.payout === '0' ? 'This losing claim pays zero. Clearing it is optional and costs gas.' : 'Redemption pays the settled outcome; no token spending approval is needed.',
+        `Proposed gas budget: ${formatUnits(plan.gasBudget, 18)} MON. Review any wallet edits.`,
+        'The review expires in 30 seconds or sooner. The redemption contract has no transaction deadline.'];
+      $('review-details').replaceChildren(...lines.map(line => { const p = document.createElement('p'); p.textContent = line; return p; }));
+      $('confirm-trade').textContent = plan.payout === '0' ? 'Confirm clearing for 0 AUSD in wallet' : 'Redeem winnings in wallet';
+      text('execution-status', 'Review the payout and units, then click the confirmation button to open your wallet.');
+    } catch (error) { text('execution-status', walletMessage(error)); }
+    finally { operation = false; update(); }
+  });
   $('review-trade').addEventListener('click', async () => {
     const quoted = hooks.getQuote();
     if (!provider || !account || !quoted?.quote || pending || operation) return;
@@ -193,12 +223,14 @@ export function mountTrading(hooks) {
       }
       if ((status === 'matched' || status === 'reverted') && result.transaction.confirmations >= 2) {
         persist(null); review = null;
-        const completed = record.plan.kind === 'approve'
+        const completed = record.plan.kind === 'redeem'
+          ? `Redemption confirmed: ${formatUnits(record.plan.quantity)} units burned, ${formatUnits(record.plan.payout)} AUSD paid. Balances are refreshing.`
+          : record.plan.kind === 'approve'
           ? (record.plan.approval === '0'
             ? 'Allowance reset confirmed. No claims bought. Next: get a fresh buy quote and review the AUSD approval.'
             : 'AUSD approval confirmed. No claims bought. Next: get a fresh buy quote and review the buy.')
           : `${record.plan.kind === 'buy' ? 'Buy' : 'Sell'} confirmed for ${formatUnits(record.plan.quantity)} claim units (scope ${record.plan.scope}, mask ${record.plan.mask}). Balances are refreshing; do not repeat the trade to refresh them.`;
-        text('execution-status', status === 'reverted' ? 'Transaction reverted. No trade or approval was applied. Refresh and review again.'
+        text('execution-status', status === 'reverted' ? 'Transaction reverted. No trade, approval or redemption was applied. Refresh and review again.'
           : `${completed} Exact calldata and contract event matched, with ${result.transaction.confirmations} canonical confirmations.`);
         lastHash = hash;
         hooks.invalidateQuote('Transaction completed. Request a fresh quote.');

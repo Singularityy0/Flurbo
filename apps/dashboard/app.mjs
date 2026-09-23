@@ -174,10 +174,10 @@ function renderWallet() {
     const cell = el('div'); cell.append(el('strong', formatUnits(amount, decimals)), el('span', label)); balances.append(cell);
   }
   const table = el('table', undefined, 'holdings');
-  const head = el('thead'), header = el('tr'); header.append(el('th', 'Requested pool claim'), el('th', 'Units held')); head.append(header);
+  const head = el('thead'), header = el('tr'); header.append(el('th', 'Requested pool claim'), el('th', 'Units held'), el('th', 'Settlement'), el('th', 'Redeemable AUSD')); head.append(header);
   const body = el('tbody');
   for (const p of w.positions) {
-    const row = el('tr'); row.append(el('td', selectedLabels.get(`${p.scope}:${p.mask}`) || `Scope ${p.scope} · mask ${p.mask}`), el('td', formatUnits(p.quantity_atoms))); body.append(row);
+    const row = el('tr'); row.append(el('td', selectedLabels.get(`${p.scope}:${p.mask}`) || `Scope ${p.scope} · mask ${p.mask}`), el('td', formatUnits(p.quantity_atoms)), el('td', p.settlement), el('td', p.redeemable_atoms === null ? 'Pending' : formatUnits(p.redeemable_atoms))); body.append(row);
   }
   table.append(head, body);
   $('wallet-result').append(balances, table, el('p', 'Only the eight base YES claims and your current composed claim are requested. This is not a complete portfolio. Kuru available balances exclude resting-order reserves; wrapped receipts are separate from internal pool holdings.', 'caption'));
@@ -270,6 +270,8 @@ $('tx-form').addEventListener('submit', async event => {
 });
 
 trading = mountTrading({
+  getState: () => data,
+  getSelection: () => composed && quantityValid ? { ...composed, quantity: parseUnits($('quantity').value.trim()), label: claimLabel(legs, $('mode').value) } : null,
   readHealth: () => request('/api/health', new AbortController()),
   fundLocal: wallet => request('/api/local-wallet-setup', new AbortController(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallet }) }),
   getQuote: () => quote ? structuredClone(quote) : null,

@@ -47,7 +47,7 @@
         <section class="card quote-card" aria-labelledby="quote-title"><p class="eyebrow">02 / ON-CHAIN PRICE</p><h2 id="quote-title">A price for your view.</h2><p class="muted">Computed by the pool's cost function.</p><div id="quote-result" aria-live="polite"><p class="quote-empty">Build a claim, then request a quote.</p></div><div class="quote-footer">Review the quote below to approve AUSD or trade through your connected wallet. Local test assets only.</div></section>
         <section class="card trading" aria-labelledby="trade-title">
           <p class="eyebrow">WALLET & EXECUTION</p><h2 id="trade-title">Make your move.</h2>
-          <p class="caption">Every approval and trade requires a separate confirmation in your wallet. Automatic setup only funds local test balances.</p>
+          <p class="caption">Every approval, trade and redemption requires a separate confirmation in your wallet. Automatic setup only funds local test balances.</p>
           <label for="wallet-provider">Browser wallet</label><select id="wallet-provider" disabled><option value="" disabled selected>No wallet detected</option></select>
           <button id="setup-wallet" class="button primary wide" disabled>Set up local wallet ↗</button>
           <p id="setup-status" class="caption" role="status">Choose a dedicated test account in MetaMask. Setup requests the local network and tops up to 10 test AUSD and 10 MON; it never creates or exports a private key.</p>
@@ -57,6 +57,10 @@
           <label for="slippage">Slippage limit</label><select id="slippage"><option value="0">0%</option><option value="50" selected>0.5%</option><option value="100">1%</option><option value="300">3%</option><option value="500">5%</option></select>
           <p id="execution-help" class="caption">Connect your test wallet, then get a pool quote.</p>
           <button id="review-trade" class="button primary wide" disabled>Get a quote to review</button>
+          <h3>Settlement &amp; redemption</h3>
+          <p id="settlement-status" class="caption" role="status">Waiting for settlement data…</p>
+          <p class="caption">Uses the claim and quantity in Your prediction. Winning internal units pay 1 AUSD each. Clearing losing units pays zero and still costs gas. Wrapped receipts must be unwrapped separately.</p>
+          <button id="review-redeem" class="button secondary wide" disabled>Review redemption</button>
           <div id="review-details" class="review-details" hidden></div>
           <button id="confirm-trade" class="button primary wide" hidden disabled>Confirm in wallet</button>
           <button id="cancel-review" class="button quiet" hidden>Cancel review</button>
