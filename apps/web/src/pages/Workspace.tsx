@@ -24,6 +24,13 @@ function CoreMarket({ account, panel }: { account: string | null; panel: Panel }
     main.querySelector('#compose-title')!.textContent = 'Build your prediction.';
     main.querySelector('#account-title')!.textContent = 'Your positions.';
     main.querySelector('#trade-title')!.textContent = 'Make it yours.';
+    main.querySelector('#quote-button')!.classList.replace('primary', 'secondary');
+    main.querySelector('label[for="side"]')!.textContent = 'Buy or sell';
+    main.querySelector('label[for="quantity"]')!.textContent = 'Number of shares';
+    const tradingBalance = document.createElement('p');
+    tradingBalance.id = 'trade-wallet-balance'; tradingBalance.className = 'caption';
+    tradingBalance.setAttribute('role', 'status');
+    main.querySelector('#signer-status')!.after(tradingBalance);
     main.querySelector('#book-title')!.textContent = 'A market for the basics.';
     main.querySelector('.account > .muted')!.textContent = 'Balances and positions belong to your selected trading wallet. Connecting MetaMask does not change your Mera login.';
     main.querySelector('.account .pill')!.textContent = 'On-chain balances';
@@ -34,9 +41,9 @@ function CoreMarket({ account, panel }: { account: string | null; panel: Panel }
       (main.querySelector('#setup-wallet') as HTMLElement).hidden = true;
       (main.querySelector('#setup-wallet') as HTMLElement).style.display = 'none';
       main.querySelector('.quote-footer')!.textContent = 'Review your quote to approve AUSD or trade. Public Monad testnet assets only.';
-      const bookHelp = main.querySelector('#book .caption');
+      const bookHelp = main.querySelector('.book .caption');
       if (bookHelp) bookHelp.textContent = 'Indicative depth only. Execution requires a reviewed quote. Synthetic operator liquidity.';
-      main.querySelector('#setup-status')!.textContent = 'Use Fund your account above to get test AUSD and MON on Monad testnet.';
+      main.querySelector('#setup-status')!.textContent = 'Use the balance of your selected trading wallet. Mera and MetaMask hold separate funds; the funding panel above is for Mera.';
       main.querySelector('.wallet-help')!.innerHTML = '<summary>Monad testnet network</summary><p>Chain ID 10143. RPC https://testnet-rpc.monad.xyz. Use public test assets only.</p>';
     }
     main.querySelector('.trading > .caption')!.textContent = 'Every approval, trade and redemption needs your confirmation. Mera signs here after review; extension wallets open their own prompt.';
@@ -49,6 +56,12 @@ function CoreMarket({ account, panel }: { account: string | null; panel: Panel }
       let node = heading.nextElementSibling;
       while (node && node.tagName !== 'H3' && node.id !== 'review-details') { const next = node.nextElementSibling; details.append(node); node = next; }
       heading.remove();
+    }
+    // Keep review, confirmation and receipt tracking next to the primary action.
+    // Advanced actions keep their existing controllers and shared submission lock.
+    const advanced = main.querySelector('.advanced-action')!;
+    for (const id of ['review-details', 'confirm-trade', 'cancel-review', 'execution-status', 'execution-hash', 'replacement-area', 'check-execution', 'clear-tracking']) {
+      advanced.before(main.querySelector('#' + id)!);
     }
     const style = document.createElement('style'); style.textContent = dashboardCss.replace(':root', ':host') + '\n' + workspaceCss;
     shadow.replaceChildren(style, main);

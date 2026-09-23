@@ -8,7 +8,24 @@ Firefox/MetaMask. Chain events confirmed the separate reset/approval/trade steps
 Settlement and [wallet redemption](DASHBOARD_REDEMPTION.md) are now implemented
 and tested on a separate local clone; a manual redemption popup remains untested.
 
-## Your first manual trade
+## Consumer workspace flow
+
+The authenticated `/account` workspace keeps the same visual style. After selecting
+outcomes, a quantity and a connected trading wallet, **Review buy** or **Review sell**
+fetches a quote if needed and prepares the transaction review. **Check price** is an
+optional read-only preview. Review never submits a transaction.
+
+The selected trading wallet's available AUSD appears beside the wallet controls.
+Mera and MetaMask balances remain separate. Confirmation and transaction status
+appear before advanced conversion, redemption and withdrawal controls.
+
+After a confirmed allowance reset or approval, **Continue to buy** obtains a fresh
+quote and prepares the next review. Approval does not create a position. Each reset,
+approval and buy still requires its own explicit confirmation. Five-minute quote
+review, fresh preflight, fixed slippage limits and pending-transaction tracking
+remain enforced. No automatic submission or retry is introduced.
+
+## Your first manual trade in the standalone local dashboard
 
 1. Open `http://127.0.0.1:18765/` in Firefox with MetaMask enabled. Keep the existing
    local Anvil and block helper running. This URL is on your development computer.

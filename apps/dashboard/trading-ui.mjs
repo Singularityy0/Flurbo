@@ -11,6 +11,7 @@ export function mountTrading(hooks) {
   const providers = [];
   let provider, account = null, review = null, operation = false, checking = false, generation = 0, pending = null, lastHash = '';
   let removeListeners = () => {};
+  let approvalComplete = false;
   function conversionQuantity() {
     try { return parseUnits($('conversion-quantity').value.trim()); } catch { return null; }
   }
@@ -40,7 +41,7 @@ export function mountTrading(hooks) {
     if (disposed) return;
     const locked = operation || Boolean(pending);
     const quote = hooks.getQuote()?.quote;
-    const side = quote?.side === 'sell' ? 'sell' : 'buy';
+    const side = (quote?.side || hooks.getSide?.()) === 'sell' ? 'sell' : 'buy';
     const state = hooks.getState?.(), selection = hooks.getSelection?.();
     const conversionQty = conversionQuantity();
     const connectedWallet = account && state?.wallet?.address === account ? state.wallet : null;
@@ -59,16 +60,22 @@ export function mountTrading(hooks) {
       : !conversionQty ? 'Enter a positive conversion quantity with up to six decimal places.'
       : `H YES in pool: ${formatUnits(internalH)} · Receipts in wallet: ${formatUnits(connectedWallet.receipt_atoms)}. ${!state.conversion_available || !snapshotFresh(state.snapshot) ? 'Conversion unavailable; refresh and check receipt backing.' : 'Only wallet receipts can be unwrapped; Kuru margin is excluded.'}`);
     const owned = state?.wallet?.address === account ? state.wallet.positions.find(p => p.scope === selection?.scope && p.mask === selection?.mask) : null;
+    if (hooks.consumer && $('trade-wallet-balance')) text('trade-wallet-balance', !account ? 'Connect a trading wallet to see its available balance.'
+      : !connectedWallet || !snapshotFresh(state.snapshot) ? 'Checking this trading wallet’s balance...'
+      : `Available: ${formatUnits(connectedWallet.ausd_atoms)} AUSD${owned ? ` · ${formatUnits(owned.quantity_atoms)} shares of this prediction` : ''}.`);
     const resolved = state?.pool?.resolved;
     text('settlement-status', !state ? 'Settlement data unavailable.' : !resolved
       ? (state.pool.phase === 'closed' ? 'Trading has closed. Awaiting the resolver’s outcome; redemption is not available yet.' : 'Market open. Payouts become redeemable after close and resolution.')
       : `Resolved: ${state.cluster.events.map(e => `${String.fromCharCode(65 + e.index)} ${state.pool.resolved_state & (1 << e.index) ? 'YES' : 'NO'}`).join(' · ')}. ${owned ? `${selection.label || 'Selected claim'}: ${owned.settlement}; ${formatUnits(owned.redeemable_atoms)} AUSD redeemable across your held units.` : 'Connect your wallet and select a held claim.'}`);
     $('review-redeem').disabled = locked || !account || !selection || !state?.redemption_available || !snapshotFresh(state.snapshot) || !owned || BigInt(owned.quantity_atoms) < BigInt(selection.quantity) || BigInt(selection.quantity) <= 0n;
     text('review-redeem', owned?.settlement === 'losing' ? 'Review clearing losing units (0 AUSD)' : 'Review redeem winnings');
-    text('review-trade', quote ? `Review ${side} →` : 'Get a quote to review');
+    text('review-trade', hooks.consumer
+      ? operation ? 'Preparing your transaction...' : pending ? 'Waiting for confirmation...' : !account ? 'Connect a wallet to continue' : approvalComplete && side === 'buy' ? 'Continue to buy' : `Review ${side}`
+      : quote ? `Review ${side} →` : 'Get a quote to review');
+    $('review-trade').hidden = Boolean(hooks.consumer && review);
     text('execution-help', !account ? 'Connect your test wallet, then get a pool quote.'
       : resolved ? 'Trading has ended. Select your claim and quantity, then review redemption below.'
-      : !quote ? 'Wallet connected. Get a fresh pool quote to enable the buy or sell review.'
+      : !quote ? hooks.consumer ? 'Review checks the current price and your balance. You confirm separately before anything is sent.' : 'Wallet connected. Get a fresh pool quote to enable the buy or sell review.'
       : review ? 'Click the confirmation button below to open your selected wallet.'
       : `Click Review ${side} to check funding and show the confirmation button. Reviewing does not open your selected wallet; confirming does.`);
     $('execution-help').hidden = locked;
@@ -76,7 +83,7 @@ export function mountTrading(hooks) {
     $('setup-wallet').disabled = locked || providers.length === 0;
     $('disconnect-wallet').disabled = locked || !account;
     $('wallet-provider').disabled = locked || Boolean(account) || providers.length === 0;
-    $('review-trade').disabled = locked || !account || !hooks.getQuote()?.quote;
+    $('review-trade').disabled = locked || !account || (!quote && !(hooks.requestQuote && hooks.canRequestQuote?.()));
     $('confirm-trade').disabled = locked || !review || Date.now() / 1000 >= review.quoteExpiry;
     $('confirm-trade').hidden = !review;
     $('cancel-review').hidden = !review;
@@ -98,6 +105,7 @@ export function mountTrading(hooks) {
     update();
   }
   function disconnect(message = 'Wallet disconnected from this page. Wallet permissions are unchanged.') {
+    approvalComplete = false;
     removeListeners(); account = null; provider = null;
     invalidate(); text('signer-status', message); hooks.accountChanged(null); update();
   }
@@ -248,20 +256,25 @@ export function mountTrading(hooks) {
     finally { operation = false; update(); }
   });
   $('review-trade').addEventListener('click', async () => {
-    const quoted = hooks.getQuote();
-    if (!provider || !account || !quoted?.quote || pending || operation) return;
-    const current = ++generation, signer = provider, owner = account;
+    let quoted = hooks.getQuote();
+    if (!provider || !account || pending || operation || (!quoted?.quote && !hooks.requestQuote)) return;
+    const signer = provider, owner = account;
+    ++generation;
     review = null; operation = true; update(); text('execution-status', 'Checking account, Monad network, balances, allowance and gas…');
     try {
+      if (!quoted?.quote) quoted = await hooks.requestQuote();
+      if (!quoted?.quote) throw new WalletError('Price unavailable. Check the price message and try again. Nothing was submitted.');
+      if (disposed || signer !== provider || owner !== account) throw new WalletError('Wallet changed. Review again.');
+      const current = generation;
       const state = await hooks.readSnapshot(owner, quoted.quote);
       const plan = await prepare(signer, state, quoted, owner, Number($('slippage').value));
       if (current !== generation || signer !== provider || owner !== account) throw new WalletError('Inputs or wallet changed. Review again.');
       review = plan;
       const lines = [
         plan.kind === 'approve' ? (plan.approval === '0' ? 'Reset the existing AUSD allowance to zero first.' : `Approve exactly ${formatUnits(plan.approval)} AUSD for this pool.`)
-          : `${plan.kind === 'buy' ? 'Buy' : 'Sell'} ${formatUnits(plan.quantity)} claim units · scope ${plan.scope}, mask ${plan.mask}`,
+          : `${plan.kind === 'buy' ? 'Buy' : 'Sell'} ${formatUnits(plan.quantity)} claim units · ${hooks.consumer ? hooks.getSelection()?.label : `scope ${plan.scope}, mask ${plan.mask}`}`,
         `From: ${plan.account}`, `Contract: ${plan.tx.to}`,
-        plan.kind === 'approve' ? `Spender: ${plan.pool}. This step does not buy a claim. Get a new quote after confirmation.`
+        plan.kind === 'approve' ? `Spender: ${plan.pool}. This step does not buy a claim. ${hooks.consumer ? 'After approval, select Continue to buy.' : 'Get a new quote after confirmation.'}`
           : `${plan.kind === 'buy' ? 'Maximum cost' : 'Minimum proceeds'}: ${formatUnits(plan.limit)} AUSD · ${plan.bps / 100}% slippage`,
         `Proposed gas budget: ${formatUnits(plan.gasBudget, 18)} MON. Review any wallet edits.`,
         plan.kind === 'approve' ? 'Token approval has no on-chain expiry; this review expires with the quote.'
@@ -273,7 +286,13 @@ export function mountTrading(hooks) {
         : `Confirm ${plan.kind} in wallet`;
       text('execution-status', `Review the details, then click “${$('confirm-trade').textContent}” to open your selected wallet.`);
     } catch (error) { text('execution-status', walletMessage(error)); }
-    finally { operation = false; update(); }
+    finally {
+      operation = false; update();
+      if (hooks.consumer && review && !disposed) {
+        $('review-details').scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
+        $('confirm-trade').focus?.({ preventScroll: true });
+      }
+    }
   });
   $('confirm-trade').addEventListener('click', async () => {
     if (!review || !provider || !account || pending || operation) return;
@@ -318,6 +337,7 @@ export function mountTrading(hooks) {
       }
       if ((status === 'matched' || status === 'reverted') && result.transaction.confirmations >= 2) {
         persist(null); review = null;
+        approvalComplete = status === 'matched' && record.plan.kind === 'approve' && record.plan.account === account;
         const completed = record.plan.kind === 'withdraw'
           ? `Withdrawal confirmed: ${formatUnits(record.plan.quantity)} AUSD sent to ${record.plan.recipient}. Balances are refreshing.`
           : ['wrap', 'unwrap'].includes(record.plan.kind)
@@ -330,6 +350,7 @@ export function mountTrading(hooks) {
             : 'AUSD approval confirmed. No claims bought. Next: get a fresh buy quote and review the buy.')
           : `${record.plan.kind === 'buy' ? 'Buy' : 'Sell'} confirmed for ${formatUnits(record.plan.quantity)} claim units (scope ${record.plan.scope}, mask ${record.plan.mask}). Balances are refreshing; do not repeat the trade to refresh them.`;
         text('execution-status', status === 'reverted' ? 'Transaction reverted. No trade, approval, conversion, redemption or withdrawal was applied. Refresh and review again.'
+          : approvalComplete && hooks.consumer ? `${record.plan.approval === '0' ? 'Allowance reset' : 'AUSD approval'} confirmed. No claims bought yet. Select Continue to buy for the next reviewed step.`
           : `${completed} Exact calldata and contract event matched, with ${result.transaction.confirmations} canonical confirmations.`);
         lastHash = hash;
         hooks.invalidateQuote('Transaction completed. Request a fresh quote.');

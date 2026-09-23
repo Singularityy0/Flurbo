@@ -7,10 +7,10 @@ const account = '0x' + '11'.repeat(20), pool = '0x' + '22'.repeat(20), cash = '0
 const blockHash = number => '0x' + number.toString(16).padStart(64, '0');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-async function harness(run) {
+async function harness(run, options = {}) {
   const keys = ['window', 'document', 'fetch', 'sessionStorage', 'setInterval', 'clearInterval'];
   const previous = Object.fromEntries(keys.map(key => [key, globalThis[key]])), realNow = Date.now;
-  let now = 1000, dispose, holdState = false, statePatch = {};
+  let now = 1000, dispose, holdState = false, statePatch = {}, allowance = '0', quoteFailure = false;
   const nodes = new Map(), timers = [], requests = [], held = [], storage = new Map();
   class Node {
     value = ''; textContent = ''; children = []; hidden = false; disabled = false; handlers = {};
@@ -28,10 +28,10 @@ async function harness(run) {
       required_collateral_atoms: '10000000', coverage_surplus_atoms: '51000000', receipt_supply_atoms: '10000000'},
     kuru: {best_bid_wad: null, best_ask_wad: null},
     wallet: wallet ? {address: wallet, ausd_atoms: '10000000', native_balance_wei: '1000000000000000000',
-      pool_allowance_atoms: '0', receipt_atoms: '0', margin_available_ausd_atoms: '0', margin_available_receipt_atoms: '0', positions: []} : null,
+      pool_allowance_atoms: allowance, receipt_atoms: '0', margin_available_ausd_atoms: '0', margin_available_receipt_atoms: '0', positions: []} : null,
     ...statePatch});
   class Provider extends EventEmitter {
-    calls = []; simulate;
+    calls = []; simulate; sendSucceeds = false;
     async request({method, params}) {
       this.calls.push(method);
       if (method === 'eth_call') {
@@ -39,7 +39,10 @@ async function harness(run) {
         return '0x' + '1'.padStart(64, '0');
       }
       if (method === 'eth_getBlockByNumber') return {hash: blockHash(Number(BigInt(params[0])))};
-      if (method === 'eth_sendTransaction') throw Object.assign(new Error('Test wallet rejection'), {code: 4001});
+      if (method === 'eth_sendTransaction') {
+        if (this.sendSucceeds) return '0x' + 'ab'.repeat(32);
+        throw Object.assign(new Error('Test wallet rejection'), {code: 4001});
+      }
       return {eth_requestAccounts: [account], eth_accounts: [account], eth_chainId: '0x279f',
         eth_estimateGas: '0x186a0', eth_gasPrice: '0x3b9aca00'}[method];
     }
@@ -55,10 +58,17 @@ async function harness(run) {
     globalThis.fetch = async path => {
       requests.push(path);
       const url = new URL(path, 'http://localhost');
+      if (url.pathname === '/api/transaction') {
+        const plan = JSON.parse(storage.get('flurbo.local.pending.v1')).plan;
+        allowance = plan.approval;
+        return Response.json({transaction: {status: 'succeeded', confirmations: 2, sender: account, to: cash,
+          input: plan.tx.data, value_wei: '0', events: [{kind: 'approval', owner: account, spender: pool, amount_atoms: allowance}]}});
+      }
       if (url.pathname === '/api/state') {
         if (holdState) { holdState = false; return new Promise(resolve => held.push(() => resolve(Response.json(snapshot(url.searchParams.get('wallet')))))) ; }
         return Response.json(snapshot(url.searchParams.get('wallet')));
       }
+      if (url.pathname === '/api/quote' && quoteFailure) return Response.json({error: 'Pool unavailable'}, {status: 503});
       if (url.pathname === '/api/quote') return Response.json({environment: 'public_testnet', chain_id: 10143,
         snapshot: snapshot().snapshot, quote: {side: 'buy', scope: 128, mask: 2, quantity_atoms: '1000000', collateral_atoms: '740737', valid_until: now + 300}});
       throw new Error('Unexpected test request');
@@ -66,11 +76,12 @@ async function harness(run) {
     get('mode').value = 'all'; get('side').value = 'buy'; get('quantity').value = '1';
     get('conversion-quantity').value = '1'; get('slippage').value = '50';
     const {mountDashboard} = await import('./app.mjs');
-    dispose = mountDashboard({querySelector: selector => get(selector.slice(1))});
+    dispose = mountDashboard({querySelector: selector => get(selector.slice(1))}, options);
     await flush();
     const click = id => get(id).handlers.click();
     await click('connect-wallet'); await flush();
     await run({get, click, provider, requests, held, advance: seconds => {now += seconds;},
+      failQuote: () => {quoteFailure = true;},
       hold: () => {holdState = true;}, patch: value => {statePatch = value;},
       tick: () => timers.find(t => t.ms === 1000).fn(), refresh: () => timers.find(t => t.ms === 15000).fn(),
       visible: () => document.dispatchEvent(new Event('visibilitychange'))});
@@ -79,6 +90,35 @@ async function harness(run) {
     for (const key of keys) { if (previous[key] === undefined) delete globalThis[key]; else globalThis[key] = previous[key]; }
   }
 }
+
+test('consumer review fetches a price and approval continuation prepares a buy without automatically signing', async () => harness(async f => {
+  assert.equal(f.get('review-trade').disabled, false);
+  await f.click('review-trade');
+  assert.equal(f.requests.filter(path => path.startsWith('/api/quote')).length, 1);
+  assert.equal(f.get('review-trade').hidden, true);
+  assert.equal(f.get('confirm-trade').textContent, 'Approve AUSD in wallet');
+  assert.equal(f.provider.calls.includes('eth_sendTransaction'), false);
+  f.provider.sendSucceeds = true;
+  await f.click('confirm-trade'); await flush();
+  assert.equal(f.get('review-trade').textContent, 'Continue to buy');
+  assert.match(f.get('execution-status').textContent, /No claims bought yet/);
+  await f.click('review-trade');
+  assert.equal(f.requests.filter(path => path.startsWith('/api/quote')).length, 2);
+  assert.equal(f.get('confirm-trade').textContent, 'Confirm buy in wallet');
+  assert.equal(f.provider.calls.filter(method => method === 'eth_sendTransaction').length, 1);
+  assert.ok(f.get('review-details').children.some(node => node.textContent.includes('H YES')));
+}, {consumer: true}));
+
+test('consumer price errors and edits during preflight cannot open confirmation or submit', async () => {
+  for (const reason of ['quote-error', 'edited']) await harness(async f => {
+    if (reason === 'quote-error') f.failQuote();
+    else f.provider.simulate = async () => { f.get('quantity').value = '2'; f.get('quantity').handlers.input(); };
+    await f.click('review-trade');
+    assert.equal(f.get('confirm-trade').hidden, true);
+    assert.equal(f.get('review-trade').hidden, false);
+    assert.equal(f.provider.calls.includes('eth_sendTransaction'), false);
+  }, {consumer: true});
+});
 
 test('a quote can be reviewed after four minutes and still open the wallet after fresh preflight', async () => harness(async f => {
   await f.click('quote-button');

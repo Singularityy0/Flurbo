@@ -119,7 +119,7 @@ function tick() {
   const fresh = data && snapshotFresh(data.snapshot);
   const usable = fresh && data.trading_available && Date.now() / 1000 < data.cluster.closes_at;
   $('quote-button').disabled = !composed || !quantityValid || !usable || stateBusy || quoteBusy || Boolean(trading?.busy);
-  $('quote-button').textContent = quoteBusy ? 'Reading the pool…' : 'Get pool quote ↗';
+  $('quote-button').textContent = quoteBusy ? 'Reading the pool…' : options.consumer ? 'Check price' : 'Get pool quote ↗';
   $('refresh').disabled = stateBusy;
   $('refresh').textContent = stateBusy ? 'Reading…' : 'Refresh data ↻';
   $('status-dot').className = 'status-dot' + (lastFailure ? ' off' : fresh ? ' live' : '');
@@ -220,7 +220,7 @@ async function refresh() {
   } finally { if (generation === stateGeneration) { stateBusy = false; tick(); } }
 }
 
-$('quote-button').addEventListener('click', async () => {
+async function requestQuote() {
   if (!composed || !data?.trading_available || !snapshotFresh(data.snapshot)) return;
   invalidateQuote('Reading the exact claim and quantity from the pool…');
   const generation = quoteGeneration;
@@ -244,9 +244,12 @@ $('quote-button').addEventListener('click', async () => {
     $('quote-result').replaceChildren(el('p', side === 'buy' ? 'Total buy cost' : 'Total sell proceeds', 'caption'), amount,
       el('p', `${formatUnits(q.quantity_atoms)} units · ${label}`, 'caption'), detail,
       el('p', 'Pool price for this quantity, not a probability. Gas is excluded. Ownership and allowance are not checked; execution must recheck price and slippage.', 'caption'));
+    if (options.consumer && side === 'buy') $('quote-result').append(el('p', `Pays ${formatUnits(q.quantity_atoms)} AUSD if your prediction wins; pays 0 otherwise.`, 'caption'));
+    return result;
   } catch (error) { if (generation === quoteGeneration) emptyQuote(error.message); }
   finally { if (generation === quoteGeneration) { quoteBusy = false; tick(); } }
-});
+}
+$('quote-button').addEventListener('click', requestQuote);
 $('mode').addEventListener('change', () => {
   if ($('mode').value === 'custom' && legs.length) customMask = compileClaim(legs, 'all').mask;
   changeClaim(true);
@@ -286,6 +289,10 @@ $('tx-form').addEventListener('submit', async event => {
 
 trading = mountTrading({
   root,
+  consumer: Boolean(options.consumer),
+  requestQuote: options.consumer ? requestQuote : undefined,
+  canRequestQuote: () => Boolean(composed && quantityValid && data?.trading_available && snapshotFresh(data.snapshot) && Date.now() / 1000 < data.cluster.closes_at && !stateBusy && !quoteBusy),
+  getSide: () => $('side').value,
   providers: options.providers || [],
   getState: () => data,
   getSelection: () => composed && quantityValid ? { ...composed, quantity: parseUnits($('quantity').value.trim()), label: claimLabel(legs, $('mode').value) } : null,
