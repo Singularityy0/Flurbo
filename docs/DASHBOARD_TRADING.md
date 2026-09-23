@@ -135,7 +135,7 @@ concurrent balance changes are all attributable to one transaction.
 
 ## Verification and limits
 
-58 Python tests and 25 JavaScript tests pass, including settlement/redemption, local funding guards,
+60 Python tests and 28 JavaScript tests pass, including receipt conversion, settlement/redemption, local funding guards,
 network setup and wrong-fork rejection, asynchronous duplicate
 submission prevention, account changes while a wallet prompt is open, rejection
 versus uncertain errors, restored pending locks and receipt-event matching.
@@ -177,7 +177,8 @@ manifest, an Anvil client and the matching checkpoint. Both its wallet transport
 and Python bridge are fixed to the disposable loopback port. Do not point another
 service at that port or run a second rehearsal against a clone you want to preserve.
 
-User confirmation of buy/sell in Firefox/MetaMask is complete. Wrapping,
+User confirmation of buy/sell in Firefox/MetaMask is complete. [H YES conversion](DASHBOARD_RECEIPTS.md)
+is implemented with clone validation; manual conversion confirmation remains.
 Kuru order controls, Mera/Agora mobile, CRE, Envio, Alchemy
 and the MetaMask Agent Wallet plugin retain their separate milestones. Browser
 extension support does not establish the Agent Wallet bounty integration.

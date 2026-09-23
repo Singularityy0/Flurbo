@@ -81,6 +81,9 @@ tracking. The user verified Firefox/MetaMask single-event and multi-leg buy/sell
 [Settlement and redemption](docs/DASHBOARD_REDEMPTION.md) now show final payouts
 and support wallet-signed winning/losing claim redemption, with partial and zero
 payouts verified on a disposable clone. Manual redemption popup testing remains.
+[H YES wrap/unwrap controls](docs/DASHBOARD_RECEIPTS.md) now convert between
+internal holdings and the canonical receipt for the Kuru pair. Exact conversion
+accounting passes on a disposable clone; Kuru margin/order controls are next.
 An opt-in **Set up local wallet** button now requests the local network, verifies
 the exact fork and tops up missing test AUSD/MON. Wallet prompts still need approval.
 The [gas optimizations](docs/FACTORED_GAS.md) reduce measured large-graph quote

@@ -33,6 +33,10 @@ testing and remaining partner flows remain open. This engineering test surface d
 not replace the Expo/Mera/AUSD consumer app or establish partner completion.
 CRE adapters still target the enumerated pool and require a separate port.
 
+[H YES wallet wrap/unwrap](DASHBOARD_RECEIPTS.md) now passes exact conversion
+accounting on a disposable clone. Kuru margin deposits, withdrawals and order
+controls remain the next dashboard steps; conversion alone is not Kuru trading.
+
 ## Required integration milestones
 
 | Partner / source | Role and completion evidence | Human input / verification still needed |
