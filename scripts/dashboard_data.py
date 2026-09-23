@@ -11,6 +11,17 @@ from verify_demo import RULES, RULES_HASH
 
 TRADED = "0xfafd4a382ead0cb54fe827af5995137a1a8b433ebfd5a8d13def35a83adfb9b5"
 APPROVAL = "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925"
+REDEEMED = "0x3e24bbc5ae535f3f571a815b8ba9fc70c94ad494d812f0210c3da99fad2173ae"
+
+
+def wins(scope, mask, outcome):
+    projected = 0
+    bit = 0
+    for event in range(8):
+        if scope & (1 << event):
+            projected |= ((outcome >> event) & 1) << bit
+            bit += 1
+    return bool(mask & (1 << projected))
 
 
 class DashboardRpc(Rpc):
@@ -148,9 +159,14 @@ class Dashboard:
                                 "margin_available_receipt_atoms": str(self.call("margin", "d4fac45d", w, int(self.m["receipt"], 16))[0]),
                                 "positions_scope": "requested_claims_only",
                                 "positions": [{"scope": s, "mask": p, "quantity_atoms": str(self.call("pool", "90fc2c7b", w, s, p)[0])} for s, p in claims]}
+            for position in result["wallet"]["positions"]:
+                winner = wins(position["scope"], position["mask"], state["resolved_state"]) if state["resolved"] else None
+                position.update(settlement="pending" if winner is None else "winning" if winner else "losing",
+                                redeemable_atoms=None if winner is None else position["quantity_atoms"] if winner else "0")
         result = self.finish(result)
         result["trading_available"] = (state["phase"] == "open" and state["covered"] and state["receipt_backed"]
                                        and not result["snapshot"]["stale"] and int(self.clock()) < self.m["closes_at"])
+        result["redemption_available"] = bool(state["resolved"] and state["covered"] and state["receipt_backed"] and not result["snapshot"]["stale"])
         return result
 
     def quote(self, side, scope, mask, amount):
@@ -214,7 +230,7 @@ class Dashboard:
         for log in receipt.get("logs", []):
             origin = address(log.get("address"))
             topics = log.get("topics", [])
-            if not topics or (origin, topics[0]) not in ((self.m["pool"], TRADED), (self.m["cash"], APPROVAL)):
+            if not topics or (origin, topics[0]) not in ((self.m["pool"], TRADED), (self.m["pool"], REDEEMED), (self.m["cash"], APPROVAL)):
                 continue
             if log.get("removed") or hash32(log.get("blockHash")) != hash32(receipt["blockHash"]) or hash32(log.get("transactionHash")) != tx_hash:
                 raise CheckError("Event is outside the canonical transaction receipt")
@@ -226,6 +242,15 @@ class Dashboard:
                 result.append({"kind": "trade", "trader": f"0x{indexed[0]:040x}", "scope": indexed[1],
                                "mask": str(indexed[2]), "is_buy": bool(values[0]), "quantity_atoms": str(values[1]),
                                "collateral_atoms": str(values[2])})
+            elif topics[0] == REDEEMED:
+                values = words(log.get("data"), 2)
+                if len(indexed) != 3 or indexed[0] >= 2**160 or indexed[1] >= 2**32 or max(values) >= 2**128:
+                    raise CheckError("Malformed redemption event")
+                claim(indexed[1], indexed[2])
+                if values[0] == 0 or values[1] not in (0, values[0]):
+                    raise CheckError("Unexpected redemption payout")
+                result.append({"kind": "redemption", "owner": f"0x{indexed[0]:040x}", "scope": indexed[1],
+                               "mask": str(indexed[2]), "quantity_atoms": str(values[0]), "collateral_atoms": str(values[1])})
             else:
                 values = words(log.get("data"), 1)
                 if len(indexed) != 2 or max(indexed) >= 2**160:

@@ -4,7 +4,7 @@ import copy
 import unittest
 
 from check_monad_readiness import CheckError
-from dashboard_data import Dashboard, DashboardRpc, TRADED, APPROVAL
+from dashboard_data import Dashboard, DashboardRpc, TRADED, APPROVAL, REDEEMED, wins
 from scan_arbitrage import abi
 from serve_dashboard import route
 from test_demo_manifest import FakeRpc as ManifestRpc, fixture, NETWORK
@@ -54,6 +54,42 @@ def setup(clock=lambda: 1000):
 
 
 class DashboardTests(unittest.TestCase):
+    def test_settlement_payouts_project_nonadjacent_events_and_preserve_pending(self):
+        model, rpc, m = setup()
+        pending = model.snapshot(m['operator'], [(129, 8), (129, 1)])
+        self.assertFalse(pending['redemption_available'])
+        self.assertIsNone(pending['wallet']['positions'][0]['redeemable_atoms'])
+        rpc.values[(m['pool'], '3f6fa655')] = [1]
+        rpc.values[(m['pool'], '1bb51c6a')] = [129]
+        settled = model.snapshot(m['operator'], [(129, 8), (129, 1)])
+        self.assertTrue(settled['redemption_available'])
+        self.assertFalse(settled['trading_available'])
+        winner, loser = settled['wallet']['positions']
+        self.assertEqual((winner['settlement'], winner['redeemable_atoms']), ('winning', '10000000'))
+        self.assertEqual((loser['settlement'], loser['redeemable_atoms']), ('losing', '0'))
+        for outcome in range(256):
+            self.assertEqual(wins(129, 8, outcome), bool(outcome & 1 and outcome & 128))
+        model.clock = lambda: 1031
+        self.assertFalse(model.snapshot()['redemption_available'])
+        model.clock = lambda: 1000
+        rpc.values[(m['pool'], 'b53105a3')] = [999999999]
+        self.assertFalse(model.snapshot()['redemption_available'])
+
+    def test_redemption_events_require_exact_canonical_payout_encoding(self):
+        model, _, m = setup()
+        topic = lambda value: '0x' + f'{value:064x}'
+        receipt = {'blockHash': '0x' + 'aa' * 32}
+        log = {'address': m['pool'], 'blockHash': receipt['blockHash'], 'transactionHash': TX,
+               'topics': [REDEEMED, topic(int(m['operator'], 16)), topic(129), topic(8)], 'data': abi('', 500000, 500000)}
+        receipt['logs'] = [log]
+        self.assertEqual(model.receipt_events(receipt, TX)[0]['collateral_atoms'], '500000')
+        log['data'] = abi('', 500000, 0)
+        self.assertEqual(model.receipt_events(receipt, TX)[0]['collateral_atoms'], '0')
+        log['data'] = abi('', 500000, 1)
+        with self.assertRaises(CheckError): model.receipt_events(receipt, TX)
+        log['data'] = abi('', 500000, 0); log['removed'] = True
+        with self.assertRaises(CheckError): model.receipt_events(receipt, TX)
+
     def test_no_wallet_is_not_a_fabricated_account(self):
         model, rpc, _ = setup()
         result = model.snapshot()

@@ -62,6 +62,14 @@ Kuru margin excludes funds reserved by resting orders, and the API does not yet
 enumerate those orders. Wrapped ERC-20 units are shown separately from internal
 pool claims to avoid double counting.
 
+Each requested position includes `settlement` (`pending`, `winning`, `losing`)
+and `redeemable_atoms` (null until resolution, then the full holding's payout).
+Payout projection follows the selected events' ascending bit order.
+`redemption_available` requires a resolved, fresh, covered and receipt-backed
+pool. It does not assert wallet ownership or gas sufficiency; wallet review checks
+both. Canonical transaction events now also include the pool's `Redeemed` event
+for exact owner/claim/quantity/payout reconciliation. See [redemption](DASHBOARD_REDEMPTION.md).
+
 Pool collateral and required collateral are distinct. Their difference is
 coverage surplus, not LP profit or withdrawable balance. Receipt total supply
 must equal the pool's escrow holding. Shortfall or escrow mismatch is visible
