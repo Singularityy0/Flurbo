@@ -7,11 +7,14 @@ import { HDKey, HARDENED_OFFSET } from "@scure/bip32";
 import { entropyToMnemonic, mnemonicToSeedSync } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { SESSION_MS, type AuthPolicy } from "./policy.ts";
+import { hashMessage, hexToBytes, bytesToHex, serializeSignature, type Hex } from 'viem';
+import type { SessionTransport } from './server-session.ts';
 
 type StoragePort = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 type Remembered = { version: 1; rpId: string; credentialId: string; address: string };
 export type AuthSnapshot = {
   busy: boolean; address: string | null; expiresAt: number | null;
+  signingExpiresAt: number | null; restoring: boolean;
   remembered: boolean; error: string | null; notice: string | null;
 };
 
@@ -59,6 +62,7 @@ function friendlyError(error: unknown, creating: boolean): string {
 export class AuthController {
   readonly policy: AuthPolicy;
   #storage?: StoragePort;
+  #transport?: SessionTransport;
   #client?: WebAuthnClient;
   #now: () => number;
   #key: string;
@@ -66,16 +70,18 @@ export class AuthController {
   #timer?: ReturnType<typeof setTimeout>;
   #generation = 0;
   #inFlight = false;
+  #signedOut = false;
   #listeners = new Set<() => void>();
   #snapshot: AuthSnapshot;
 
-  constructor(options: { policy: AuthPolicy; storage?: StoragePort; client?: WebAuthnClient; now?: () => number }) {
+  constructor(options: { policy: AuthPolicy; storage?: StoragePort; client?: WebAuthnClient; now?: () => number; transport?: SessionTransport }) {
     this.policy = options.policy;
     this.#storage = options.storage;
+    this.#transport = options.transport;
     this.#client = options.client;
     this.#now = options.now ?? Date.now;
     this.#key = `flurbo.passkey.v1:${this.policy.rpId ?? "unavailable"}`;
-    this.#snapshot = { busy: false, address: null, expiresAt: null, remembered: !!this.#read(), error: null, notice: null };
+    this.#snapshot = { busy: false, address: null, expiresAt: null, signingExpiresAt: null, restoring: !!options.transport, remembered: !!this.#read(), error: null, notice: null };
   }
 
   getSnapshot = () => this.#snapshot;
@@ -94,14 +100,43 @@ export class AuthController {
     return undefined;
   }
   #endSession() { clearTimeout(this.#timer); this.#session?.end(); this.#session = undefined; }
-  signOut = (notice: string | null = null) => {
+  lockSigning = () => {
     this.#generation++;
     this.#endSession();
-    this.#update({ busy: false, address: null, expiresAt: null, error: null, notice });
+    this.#update({ busy: false, signingExpiresAt: null });
+  };
+  restore = async () => {
+    if (!this.#transport || this.#inFlight || this.#signedOut) return;
+    const generation = this.#generation;
+    try {
+      const login = await this.#transport.read();
+      if (generation !== this.#generation) return;
+      if (!login || login.expiresAt <= this.#now() || !/^0x[0-9a-fA-F]{40}$/.test(login.address)) {
+        this.#endSession(); this.#update({ address: null, expiresAt: null, signingExpiresAt: null });
+      } else {
+        if (this.#snapshot.address?.toLowerCase() !== login.address.toLowerCase()) this.lockSigning();
+        this.#update({ address: login.address, expiresAt: login.expiresAt });
+      }
+    } catch { if (generation === this.#generation) this.#update({ notice: 'Account service is unavailable. Reconnect before signing.' }); }
+    finally { this.#update({ restoring: false }); }
+  };
+  async signDigest(digest: Hex) {
+    this.checkExpiry();
+    if (!this.#session || !this.#snapshot.address) throw new Error('Unlock signing with your passkey first.');
+    return this.#session.signDigest(hexToBytes(digest));
+  }
+  signOut = (notice: string | null = null) => {
+    this.#signedOut = true;
+    this.#generation++;
+    this.#endSession();
+    this.#update({ busy: false, address: null, expiresAt: null, signingExpiresAt: null, error: null, notice });
+    return this.#transport?.logout().catch(() => { this.#update({ error: 'Server sign-out could not finish. Retry sign-out when the service is reachable.' }); });
   };
   checkExpiry = () => {
     if (this.#snapshot.expiresAt !== null && this.#now() >= this.#snapshot.expiresAt) {
       this.signOut("Your session expired. Sign in again to open your account.");
+    } else if (this.#snapshot.signingExpiresAt !== null && this.#now() >= this.#snapshot.signingExpiresAt) {
+      this.lockSigning();
     }
   };
 
@@ -116,7 +151,7 @@ export class AuthController {
     this.#endSession();
     this.#inFlight = true;
     const generation = ++this.#generation;
-    this.#update({ busy: true, address: null, expiresAt: null, error: null, notice: null });
+    this.#update({ busy: true, signingExpiresAt: null, error: null, notice: null });
     let result: { credentialId: string; prfOutput: Uint8Array } | undefined;
     let derived: ReturnType<typeof deriveAccount> | undefined;
     try {
@@ -137,6 +172,16 @@ export class AuthController {
         this.#update({ error: "This passkey returned a different account address. Sign-in was stopped to protect your existing account." });
         return false;
       }
+      let loginExpiry = this.#now() + SESSION_MS;
+      if (this.#transport) {
+        const message = await this.#transport.challenge(derived.address);
+        if (generation !== this.#generation) return false;
+        const signature = await derived.session.signDigest(hexToBytes(hashMessage(message)));
+        const login = await this.#transport.verify(serializeSignature({ r: bytesToHex(signature.compact.slice(0, 32)), s: bytesToHex(signature.compact.slice(32)), yParity: signature.recovery }));
+        if (generation !== this.#generation) { await this.#transport.logout(); return false; }
+        if (login.address.toLowerCase() !== derived.address.toLowerCase() || login.expiresAt <= this.#now()) throw new Error('Login proof mismatch');
+        loginExpiry = login.expiresAt;
+      }
       let notice: string | null = null;
       let remembered = false;
       try {
@@ -146,11 +191,12 @@ export class AuthController {
         remembered = true;
       } catch { notice = "This browser cannot remember the account. Next time, choose your passkey from the device prompt."; }
       this.#session = derived.session;
-      const address = derived.address;
+      const address = derived.address.toLowerCase();
       derived = undefined;
-      const expiresAt = this.#now() + SESSION_MS;
+      this.#signedOut = false;
+      const expiresAt = loginExpiry;
       this.#timer = setTimeout(this.checkExpiry, SESSION_MS);
-      this.#update({ address, expiresAt, remembered, notice });
+      this.#update({ address, expiresAt, signingExpiresAt: this.#now() + SESSION_MS, restoring: false, remembered, notice });
       return true;
     } catch (error) {
       if (generation === this.#generation) this.#update({ error: friendlyError(error, mode === "signup") });

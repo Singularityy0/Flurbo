@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AuthController } from "./controller";
 import { authPolicy } from "./policy";
+import { serverSession } from './server-session';
 
 const AuthContext = createContext<AuthController | null>(null);
 
@@ -10,19 +11,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { storage = window.localStorage; } catch { /* Private browsing may deny storage. */ }
     return new AuthController({
       policy: authPolicy(window.location.href, import.meta.env.DEV, window.isSecureContext,
-        !!window.PublicKeyCredential && !!navigator.credentials?.create && !!navigator.credentials?.get), storage,
+        !!window.PublicKeyCredential && !!navigator.credentials?.create && !!navigator.credentials?.get), storage, transport: serverSession,
     });
   });
   useEffect(() => {
-    const pageHide = () => controller.signOut();
+    void controller.restore();
+    const pageHide = () => controller.lockSigning();
+    const focus = () => { controller.checkExpiry(); void controller.restore(); };
     window.addEventListener("pagehide", pageHide);
-    window.addEventListener("focus", controller.checkExpiry);
+    window.addEventListener("focus", focus);
     document.addEventListener("visibilitychange", controller.checkExpiry);
     return () => {
       window.removeEventListener("pagehide", pageHide);
-      window.removeEventListener("focus", controller.checkExpiry);
+      window.removeEventListener("focus", focus);
       document.removeEventListener("visibilitychange", controller.checkExpiry);
-      controller.signOut();
+      controller.lockSigning();
     };
   }, [controller]);
   return <AuthContext.Provider value={controller}>{children}</AuthContext.Provider>;

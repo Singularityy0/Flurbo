@@ -21,6 +21,7 @@
     "lucide-react": "1.47.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "viem": "2.56.8",
     "wouter": "3.11.0"
   },
   "devDependencies": {

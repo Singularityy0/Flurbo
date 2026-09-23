@@ -1,5 +1,5 @@
 export const PASSKEY_HOST = "flurbo.singu.online";
-export const SESSION_MS = 15 * 60 * 1000;
+export const SESSION_MS = 60 * 60 * 1000;
 
 export type AuthPolicy = { rpId: string | null; local: boolean; reason: string | null; localUrl?: string };
 
