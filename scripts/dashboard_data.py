@@ -1,8 +1,13 @@
 """Read-only dashboard model. Amounts are decimal strings safe for JavaScript BigInt."""
 
 import hashlib
+import json
 import re
 import time
+import threading
+from collections import deque
+from urllib.parse import urlsplit
+from urllib.request import Request
 
 from check_monad_readiness import CheckError, Rpc, quantity
 from check_kuru_readiness import words
@@ -29,6 +34,81 @@ def wins(scope, mask, outcome):
 
 class DashboardRpc(Rpc):
     allowed_methods = Rpc.allowed_methods | {"eth_getBalance", "eth_getTransactionByHash", "eth_getTransactionReceipt"}
+    _public_lock = threading.Lock()
+    _public_reads = deque()
+
+    def pace(self, count):
+        # The public endpoint enforces 15 reads/sec even inside JSON-RPC batches.
+        # Share a conservative budget between HTTP handlers; private RPCs have
+        # their own provider quotas and do not use this public-endpoint limiter.
+        if urlsplit(self.url).hostname != "testnet-rpc.monad.xyz":
+            return
+        with self._public_lock:
+            while True:
+                now = time.monotonic()
+                while self._public_reads and now - self._public_reads[0] >= 1.1:
+                    self._public_reads.popleft()
+                if len(self._public_reads) + count <= 12:
+                    self._public_reads.extend([now] * count)
+                    return
+                time.sleep(max(0.001, 1.1 - (now - self._public_reads[0])))
+
+    def __init__(self, url):
+        super().__init__(url)
+        self.prefetched = {}
+
+    @staticmethod
+    def cache_key(method, params):
+        return json.dumps([method, params], sort_keys=True)
+
+    def __call__(self, method, params):
+        key = self.cache_key(method, params)
+        if key in self.prefetched:
+            return self.prefetched[key]
+        self.pace(1)
+        return super().__call__(method, params)
+
+    def prefetch(self, calls):
+        # Only block-pinned reads may be reused inside this one HTTP request.
+        # Checkpoints, latest heads and the final reorg check always hit the RPC.
+        if not 1 <= len(calls) <= 32:
+            raise CheckError("Invalid dashboard batch size")
+        payload, keys = [], {}
+        for method, params in calls:
+            if method not in {"eth_call", "eth_getCode", "eth_getBalance"} or not params or not re.fullmatch(r"0x[0-9a-fA-F]+", str(params[-1])):
+                raise CheckError("Only block-pinned dashboard reads may be batched")
+            self.counter += 1
+            keys[self.counter] = self.cache_key(method, params)
+            payload.append({"jsonrpc": "2.0", "id": self.counter, "method": method, "params": params})
+        values = {}
+        for start in range(0, len(payload), 10):
+            chunk = payload[start:start + 10]
+            self.pace(len(chunk))
+            values.update(self.read_batch(chunk, {item["id"]: keys[item["id"]] for item in chunk}))
+        self.prefetched.update(values)  # Never accept a partially valid prefetch.
+
+    def read_batch(self, payload, keys):
+        request = Request(self.url, json.dumps(payload).encode(), {"Content-Type": "application/json"})
+        try:
+            with self.opener.open(request, timeout=15) as response:
+                raw = response.read(2_000_001)
+            if len(raw) > 2_000_000:
+                raise CheckError("Dashboard batch exceeded size limit")
+            results = json.loads(raw)
+        except CheckError:
+            raise
+        except Exception:
+            raise CheckError("Dashboard batch transport or JSON failure; remote details withheld") from None
+        if not isinstance(results, list) or len(results) != len(payload):
+            raise CheckError("Invalid dashboard batch response")
+        received, values = set(), {}
+        for item in results:
+            if (not isinstance(item, dict) or item.get("jsonrpc") != "2.0" or type(item.get("id")) is not int
+                    or item["id"] not in keys or item["id"] in received or "error" in item or "result" not in item):
+                raise CheckError("Dashboard batch rejected or mismatched; remote details withheld")
+            received.add(item["id"])
+            values[keys[item["id"]]] = item["result"]
+        return values
 
 
 def claim(scope, mask):
@@ -66,6 +146,8 @@ class Dashboard:
 
     def begin(self):
         m = self.m
+        if isinstance(self.rpc, DashboardRpc):
+            self.rpc.prefetched.clear()
         if quantity(self.rpc("eth_chainId", [])) != 10143:
             raise CheckError("Wrong RPC chain")
         baseline = self.rpc("eth_getBlockByNumber", [hex(m["verified_block"]), False])
@@ -73,6 +155,13 @@ class Dashboard:
             raise CheckError("Deployment checkpoint changed; verify the manifest again")
         self.number, self.timestamp, self.block_hash = block_info(self.rpc("eth_getBlockByNumber", ["latest", False]))
         self.tag = hex(self.number)
+        self.prefetch(
+            [("eth_getCode", [m[key], self.tag]) for key in ("pool", "receipt", "market", "executor", "cash", "margin")]
+            + [self.read_call("pool", sig) for sig in ("71be2e4a", "1a686502", "ec9c6c30", "04f3bcec", "03a79426", "39a3a99a", "d8dfeb45", "f3a504f2", "3f6fa655", "b53105a3")]
+            + [self.read_call("pool", "7220c660", 128, 2), self.read_call("market", "90c9427c"),
+               self.read_call("cash", "70a08231", int(m["pool"], 16)), self.read_call("receipt", "18160ddd"),
+               self.read_call("pool", "90fc2c7b", int(m["receipt"], 16), 128, 2),
+               self.read_call("cash", "70a08231", int(m["executor"], 16))])
         for key in ("pool", "receipt", "market", "executor", "cash", "margin"):
             code = self.rpc("eth_getCode", [m[key], self.tag])
             if not isinstance(code, str) or not re.fullmatch(r"0x(?:[0-9a-fA-F]{2})+", code):
@@ -92,6 +181,13 @@ class Dashboard:
 
     def call(self, key, selector, *args, count=1):
         return words(self.rpc("eth_call", [{"to": self.m[key], "data": abi(selector, *args)}, self.tag]), count)
+
+    def read_call(self, key, selector, *args):
+        return ("eth_call", [{"to": self.m[key], "data": abi(selector, *args)}, self.tag])
+
+    def prefetch(self, calls):
+        if isinstance(self.rpc, DashboardRpc):
+            self.rpc.prefetch(calls)
 
     def balance(self, asset, owner):
         return self.call(asset, "70a08231", int(owner, 16))[0]
@@ -143,6 +239,15 @@ class Dashboard:
             raise ValueError("Request 1–16 claim balances")
         claims = list(dict.fromkeys(claim(*item) for item in claims))
         self.begin()
+        reads = [self.read_call("market", "b4de8b70")]
+        if wallet:
+            w = int(wallet, 16)
+            reads += [("eth_getBalance", [wallet, self.tag]), self.read_call("cash", "70a08231", w),
+                      self.read_call("receipt", "70a08231", w), self.read_call("cash", "dd62ed3e", w, int(self.m["pool"], 16)),
+                      self.read_call("margin", "d4fac45d", w, int(self.m["cash"], 16)),
+                      self.read_call("margin", "d4fac45d", w, int(self.m["receipt"], 16))]
+            reads += [self.read_call("pool", "90fc2c7b", w, s, p) for s, p in claims]
+        self.prefetch(reads)
         state = self.state()
         bid, ask = self.call("market", "b4de8b70", count=2)
         result = {"cluster": {"events": [{"index": i, "label": f"Synthetic event {chr(65+i)}"} for i in range(8)],

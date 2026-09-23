@@ -20,7 +20,8 @@ let trading;
 
 const requestCredentials = options.credentials || 'omit';
 async function request(path, controller, options = {}) {
-  const timeout = setTimeout(() => controller.abort(), 20000);
+  // Let the gateway's 20-second timeout return its error before aborting locally.
+  const timeout = setTimeout(() => controller.abort(), 25000);
   try {
     const response = await fetch(path, { ...options, signal: controller.signal, cache: 'no-store', credentials: requestCredentials });
     const result = await response.json();

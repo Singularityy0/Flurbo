@@ -56,6 +56,20 @@ the reviewed Monad testnet Alchemy endpoint. Both reader and transaction relay
 use it. Otherwise they use the public Monad testnet RPC. Never put the RPC key
 in a frontend `VITE_` variable.
 
+If market loading times out, inspect `/api/health` (reader liveness) separately
+from `/api/state` (actual chain reads). The original sequential reader exceeded
+the gateway's 20-second limit for wallet snapshots on the public RPC. The reader
+now batches block-pinned reads in groups of at most ten, with a shared conservative
+public-RPC rate budget. Cache entries last only for that request; checkpoint,
+code, collateral, freshness and final reorg checks remain enforced. The browser
+waits 25 seconds so the gateway can return a structured error first.
+
+Alchemy is already supported for both the Python reader and Mera transaction
+relay. Set `FLURBO_ALCHEMY_TESTNET_RPC_URL` to the Monad **testnet** HTTPS endpoint
+from your Alchemy application, then redeploy. Leave `FLURBO_MANIFEST_JSON` in
+place. Provider quotas still apply; an RPC change does not require redeploying
+the on-chain contracts, and failed reads must never trigger transaction retries.
+
 ## Fund the deployer and users
 
 Selected deployer: `0xF1feA08EbBa92eD342Acc5639dB312C3694Bc391`.
@@ -95,9 +109,13 @@ the repository root, after funding and configuring the signer:
 export PATH="$HOME/.foundry/bin:$PATH"
 export FOUNDRY_PROFILE=demo
 export FLURBO_DEPLOYER=0xF1feA08EbBa92eD342Acc5639dB312C3694Bc391
-export FLURBO_DEMO_CLOSES_AT=$(node -p 'Math.floor(Date.now()/1000)+7*86400')
+export FLURBO_DEMO_CLOSES_AT=$(( $(date +%s) + 7 * 86400 ))
 forge script contracts/script/DeployDemo.s.sol:DeployDemo --rpc-url https://testnet-rpc.monad.xyz --sender "$FLURBO_DEPLOYER"
 ```
+
+The timestamp command uses Git Bash's `date` to avoid its interactive `node`
+alias, which can fail inside command substitution with `stdout is not a tty`.
+The environment value must contain only decimal digits.
 
 Review the simulation and funding requirements. A dry run writes an **unverified**
 manifest and does not deploy anything. Only after the dry run succeeds, broadcast
