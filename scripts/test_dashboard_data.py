@@ -54,6 +54,21 @@ def setup(clock=lambda: 1000):
 
 
 class DashboardTests(unittest.TestCase):
+    def test_public_snapshot_accepts_advancing_head_but_preserves_age_and_canonical_checks(self):
+        model, rpc, _ = setup()
+        model.m["environment"] = "public_testnet"
+        model.begin()
+        original = model.rpc
+        def advanced(method, params):
+            result = original(method, params)
+            if method == "eth_getBlockByNumber" and params[0] == "latest":
+                result = dict(result, number=hex(model.number + 10))
+            return result
+        model.rpc = advanced
+        self.assertFalse(model.finish({})["snapshot"]["stale"])
+        model.clock = lambda: model.timestamp + 31
+        self.assertTrue(model.finish({})["snapshot"]["stale"])
+
     def test_conversion_remains_available_after_resolution_and_shortfall_but_not_stale_or_unbacked(self):
         model, rpc, m = setup()
         self.assertTrue(model.snapshot()['conversion_available'])

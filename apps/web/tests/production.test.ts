@@ -1,0 +1,99 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { request as httpRequest } from 'node:http';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, dirname, basename } from 'node:path';
+import { privateKeyToAccount } from 'viem/accounts';
+import { SessionStore } from '../server/session.mjs';
+import { RedisSessionStore, redisCommand } from '../server/redis-session.mjs';
+import { hostedConfig, TESTNET } from '../server/network.mjs';
+import { productionServer } from '../server/production.mjs';
+
+const signer = privateKeyToAccount(('0x' + '11'.repeat(32)) as `0x${string}`);
+const origin = 'https://flurbo.singu.online';
+function memoryRedis() {
+  const data = new Map<string,string>();
+  const command = async (...args: Array<string | number>) => {
+    const [cmd,key,value] = args as string[];
+    if(cmd === 'EVAL') return 1;
+    if(cmd === 'SET') { data.set(key,value); assert.ok(Number(args[4]) > 0); return 'OK'; }
+    const result = data.get(key) || null;
+    if(cmd === 'GETDEL' || cmd === 'DEL') data.delete(key);
+    return result;
+  };
+  return {data,command};
+}
+test('durable session adapter survives service reconstruction, consumes proofs once and revokes everywhere', async () => {
+  let now = Date.now(); const redis = memoryRedis();
+  const first = new RedisSessionStore(redis.command,()=>now), restarted = new RedisSessionStore(redis.command,()=>now);
+  const challenge = await first.challenge(signer.address,origin,'wallet');
+  const signature = await signer.signMessage({message:challenge.message});
+  const attempts = await Promise.allSettled([first.verify(challenge.id,signature,origin),restarted.verify(challenge.id,signature,origin)]);
+  assert.equal(attempts.filter(a=>a.status==='fulfilled').length,1);
+  const login = (attempts.find(a=>a.status==='fulfilled') as PromiseFulfilledResult<any>).value;
+  assert.equal((await restarted.read(login.sessionId,origin)).method,'wallet');
+  assert.equal(await restarted.read(login.sessionId,'https://other.example'),null);
+  assert.ok(![...redis.data.keys()].some(k=>k.includes(login.sessionId)));
+  await restarted.revoke(login.sessionId); assert.equal(await first.read(login.sessionId,origin),null);
+  const stale = await first.challenge(signer.address,origin); now += 300001;
+  await assert.rejects(restarted.verify(stale.id,await signer.signMessage({message:stale.message}),origin));
+});
+test('host configuration rejects local/mainnet RPC and session storage never falls back to memory', async () => {
+  const env = {FLURBO_ORIGIN:origin,FLURBO_NETWORK:'public_testnet'};
+  assert.equal(hostedConfig(env).rpcUrl,TESTNET.rpc + '/');
+  for(const url of ['http://127.0.0.1:18545','https://rpc.monad.xyz','https://evil.example']) assert.throws(()=>hostedConfig({...env,FLURBO_ALCHEMY_TESTNET_RPC_URL:url}));
+  assert.throws(()=>hostedConfig({...env,FLURBO_NETWORK:'mainnet'}));
+  assert.throws(()=>redisCommand({}));
+  const command = redisCommand({UPSTASH_REDIS_REST_URL:'https://fixture.upstash.io',UPSTASH_REDIS_REST_TOKEN:'fixture'}, async () => Response.json({error:'denied'}));
+  await assert.rejects(command('GET','key'));
+});
+test('hosted HTTP serves guarded SPA routes, secure login and public-only transactions without local funding', async () => {
+  const directory = await mkdtemp(join(tmpdir(),'flurbo-server-'));
+  await writeFile(join(directory,'index.html'),'<html>Flurbo</html>');
+  const store = new SessionStore();
+  const server = productionServer({origin,rpcUrl:TESTNET.rpc},store,directory);
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const port = (server.address() as {port:number}).port;
+  function request(path:string,body?:object,cookie='',host='flurbo.singu.online',requestOrigin=origin):Promise<any> {
+    return new Promise((resolve,reject)=>{
+      const req=httpRequest({hostname:'127.0.0.1',port,path,method:body?'POST':'GET',headers:{Host:host,Origin:requestOrigin,'Content-Type':'application/json',Cookie:cookie}},res=>{
+        let text='';res.on('data',chunk=>text+=chunk);res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,text,json:()=>JSON.parse(text)}));
+      });req.on('error',reject);req.end(body?JSON.stringify(body):undefined);
+    });
+  }
+  const originalFetch=globalThis.fetch;let broadcasts=0, environment='public_testnet';
+  const pool='0x'+'22'.repeat(20);
+  globalThis.fetch=async(input,options)=>{
+    if(String(input)==='http://127.0.0.1:18765/api/state') return Response.json({environment,chain_id:10143,contracts:{pool,cash:TESTNET.cash}});
+    if(String(input)===TESTNET.rpc) { const body=JSON.parse(options!.body as string); if(body.method==='eth_sendRawTransaction') broadcasts++; return Response.json({result:'0x'+'77'.repeat(32)}); }
+    throw Error('Unexpected upstream');
+  };
+  try {
+    assert.equal((await request('/account')).status,200); // Client route waits for verified auth.
+    assert.equal((await request('/.env')).status,404);
+    assert.equal((await request('/api/network',undefined,'','evil.example')).status,421);
+    assert.equal((await request('/api/auth/challenge',{address:signer.address},'','flurbo.singu.online','https://evil.example')).status,403);
+    assert.equal((await request('/api/local-wallet-setup',{wallet:signer.address})).status,404);
+    assert.equal((await request('/api/rpc',{method:'anvil_setBalance',params:[]})).status,400);
+    const challenge=await request('/api/auth/challenge',{address:signer.address,method:'wallet'});
+    const verified=await request('/api/auth/verify',{signature:await signer.signMessage({message:challenge.json().message})},challenge.headers['set-cookie'][0].split(';')[0]);
+    assert.equal(verified.status,200);assert.match(verified.headers['set-cookie'][0],/HttpOnly.*SameSite=Strict.*Secure/);
+    const cookie=verified.headers['set-cookie'][0].split(';')[0];
+    assert.equal((await request('/api/auth/session',undefined,cookie)).json().session.method,'wallet');
+    const tx={type:'legacy' as const,chainId:10143,nonce:0,gas:100000n,gasPrice:1000000000n,to:TESTNET.cash as `0x${string}`,value:0n,data:('0x095ea7b3'+pool.slice(2).padStart(64,'0')+'1'.padStart(64,'0')) as `0x${string}`};
+    const send=async(value:typeof tx)=>request('/api/rpc',{method:'eth_sendRawTransaction',params:[await signer.signTransaction(value)]},cookie);
+    assert.equal((await send(tx)).status,200);
+    assert.equal((await send({...tx,chainId:143})).status,403);
+    assert.equal((await send({...tx,value:1n})).status,403);
+    assert.equal((await send({...tx,data:('0x095ea7b3'+'33'.repeat(20).padStart(64,'0')+'1'.padStart(64,'0')) as `0x${string}`})).status,403);
+    environment='local_fork'; assert.equal((await send(tx)).status,403);
+    const faucet={...tx,to:TESTNET.faucet as `0x${string}`,data:(TESTNET.faucetSelector+signer.address.slice(2).toLowerCase().padStart(64,'0')) as `0x${string}`};
+    assert.equal((await send(faucet)).status,200);
+    assert.equal((await send({...faucet,value:1n})).status,403);
+    assert.equal((await send({...faucet,data:(TESTNET.faucetSelector+'33'.repeat(20).padStart(64,'0')) as `0x${string}`})).status,403);
+    assert.equal(broadcasts,2);
+    assert.equal((await request('/api/state')).status,503);
+    await request('/api/auth/logout',{},cookie); assert.equal((await request('/api/auth/session',undefined,cookie)).json().session,null);
+  } finally { globalThis.fetch=originalFetch;server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));assert.equal(dirname(directory),tmpdir());assert.ok(basename(directory).startsWith('flurbo-server-'));await rm(directory,{recursive:true,force:true}); }
+});

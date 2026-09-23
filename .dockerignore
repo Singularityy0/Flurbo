@@ -1,0 +1,10 @@
+.git
+**/node_modules
+**/dist
+target
+tmp
+resources
+.superdesign
+**/.env*
+**/*.local
+**/__pycache__

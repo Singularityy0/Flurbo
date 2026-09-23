@@ -120,7 +120,7 @@ class Dashboard:
             raise CheckError("Snapshot reorganized; retry")
         head, _, _ = block_info(self.rpc("eth_getBlockByNumber", ["latest", False]))
         age = int(self.clock()) - self.timestamp
-        stale = not 0 <= age <= 30 or not self.number <= head <= self.number + 2
+        stale = not 0 <= age <= 30 or (head < self.number or (self.m["environment"] == "local_fork" and head > self.number + 2))
         payload.update(read_only=True, environment=self.m["environment"], chain_id=10143,
                        snapshot={"block_number": self.number, "block_hash": self.block_hash,
                                  "timestamp": self.timestamp, "age_seconds": age, "stale": stale})

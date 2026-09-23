@@ -81,3 +81,9 @@ FAQ expansion, keyboard navigation/Escape, direct account routes and their
 back links, the not-found route, and reduced motion. All interaction prices
 on the landing page remain illustrative. The account workspace reads real local
 contract quotes and can submit explicitly reviewed local test transactions.
+# Public Monad testnet deployment
+
+Use the standalone `npm start` server and repository-root Render/Docker setup,
+not `vite preview`, for hosting. See
+[the deployment guide](../../docs/PUBLIC_TESTNET_DEPLOYMENT.md) for free hosting,
+Redis secrets, DNS, wallet funding and the verified public contract manifest.
