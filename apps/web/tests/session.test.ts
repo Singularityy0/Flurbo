@@ -101,3 +101,25 @@ test('reload restores only a verified account, hour expiry locks signing without
     await reloaded.signOut(); await first.restore(); assert.equal(first.getSnapshot().address,null);
   } finally { await first.signOut(); await reloaded.signOut(); }
 });
+
+test('stale restoration cannot finish the loading gate or reopen a signed-out account', async () => {
+  type Login = {address:string; expiresAt:number} | null;
+  const pending: Array<(value:Login) => void> = [];
+  const transport = { read: () => new Promise<Login>(resolve => pending.push(resolve)),
+    async challenge() { throw new Error('unused'); }, async verify() { throw new Error('unused'); }, async logout() {} };
+  const controller = new AuthController({policy:authPolicy(origin,true,true,true),transport});
+  const login = {address:signer.address,expiresAt:Date.now()+LOGIN_MS};
+  const first = controller.restore();
+  controller.lockSigning(); // React StrictMode cleanup invalidates the first mount.
+  const second = controller.restore();
+  pending[0](null); await first;
+  assert.equal(controller.getSnapshot().restoring,true);
+  assert.equal(controller.getSnapshot().address,null);
+  pending[1](login); await second;
+  assert.equal(controller.getSnapshot().restoring,false);
+  assert.equal(controller.getSnapshot().address,signer.address);
+  const late = controller.restore();
+  await controller.signOut(); pending[2](login); await late;
+  assert.equal(controller.getSnapshot().address,null);
+  assert.equal(controller.getSnapshot().restoring,false);
+});

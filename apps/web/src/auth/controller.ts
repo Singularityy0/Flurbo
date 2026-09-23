@@ -114,11 +114,13 @@ export class AuthController {
       if (!login || login.expiresAt <= this.#now() || !/^0x[0-9a-fA-F]{40}$/.test(login.address)) {
         this.#endSession(); this.#update({ address: null, expiresAt: null, signingExpiresAt: null });
       } else {
-        if (this.#snapshot.address?.toLowerCase() !== login.address.toLowerCase()) this.lockSigning();
+        if (this.#snapshot.address?.toLowerCase() !== login.address.toLowerCase()) {
+          this.#endSession(); this.#update({ signingExpiresAt: null });
+        }
         this.#update({ address: login.address, expiresAt: login.expiresAt });
       }
     } catch { if (generation === this.#generation) this.#update({ notice: 'Account service is unavailable. Reconnect before signing.' }); }
-    finally { this.#update({ restoring: false }); }
+    finally { if (generation === this.#generation) this.#update({ restoring: false }); }
   };
   async signDigest(digest: Hex) {
     this.checkExpiry();
@@ -129,7 +131,7 @@ export class AuthController {
     this.#signedOut = true;
     this.#generation++;
     this.#endSession();
-    this.#update({ busy: false, address: null, expiresAt: null, signingExpiresAt: null, error: null, notice });
+    this.#update({ busy: false, restoring: false, address: null, expiresAt: null, signingExpiresAt: null, error: null, notice });
     return this.#transport?.logout().catch(() => { this.#update({ error: 'Server sign-out could not finish. Retry sign-out when the service is reachable.' }); });
   };
   checkExpiry = () => {

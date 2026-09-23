@@ -5,6 +5,12 @@ Keep the existing local Anvil (18545), dashboard service (18765) and block helpe
 running as described in [dashboard setup](DASHBOARD_SCREEN.md). The new workspace
 uses the consumer site's typography, colours and responsive navigation.
 
+`/account` requires a verified, unexpired login. Direct visits wait for server
+session restoration before mounting the market; signed-out visitors go to
+`/login`, which also links to signup. Sign-out and login expiry remove the
+workspace and redirect to sign-in. Signing-key expiry alone keeps account access.
+This route guard does not change the separate dashboard's public on-chain read API.
+
 ## What is connected
 
 - Explore & trade: one-to-three-event AND, OR and custom Boolean claims, live

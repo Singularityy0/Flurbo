@@ -92,6 +92,28 @@ function AuthShell({ mode }: { mode: "login" | "signup" | "account" }) {
   );
 }
 
+function AccountRoute() {
+  const { controller, state } = useAuth();
+  const [, navigate] = useLocation();
+  const authenticated = !!state.address && state.expiresAt !== null && state.expiresAt > Date.now();
+
+  useEffect(() => {
+    if (!state.restoring && !authenticated) navigate('/login', { replace: true });
+  }, [state.restoring, authenticated, navigate]);
+
+  useEffect(() => {
+    if (!authenticated || state.expiresAt === null) return;
+    const timer = setTimeout(controller.checkExpiry, Math.max(0, state.expiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [controller, authenticated, state.expiresAt]);
+
+  // Do not mount the market, its data requests or wallet listeners until the
+  // server-backed login has been restored. Remembered addresses are not login.
+  return <AppShell>{state.restoring
+    ? <main id="main" tabIndex={-1} className="auth-page"><p role="status">Checking your session...</p></main>
+    : authenticated ? <Workspace /> : null}</AppShell>;
+}
+
 export default function App() {
   const [location] = useLocation();
   const previousLocation = useRef(location);
@@ -115,7 +137,7 @@ export default function App() {
       <Route path="/" component={() => <AppShell><Home /></AppShell>} />
       <Route path="/login" component={() => <AuthShell mode="login" />} />
       <Route path="/signup" component={() => <AuthShell mode="signup" />} />
-      <Route path="/account" component={() => <AppShell><Workspace /></AppShell>} />
+      <Route path="/account" component={AccountRoute} />
       <Route component={NotFound} />
     </Switch>
   );
