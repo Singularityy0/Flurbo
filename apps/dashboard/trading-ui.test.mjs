@@ -26,7 +26,7 @@ async function harness(run, saved) {
   const now = Math.floor(Date.now() / 1000);
   const snapshot = { environment: 'local_fork', chain_id: 10143, trading_available: true, snapshot: { timestamp: now, stale: false, block_number: 100, block_hash: hash },
     contracts: { pool, cash }, pool: { phase: 'open', resolved: false }, cluster: { closes_at: now + 1000, events: [{ index: 0 }, { index: 1 }] }, wallet: { address: account, ausd_atoms: '10000000', native_balance_wei: '1000000000000000000', pool_allowance_atoms: '1000000', positions: [] } };
-  const quote = { environment: 'local_fork', chain_id: 10143, snapshot: snapshot.snapshot, quote: { side: 'buy', scope: 3, mask: 8, quantity_atoms: '1000000', collateral_atoms: '250001', valid_until: now + 30 } };
+  const quote = { environment: 'local_fork', chain_id: 10143, snapshot: snapshot.snapshot, quote: { side: 'buy', scope: 3, mask: 8, quantity_atoms: '1000000', collateral_atoms: '250001', valid_until: now + 300 } };
   const state = { tx: { status: 'unknown', confirmations: 0 }, refreshes: 0 };
   try {
     globalThis.document = { getElementById: get, createElement: node };

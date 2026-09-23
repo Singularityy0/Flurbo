@@ -197,7 +197,7 @@ export function mountTrading(hooks) {
         `From: ${plan.account}`, `To: ${plan.recipient}`, `AUSD token: ${plan.cash}`,
         `Proposed gas budget: ${formatUnits(plan.gasBudget, 18)} MON.`,
         'Only available wallet AUSD moves. No approval, sale, redemption or bridge is included. Confirm the entire receiving address.',
-        'The review expires within 30 seconds. The token transfer has no on-chain deadline and cannot be reversed by Flurbo.'];
+        'You have up to 5 minutes to review. The token transfer has no on-chain deadline and cannot be reversed by Flurbo.'];
       $('review-details').replaceChildren(...lines.map(line => { const p = document.createElement('p'); p.textContent = line; return p; }));
       $('confirm-trade').textContent = 'Confirm AUSD withdrawal';
       text('execution-status', 'Review the amount, full receiving address and network, then confirm the withdrawal.');
@@ -219,7 +219,7 @@ export function mountTrading(hooks) {
         `From: ${plan.account}`, `Pool: ${plan.pool}`, `Canonical H YES receipt: ${plan.receipt}`,
         'No AUSD is spent or paid. No token approval or Kuru order is submitted.',
         `Proposed gas budget: ${formatUnits(plan.gasBudget, 18)} MON. Review any wallet edits.`,
-        'This review expires within 30 seconds. The conversion contract has no transaction deadline.'];
+        'You have up to 5 minutes to review. The conversion contract has no transaction deadline.'];
       $('review-details').replaceChildren(...lines.map(line => { const p = document.createElement('p'); p.textContent = line; return p; }));
       $('confirm-trade').textContent = `Confirm ${kind} in wallet`;
       text('execution-status', 'Review the conversion, then click the confirmation button to open your wallet.');
@@ -240,7 +240,7 @@ export function mountTrading(hooks) {
         `From: ${plan.account}`, `Contract: ${plan.pool}`, `Exact payout: ${formatUnits(plan.payout)} AUSD. These internal claim units will be burned.`,
         plan.payout === '0' ? 'This losing claim pays zero. Clearing it is optional and costs gas.' : 'Redemption pays the settled outcome; no token spending approval is needed.',
         `Proposed gas budget: ${formatUnits(plan.gasBudget, 18)} MON. Review any wallet edits.`,
-        'The review expires in 30 seconds or sooner. The redemption contract has no transaction deadline.'];
+        'You have up to 5 minutes to review. The redemption contract has no transaction deadline.'];
       $('review-details').replaceChildren(...lines.map(line => { const p = document.createElement('p'); p.textContent = line; return p; }));
       $('confirm-trade').textContent = plan.payout === '0' ? 'Confirm clearing for 0 AUSD in wallet' : 'Redeem winnings in wallet';
       text('execution-status', 'Review the payout and units, then click the confirmation button to open your wallet.');
@@ -265,7 +265,7 @@ export function mountTrading(hooks) {
           : `${plan.kind === 'buy' ? 'Maximum cost' : 'Minimum proceeds'}: ${formatUnits(plan.limit)} AUSD · ${plan.bps / 100}% slippage`,
         `Proposed gas budget: ${formatUnits(plan.gasBudget, 18)} MON. Review any wallet edits.`,
         plan.kind === 'approve' ? 'Token approval has no on-chain expiry; this review expires with the quote.'
-          : `Contract deadline: ${new Date(plan.deadline * 1000).toLocaleTimeString()}. Submit this review before the quote expires.`,
+          : `Review within 5 minutes of the quote. Wallet confirmation deadline: ${new Date(plan.deadline * 1000).toLocaleTimeString()}. Prices are rechecked before opening your wallet; the reviewed slippage limit stays fixed.`,
       ];
       $('review-details').replaceChildren(...lines.map(line => { const p = document.createElement('p'); p.textContent = line; return p; }));
       $('confirm-trade').textContent = plan.kind === 'approve'

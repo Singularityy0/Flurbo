@@ -1,5 +1,5 @@
 // EIP-1193 requests stay in the user's selected wallet. The HTTP API never signs.
-import { compileClaim, snapshotFresh } from './claims.mjs';
+import { compileClaim, snapshotFresh, quoteReviewable, REVIEW_SECONDS } from './claims.mjs';
 
 export const CHAIN_ID = '0x279f';
 export const SELECTORS = { buy: '3e6b6cde', sell: 'c39849c5', approve: '095ea7b3', redeem: 'df992423', wrap: 'b0a52172', unwrap: 'f6c4eade', withdraw: 'a9059cbb' };
@@ -74,7 +74,7 @@ export function makePlan(snapshot, quoted, account, bps, now = Date.now() / 1000
   if (!supportedDeployment(snapshot) || quoted.environment !== snapshot.environment || quoted.chain_id !== 10143) {
     throw new WalletError('A verified Monad testnet deployment and matching quote are required.');
   }
-  if (!snapshotFresh(snapshot.snapshot, now) || !snapshotFresh(quoted.snapshot, now) || !snapshot.trading_available || !quoted.quote || now >= quoted.quote.valid_until) {
+  if (!snapshotFresh(snapshot.snapshot, now) || !quoteReviewable(quoted, now) || !snapshot.trading_available) {
     throw new WalletError('The quote or pool state expired. Refresh and request a new quote.');
   }
   const q = quoted.quote;
@@ -96,7 +96,9 @@ export function makePlan(snapshot, quoted, account, bps, now = Date.now() / 1000
     const holding = w.positions.find(p => p.scope === q.scope && p.mask === q.mask);
     if (!holding || BigInt(holding.quantity_atoms) < BigInt(q.quantity_atoms)) throw new WalletError('Not enough internal pool units to sell this claim. Wrapped receipts must be unwrapped separately.');
   }
-  const deadline = Math.min(Math.floor(now) + 180, snapshot.cluster.closes_at - 1);
+  // Keep two minutes for the wallet prompt after the five-minute review window.
+  // The reviewed slippage limit is fixed and simulated again before submission.
+  const deadline = Math.min(q.valid_until + 120, snapshot.cluster.closes_at - 1);
   if (deadline <= now) throw new WalletError('The market is closing.');
   const input = kind === 'approve' ? encode(SELECTORS.approve, pool, approval)
     : encode(SELECTORS[kind], q.scope, q.mask, q.quantity_atoms, limit, deadline);
@@ -161,7 +163,7 @@ export function makeRedemptionPlan(snapshot, selected, account, quantity) {
   const payout = mask & (1 << projected) ? qty : 0n;
   const pool = address(snapshot.contracts.pool), cash = address(snapshot.contracts.cash);
   return { kind: 'redeem', account, pool, cash, scope, mask, quantity: qty.toString(), payout: payout.toString(), outcome,
-    quoteExpiry: snapshot.snapshot.timestamp + 30,
+    quoteExpiry: snapshot.snapshot.timestamp + REVIEW_SECONDS,
     tx: { from: account, to: pool, data: encode(SELECTORS.redeem, scope, mask, qty), value: '0x0', chainId: CHAIN_ID } };
 }
 
@@ -182,7 +184,7 @@ export function makeConversionPlan(snapshot, kind, account, quantity) {
     ? 'Not enough internal H YES units. Buy H YES first; composed claims cannot be wrapped here.'
     : 'Not enough H YES receipts in your wallet. Receipts deposited in Kuru must be withdrawn first.');
   const pool = address(snapshot.contracts.pool), cash = address(snapshot.contracts.cash), receipt = address(snapshot.contracts.receipt);
-  return { kind, account, pool, cash, receipt, scope: 128, mask: 2, quantity: qty.toString(), quoteExpiry: snapshot.snapshot.timestamp + 30,
+  return { kind, account, pool, cash, receipt, scope: 128, mask: 2, quantity: qty.toString(), quoteExpiry: snapshot.snapshot.timestamp + REVIEW_SECONDS,
     tx: { from: account, to: pool, data: encode(SELECTORS[kind], 7, 1, qty), value: '0x0', chainId: CHAIN_ID } };
 }
 
@@ -198,7 +200,7 @@ export function makeWithdrawalPlan(snapshot, account, recipient, quantity) {
   if (!snapshot.wallet || address(snapshot.wallet.address) !== account || qty <= 0n || qty > MAX128 || BigInt(snapshot.wallet.ausd_atoms) < qty) {
     throw new WalletError('Withdraw only available AUSD in the selected wallet. Sell or redeem positions first; Kuru deposits are separate.');
   }
-  return { kind: 'withdraw', account, recipient, pool, cash, quantity: qty.toString(), quoteExpiry: snapshot.snapshot.timestamp + 30,
+  return { kind: 'withdraw', account, recipient, pool, cash, quantity: qty.toString(), quoteExpiry: snapshot.snapshot.timestamp + REVIEW_SECONDS,
     tx: { from: account, to: cash, data: encode(SELECTORS.withdraw, recipient, qty), value: '0x0', chainId: CHAIN_ID } };
 }
 

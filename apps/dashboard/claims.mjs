@@ -44,3 +44,10 @@ export function claimLabel(legs, mode) {
 export function snapshotFresh(snapshot, now = Date.now() / 1000) {
   return !!snapshot && !snapshot.stale && now >= snapshot.timestamp && now - snapshot.timestamp <= 30;
 }
+
+export const REVIEW_SECONDS = 300;
+export function quoteReviewable(quoted, now = Date.now() / 1000) {
+  const timestamp = quoted?.snapshot?.timestamp, expiry = quoted?.quote?.valid_until;
+  return Number.isSafeInteger(timestamp) && Number.isSafeInteger(expiry) && !quoted.snapshot.stale &&
+    now >= timestamp && expiry > timestamp && expiry <= timestamp + REVIEW_SECONDS && now < expiry;
+}

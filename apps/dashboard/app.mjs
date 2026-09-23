@@ -1,4 +1,4 @@
-import { compileClaim, claimLabel, parseUnits, formatUnits, snapshotFresh } from './claims.mjs';
+import { compileClaim, claimLabel, parseUnits, formatUnits, snapshotFresh, quoteReviewable } from './claims.mjs';
 import { mountTrading } from './trading-ui.mjs';
 
 export function mountDashboard(root = document, options = {}) {
@@ -133,9 +133,12 @@ function tick() {
   // A quote is read at its own block. An older dashboard snapshot expiring
   // must not cancel a newer quote while wallet preflight is running.
   const marketStopped = fresh && data.snapshot.timestamp >= (quote?.snapshot.timestamp ?? 0) && !data.trading_available;
-  if (quote && (!snapshotFresh(quote.snapshot) || Date.now() / 1000 >= quote.quote.valid_until || marketStopped || Date.now() / 1000 >= data?.cluster.closes_at)) {
+  if (quote && (!quoteReviewable(quote) || marketStopped || Date.now() / 1000 >= data?.cluster.closes_at)) {
     invalidateQuote('Quote expired or chain data became stale. Refresh and request a new quote.');
-  } else if (quote) text('quote-expiry', `${Math.max(0, Math.ceil(quote.quote.valid_until - Date.now() / 1000))}s remaining`);
+  } else if (quote) {
+    const seconds = Math.max(0, Math.ceil(quote.quote.valid_until - Date.now() / 1000));
+    text('quote-expiry', `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} to review`);
+  }
   trading?.update();
 }
 
@@ -230,7 +233,7 @@ $('quote-button').addEventListener('click', async () => {
   try {
     const result = await request('/api/quote?' + params, quoteController);
     if (generation !== quoteGeneration) return;
-    if (!result.quote || !snapshotFresh(result.snapshot) || result.quote.valid_until <= Date.now() / 1000) {
+    if (!snapshotFresh(result.snapshot) || !quoteReviewable(result)) {
       emptyQuote(result.reason || 'A fresh quote is unavailable. Refresh the data and retry.'); return;
     }
     quote = result;

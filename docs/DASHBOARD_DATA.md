@@ -106,9 +106,11 @@ Mutable chain reads use one block number, then recheck its hash. A changed code
 or deployment checkpoint requires manifest re-verification. Proxy implementation
 security is not established by a proxy runtime hash alone.
 
-Snapshots older than 30 seconds, future timestamps, or head advance beyond two
-blocks are marked stale. Trading is disabled and quotes are removed. The quote
-window also stops before market close. An idle Anvil fork does not automatically
+Snapshots older than 30 seconds, future timestamps, or local-fork head advance
+beyond two blocks are marked stale. New quotes are not issued from stale data.
+A quote issued from a fresh snapshot has a separate five-minute review window,
+capped before market close; execution must still obtain fresh state and simulate
+against its original limits. An idle Anvil fork does not automatically
 mine fresh blocks; refresh its local clock/block explicitly during development.
 The read API never performs that write. The browser must show stale/unavailable
 state instead of treating the last response as live.

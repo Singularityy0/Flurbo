@@ -60,7 +60,7 @@ async function harness(run) {
         return Response.json(snapshot(url.searchParams.get('wallet')));
       }
       if (url.pathname === '/api/quote') return Response.json({environment: 'public_testnet', chain_id: 10143,
-        snapshot: snapshot().snapshot, quote: {side: 'buy', scope: 128, mask: 2, quantity_atoms: '1000000', collateral_atoms: '740737', valid_until: now + 30}});
+        snapshot: snapshot().snapshot, quote: {side: 'buy', scope: 128, mask: 2, quantity_atoms: '1000000', collateral_atoms: '740737', valid_until: now + 300}});
       throw new Error('Unexpected test request');
     };
     get('mode').value = 'all'; get('side').value = 'buy'; get('quantity').value = '1';
@@ -79,6 +79,16 @@ async function harness(run) {
     for (const key of keys) { if (previous[key] === undefined) delete globalThis[key]; else globalThis[key] = previous[key]; }
   }
 }
+
+test('a quote can be reviewed after four minutes and still open the wallet after fresh preflight', async () => harness(async f => {
+  await f.click('quote-button');
+  f.advance(240); f.tick();
+  assert.equal(f.get('quote-expiry').textContent, '1:00 to review');
+  await f.click('review-trade');
+  assert.equal(f.get('confirm-trade').hidden, false);
+  await f.click('confirm-trade');
+  assert.equal(f.provider.calls.filter(method => method === 'eth_sendTransaction').length, 1);
+}));
 
 test('new quote survives an older display snapshot expiring during review and reaches the wallet', async () => harness(async f => {
   f.advance(20); await f.click('quote-button');
@@ -108,7 +118,7 @@ test('a previously started background refresh at a newer block does not invalida
 test('quote expiry and user input changes still cancel reviews before submission', async () => {
   for (const reason of ['expiry', 'input']) await harness(async f => {
     await f.click('quote-button'); await f.click('review-trade');
-    if (reason === 'expiry') { f.advance(31); f.tick(); }
+    if (reason === 'expiry') { f.advance(301); f.tick(); }
     else { f.get('quantity').value = '2'; f.get('quantity').handlers.input(); }
     assert.equal(f.get('confirm-trade').hidden, true);
     await f.click('confirm-trade');

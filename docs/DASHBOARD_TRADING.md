@@ -42,12 +42,20 @@ and tested on a separate local clone; a manual redemption popup remains untested
    refreshes balances and positions. Switch to Sell, request another quote, review
    and confirm to sell those same internal pool units.
 
-The quote/review must still be fresh when opening MetaMask. Trade calldata fixes
-the maximum cost or minimum proceeds and a deadline up to three minutes from
-review, capped before market close. This gives time for the wallet prompt while
+Quotes allow five minutes for review, shown as a minutes-and-seconds countdown.
+The page still requires a fresh chain snapshot (at most 30 seconds old) and a
+successful simulation before opening MetaMask. Trade calldata fixes the maximum
+cost or minimum proceeds and a deadline two minutes after the quote's review
+expiry, capped before market close. This gives time for the wallet prompt while
 the contract continues to enforce the reviewed bounds. An expired wallet prompt
 can revert on-chain; do not blindly retry it. ERC-20 approvals have no on-chain
 expiry, so the page states the exact amount and spender separately.
+
+Withdrawal, conversion and redemption reviews also allow five minutes, with
+fresh state and simulation required at confirmation. Their contract calls have
+no on-chain deadline. A longer review window is not a promise of a fixed market
+price: a price move beyond the original slippage bound blocks the trade instead
+of silently replacing the quote or increasing its spending limit.
 
 ## Automatic local funding and manual fallback
 

@@ -1,6 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { compileClaim, parseUnits, formatUnits, snapshotFresh } from './claims.mjs';
+import { compileClaim, parseUnits, formatUnits, snapshotFresh, quoteReviewable } from './claims.mjs';
+
+test('five-minute review lifetime is separate from the thirty-second live snapshot freshness', () => {
+  const quoted = {snapshot: {timestamp: 1000, stale: false}, quote: {valid_until: 1300}};
+  assert.equal(snapshotFresh(quoted.snapshot, 1240), false);
+  assert.equal(quoteReviewable(quoted, 1240), true);
+  assert.equal(quoteReviewable(quoted, 1299), true);
+  assert.equal(quoteReviewable(quoted, 1300), false);
+  assert.equal(quoteReviewable(quoted, 999), false);
+  for (const expiry of [NaN, Infinity, '1300', 1301, 1000]) {
+    assert.equal(quoteReviewable({...quoted, quote: {valid_until: expiry}}, 1100), false);
+  }
+  assert.equal(quoteReviewable({...quoted, snapshot: {...quoted.snapshot, stale: true}}, 1100), false);
+  assert.equal(quoteReviewable(null, 1100), false);
+});
 
 test('canonical masks preserve actual event ordering and mixed YES/NO payouts', () => {
   assert.equal(compileClaim([{ index: 7, yes: true }], 'all').mask, 2);

@@ -178,6 +178,13 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(result["quote"]["collateral_atoms"], expected)
             self.assertFalse(result["quote"]["ownership_checked"])
             self.assertTrue(result["quote"]["requires_execution_recheck"])
+            self.assertEqual(result["quote"]["valid_until"], 1300)
+
+    def test_review_window_is_capped_at_market_close(self):
+        model, rpc, m = setup()
+        model.m["closes_at"] = 1050
+        rpc.values[(m["pool"], "39a3a99a")] = [1050]
+        self.assertEqual(model.quote("buy", 128, 2, 1000000)["quote"]["valid_until"], 1049)
 
     def test_stale_data_is_flagged_and_quote_removed(self):
         model, rpc, _ = setup(clock=lambda: 1031)

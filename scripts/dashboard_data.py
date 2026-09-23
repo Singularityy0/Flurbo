@@ -297,7 +297,7 @@ class Dashboard:
                     raise CheckError("Quote exceeds supported payoff bounds")
                 result.update(quote_status="available", quote={"side": side, "scope": scope, "mask": mask,
                               "quantity_atoms": str(amount), "collateral_atoms": str(value),
-                              "valid_until": min(self.timestamp + 30, self.m["closes_at"] - 1),
+                              "valid_until": min(self.timestamp + 300, self.m["closes_at"] - 1),
                               "requires_execution_recheck": True, "ownership_checked": False})
             except CheckError:
                 result["reason"] = "Pool quote unavailable or rejected; no fallback price is supplied"

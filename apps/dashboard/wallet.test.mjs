@@ -97,7 +97,7 @@ function fixture() {
   const snapshot = { environment: 'local_fork', chain_id: 10143, snapshot: { timestamp: now, stale: false, block_number: 100, block_hash: '0x' + 'aa'.repeat(32) },
     trading_available: true, contracts: { pool: POOL, cash: CASH }, cluster: { closes_at: now + 1000 },
     wallet: { address: ACCOUNT, ausd_atoms: '10000000', native_balance_wei: '1000000000000000000', pool_allowance_atoms: '1000000', positions: [{ scope: 3, mask: 8, quantity_atoms: '1000000' }] } };
-  const quoted = { environment: 'local_fork', chain_id: 10143, snapshot: { ...snapshot.snapshot }, quote: { side: 'buy', scope: 3, mask: 8, quantity_atoms: '1000000', collateral_atoms: '250001', valid_until: now + 30 } };
+  const quoted = { environment: 'local_fork', chain_id: 10143, snapshot: { ...snapshot.snapshot }, quote: { side: 'buy', scope: 3, mask: 8, quantity_atoms: '1000000', collateral_atoms: '250001', valid_until: now + 300 } };
   const calls = [], overrides = {};
   const provider = { async request({ method, params }) {
     calls.push({ method, params });
@@ -163,7 +163,7 @@ test('buy calldata uses factored scope/mask, capped integer slippage and contrac
   assert.equal(p.limit, '251252'); assert.equal(p.kind, 'buy');
   assert.equal(p.tx.data, encode('3e6b6cde', 3, 8, 1000000, 251252, p.deadline));
   assert.equal(p.tx.chainId, '0x279f'); assert.equal(p.tx.value, '0x0');
-  assert.equal(p.deadline, snapshot.snapshot.timestamp + 180);
+  assert.equal(p.deadline, quoted.quote.valid_until + 120);
   assert.equal(boundFor({ ...quoted.quote, collateral_atoms: '1000000' }, 500), 1000000n);
 });
 
@@ -195,6 +195,23 @@ test('setup never funds on rejected prompts, unchanged public RPC, or changed ac
     if (reason === 'disabled') assert.equal(f.calls.length, 0);
   }
 });
+test('older reviewed quotes keep their limits while fresh execution state and simulation remain mandatory', async () => {
+  const f = fixture(), now = Math.floor(Date.now() / 1000);
+  f.quoted.snapshot.timestamp = now - 240;
+  f.quoted.quote.valid_until = now + 60;
+  const plan = await prepare(f.provider, f.snapshot, f.quoted, ACCOUNT, 50);
+  assert.equal(plan.limit, '251252');
+  assert.equal(plan.deadline, now + 180);
+  f.overrides.eth_call = () => encode('', 251253);
+  await assert.rejects(sendReviewed(f.provider, plan, f.snapshot), /Simulation/);
+  assert.equal(f.calls.some(call => call.method === 'eth_sendTransaction'), false);
+  f.snapshot.snapshot.timestamp = now - 31;
+  assert.throws(() => makePlan(f.snapshot, f.quoted, ACCOUNT, 50), /expired/);
+  f.snapshot.snapshot.timestamp = now;
+  f.snapshot.cluster.closes_at = now + 40;
+  assert.equal(makePlan(f.snapshot, f.quoted, ACCOUNT, 50).deadline, now + 39);
+});
+
 test('approvals are exact and a nonzero insufficient allowance is reset in a separate transaction', () => {
   const { snapshot, quoted } = fixture(); snapshot.wallet.pool_allowance_atoms = '0';
   const p = makePlan(snapshot, quoted, ACCOUNT, 50);
