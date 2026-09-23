@@ -61,6 +61,18 @@ library FactoredQuote {
         uint256 b = uint256(market.liquidity) * scale;
         F.Factor[] memory beforeWad = toWad(market.factors, scale);
         QuoteMath.CostBounds memory before_ = F.bounds(market.events, b, beforeWad, market.order);
+        quote.factorsAfter = updatedFactors(market, scope, mask, quantity, isBuy);
+        price(market, before_, quote, isBuy);
+        if (quote.collateral == 0 || (isBuy && quote.collateral > quantity)) revert UnquotableTrade();
+    }
+
+    /// @dev Liability update only. Caller must validate the input and resulting factor graphs.
+    function updatedFactors(Market memory market, uint32 scope, uint256 mask, uint128 quantity, bool isBuy)
+        internal
+        pure
+        returns (Factor[] memory)
+    {
+        if (quantity == 0 || quantity > market.liquidity) revert InvalidQuantity();
         uint256 size;
         for (uint32 s = scope; s != 0; s &= s - 1) {
             size++;
@@ -70,9 +82,7 @@ library FactoredQuote {
         uint256 full = (uint256(1) << states) - 1;
         if (mask == 0 || mask >= full) revert InvalidMask();
 
-        quote.factorsAfter = update(market.factors, scope, mask, quantity, states, isBuy);
-        price(market, before_, quote, isBuy);
-        if (quote.collateral == 0 || (isBuy && quote.collateral > quantity)) revert UnquotableTrade();
+        return update(market.factors, scope, mask, quantity, states, isBuy);
     }
 
     function price(Market memory market, QuoteMath.CostBounds memory before_, Quote memory quote, bool isBuy)
@@ -130,7 +140,7 @@ library FactoredQuote {
         after_[cursor] = Factor(scope, values);
     }
 
-    function toWad(Factor[] memory factors, uint256 scale) private pure returns (F.Factor[] memory result) {
+    function toWad(Factor[] memory factors, uint256 scale) internal pure returns (F.Factor[] memory result) {
         if (factors.length > 64) revert F.TooManyFactors();
         result = new F.Factor[](factors.length);
         for (uint256 i; i < factors.length; i++) {
