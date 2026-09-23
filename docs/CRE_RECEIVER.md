@@ -101,3 +101,29 @@ deliver generated TypeScript ABI bytes unchanged to local contracts, exercise al
 four two-event outcomes and exact multi-owner redemption, and reject replay,
 wrong-chain, stale and direct unsigned delivery. No production authentication
 or contract behavior was changed for this harness.
+
+## Factored pools: report version 2
+
+`FactoredCreSettlementReceiver` now ports the same immutable forwarder/workflow,
+domain, freshness and one-time-delivery boundary to `FactoredPool` and its
+`FundedFactoredPool` subclass. It accepts version **2** only and a `uint32`
+terminal state (event i is bit i, including bit 31). Metadata remains 64 bytes;
+the report remains seven ABI words. The original receiver and version-1 payload
+remain unchanged. Select the receiver before deploying the pool: its resolver is
+immutable.
+
+The synthetic TypeScript workflow opts in with `reportVersion: 2` and accepts
+1–32 fixture events. Version 1 remains the default with 1–3 reference events.
+Rules and evidence use separate `flurbo.synthetic.rules.v2` and
+`flurbo.synthetic.evidence.v2` domains; do not reuse a v1 rules hash for v2.
+Terminal-state construction uses unsigned arithmetic to preserve the high bit.
+
+Fifteen receiver tests cover authentication, binding, domain, age, canonical
+encoding, rollback/retry, replay, overlapping claims, and a 32-event funded-pool
+settlement/redemption. Seven additional contract tests deliver unchanged bytes
+from the TypeScript v2 fixture generator and redeem all two-event outcomes.
+The funded pool resolves actual liabilities; pricing bias does not alter payouts.
+
+These are local tests with synthetic evidence and an unauthenticated mock
+forwarder. Official event ingestion, DON signature verification, public receiver
+configuration/deployment and authenticated delivery remain outstanding.

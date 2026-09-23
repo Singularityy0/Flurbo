@@ -223,3 +223,8 @@ observations and prepares unsigned settlement payloads in the actual CRE CLI.
 Official source rules, API retrieval and verified network delivery remain pending.
 Kuru anchoring, factored inference and tradable conditionals remain required
 product milestones.
+
+The [local learning dashboard](docs/LEARNING_DASHBOARD.md) adds wallet review and
+confirmation of synthetic funded model updates at `http://127.0.0.1:18766/`.
+It runs separately from the AUSD/Monad demo. The [CRE v2 boundary](docs/CRE_RECEIVER.md#factored-pools-report-version-2)
+now settles factored/funded pools in local synthetic tests.

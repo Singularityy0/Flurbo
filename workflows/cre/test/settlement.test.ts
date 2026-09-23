@@ -87,3 +87,20 @@ test("commitments bind domain, rules, time and outcomes", () => {
   expect(prepare(config, changedObservation({ finalizedAt: now })).observationsHash).not.toBe(base.observationsHash);
   expect(prepare(config, changedObservation({ outcome: false })).rulesHash).toBe(base.rulesHash);
 });
+
+test("version 2 preserves bit 31 and separates the factored report domain", () => {
+  const events = Array.from({length: 32}, (_, bit) => ({id: `e-${bit}`, source: `fixture:${bit}`}));
+  const observations = events.map(event => ({eventId: event.id, source: event.source, outcome: true, final: true, finalizedAt: now}));
+  const c = {...config, reportVersion: 2, events};
+  const result = prepare(c, {...evidence, observations});
+  const words = result.unsignedReport.slice(2).match(/.{64}/g)!;
+  expect(result.terminalState).toBe(4294967295);
+  expect(BigInt('0x' + words[0])).toBe(2n);
+  expect(BigInt('0x' + words[6])).toBe(4294967295n);
+  const highOnly = observations.map((row, bit) => ({...row, outcome: bit === 31}));
+  expect(prepare(c, {...evidence, observations: highOnly}).terminalState).toBe(2147483648);
+  expect(() => prepare({...c, reportVersion: 1}, {...evidence, observations})).toThrow();
+  expect(() => prepare({...c, events: [...events, {id:'extra', source:'fixture:extra'}]}, {...evidence, observations})).toThrow();
+  expect(prepare({...config, reportVersion: 2}).rulesHash).not.toBe(prepare().rulesHash);
+  expect(prepare({...config, reportVersion: 2}).observationsHash).not.toBe(prepare().observationsHash);
+});

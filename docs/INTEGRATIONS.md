@@ -31,7 +31,9 @@ single-event and multi-leg buy/sell. [Settlement displays and redemption](DASHBO
 now pass partial-winner/loser tests on a separate clone. Manual redemption popup
 testing and remaining partner flows remain open. This engineering test surface does
 not replace the Expo/Mera/AUSD consumer app or establish partner completion.
-CRE adapters still target the enumerated pool and require a separate port.
+The [version-2 CRE receiver and synthetic payloads](CRE_RECEIVER.md#factored-pools-report-version-2)
+now also target factored/funded pools in local tests. Official observations and
+authenticated public delivery remain open.
 
 [H YES wallet wrap/unwrap](DASHBOARD_RECEIPTS.md) now passes exact conversion
 accounting on a disposable clone. Kuru margin deposits, withdrawals and order
@@ -91,8 +93,14 @@ external funding. The [integer funded pool](FUNDED_FACTORED_POOL.md) now enforce
 conservative reserve math, updater authorization, limits and bounded-width checks
 in local contract tests. A [deterministic proposal builder and disposable mock-chain
 rehearsal](LEARNING_EXECUTION.md) now connect the Rust learner to actual funded EVM
-updates. Dashboard operator controls and live signal ingestion remain pending;
-the persistent dashboard and partner deployments are unchanged.
+updates. A separate [learning dashboard](LEARNING_DASHBOARD.md) now supports
+reviewed wallet approvals, buy/update/sell and exact confirmation checks on a
+mock chain. Live signal ingestion and public execution remain pending; the
+persistent Monad dashboard and partner deployments are unchanged.
+
+The user selected `flurbo.singu.online` for passkeys. EAS profiles now record it;
+DNS/HTTPS hosting, the Android signing-certificate association and Mera device
+authentication remain unverified. See [native setup](../apps/mobile/PASSKEY_SETUP.md).
 
 Read the two papers requested in the idea before the pricing slice. Reviewed
 their mechanism and scope: [ParlayMarket](https://arxiv.org/html/2603.22596v2)

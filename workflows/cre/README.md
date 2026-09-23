@@ -122,3 +122,12 @@ runtime; it is not bundled into the CRE WASM workflow.
 This proves compatibility between the TypeScript report preparation and local
 Solidity settlement/accounting. It does not exercise DON signing, production
 forwarder verification, official APIs, actual AUSD or public-chain execution.
+
+Factored pools opt in with `reportVersion: 2` (1–32 synthetic events and a
+`uint32` terminal-state word), targeting `FactoredCreSettlementReceiver`.
+The default version 1 continues to target `CreSettlementReceiver` (1–3 events).
+The rules/evidence domains differ by version; regenerate commitments when changing
+versions. `bun run fixtures` and `bun run fixtures:check` now cover both receivers.
+The workflow still produces unsigned synthetic payloads only. See
+[the receiver version-2 boundary](../../docs/CRE_RECEIVER.md#factored-pools-report-version-2)
+for the tested scope and remaining live-delivery requirements.
