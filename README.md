@@ -79,6 +79,8 @@ inspection and transaction checks. [Local wallet trading](docs/DASHBOARD_TRADING
 now adds bounded approvals, buy/sell, slippage/deadline checks and event-confirmed
 tracking. A seven-transaction disposable-fork rehearsal passes; the user's
 Firefox/MetaMask signing test and full manual lifecycle validation remain next.
+An opt-in **Set up local wallet** button now requests the local network, verifies
+the exact fork and tops up missing test AUSD/MON. Wallet prompts still need approval.
 The [gas optimizations](docs/FACTORED_GAS.md) reduce measured large-graph quote
 costs by 35–38% cumulatively with unchanged outputs. The latest changes also cut
 the measured pool buy/sell costs by about 9%; deployment gas limits remain a gate.

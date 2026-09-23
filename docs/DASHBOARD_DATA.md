@@ -4,8 +4,8 @@
 manifest. `scripts/serve_dashboard.py` exposes it as a loopback HTTP API. This is
 the data-layer milestone; the [interactive screen](DASHBOARD_SCREEN.md) now runs
 on the same service, with [browser-wallet signing](DASHBOARD_TRADING.md) handled
-by the client. The API does not sign, approve, trade, resolve, mine blocks or
-publish a site.
+by the client. An optional local-only test-funding route now tops up test accounts;
+the API does not submit user approvals/trades, resolve markets or publish a site.
 
 ## Start and inspect
 
@@ -27,13 +27,20 @@ and hosting remain pending.
 
 | Endpoint | Returns |
 |---|---|
-| `/api/health` | Process liveness and read-only status; deliberately does not claim chain health |
+| `/api/health` | Process liveness, read-only status and `local_wallet_setup` availability; deliberately does not claim chain health |
 | `/api/state` | Synthetic event definitions, contract addresses, pool lifecycle, backing/coverage, executor balance and indicative Kuru bid/ask |
 | `/api/state?wallet=0x...&claims=128:2,3:8` | The same snapshot plus that wallet's AUSD/native/receipt balances, pool allowance, available Kuru margin, and requested internal claim holdings |
 | `/api/quote?side=buy&scope=128&mask=2&quantity=1000000` | Current pool buy cost for one event-H YES unit; `side=sell` reads pool sale proceeds |
 | `/api/transaction?hash=0x...` | Unknown, pending, awaiting receipt, succeeded or reverted state; canonical inclusion block, confirmation count and gas used when available |
 
-POST is rejected. The API does not forward arbitrary RPC methods or accept an
+POST is rejected by default. With `--enable-local-wallet-setup --provider local`,
+`POST /api/local-wallet-setup` accepts only `{"wallet":"0x..."}` to top up local
+test balances, with exact Origin/Host matching and a bounded JSON body. This
+changes health's `read_only` to false; data snapshots still describe read-only
+observations. The currently running development service has this option enabled.
+See [funding limits and recovery](DASHBOARD_TRADING.md).
+
+The API does not forward arbitrary RPC methods or accept an
 RPC URL in a request. Browser access is same-origin with host/origin checks and
 no CORS allowance. Every response disables caching; errors omit remote bodies,
 credentials and stack traces. A new RPC client is used per HTTP request.

@@ -64,7 +64,8 @@ In Git Bash, start the web service (only if it is not already running):
 ```bash
 cd /c/Users/anany/Flurbo
 python scripts/serve_dashboard.py \
-  --manifest target/deployments/demo-verified.json --provider local --port 18765
+  --manifest target/deployments/demo-verified.json --provider local --port 18765 \
+  --enable-local-wallet-setup
 ```
 
 In a second terminal, keep local blocks fresh:
@@ -96,7 +97,11 @@ already ahead of wall time. It does not sign transactions or accept a public RPC
 Running it naturally advances the market toward its immutable close time; it
 does not reopen a closed pool. Omit `--watch` to mine once.
 
-The dashboard server itself remains strictly read-only and loopback-only. Opening
+The server remains loopback-only. Omit `--enable-local-wallet-setup` to keep the
+HTTP API read-only. With it enabled, **Set up local wallet** can request wallet
+network setup, verify the fork and top up local test balances as described in
+[the trading guide](DASHBOARD_TRADING.md). Approvals/trades still require wallet
+confirmation. Opening
 this URL on an Android phone would refer to the phone's own loopback interface;
 this milestone is for a browser on the development computer. Phone-width browser
 validation is not native Android/Mera validation.

@@ -9,18 +9,24 @@ No user-wallet signing test has been completed yet.
 
 1. Open `http://127.0.0.1:18765/` in Firefox with MetaMask enabled. Keep the existing
    local Anvil and block helper running. This URL is on your development computer.
-2. Use a dedicated test account. In MetaMask, configure/select the local network
+2. Choose a dedicated test account in MetaMask, select MetaMask under Browser
+   wallet and click **Set up local wallet**. Approve account access and any network
+   prompts. Setup requests the local RPC, verifies the wallet's block hash against
+   this fork, and tops up the account to at least **10 local AUSD and 10 MON**.
+   Existing balances above those targets are preserved. It does not create an
+   account, read keys or approve spending.
+3. If MetaMask cannot apply the network request, configure/select the local network
    with RPC `http://127.0.0.1:18545`, chain ID `10143`, currency `MON` and a name such
    as `Flurbo local fork`. Public Monad testnet has the same chain ID. If MetaMask
    already has that network, select/add its local RPC entry rather than assuming
    a chain-ID switch chooses the right RPC. The dashboard verifies a block hash
    against its own snapshot and refuses a different fork or public testnet.
-3. Select MetaMask under Browser wallet and click **Connect wallet**. Authorize
-   the test account in MetaMask. The connected signer is shown separately from
-   the address-inspection form. Reading another address does not change the signer.
-4. Check that the signer has local AUSD and MON. If it does not, fund only that
-   public address on the local node using the commands below. Never paste a seed
-   phrase or private key into the dashboard, a source file or chat.
+   Then retry setup. Wallets may reject a loopback RPC request or retain their
+   existing RPC for the same chain ID; automatic replacement is not guaranteed.
+4. Check the connected signer and balances. The signer is shown separately from
+   the address-inspection form; reading another address does not change it.
+   **Connect wallet** remains available for an already configured/funded account.
+   Never paste a seed phrase or private key into the dashboard, source files or chat.
 5. Select H YES, Buy, quantity 1, and request a pool quote. Choose a slippage limit
    (default 0.5%), then **Review next step**. Read the account, contract, allowance
    amount or price limit, and proposed gas budget.
@@ -40,7 +46,23 @@ the contract continues to enforce the reviewed bounds. An expired wallet prompt
 can revert on-chain; do not blindly retry it. ERC-20 approvals have no on-chain
 expiry, so the page states the exact amount and spender separately.
 
-## Local test funding, if needed
+## Automatic local funding and manual fallback
+
+The running development server has `--enable-local-wallet-setup` enabled. Without
+that flag the server is read-only and automatic funding is unavailable. The flag
+requires `--provider local`; the funding client is fixed to `127.0.0.1:18545` and
+checks Anvil, chain identity, deployment checkpoint, code and fresh/open/backed
+pool state before writing. Only the selected public address is sent to the API.
+It accepts no amount, sender, transaction or RPC URL from the browser.
+
+Top-ups transfer only missing test AUSD from the local unlocked operator and
+raise the native balance only when below 10 MON. Repeating setup at the targets
+sends no transfer. An uncertain transfer blocks resubmission for that address
+within the running server; this lock is not persisted across a server restart.
+Inspect balances and the local operator transaction before restarting after an
+uncertain result. Native funding can succeed before a token transfer fails.
+
+If automatic setup is unavailable, the manual fallback is:
 
 These commands use the current demo operator's unlocked **local** account and
 local token balance. They do not use a private key and do not fund public testnet.
@@ -67,8 +89,9 @@ you intend another transfer.
 
 ## Submission and recovery
 
-Every write goes through the selected wallet's `eth_sendTransaction`. The Python
-HTTP API still has no send/sign/estimate/write RPC methods. Connection follows
+Every approval and trade goes through the selected wallet's `eth_sendTransaction`.
+The opt-in Python funding route only tops up local test balances; it cannot submit
+user approvals or trades. The read data client still prohibits writes. Connection follows
 [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193), with
 [EIP-6963 provider discovery](https://eips.ethereum.org/EIPS/eip-6963) and an
 injected-provider fallback. No key material is read by the page.
@@ -109,7 +132,8 @@ concurrent balance changes are all attributable to one transaction.
 
 ## Verification and limits
 
-51 Python tests and 19 JavaScript tests pass, including asynchronous duplicate
+56 Python tests and 21 JavaScript tests pass, including local funding guards,
+network setup and wrong-fork rejection, asynchronous duplicate
 submission prevention, account changes while a wallet prompt is open, rejection
 versus uncertain errors, restored pending locks and receipt-event matching.
 
@@ -120,6 +144,11 @@ position deltas were exact; collateral coverage and receipt backing remained tru
 That test adapter uses unlocked local accounts and is **not a MetaMask popup test**.
 The clone was stopped afterward; the existing demo at 18545 was unchanged.
 Evidence is in ignored `target/deployments/dashboard-wallet-rehearsal.json`.
+
+A real HTTP setup check on the existing local fork funded a disposable address
+with 10 test AUSD and 10 MON; a second request added nothing and sent no transfer.
+Evidence is in ignored `target/deployments/local-wallet-setup-check.json`. Actual
+Firefox/MetaMask account and network prompts still require manual verification.
 
 ```bash
 python -m unittest discover -s scripts -p 'test_*.py'
