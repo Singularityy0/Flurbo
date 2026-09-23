@@ -192,6 +192,11 @@ pending rather than being replaced with invented historical rows.
 
 ## Next execution gate
 
+The [funded repricing reference](FUNDED_REPRICING.md) now implements a separate
+bias/payout accounting model, explicit funding and movement caps, revision checks
+and adversarial trade simulations. It is offline f64 research code; the remaining
+integer, authentication and graph-width gates below still apply.
+
 Keep actual liabilities immutable under learning. Specify how a model update is
 funded, authenticated, bounded and made deterministic; analyse transaction-order
 manipulation and round-trip extraction; then prove/test collateral preservation

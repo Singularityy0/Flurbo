@@ -2,6 +2,7 @@
 
 pub mod accounting;
 pub mod factored;
+pub mod funded_repricing;
 pub mod parlay_learning;
 pub mod pricing;
 

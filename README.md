@@ -54,6 +54,13 @@ Published historical results have not been reproduced; the authors' dataset is
 unavailable. No statistical loss guarantees are claimed. Run
 `python scripts/parlay_report.py` for the reproducible report and trajectories.
 
+The next [funded repricing reference](docs/FUNDED_REPRICING.md) connects learned
+prices to simulated trades while preserving actual payouts and requiring explicit
+external funding. It tests reserve coverage, update limits and round-trip
+extraction. Run `cargo run --offline -p flurbo-core --example funded_reprice`.
+This remains offline: integer contract integration and update authentication
+are the next gate.
+
 A [factored pricing reference](docs/FACTORED_PRICING.md) now evaluates one global
 LMSR cost, conjunction probabilities and maximum liabilities for up to 32 binary
 events under a validated elimination order of width at most two. Buy/sell

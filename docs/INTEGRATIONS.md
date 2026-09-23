@@ -85,6 +85,11 @@ gradient equations with explicit virtual shadow books. It leaves the shared
 on-chain maker and partner architecture intact. Exact historical reproduction
 remains pending source data; no statistical loss guarantees are claimed.
 
+The next [funded repricing reference](FUNDED_REPRICING.md) connects learned
+probabilities to simulated fills with a separate payout ledger and explicit
+external funding. It does not yet change executable on-chain prices; conservative
+integer math, updater authorization and bounded-width compatibility remain gates.
+
 Read the two papers requested in the idea before the pricing slice. Reviewed
 their mechanism and scope: [ParlayMarket](https://arxiv.org/html/2603.22596v2)
 uses a shared pairwise model with learning/error analysis; its statistical loss
