@@ -108,6 +108,24 @@ function fixture() {
   return { snapshot, quoted, provider, calls, overrides };
 }
 
+test('public Monad testnet trades, conversions and redemptions retain snapshot and collateral checks', async () => {
+  const cash = '0xa9012a055bd4e0edff8ce09f960291c09d5322dc';
+  const f = fixture(); f.snapshot.environment = f.quoted.environment = 'public_testnet'; f.snapshot.contracts.cash = cash;
+  for (const side of ['buy', 'sell']) {
+    f.quoted.quote.side = side;
+    const plan = await prepare(f.provider, f.snapshot, f.quoted, ACCOUNT, 50);
+    assert.equal(plan.kind, side);
+    await sendReviewed(f.provider, plan, f.snapshot);
+  }
+  f.overrides.eth_getBlockByNumber = () => ({hash: '0x' + 'bb'.repeat(32)});
+  await assert.rejects(assertContext(f.provider, f.snapshot, ACCOUNT), /public Monad testnet/);
+  f.quoted.environment = 'local_fork'; assert.throws(() => makePlan(f.snapshot, f.quoted, ACCOUNT, 50));
+  const c = convertible(); c.snapshot.environment = 'public_testnet'; c.snapshot.contracts.cash = cash;
+  assert.equal((await prepareConversion(c.provider, c.snapshot, 'wrap', ACCOUNT, '1')).kind, 'wrap');
+  const r = settled(); r.snapshot.environment = 'public_testnet'; r.snapshot.contracts.cash = cash;
+  assert.equal(makeRedemptionPlan(r.snapshot, {scope:129,mask:8}, ACCOUNT, '1').kind, 'redeem');
+});
+
 test('buy calldata uses factored scope/mask, capped integer slippage and contract deadline', () => {
   const { snapshot, quoted } = fixture();
   const p = makePlan(snapshot, quoted, ACCOUNT, 50, snapshot.snapshot.timestamp);
@@ -189,7 +207,7 @@ test('review simulates, pads gas, fixes a fee budget, and never submits', async 
   assert.equal(p.gasBudget, '240000000000000');
   assert.equal(f.calls.some(c => c.method === 'eth_sendTransaction'), false);
   f.snapshot.wallet.native_balance_wei = '0';
-  await assert.rejects(prepare(f.provider, f.snapshot, f.quoted, ACCOUNT, 50), /local MON/);
+  await assert.rejects(prepare(f.provider, f.snapshot, f.quoted, ACCOUNT, 50), /MON/);
 });
 test('confirmation rechecks context and simulation and sends exactly the reviewed fields once', async () => {
   const f = fixture(); const p = await prepare(f.provider, f.snapshot, f.quoted, ACCOUNT, 50);

@@ -4,6 +4,7 @@ import { compileClaim, snapshotFresh } from './claims.mjs';
 export const CHAIN_ID = '0x279f';
 export const SELECTORS = { buy: '3e6b6cde', sell: 'c39849c5', approve: '095ea7b3', redeem: 'df992423', wrap: 'b0a52172', unwrap: 'f6c4eade' };
 const conversion = kind => kind === 'wrap' || kind === 'unwrap';
+export const supportedDeployment = state => state?.chain_id === 10143 && (state.environment === 'local_fork' || (state.environment === 'public_testnet' && state.contracts?.cash?.toLowerCase() === '0xa9012a055bd4e0edff8ce09f960291c09d5322dc'));
 const MAX128 = (1n << 128n) - 1n;
 export const address = value => {
   if (!/^0x[0-9a-fA-F]{40}$/.test(value)) throw new Error('Invalid wallet or contract address.');
@@ -50,8 +51,8 @@ export function walletMessage(error) {
   if (error?.code === 4001) return 'You rejected the wallet request. Nothing was submitted by this request.';
   if (error?.code === -32002) return 'A request is already open in your wallet. Complete or reject it there.';
   if (error?.code === 4100) return 'The wallet has not authorized this account. Reconnect it.';
-  if ([4900, 4901].includes(error?.code)) return 'The wallet is disconnected from the required local network.';
-  return error instanceof WalletError ? error.message : 'Wallet request failed. Check the wallet and its local RPC connection; remote details are withheld.';
+  if ([4900, 4901].includes(error?.code)) return 'The wallet is disconnected from the required Monad network.';
+  return error instanceof WalletError ? error.message : 'Wallet request failed. Check the wallet and its RPC connection; remote details are withheld.';
 }
 
 export function boundFor(quote, bps) {
@@ -70,8 +71,8 @@ export function boundFor(quote, bps) {
 
 export function makePlan(snapshot, quoted, account, bps, now = Date.now() / 1000) {
   account = address(account);
-  if (snapshot.environment !== 'local_fork' || quoted.environment !== 'local_fork' || snapshot.chain_id !== 10143 || quoted.chain_id !== 10143) {
-    throw new WalletError('This transaction phase supports only the verified local fork.');
+  if (!supportedDeployment(snapshot) || quoted.environment !== snapshot.environment || quoted.chain_id !== 10143) {
+    throw new WalletError('A verified Monad testnet deployment and matching quote are required.');
   }
   if (!snapshotFresh(snapshot.snapshot, now) || !snapshotFresh(quoted.snapshot, now) || !snapshot.trading_available || !quoted.quote || now >= quoted.quote.valid_until) {
     throw new WalletError('The quote or pool state expired. Refresh and request a new quote.');
@@ -86,7 +87,7 @@ export function makePlan(snapshot, quoted, account, bps, now = Date.now() / 1000
   const pool = address(snapshot.contracts.pool), cash = address(snapshot.contracts.cash);
   let kind = q.side, approval;
   if (kind === 'buy') {
-    if (BigInt(w.ausd_atoms) < limit) throw new WalletError('Not enough local test AUSD for this buy. Click Set up local wallet to top up test balances, then get a new quote.');
+    if (BigInt(w.ausd_atoms) < limit) throw new WalletError(snapshot.environment === 'local_fork' ? 'Not enough local test AUSD for this buy. Click Set up local wallet to top up test balances, then get a new quote.' : 'Not enough test AUSD. Fund this wallet on Monad testnet, then request a new quote.');
     if (BigInt(w.pool_allowance_atoms) < limit) {
       kind = 'approve';
       approval = BigInt(w.pool_allowance_atoms) > 0n ? 0n : limit;
@@ -111,11 +112,11 @@ export async function assertContext(provider, snapshot, account) {
   const accounts = await provider.request({ method: 'eth_accounts' });
   if (!Array.isArray(accounts) || !accounts.length || address(accounts[0]) !== address(account)) throw new WalletError('Wallet account changed. Reconnect and review again.');
   const chain = await provider.request({ method: 'eth_chainId' });
-  if (BigInt(chain) !== 10143n) throw new WalletError('Select the local Monad fork (chain 10143, RPC http://127.0.0.1:18545) in your wallet.');
-  if (snapshot.environment !== 'local_fork' || snapshot.chain_id !== 10143 || !snapshotFresh(snapshot.snapshot)) throw new WalletError('A fresh local deployment snapshot is required.');
+  if (BigInt(chain) !== 10143n) throw new WalletError(snapshot.environment === 'local_fork' ? 'Select the local Monad fork (chain 10143, RPC http://127.0.0.1:18545) in your wallet.' : 'Select Monad testnet (chain 10143) in your wallet.');
+  if (!supportedDeployment(snapshot) || !snapshotFresh(snapshot.snapshot)) throw new WalletError('A fresh verified Monad deployment snapshot is required.');
   const block = await provider.request({ method: 'eth_getBlockByNumber', params: [hex(snapshot.snapshot.block_number), false] });
   if (!block || block.hash?.toLowerCase() !== snapshot.snapshot.block_hash.toLowerCase()) {
-    throw new WalletError('Wallet RPC does not match this local fork. Public Monad testnet has the same chain ID; choose RPC http://127.0.0.1:18545 manually.');
+    throw new WalletError(snapshot.environment === 'local_fork' ? 'Wallet RPC does not match this local fork. Public Monad testnet has the same chain ID; choose RPC http://127.0.0.1:18545 manually.' : 'Wallet RPC does not match public Monad testnet. Select https://testnet-rpc.monad.xyz manually, then reconnect.');
   }
 }
 
@@ -139,9 +140,9 @@ export async function prepare(provider, snapshot, quoted, account, bps) {
 
 export function makeRedemptionPlan(snapshot, selected, account, quantity) {
   account = address(account);
-  if (snapshot.environment !== 'local_fork' || snapshot.chain_id !== 10143 || !snapshotFresh(snapshot.snapshot) ||
+  if (!supportedDeployment(snapshot) || !snapshotFresh(snapshot.snapshot) ||
       !snapshot.redemption_available || !snapshot.pool?.resolved || !snapshot.pool.covered || !snapshot.pool.receipt_backed) {
-    throw new WalletError('Redemption requires a fresh, resolved and fully backed local pool.');
+    throw new WalletError('Redemption requires a fresh, resolved and fully backed Monad pool.');
   }
   const outcome = snapshot.pool.resolved_state;
   if (!Number.isInteger(outcome) || outcome < 0 || outcome > 255) throw new WalletError('Invalid settlement outcome.');
@@ -170,9 +171,9 @@ export async function prepareRedemption(provider, snapshot, selected, account, q
 
 export function makeConversionPlan(snapshot, kind, account, quantity) {
   account = address(account);
-  if (!conversion(kind) || snapshot.environment !== 'local_fork' || snapshot.chain_id !== 10143 ||
+  if (!conversion(kind) || !supportedDeployment(snapshot) ||
       !snapshotFresh(snapshot.snapshot) || !snapshot.conversion_available || !snapshot.pool?.receipt_backed) {
-    throw new WalletError('Conversion requires a fresh local snapshot and fully backed canonical H YES receipts.');
+    throw new WalletError('Conversion requires a fresh verified snapshot and fully backed canonical H YES receipts.');
   }
   const qty = BigInt(quantity), w = snapshot.wallet;
   if (!w || address(w.address) !== account || qty <= 0n || qty > MAX128) throw new WalletError('Choose a positive conversion quantity for the connected wallet.');
@@ -195,8 +196,8 @@ async function preparePlan(provider, snapshot, plan) {
   const estimate = BigInt(await provider.request({ method: 'eth_estimateGas', params: [plan.tx] }));
   const gas = (estimate * 120n + 99n) / 100n;
   const gasPrice = BigInt(await provider.request({ method: 'eth_gasPrice' })) * 2n;
-  if (gas <= 0n || gas > 30000000n || gasPrice <= 0n) throw new WalletError('Gas estimate is outside the local test limits.');
-  if (BigInt(snapshot.wallet.native_balance_wei) < gas * gasPrice) throw new WalletError('Not enough local MON for the reviewed gas budget.');
+  if (gas <= 0n || gas > 30000000n || gasPrice <= 0n) throw new WalletError('Gas estimate is outside the supported limits.');
+  if (BigInt(snapshot.wallet.native_balance_wei) < gas * gasPrice) throw new WalletError('Not enough MON for the reviewed gas budget.');
   plan.tx.gas = hex(gas); plan.tx.gasPrice = hex(gasPrice);
   plan.gasBudget = (gas * gasPrice).toString();
   if (Date.now() / 1000 >= plan.quoteExpiry) throw new WalletError(plan.kind === 'redeem' || conversion(plan.kind) ? 'Snapshot expired during review. Refresh and review again.' : 'Quote expired during review. Request a new quote.');

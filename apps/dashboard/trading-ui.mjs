@@ -102,7 +102,7 @@ export function mountTrading(hooks) {
     if (providers.length === 0) $('wallet-provider').replaceChildren();
     providers.push({ provider: candidate }); $('wallet-provider').append(option);
     if (providers.length === 1) $('wallet-provider').value = '0';
-    if (!account) text('signer-status', 'Select a browser wallet and connect your dedicated local test account.');
+    if (!account) text('signer-status', 'Select a browser wallet and connect your test account.');
     update();
   }
   const announced = event => addProvider(event.detail?.provider, event.detail?.info?.name);
@@ -118,7 +118,7 @@ export function mountTrading(hooks) {
     const changed = () => disconnect('Wallet account or network changed. Reconnect and review again. Any open wallet request must be handled in the wallet.');
     for (const name of ['accountsChanged', 'chainChanged', 'disconnect']) selected.on(name, changed);
     removeListeners = () => { for (const name of ['accountsChanged', 'chainChanged', 'disconnect']) selected.removeListener(name, changed); };
-    text('signer-status', `Connected ${account} · local fork verified`);
+    text('signer-status', `Connected ${account} · ${hooks.getState?.()?.environment === 'public_testnet' ? 'Monad testnet verified' : 'local fork verified'}`);
     hooks.accountChanged(account);
   }
   $('setup-wallet').addEventListener('click', async () => {
@@ -201,7 +201,7 @@ export function mountTrading(hooks) {
     const quoted = hooks.getQuote();
     if (!provider || !account || !quoted?.quote || pending || operation) return;
     const current = ++generation, signer = provider, owner = account;
-    review = null; operation = true; update(); text('execution-status', 'Checking account, local fork, balances, allowance and gas…');
+    review = null; operation = true; update(); text('execution-status', 'Checking account, Monad network, balances, allowance and gas…');
     try {
       const state = await hooks.readSnapshot(owner, quoted.quote);
       const plan = await prepare(signer, state, quoted, owner, Number($('slippage').value));

@@ -18,16 +18,17 @@ let stateController, quoteController, txController;
 let lastFailure = '', selectedLabels = new Map();
 let trading;
 
+const requestCredentials = options.credentials || 'omit';
 async function request(path, controller, options = {}) {
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-    const response = await fetch(path, { ...options, signal: controller.signal, cache: 'no-store', credentials: options.credentials || 'omit' });
+    const response = await fetch(path, { ...options, signal: controller.signal, cache: 'no-store', credentials: requestCredentials });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Data is unavailable. Try refreshing.');
     return result;
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('Request interrupted or timed out. Try again.');
-    if (error instanceof TypeError) throw new Error('Cannot reach the local dashboard service. Check that it is running.');
+    if (error instanceof TypeError) throw new Error('Cannot reach the market service. Please try again shortly.');
     throw error;
   } finally { clearTimeout(timeout); }
 }
@@ -121,13 +122,13 @@ function tick() {
   $('refresh').disabled = stateBusy;
   $('refresh').textContent = stateBusy ? 'Reading…' : 'Refresh data ↻';
   $('status-dot').className = 'status-dot' + (lastFailure ? ' off' : fresh ? ' live' : '');
-  text('connection', stateBusy ? 'Refreshing chain data…' : lastFailure ? 'Data unavailable' : !data ? 'Connecting to local data…' : fresh ? 'Chain data is fresh' : 'Snapshot is stale');
+  text('connection', stateBusy ? 'Refreshing chain data…' : lastFailure ? 'Data unavailable' : !data ? 'Connecting to Monad…' : fresh ? 'Chain data is fresh' : 'Snapshot is stale');
   text('block-label', data ? `Block ${data.snapshot.block_number.toLocaleString()} · ${Math.max(0, Math.floor(Date.now() / 1000 - data.snapshot.timestamp))}s old` : '');
   $('notice').className = 'notice' + (fresh && !lastFailure ? ' good' : '');
   text('notice', lastFailure || (!data ? 'Loading the verified deployment. No wallet is connected.' : !fresh
-    ? 'Showing the last snapshot. Quotes are disabled until fresh chain data arrives. For the local fork, run the local block helper described in the dashboard guide.'
+    ? 'Showing the last snapshot. Quotes are disabled until fresh chain data arrives. Refresh when the network is available.'
     : !usable ? 'Pool quotes are unavailable: the market is closed, resolved, unfunded or has a backing shortfall.'
-    : `${data.environment === 'local_fork' ? 'Local Monad fork' : 'Monad testnet'} · Synthetic events · Pool quotes are on-chain. Local trades require your connected wallet's approval.`));
+    : `${data.environment === 'local_fork' ? 'Local Monad fork' : 'Monad testnet'} · Synthetic events · Pool quotes are on-chain. Trades require your connected wallet's approval.`));
   if (quote && (!snapshotFresh(quote.snapshot) || Date.now() / 1000 >= quote.quote.valid_until || !usable)) {
     invalidateQuote('Quote expired or chain data became stale. Refresh and request a new quote.');
   } else if (quote) text('quote-expiry', `${Math.max(0, Math.ceil(quote.quote.valid_until - Date.now() / 1000))}s remaining`);

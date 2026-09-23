@@ -1,12 +1,13 @@
 import { bytesToHex, keccak256, serializeTransaction, type Hex } from 'viem';
+import { TESTNET } from '../../server/network.mjs';
 import type { AuthController } from './controller';
-import { WalletError } from '../../../dashboard/wallet.mjs';
+import { WalletError, supportedDeployment } from '../../../dashboard/wallet.mjs';
 
 async function rpc(method: string, params: unknown[] = []) {
   const response = await fetch('/api/rpc', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ method, params }), signal: AbortSignal.timeout(20_000) });
   const value = await response.json();
-  if (!response.ok || value.error) throw new WalletError('Local chain request failed. Check transaction tracking before retrying.');
+  if (!response.ok || value.error) throw new WalletError('Monad request failed. Check transaction tracking before retrying.');
   return value.result;
 }
 
@@ -31,18 +32,21 @@ export function meraProvider(controller: AuthController) {
         if (!controller.getSnapshot().signingExpiresAt || !owner) throw new WalletError('Use Unlock signing at the top of the workspace, then review again.');
         const input = params[0] as Record<string, string>;
         if (!input || input.from?.toLowerCase() !== owner.toLowerCase() || BigInt(input.chainId) !== 10143n || BigInt(input.value) !== 0n) throw new Error('Unsupported transaction');
-        const response = await fetch('/api/state', { cache: 'no-store' });
+        const faucet = input.to?.toLowerCase() === TESTNET.faucet && input.data?.toLowerCase() === TESTNET.faucetSelector + owner.toLowerCase().slice(2).padStart(64, '0');
+        const response = await fetch(faucet ? '/api/network' : '/api/state', { cache: 'no-store' });
         if (!response.ok) throw new Error('Deployment unavailable');
         const state = await response.json();
         const selector = input.data?.slice(0, 10);
-        if (state.environment !== 'local_fork' || state.chain_id !== 10143 || ![state.contracts.pool, state.contracts.cash].some((a: string) => a.toLowerCase() === input.to?.toLowerCase()) ||
+        if (faucet ? state.environment !== 'public_testnet' || state.chain_id !== 10143 : !supportedDeployment(state) || ![state.contracts.pool, state.contracts.cash].some((a: string) => a.toLowerCase() === input.to?.toLowerCase()) ||
             !(input.to.toLowerCase() === state.contracts.cash.toLowerCase()
               ? selector === '0x095ea7b3'
-              : ['0x3e6b6cde', '0xc39849c5', '0xb0a52172', '0xf6c4eade', '0xdf992423'].includes(selector))) throw new Error('Unsupported local contract');
+              : ['0x3e6b6cde', '0xc39849c5', '0xb0a52172', '0xf6c4eade', '0xdf992423'].includes(selector))) throw new Error('Unsupported Monad contract');
         const chain = await rpc('eth_chainId');
-        if (BigInt(chain) !== 10143n) throw new Error('Wrong local chain');
+        if (BigInt(chain) !== 10143n) throw new Error('Wrong Monad network');
+        if (!faucet) {
         const block = await rpc('eth_getBlockByNumber', ['0x' + BigInt(state.snapshot.block_number).toString(16), false]);
-        if (block?.hash?.toLowerCase() !== state.snapshot.block_hash.toLowerCase()) throw new Error('Local fork changed');
+        if (block?.hash?.toLowerCase() !== state.snapshot.block_hash.toLowerCase()) throw new Error('Monad snapshot changed');
+        }
         const nonce = BigInt(await rpc('eth_getTransactionCount', [owner, 'pending']));
         if (nonce > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Nonce out of range');
         const tx = { type: 'legacy' as const, chainId: 10143, nonce: Number(nonce), to: input.to as Hex, data: input.data as Hex,
@@ -52,7 +56,7 @@ export function meraProvider(controller: AuthController) {
         const serialized = serializeTransaction(tx, { r: bytesToHex(signature.compact.slice(0, 32)), s: bytesToHex(signature.compact.slice(32)), v: 27n + BigInt(signature.recovery) });
         return rpc('eth_sendRawTransaction', [serialized]);
       }
-      if (!['eth_chainId', 'eth_getBlockByNumber', 'eth_call', 'eth_estimateGas', 'eth_gasPrice'].includes(method)) throw new Error('Unsupported wallet request');
+      if (!['eth_chainId', 'eth_getBlockByNumber', 'eth_call', 'eth_estimateGas', 'eth_gasPrice', 'eth_getBalance', 'eth_getTransactionReceipt'].includes(method)) throw new Error('Unsupported wallet request');
       return rpc(method, params);
     },
   };
