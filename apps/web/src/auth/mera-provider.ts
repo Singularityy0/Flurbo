@@ -1,4 +1,5 @@
 import { bytesToHex, keccak256, serializeTransaction, type Hex } from 'viem';
+import { validWithdrawal } from '../../server/withdrawal-policy.mjs';
 import { TESTNET } from '../../server/network.mjs';
 import type { AuthController } from './controller';
 import { WalletError, supportedDeployment } from '../../../dashboard/wallet.mjs';
@@ -39,7 +40,7 @@ export function meraProvider(controller: AuthController) {
         const selector = input.data?.slice(0, 10);
         if (faucet ? state.environment !== 'public_testnet' || state.chain_id !== 10143 : !supportedDeployment(state) || ![state.contracts.pool, state.contracts.cash].some((a: string) => a.toLowerCase() === input.to?.toLowerCase()) ||
             !(input.to.toLowerCase() === state.contracts.cash.toLowerCase()
-              ? selector === '0x095ea7b3'
+              ? validWithdrawal({ to: input.to, data: input.data, account: owner, cash: state.contracts.cash, pool: state.contracts.pool }) || selector === '0x095ea7b3'
               : ['0x3e6b6cde', '0xc39849c5', '0xb0a52172', '0xf6c4eade', '0xdf992423'].includes(selector))) throw new Error('Unsupported Monad contract');
         const chain = await rpc('eth_chainId');
         if (BigInt(chain) !== 10143n) throw new Error('Wrong Monad network');

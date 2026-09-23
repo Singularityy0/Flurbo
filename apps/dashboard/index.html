@@ -66,6 +66,14 @@
           <p id="settlement-status" class="caption" role="status">Waiting for settlement data…</p>
           <p class="caption">Uses the claim and quantity in Your prediction. Winning internal units pay 1 AUSD each. Clearing losing units pays zero and still costs gas. Wrapped receipts must be unwrapped separately.</p>
           <button id="review-redeem" class="button secondary wide" disabled>Review redemption</button>
+          <h3>Withdraw available AUSD</h3>
+          <p class="caption">Send AUSD from your selected trading wallet to MetaMask or another address on this Monad network. First sell or redeem any positions you want to turn into AUSD. This is a token transfer, not a bridge or bank withdrawal.</p>
+          <p id="withdrawal-status" class="caption" role="status">Connect the wallet holding your AUSD.</p>
+          <label for="recipient-wallet">Receiving browser wallet (optional)</label><select id="recipient-wallet"><option value="">Choose a wallet or paste an address below</option></select>
+          <button id="use-recipient-wallet" class="button secondary" disabled>Use receiving wallet address</button>
+          <label for="withdrawal-address">Receiving address on the same Monad network</label><input id="withdrawal-address" placeholder="0x..." maxlength="42" autocomplete="off" spellcheck="false">
+          <label for="withdrawal-quantity">AUSD to send</label><input id="withdrawal-quantity" inputmode="decimal" placeholder="0.00" autocomplete="off">
+          <button id="review-withdraw" class="button secondary wide" disabled>Review withdrawal</button>
           <div id="review-details" class="review-details" hidden></div>
           <button id="confirm-trade" class="button primary wide" hidden disabled>Confirm in wallet</button>
           <button id="cancel-review" class="button quiet" hidden>Cancel review</button>

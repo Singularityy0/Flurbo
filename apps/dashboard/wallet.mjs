@@ -2,7 +2,7 @@
 import { compileClaim, snapshotFresh } from './claims.mjs';
 
 export const CHAIN_ID = '0x279f';
-export const SELECTORS = { buy: '3e6b6cde', sell: 'c39849c5', approve: '095ea7b3', redeem: 'df992423', wrap: 'b0a52172', unwrap: 'f6c4eade' };
+export const SELECTORS = { buy: '3e6b6cde', sell: 'c39849c5', approve: '095ea7b3', redeem: 'df992423', wrap: 'b0a52172', unwrap: 'f6c4eade', withdraw: 'a9059cbb' };
 const conversion = kind => kind === 'wrap' || kind === 'unwrap';
 export const supportedDeployment = state => state?.chain_id === 10143 && (state.environment === 'local_fork' || (state.environment === 'public_testnet' && state.contracts?.cash?.toLowerCase() === '0xa9012a055bd4e0edff8ce09f960291c09d5322dc'));
 const MAX128 = (1n << 128n) - 1n;
@@ -128,7 +128,7 @@ export async function simulate(provider, plan) {
   }
   if (!/^0x[0-9a-fA-F]{64}$/.test(output)) throw new WalletError('Unexpected contract simulation result.');
   const amount = BigInt(output);
-  if (plan.kind === 'redeem' ? amount !== BigInt(plan.payout) : plan.kind === 'approve' ? amount !== 1n : plan.kind === 'buy' ? amount > BigInt(plan.limit) : amount < BigInt(plan.limit)) {
+  if (plan.kind === 'redeem' ? amount !== BigInt(plan.payout) : ['approve', 'withdraw'].includes(plan.kind) ? amount !== 1n : plan.kind === 'buy' ? amount > BigInt(plan.limit) : amount < BigInt(plan.limit)) {
     throw new WalletError('Simulation did not satisfy the reviewed approval, price limit or redemption payout.');
   }
 }
@@ -190,6 +190,22 @@ export async function prepareConversion(provider, snapshot, kind, account, quant
   return preparePlan(provider, snapshot, makeConversionPlan(snapshot, kind, account, quantity));
 }
 
+export function makeWithdrawalPlan(snapshot, account, recipient, quantity) {
+  account = address(account); recipient = address(recipient);
+  if (!supportedDeployment(snapshot) || !snapshotFresh(snapshot.snapshot)) throw new WalletError('A fresh Monad snapshot is required for withdrawal.');
+  const pool = address(snapshot.contracts.pool), cash = address(snapshot.contracts.cash), qty = BigInt(quantity);
+  if (['0x' + '0'.repeat(40), account, pool, cash].includes(recipient)) throw new WalletError('Choose a different receiving wallet, not a pool or token contract.');
+  if (!snapshot.wallet || address(snapshot.wallet.address) !== account || qty <= 0n || qty > MAX128 || BigInt(snapshot.wallet.ausd_atoms) < qty) {
+    throw new WalletError('Withdraw only available AUSD in the selected wallet. Sell or redeem positions first; Kuru deposits are separate.');
+  }
+  return { kind: 'withdraw', account, recipient, pool, cash, quantity: qty.toString(), quoteExpiry: snapshot.snapshot.timestamp + 30,
+    tx: { from: account, to: cash, data: encode(SELECTORS.withdraw, recipient, qty), value: '0x0', chainId: CHAIN_ID } };
+}
+
+export async function prepareWithdrawal(provider, snapshot, account, recipient, quantity) {
+  return preparePlan(provider, snapshot, makeWithdrawalPlan(snapshot, account, recipient, quantity));
+}
+
 async function preparePlan(provider, snapshot, plan) {
   await assertContext(provider, snapshot, plan.account);
   await simulate(provider, plan);
@@ -200,7 +216,7 @@ async function preparePlan(provider, snapshot, plan) {
   if (BigInt(snapshot.wallet.native_balance_wei) < gas * gasPrice) throw new WalletError('Not enough MON for the reviewed gas budget.');
   plan.tx.gas = hex(gas); plan.tx.gasPrice = hex(gasPrice);
   plan.gasBudget = (gas * gasPrice).toString();
-  if (Date.now() / 1000 >= plan.quoteExpiry) throw new WalletError(plan.kind === 'redeem' || conversion(plan.kind) ? 'Snapshot expired during review. Refresh and review again.' : 'Quote expired during review. Request a new quote.');
+  if (Date.now() / 1000 >= plan.quoteExpiry) throw new WalletError(['redeem', 'withdraw'].includes(plan.kind) || conversion(plan.kind) ? 'Snapshot expired during review. Refresh and review again.' : 'Quote expired during review. Request a new quote.');
   return plan;
 }
 
@@ -208,7 +224,10 @@ export async function sendReviewed(provider, plan, snapshot, stillCurrent = () =
   const guard = () => {
     if (!stillCurrent()) throw new WalletError('Inputs or wallet changed. Review again.');
     if (Date.now() / 1000 >= plan.quoteExpiry) throw new WalletError('Review expired. Refresh and review again.');
-    if (plan.kind === 'redeem') {
+    if (plan.kind === 'withdraw') {
+      const checked = makeWithdrawalPlan(snapshot, plan.account, plan.recipient, plan.quantity);
+      if (checked.tx.data !== plan.tx.data || plan.tx.to !== checked.cash) throw new WalletError('Withdrawal changed. Review again.');
+    } else if (plan.kind === 'redeem') {
       const checked = makeRedemptionPlan(snapshot, plan, plan.account, plan.quantity);
       if (checked.outcome !== plan.outcome || checked.payout !== plan.payout || checked.tx.data !== plan.tx.data) throw new WalletError('Settlement changed. Review redemption again.');
     } else if (conversion(plan.kind)) {
@@ -229,7 +248,9 @@ export function reconcile(plan, tx) {
   if (!['succeeded', 'reverted'].includes(tx.status)) return 'pending';
   if (tx.sender !== plan.account || tx.to !== plan.tx.to || tx.input !== plan.tx.data || tx.value_wei !== '0') return 'mismatch';
   if (tx.status === 'reverted') return 'reverted';
-  const matches = (tx.events || []).filter(event => plan.kind === 'approve'
+  const matches = (tx.events || []).filter(event => plan.kind === 'withdraw'
+    ? event.kind === 'transfer' && event.owner === plan.account && event.recipient === plan.recipient && event.amount_atoms === plan.quantity
+    : plan.kind === 'approve'
     ? event.kind === 'approval' && event.owner === plan.account && event.spender === plan.pool && event.amount_atoms === plan.approval
     : plan.kind === 'redeem' ? event.kind === 'redemption' && event.owner === plan.account && event.scope === plan.scope && event.mask === String(plan.mask) && event.quantity_atoms === plan.quantity && event.collateral_atoms === plan.payout
     : conversion(plan.kind) ? event.kind === plan.kind && event.owner === plan.account && event.scope === 128 && event.mask === '2' && event.quantity_atoms === plan.quantity

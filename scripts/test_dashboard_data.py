@@ -4,7 +4,7 @@ import copy
 import unittest
 
 from check_monad_readiness import CheckError
-from dashboard_data import Dashboard, DashboardRpc, TRADED, APPROVAL, REDEEMED, WRAPPED, UNWRAPPED, wins
+from dashboard_data import Dashboard, DashboardRpc, TRADED, APPROVAL, TRANSFER, REDEEMED, WRAPPED, UNWRAPPED, wins
 from scan_arbitrage import abi
 from serve_dashboard import route
 from test_demo_manifest import FakeRpc as ManifestRpc, fixture, NETWORK
@@ -54,6 +54,18 @@ def setup(clock=lambda: 1000):
 
 
 class DashboardTests(unittest.TestCase):
+    def test_withdrawal_decodes_only_canonical_ausd_transfer(self):
+        model, _, m = setup()
+        topic = lambda n: "0x" + f"{n:064x}"
+        block_hash = "0x" + "aa" * 32
+        log = {"address": m["cash"], "blockHash": block_hash, "transactionHash": TX,
+               "removed": False, "topics": [TRANSFER, topic(int(m["operator"], 16)), topic(123)], "data": topic(1500000)}
+        receipt = {"blockHash": block_hash, "logs": [log, dict(log, address=m["receipt"])]}
+        self.assertEqual(model.receipt_events(receipt, TX), [{"kind": "transfer", "owner": m["operator"],
+                          "recipient": "0x" + f"{123:040x}", "amount_atoms": "1500000"}])
+        log["removed"] = True
+        with self.assertRaises(CheckError): model.receipt_events(receipt, TX)
+
     def test_public_snapshot_accepts_advancing_head_but_preserves_age_and_canonical_checks(self):
         model, rpc, _ = setup()
         model.m["environment"] = "public_testnet"

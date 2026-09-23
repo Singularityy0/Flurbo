@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makePlan, prepare, makeRedemptionPlan, prepareRedemption, makeConversionPlan, prepareConversion, assertContext, sendReviewed, reconcile, setupLocalWallet, encode, boundFor, walletMessage } from './wallet.mjs';
+import { makePlan, prepare, makeRedemptionPlan, prepareRedemption, makeConversionPlan, prepareConversion, makeWithdrawalPlan, prepareWithdrawal, assertContext, sendReviewed, reconcile, setupLocalWallet, encode, boundFor, walletMessage } from './wallet.mjs';
 
 const ACCOUNT = '0x' + '11'.repeat(20), POOL = '0x' + '22'.repeat(20), CASH = '0x' + '33'.repeat(20);
 function convertible() {
@@ -124,6 +124,37 @@ test('public Monad testnet trades, conversions and redemptions retain snapshot a
   assert.equal((await prepareConversion(c.provider, c.snapshot, 'wrap', ACCOUNT, '1')).kind, 'wrap');
   const r = settled(); r.snapshot.environment = 'public_testnet'; r.snapshot.contracts.cash = cash;
   assert.equal(makeRedemptionPlan(r.snapshot, {scope:129,mask:8}, ACCOUNT, '1').kind, 'redeem');
+});
+
+test('withdrawal sends only available wallet AUSD with exact destination and transfer receipt', async () => {
+  const f = fixture(), recipient = '0x' + '44'.repeat(20);
+  f.snapshot.trading_available = false;
+  f.overrides.eth_call = () => encode('', 1);
+  const plan = await prepareWithdrawal(f.provider, f.snapshot, ACCOUNT, recipient, '1500000');
+  assert.equal(plan.tx.to, CASH); assert.equal(plan.tx.data, encode('a9059cbb', recipient, 1500000));
+  assert.equal(f.calls.some(call => call.method === 'eth_sendTransaction'), false);
+  await sendReviewed(f.provider, plan, f.snapshot);
+  assert.equal(f.calls.filter(call => call.method === 'eth_sendTransaction').length, 1);
+  const event = {kind:'transfer', owner:ACCOUNT, recipient, amount_atoms:'1500000'};
+  const receipt = {status:'succeeded', sender:ACCOUNT, to:CASH, input:plan.tx.data, value_wei:'0', events:[event]};
+  assert.equal(reconcile(plan, receipt), 'matched');
+  for (const change of [{recipient:POOL}, {amount_atoms:'1'}, {owner:CASH}, {kind:'approval'}]) {
+    assert.equal(reconcile(plan, {...receipt, events:[{...event,...change}]}), 'mismatch');
+  }
+  assert.equal(reconcile(plan, {...receipt,events:[event,event]}),'mismatch');
+});
+
+test('withdrawal rejects invalid recipients, locked position value, insufficient funds and changed review', async () => {
+  const f = fixture(), recipient = '0x' + '44'.repeat(20);
+  for(const invalid of ['0x'+'00'.repeat(20),ACCOUNT,POOL,CASH,'invalid']) assert.throws(()=>makeWithdrawalPlan(f.snapshot,ACCOUNT,invalid,'1'));
+  for(const amount of ['0','-1','10000001']) assert.throws(()=>makeWithdrawalPlan(f.snapshot,ACCOUNT,recipient,amount));
+  f.snapshot.wallet.ausd_atoms = '0'; f.snapshot.wallet.positions = [{scope:1,mask:2,quantity_atoms:'999999999'}];
+  assert.throws(()=>makeWithdrawalPlan(f.snapshot,ACCOUNT,recipient,'1'),/available AUSD/);
+  f.snapshot.wallet.ausd_atoms='1000000'; f.overrides.eth_call=()=>encode('',1);
+  const plan=await prepareWithdrawal(f.provider,f.snapshot,ACCOUNT,recipient,'500000');
+  await assert.rejects(sendReviewed(f.provider,{...plan,recipient:POOL},f.snapshot));
+  f.snapshot.wallet.ausd_atoms='1'; await assert.rejects(sendReviewed(f.provider,plan,f.snapshot));
+  assert.equal(f.calls.some(call=>call.method==='eth_sendTransaction'),false);
 });
 
 test('buy calldata uses factored scope/mask, capped integer slippage and contract deadline', () => {

@@ -19,7 +19,7 @@ async function harness(run, saved) {
       if (method === 'eth_sendTransaction') return new Promise((resolve, reject) => { this.resolve = resolve; this.reject = reject; });
       if (method === 'eth_call' && ['0xb0a52172', '0xf6c4eade'].includes(params[0].data.slice(0, 10))) return '0x';
       return { eth_requestAccounts: [account], eth_accounts: [account], eth_chainId: '0x279f', eth_getBlockByNumber: { hash },
-        eth_call: '0x' + BigInt(params?.[0]?.data?.startsWith('0xdf992423') ? this.redemptionPayout : params?.[0]?.data?.startsWith('0x095ea7b3') ? 1 : 250001).toString(16).padStart(64, '0'), eth_estimateGas: '0x186a0', eth_gasPrice: '0x3b9aca00' }[method];
+        eth_call: '0x' + BigInt(params?.[0]?.data?.startsWith('0xdf992423') ? this.redemptionPayout : ['0x095ea7b3','0xa9059cbb'].includes(params?.[0]?.data?.slice(0,10)) ? 1 : 250001).toString(16).padStart(64, '0'), eth_estimateGas: '0x186a0', eth_gasPrice: '0x3b9aca00' }[method];
     }
   }
   const provider = new Provider();
@@ -47,6 +47,28 @@ async function submitting(f) {
   assert.equal(typeof f.provider.resolve, 'function');
   return { task };
 }
+test('withdrawal has a separate review, shares pending locks and confirms the exact receiving address', async () => harness(async f => {
+  const recipient='0x'+'44'.repeat(20);
+  await f.click('connect-wallet');
+  f.get('withdrawal-address').value=recipient;f.get('withdrawal-quantity').value='1.5';
+  await f.click('review-withdraw');
+  assert.equal(f.get('confirm-trade').textContent,'Confirm AUSD withdrawal');
+  assert.ok(f.get('review-details').children.some(node=>node.textContent===`To: ${recipient}`));
+  assert.equal(f.provider.calls.some(call=>call.method==='eth_sendTransaction'),false);
+  f.get('withdrawal-quantity').handlers.input();
+  assert.equal(f.get('confirm-trade').hidden,true);
+  await f.click('review-withdraw');
+  const task=f.click('confirm-trade');await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(f.get('review-trade').disabled,true);assert.equal(f.get('review-withdraw').disabled,true);
+  f.provider.resolve(txHash);await task;
+  const plan=JSON.parse(f.storage.get(key)).plan;
+  f.state.tx={status:'succeeded',confirmations:2,sender:account,to:cash,input:plan.tx.data,value_wei:'0',events:[{kind:'transfer',owner:account,recipient:pool,amount_atoms:'1500000'}]};
+  await f.click('check-execution');assert.equal(f.storage.has(key),true);
+  f.state.tx.events[0].recipient=recipient;
+  await f.click('check-execution');assert.equal(f.storage.has(key),false);
+  assert.match(f.get('execution-status').textContent,/Withdrawal confirmed: 1.5 AUSD/);
+}));
+
 test('pending request is recorded before wallet returns, blocks duplicate clicks, and survives account changes', async () => harness(async f => {
   const { task } = await submitting(f);
   assert.equal(JSON.parse(f.storage.get(key)).hash, null);

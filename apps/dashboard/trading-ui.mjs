@@ -1,4 +1,4 @@
-import { address, assertContext, prepare, prepareRedemption, prepareConversion, sendReviewed, reconcile, setupLocalWallet, walletMessage, WalletError } from './wallet.mjs';
+import { address, assertContext, prepare, prepareRedemption, prepareConversion, prepareWithdrawal, sendReviewed, reconcile, setupLocalWallet, walletMessage, WalletError } from './wallet.mjs';
 import { formatUnits, parseUnits, snapshotFresh } from './claims.mjs';
 
 const KEY = 'flurbo.local.pending.v1';
@@ -44,6 +44,12 @@ export function mountTrading(hooks) {
     const state = hooks.getState?.(), selection = hooks.getSelection?.();
     const conversionQty = conversionQuantity();
     const connectedWallet = account && state?.wallet?.address === account ? state.wallet : null;
+    $('withdrawal-address').disabled = locked;
+    $('withdrawal-quantity').disabled = locked;
+    $('recipient-wallet').disabled = locked;
+    $('use-recipient-wallet').disabled = locked || !providers.some(item => item.external);
+    $('review-withdraw').disabled = locked || !connectedWallet || !snapshotFresh(state.snapshot);
+    text('withdrawal-status', connectedWallet ? `From ${account}: ${formatUnits(connectedWallet.ausd_atoms)} AUSD available. MON is needed for gas. Positions and Kuru deposits are not included.` : 'Connect the wallet holding your AUSD. Your Flurbo login stays unchanged.');
     const internalH = connectedWallet?.positions.find(p => p.scope === 128 && p.mask === 2)?.quantity_atoms;
     const canConvert = !locked && connectedWallet && state.conversion_available && snapshotFresh(state.snapshot) && conversionQty;
     $('review-wrap').disabled = !canConvert || internalH === undefined || BigInt(internalH) < BigInt(conversionQty);
@@ -100,7 +106,12 @@ export function mountTrading(hooks) {
     const option = document.createElement('option'); option.value = String(providers.length);
     option.textContent = typeof name === 'string' ? name.slice(0, 80) : 'Browser wallet';
     if (providers.length === 0) $('wallet-provider').replaceChildren();
-    providers.push({ provider: candidate }); $('wallet-provider').append(option);
+    const external = !(hooks.providers || []).some(item => item.provider === candidate);
+    if (external) {
+      const receiver = document.createElement('option'); receiver.value = option.value; receiver.textContent = option.textContent;
+      $('recipient-wallet').append(receiver);
+    }
+    providers.push({ provider: candidate, external }); $('wallet-provider').append(option);
     if (providers.length === 1) $('wallet-provider').value = '0';
     if (!account) text('signer-status', 'Select a browser wallet and connect your test account.');
     update();
@@ -154,6 +165,45 @@ export function mountTrading(hooks) {
   $('slippage').addEventListener('change', () => invalidate('Slippage changed. Review again.'));
   $('cancel-review').addEventListener('click', () => invalidate('Review cancelled. Nothing submitted.'));
   $('conversion-quantity').addEventListener('input', () => invalidate('Conversion quantity changed. Review again.'));
+  for (const id of ['withdrawal-address', 'withdrawal-quantity']) $(id).addEventListener('input', () => invalidate('Withdrawal details changed. Review again.'));
+  $('recipient-wallet').addEventListener('change', () => invalidate('Receiving wallet changed. Fetch its address and review again.'));
+  $('use-recipient-wallet').addEventListener('click', async () => {
+    if (operation || pending) return;
+    const chosen = $('recipient-wallet').value;
+    const recipient = chosen === '' ? null : providers[Number(chosen)];
+    if (!recipient?.external) { text('execution-status', 'Choose your receiving browser wallet, or paste its address.'); return; }
+    const current = ++generation; review = null; operation = true; update();
+    try {
+      const accounts = await recipient.provider.request({method: 'eth_requestAccounts'});
+      if (current !== generation || disposed) return;
+      if (!Array.isArray(accounts) || !accounts.length) throw new WalletError('No receiving address selected.');
+      $('withdrawal-address').value = address(accounts[0]);
+      text('execution-status', 'Receiving address filled. This does not change your Flurbo login or move funds. Review the address and amount.');
+    } catch (error) { text('execution-status', walletMessage(error)); }
+    finally { operation = false; update(); }
+  });
+  $('review-withdraw').addEventListener('click', async () => {
+    if (!provider || !account || pending || operation) return;
+    const current = ++generation, signer = provider, owner = account;
+    review = null; operation = true; update();
+    try {
+      const recipient = address($('withdrawal-address').value.trim());
+      const quantity = parseUnits($('withdrawal-quantity').value.trim());
+      const state = await hooks.readSnapshot(owner);
+      const plan = await prepareWithdrawal(signer, state, owner, recipient, quantity);
+      if (current !== generation || signer !== provider || owner !== account) throw new WalletError('Inputs or wallet changed. Review again.');
+      review = plan;
+      const lines = [`Send ${formatUnits(plan.quantity)} AUSD on ${state.environment === 'public_testnet' ? 'public Monad testnet' : 'the local Monad fork'}.`,
+        `From: ${plan.account}`, `To: ${plan.recipient}`, `AUSD token: ${plan.cash}`,
+        `Proposed gas budget: ${formatUnits(plan.gasBudget, 18)} MON.`,
+        'Only available wallet AUSD moves. No approval, sale, redemption or bridge is included. Confirm the entire receiving address.',
+        'The review expires within 30 seconds. The token transfer has no on-chain deadline and cannot be reversed by Flurbo.'];
+      $('review-details').replaceChildren(...lines.map(line => { const p = document.createElement('p'); p.textContent = line; return p; }));
+      $('confirm-trade').textContent = 'Confirm AUSD withdrawal';
+      text('execution-status', 'Review the amount, full receiving address and network, then confirm the withdrawal.');
+    } catch (error) { text('execution-status', walletMessage(error)); }
+    finally { operation = false; update(); }
+  });
   for (const kind of ['wrap', 'unwrap']) $('review-' + kind).addEventListener('click', async () => {
     const quantity = conversionQuantity();
     if (!provider || !account || !quantity || pending || operation) return;
@@ -231,7 +281,7 @@ export function mountTrading(hooks) {
     let requested = false;
     operation = true; update(); text('execution-status', 'Rechecking the reviewed transaction before opening your wallet…');
     try {
-      const state = await hooks.readSnapshot(plan.account, { scope: plan.scope, mask: plan.mask });
+      const state = await hooks.readSnapshot(plan.account, plan.kind === 'withdraw' ? undefined : { scope: plan.scope, mask: plan.mask });
       const hash = await sendReviewed(signer, plan, state, () => current === generation && signer === provider && plan.account === account, () => {
         persist({ plan, hash: null }); requested = true;
         text('execution-status', 'Confirm or reject in your wallet. Changing this page cannot cancel an open wallet request.');
@@ -268,7 +318,9 @@ export function mountTrading(hooks) {
       }
       if ((status === 'matched' || status === 'reverted') && result.transaction.confirmations >= 2) {
         persist(null); review = null;
-        const completed = ['wrap', 'unwrap'].includes(record.plan.kind)
+        const completed = record.plan.kind === 'withdraw'
+          ? `Withdrawal confirmed: ${formatUnits(record.plan.quantity)} AUSD sent to ${record.plan.recipient}. Balances are refreshing.`
+          : ['wrap', 'unwrap'].includes(record.plan.kind)
           ? `${record.plan.kind === 'wrap' ? 'Wrap' : 'Unwrap'} confirmed: ${formatUnits(record.plan.quantity)} H YES units converted 1:1. No AUSD spent or paid. Balances are refreshing.`
           : record.plan.kind === 'redeem'
           ? `Redemption confirmed: ${formatUnits(record.plan.quantity)} units burned, ${formatUnits(record.plan.payout)} AUSD paid. Balances are refreshing.`
@@ -277,7 +329,7 @@ export function mountTrading(hooks) {
             ? 'Allowance reset confirmed. No claims bought. Next: get a fresh buy quote and review the AUSD approval.'
             : 'AUSD approval confirmed. No claims bought. Next: get a fresh buy quote and review the buy.')
           : `${record.plan.kind === 'buy' ? 'Buy' : 'Sell'} confirmed for ${formatUnits(record.plan.quantity)} claim units (scope ${record.plan.scope}, mask ${record.plan.mask}). Balances are refreshing; do not repeat the trade to refresh them.`;
-        text('execution-status', status === 'reverted' ? 'Transaction reverted. No trade, approval, conversion or redemption was applied. Refresh and review again.'
+        text('execution-status', status === 'reverted' ? 'Transaction reverted. No trade, approval, conversion, redemption or withdrawal was applied. Refresh and review again.'
           : `${completed} Exact calldata and contract event matched, with ${result.transaction.confirmations} canonical confirmations.`);
         lastHash = hash;
         hooks.invalidateQuote('Transaction completed. Request a fresh quote.');

@@ -35,8 +35,13 @@ test('Mera adapter signs exact local transaction and rejects locked, foreign and
     await provider.request({method:'eth_sendTransaction',params:[{...input,to:activeCash}]});
     await provider.request({method:'eth_sendTransaction',params:[{...input,to:TESTNET.faucet,data:TESTNET.faucetSelector+account.slice(2).padStart(64,'0')}]});
     assert.equal(writes,3);
+    const withdrawal={...input,to:activeCash,data:'0xa9059cbb'+'44'.repeat(20).padStart(64,'0')+'1'.padStart(64,'0')};
+    await provider.request({method:'eth_sendTransaction',params:[withdrawal]});
+    assert.equal(parseTransaction(raw as `0x${string}`).data,withdrawal.data);
+    await assert.rejects(provider.request({method:'eth_sendTransaction',params:[{...withdrawal,data:'0xa9059cbb'+account.slice(2).padStart(64,'0')+'1'.padStart(64,'0')}]}));
+    assert.equal(writes,4);
     controller.lockSigning();
     await assert.rejects(provider.request({method:'eth_sendTransaction',params:[input]}),/Unlock signing/);
-    assert.equal(writes,3);
+    assert.equal(writes,4);
   } finally {globalThis.fetch=originalFetch; provider.destroy(); await controller.signOut();}
 });

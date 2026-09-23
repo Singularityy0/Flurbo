@@ -10,6 +10,7 @@ from scan_arbitrage import abi, address, block_info
 from verify_demo import RULES, RULES_HASH
 
 TRADED = "0xfafd4a382ead0cb54fe827af5995137a1a8b433ebfd5a8d13def35a83adfb9b5"
+TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 APPROVAL = "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925"
 REDEEMED = "0x3e24bbc5ae535f3f571a815b8ba9fc70c94ad494d812f0210c3da99fad2173ae"
 WRAPPED = "0x1678e1ca0a6fe8c67ed99c47dfc6bfbd624dde9b4ea6888c388819b92bdcf9af"
@@ -234,7 +235,7 @@ class Dashboard:
         for log in receipt.get("logs", []):
             origin = address(log.get("address"))
             topics = log.get("topics", [])
-            if not topics or (origin, topics[0]) not in ((self.m["pool"], TRADED), (self.m["pool"], REDEEMED), (self.m["pool"], WRAPPED), (self.m["pool"], UNWRAPPED), (self.m["cash"], APPROVAL)):
+            if not topics or (origin, topics[0]) not in ((self.m["pool"], TRADED), (self.m["pool"], REDEEMED), (self.m["pool"], WRAPPED), (self.m["pool"], UNWRAPPED), (self.m["cash"], APPROVAL), (self.m["cash"], TRANSFER)):
                 continue
             if log.get("removed") or hash32(log.get("blockHash")) != hash32(receipt["blockHash"]) or hash32(log.get("transactionHash")) != tx_hash:
                 raise CheckError("Event is outside the canonical transaction receipt")
@@ -264,7 +265,7 @@ class Dashboard:
             else:
                 values = words(log.get("data"), 1)
                 if len(indexed) != 2 or max(indexed) >= 2**160:
-                    raise CheckError("Malformed approval event")
-                result.append({"kind": "approval", "owner": f"0x{indexed[0]:040x}",
-                               "spender": f"0x{indexed[1]:040x}", "amount_atoms": str(values[0])})
+                    raise CheckError("Malformed token event")
+                result.append({"kind": "transfer" if topics[0] == TRANSFER else "approval", "owner": f"0x{indexed[0]:040x}",
+                               ("recipient" if topics[0] == TRANSFER else "spender"): f"0x{indexed[1]:040x}", "amount_atoms": str(values[0])})
         return result
