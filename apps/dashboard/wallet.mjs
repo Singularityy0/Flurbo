@@ -85,7 +85,7 @@ export function makePlan(snapshot, quoted, account, bps, now = Date.now() / 1000
   const pool = address(snapshot.contracts.pool), cash = address(snapshot.contracts.cash);
   let kind = q.side, approval;
   if (kind === 'buy') {
-    if (BigInt(w.ausd_atoms) < limit) throw new WalletError('Not enough local test AUSD for the maximum buy cost.');
+    if (BigInt(w.ausd_atoms) < limit) throw new WalletError('Not enough local test AUSD for this buy. Click Set up local wallet to top up test balances, then get a new quote.');
     if (BigInt(w.pool_allowance_atoms) < limit) {
       kind = 'approve';
       approval = BigInt(w.pool_allowance_atoms) > 0n ? 0n : limit;

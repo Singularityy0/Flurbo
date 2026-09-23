@@ -165,7 +165,7 @@ function renderWallet() {
   const w = data?.wallet;
   $('wallet-result').replaceChildren();
   if (!wallet || !w || w.address.toLowerCase() !== wallet.toLowerCase()) return;
-  text('wallet-message', `Inspecting ${w.address}. Public data only; no wallet connected.`);
+  text('wallet-message', `Inspecting ${w.address}. Balance lookup only; your connected signer is shown in Wallet & Execution above.`);
   const balances = el('div', undefined, 'balances');
   for (const [label, amount, decimals] of [
     ['AUSD balance', w.ausd_atoms, 6], ['Native MON', w.native_balance_wei, 18], ['Wrapped H YES receipts', w.receipt_atoms, 6],

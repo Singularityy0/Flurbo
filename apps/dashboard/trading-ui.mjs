@@ -30,6 +30,14 @@ export function mountTrading(hooks) {
   }
   function update() {
     const locked = operation || Boolean(pending);
+    const quote = hooks.getQuote()?.quote;
+    const side = quote?.side === 'sell' ? 'sell' : 'buy';
+    text('review-trade', quote ? `Review ${side} →` : 'Get a quote to review');
+    text('execution-help', !account ? 'Connect your test wallet, then get a pool quote.'
+      : !quote ? 'Wallet connected. Get a fresh pool quote to enable the buy or sell review.'
+      : review ? 'Click the confirmation button below to open MetaMask.'
+      : `Click Review ${side} to check funding and show the confirmation button. Reviewing does not open MetaMask; confirming does.`);
+    $('execution-help').hidden = locked;
     $('connect-wallet').disabled = locked || providers.length === 0 || Boolean(account);
     $('setup-wallet').disabled = locked || providers.length === 0;
     $('disconnect-wallet').disabled = locked || !account;
@@ -136,7 +144,7 @@ export function mountTrading(hooks) {
       ];
       $('review-details').replaceChildren(...lines.map(line => { const p = document.createElement('p'); p.textContent = line; return p; }));
       $('confirm-trade').textContent = plan.kind === 'approve' ? 'Confirm approval in wallet' : `Confirm ${plan.kind} in wallet`;
-      text('execution-status', 'Review the exact transaction below, then confirm in your wallet.');
+      text('execution-status', `Review the details, then click “${$('confirm-trade').textContent}” to open MetaMask.`);
     } catch (error) { text('execution-status', walletMessage(error)); }
     finally { operation = false; update(); }
   });

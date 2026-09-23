@@ -55,11 +55,12 @@
           <p id="signer-status" class="caption" role="status">Discovering browser wallets…</p>
           <details class="wallet-help"><summary>Local network setup</summary><p>Use a dedicated test account with local AUSD and MON. Set the wallet RPC to <code>http://127.0.0.1:18545</code>, chain ID <code>10143</code>, currency <code>MON</code>. Public Monad testnet uses the same ID; the block-hash check must match this fork.</p><p>Wallet signing here is a local development flow. Mera mobile and the MetaMask Agent Wallet integration remain separate milestones.</p></details>
           <label for="slippage">Slippage limit</label><select id="slippage"><option value="0">0%</option><option value="50" selected>0.5%</option><option value="100">1%</option><option value="300">3%</option><option value="500">5%</option></select>
-          <button id="review-trade" class="button primary wide" disabled>Review next step ↗</button>
+          <p id="execution-help" class="caption">Connect your test wallet, then get a pool quote.</p>
+          <button id="review-trade" class="button primary wide" disabled>Get a quote to review</button>
           <div id="review-details" class="review-details" hidden></div>
           <button id="confirm-trade" class="button primary wide" hidden disabled>Confirm in wallet</button>
           <button id="cancel-review" class="button quiet" hidden>Cancel review</button>
-          <p id="execution-status" class="caption" role="status">Connect a wallet and request a pool quote to begin.</p>
+          <p id="execution-status" class="caption" role="status"></p>
           <p id="execution-hash" class="caption hash"></p>
           <div id="replacement-area" hidden><label for="replacement-hash">Wallet transaction / replacement hash</label><input id="replacement-hash" placeholder="0x…" maxlength="66" autocomplete="off" spellcheck="false"></div>
           <button id="check-execution" class="button secondary" hidden>Check submitted transaction</button>
