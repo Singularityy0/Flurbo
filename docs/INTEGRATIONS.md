@@ -89,8 +89,10 @@ The next [funded repricing reference](FUNDED_REPRICING.md) connects learned
 probabilities to simulated fills with a separate payout ledger and explicit
 external funding. The [integer funded pool](FUNDED_FACTORED_POOL.md) now enforces
 conservative reserve math, updater authorization, limits and bounded-width checks
-in local contract tests. Automated learner proposals and a deployment rehearsal
-remain pending; the persistent dashboard and partner deployments are unchanged.
+in local contract tests. A [deterministic proposal builder and disposable mock-chain
+rehearsal](LEARNING_EXECUTION.md) now connect the Rust learner to actual funded EVM
+updates. Dashboard operator controls and live signal ingestion remain pending;
+the persistent dashboard and partner deployments are unchanged.
 
 Read the two papers requested in the idea before the pricing slice. Reviewed
 their mechanism and scope: [ParlayMarket](https://arxiv.org/html/2603.22596v2)

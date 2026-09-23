@@ -60,8 +60,10 @@ external funding. It tests reserve coverage, update limits and round-trip
 extraction. Run `cargo run --offline -p flurbo-core --example funded_reprice`.
 The [integer funded pool](docs/FUNDED_FACTORED_POOL.md) now passes local contract
 tests with authenticated updates, movement/rate/funding limits and unchanged
-customer payouts. The next gate is learner-to-contract proposal generation and an
-isolated deployment rehearsal; the dashboard still uses its existing pool.
+customer payouts. [Learner-to-contract proposals and an isolated execution
+rehearsal](docs/LEARNING_EXECUTION.md) now pass with deterministic quantization,
+on-chain simulation and exact funding reconciliation. Dashboard review/execution
+controls are next; its persistent deployment still uses the existing pool.
 
 A [factored pricing reference](docs/FACTORED_PRICING.md) now evaluates one global
 LMSR cost, conjunction probabilities and maximum liabilities for up to 32 binary

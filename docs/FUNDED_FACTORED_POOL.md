@@ -93,11 +93,12 @@ forge fmt --check
 
 ## Next phase and remaining limits
 
-Connect the learner to an auditable, deterministic bias-table quantizer/proposal
-builder, compare its implied distribution with the model, then rehearse on an
-isolated local deployment with the proposal and funding visible. The contract
-currently accepts updater-supplied integer tables; it does not train the model,
-prove that a table came from ParlayMarket, or automatically ingest trade signals.
+The [deterministic proposal builder and isolated rehearsal](LEARNING_EXECUTION.md)
+now connect a Rust learning fixture to integer tables, compare implied probabilities
+and execute a funded update with ledger reconciliation. The next phase is dashboard
+review/execution controls. The contract accepts updater-supplied integer tables;
+it does not train the model, prove that a table came from ParlayMarket, or
+automatically ingest trade signals.
 Dense pairwise models may fail width 2; unsupported models must reject explicitly.
 
 Predictable updates still allow buy-before/sell-after extraction. The tests
