@@ -1,4 +1,4 @@
-"""Local dashboard and read API. No signing or transaction writes."""
+"""Local dashboard/read API, with an explicitly enabled local test-funding route."""
 
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -36,7 +36,7 @@ def route(model, path):
     raise ValueError("Unknown route or invalid query parameters")
 
 
-def handler(factory):
+def handler(factory, local_setup=None):
     class Handler(BaseHTTPRequestHandler):
         def reply(self, status, payload):
             self.send_data(status, json.dumps(payload).encode(), "application/json")
@@ -74,7 +74,7 @@ def handler(factory):
                 elif not self.path.startswith("/api/"):
                     self.reply(404, {"error": "Not found"})
                 elif self.path == "/api/health":
-                    self.reply(200, {"service": "dashboard_data", "read_only": True, "chain_state": "not_checked"})
+                    self.reply(200, {"service": "dashboard_data", "read_only": local_setup is None, "local_wallet_setup": local_setup is not None, "chain_state": "not_checked"})
                 else:
                     self.reply(200, route(factory(), self.path))
             except ValueError:
@@ -85,7 +85,31 @@ def handler(factory):
                 self.reply(503, {"error": "Data/configuration unavailable; remote details withheld", "status": "unavailable"})
 
         def do_POST(self):
-            self.reply(405, {"error": "Read-only API; transaction submission is not supported"})
+            if self.path != "/api/local-wallet-setup" or local_setup is None:
+                self.reply(405, {"error": "No write route enabled for this request"})
+                return
+            port = self.server.server_port
+            host = self.headers.get("Host")
+            if host not in (f"127.0.0.1:{port}", f"localhost:{port}") or self.headers.get("Origin") != f"http://{host}":
+                self.reply(403, {"error": "Exact same-origin browser request required"})
+                return
+            try:
+                if self.headers.get("Content-Type") != "application/json" or self.headers.get("Transfer-Encoding"):
+                    raise ValueError()
+                length = int(self.headers.get("Content-Length", "0"))
+                if not 1 <= length <= 256:
+                    raise ValueError()
+                self.connection.settimeout(5)
+                body = json.loads(self.rfile.read(length))
+                if not isinstance(body, dict) or set(body) != {"wallet"}:
+                    raise ValueError()
+                self.reply(200, local_setup(body["wallet"]))
+            except (ValueError, TypeError):
+                self.reply(400, {"error": "Provide only a public test wallet address"})
+            except CheckError as error:
+                self.reply(503, {"error": str(error)})
+            except Exception:
+                self.reply(503, {"error": "Local setup unavailable; inspect balances before retrying"})
 
         def log_message(self, format, *args):
             pass  # No wallet/query/RPC credentials in access logs.
@@ -97,9 +121,12 @@ def main():
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--provider", choices=("local", "public", "alchemy"), default="local")
     parser.add_argument("--port", type=int, default=18765)
+    parser.add_argument("--enable-local-wallet-setup", action="store_true", help="Allow fixed test-balance top-ups on local Anvil only")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("Use a port between 1024 and 65535")
+    if args.enable_local_wallet_setup and args.provider != "local":
+        parser.error("Automatic test funding may only be enabled with --provider local")
     network = json.loads(CONFIG.read_text())["networks"]["testnet"]
     endpoint = rpc_endpoint(network, args.provider, os.environ)
 
@@ -107,7 +134,11 @@ def main():
         return Dashboard(json.loads(args.manifest.read_text()), network, DashboardRpc(endpoint),
                          "local_fork" if args.provider == "local" else "public_testnet")
 
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), handler(factory))
+    local_setup = None
+    if args.enable_local_wallet_setup:
+        from local_wallet_setup import LocalSetupRpc, LocalWalletSetup
+        local_setup = LocalWalletSetup(lambda: Dashboard(json.loads(args.manifest.read_text()), network, LocalSetupRpc(), "local_fork"))
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), handler(factory, local_setup))
     print(f"Local dashboard: http://127.0.0.1:{args.port}/", flush=True)
     try:
         server.serve_forever()
