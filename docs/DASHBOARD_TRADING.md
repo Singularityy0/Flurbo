@@ -182,3 +182,18 @@ is implemented with clone validation; manual conversion confirmation remains.
 Kuru order controls, Mera/Agora mobile, CRE, Envio, Alchemy
 and the MetaMask Agent Wallet plugin retain their separate milestones. Browser
 extension support does not establish the Agent Wallet bounty integration.
+
+## Public-testnet review refresh fix
+
+A fresh executable quote has its own block and expiry. An older display snapshot
+expiring must not cancel that quote during wallet preflight. Background refreshes
+advancing to a newer block also do not by themselves change the user's reviewed
+inputs. The dashboard now preserves those reviews and skips visibility-triggered
+refreshes while reviewing or submitting. Actual quote expiry, changed inputs or
+deployment, and newly observed trading unavailability still invalidate reviews.
+Confirmation still reads current balances and repeats wallet/network checks and
+simulation against the original price limits before requesting a signature.
+
+`node --test apps/dashboard/app.test.mjs` exercises both controllers together,
+including delayed refresh results, snapshot age, visibility, real expiry and
+input/deployment changes. These mocked wallet tests do not submit transactions.

@@ -130,7 +130,10 @@ function tick() {
     ? 'Showing the last snapshot. Quotes are disabled until fresh chain data arrives. Refresh when the network is available.'
     : !usable ? 'Pool quotes are unavailable: the market is closed, resolved, unfunded or has a backing shortfall.'
     : `${data.environment === 'local_fork' ? 'Local Monad fork' : 'Monad testnet'} · Synthetic events · Pool quotes are on-chain. Trades require your connected wallet's approval.`));
-  if (quote && (!snapshotFresh(quote.snapshot) || Date.now() / 1000 >= quote.quote.valid_until || !usable)) {
+  // A quote is read at its own block. An older dashboard snapshot expiring
+  // must not cancel a newer quote while wallet preflight is running.
+  const marketStopped = fresh && data.snapshot.timestamp >= (quote?.snapshot.timestamp ?? 0) && !data.trading_available;
+  if (quote && (!snapshotFresh(quote.snapshot) || Date.now() / 1000 >= quote.quote.valid_until || marketStopped || Date.now() / 1000 >= data?.cluster.closes_at)) {
     invalidateQuote('Quote expired or chain data became stale. Refresh and request a new quote.');
   } else if (quote) text('quote-expiry', `${Math.max(0, Math.ceil(quote.quote.valid_until - Date.now() / 1000))}s remaining`);
   trading?.update();
@@ -200,7 +203,11 @@ async function refresh() {
   try {
     const result = await request(`/api/state${query.size ? '?' + query : ''}`, stateController);
     if (generation !== stateGeneration) return;
-    if (data && data.snapshot.block_hash !== result.snapshot.block_hash) invalidateQuote('The pool snapshot changed. Request a fresh quote.');
+    // A newer block alone is not an input change. Execution rechecks price,
+    // allowance and holdings against the reviewed limits before submission.
+    const deploymentChanged = data && (data.environment !== result.environment || data.chain_id !== result.chain_id ||
+      Object.entries(data.contracts).some(([key, value]) => value !== result.contracts[key]));
+    if (deploymentChanged) invalidateQuote('The deployment changed. Request a fresh quote.');
     data = result; lastFailure = ''; selectedLabels = labels;
     renderState();
   } catch (error) {
@@ -297,7 +304,12 @@ if (wallet) $('wallet').value = wallet;
 renderComposer(); preview(); refresh();
 const tickTimer = setInterval(tick, 1000);
 const refreshTimer = setInterval(() => { if (!document.hidden && !stateBusy && !quoteBusy && !trading.busy) refresh(); }, 15000);
-const visible = () => { if (!document.hidden) { tick(); refresh(); } };
+const visible = () => {
+  if (!document.hidden) {
+    tick();
+    if (!stateBusy && !quoteBusy && !trading.busy) refresh();
+  }
+};
 document.addEventListener('visibilitychange', visible);
 return () => {
   disposed = true; ++stateGeneration; ++quoteGeneration; ++txGeneration;
