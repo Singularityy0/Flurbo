@@ -195,8 +195,8 @@ function Home() {
       <section className="status-section section-light">
         <div className="status-grid">
           <span className="eyebrow">Where it stands</span>
-          <div className="status-copy"><h2>Promising, not pretending.</h2><p>Flurbo has local synthetic trading, learning tests, and a Mera passkey account flow ready for device testing. Public deployment, mobile account integration, and tradable conditional securities are still ahead.</p></div>
-          <div className="status-stamp"><span className="stamp-dot" /> concept preview<br /><small>last updated · 2026</small></div>
+          <div className="status-copy"><h2>Built for Monad.</h2><p>Flurbo brings individual and combined predictions into one shared pool on Monad. The testnet beta uses synthetic events and test AUSD. Native mobile accounts and tradable conditional securities are still in development.</p></div>
+          <div className="status-stamp"><span className="stamp-dot" /> testnet beta<br /><small>last updated · 2026</small></div>
         </div>
       </section>
 
@@ -206,9 +206,9 @@ function Home() {
           <div className="faq-list">
             {[
               ["What is Flurbo, in one sentence?", "A shared liquidity pool that prices related individual and multi-leg yes-or-no claims together, so their relationships stay coherent."],
-              ["Is Flurbo live?", "No. This is a design preview. Current work uses restricted structures, local synthetic trading, and learning tests rather than live markets."],
+              ["Is Flurbo live?", "Flurbo is preparing its public Monad testnet beta. Trading requires an open, funded and verified deployment. This version uses synthetic events and test assets; it is not a mainnet market."],
               ["What does ‘cost and payout’ mean here?", "Conceptually, the cost is what you pay to take a position; the payout is what the claim could return if it resolves in your favor. A future Flurbo experience would make both visible before you act."],
-              ["Can I create an account?", "The Mera passkey flow is ready for local testing on localhost with a compatible device. Local test accounts are separate from the future public site. Public access needs our permanent HTTPS domain, and live trading is not available here yet."],
+              ["Can I create an account?", "On flurbo.singu.online, use a compatible passkey through Mera or sign in with your existing browser wallet. You only need one method. A new passkey creates a separate wallet address; localhost passkeys belong to the development site."],
             ].map(([question, answer], index) => {
               const open = activeFaq === index;
               return <div className={`faq-item ${open ? "faq-item-open" : ""}`} key={question}>
@@ -226,10 +226,10 @@ function Home() {
 
       <section className="final-cta section-lime">
         <div className="final-cta-shape" aria-hidden="true" />
-        <div className="final-cta-inner"><p className="eyebrow">A calmer way to look ahead</p><h2>Make room for<br /><em>the connection.</em></h2><p>Explore the idea and try the passkey account experience.</p><div className="final-actions"><Link href="/signup" className="button button-dark">Create an account <ArrowUpRight size={17} /></Link><Link href="/login" className="text-link text-link-dark">Sign in <ArrowUpRight size={15} /></Link></div></div>
+        <div className="final-cta-inner"><p className="eyebrow">A calmer way to look ahead</p><h2>Make room for<br /><em>the connection.</em></h2><p>Start with a passkey or bring your existing wallet.</p><div className="final-actions"><Link href="/signup" className="button button-dark">Create an account <ArrowUpRight size={17} /></Link><Link href="/login" className="text-link text-link-dark">Sign in <ArrowUpRight size={15} /></Link></div></div>
       </section>
 
-      <footer className="site-footer section-light"><div><span className="footer-brand">flurbo<span className="logo-dot" /></span><p>Prediction, with more context.</p></div><div className="footer-meta"><span>© 2026 Flurbo preview</span><span>Illustrative design · no live market</span></div></footer>
+      <footer className="site-footer section-light"><div><span className="footer-brand">flurbo<span className="logo-dot" /></span><p>Prediction, with more context.</p></div><div className="footer-meta"><span>© 2026 Flurbo</span><span>Monad testnet · synthetic events</span></div></footer>
     </main>
   );
 }

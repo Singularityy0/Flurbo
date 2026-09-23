@@ -1,7 +1,7 @@
-export type LoginSession = { address: string; expiresAt: number };
+export type LoginSession = { address: string; expiresAt: number; method?: 'passkey' | 'wallet' };
 export interface SessionTransport {
   read(): Promise<LoginSession | null>;
-  challenge(address: string): Promise<string>;
+  challenge(address: string, method?: 'passkey' | 'wallet'): Promise<string>;
   verify(signature: string): Promise<LoginSession>;
   logout(): Promise<void>;
 }
@@ -13,7 +13,7 @@ async function request(path: string, body?: object) {
 }
 export const serverSession: SessionTransport = {
   read: async () => (await request('session')).session,
-  challenge: async address => (await request('challenge', { address })).message,
+  challenge: async (address, method = 'passkey') => (await request('challenge', { address, method })).message,
   verify: async signature => (await request('verify', { signature })).session,
   logout: async () => { await request('logout', {}); },
 };

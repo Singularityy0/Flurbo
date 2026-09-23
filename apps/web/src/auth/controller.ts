@@ -7,12 +7,13 @@ import { HDKey, HARDENED_OFFSET } from "@scure/bip32";
 import { entropyToMnemonic, mnemonicToSeedSync } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { SESSION_MS, type AuthPolicy } from "./policy.ts";
-import { hashMessage, hexToBytes, bytesToHex, serializeSignature, type Hex } from 'viem';
+import { hashMessage, hexToBytes, bytesToHex, serializeSignature, stringToHex, type Hex } from 'viem';
 import type { SessionTransport } from './server-session.ts';
 
 type StoragePort = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 type Remembered = { version: 1; rpId: string; credentialId: string; address: string };
 export type AuthSnapshot = {
+  method: 'passkey' | 'wallet';
   busy: boolean; address: string | null; expiresAt: number | null;
   signingExpiresAt: number | null; restoring: boolean;
   remembered: boolean; error: string | null; notice: string | null;
@@ -81,7 +82,7 @@ export class AuthController {
     this.#client = options.client;
     this.#now = options.now ?? Date.now;
     this.#key = `flurbo.passkey.v1:${this.policy.rpId ?? "unavailable"}`;
-    this.#snapshot = { busy: false, address: null, expiresAt: null, signingExpiresAt: null, restoring: !!options.transport, remembered: !!this.#read(), error: null, notice: null };
+    this.#snapshot = { method: 'passkey', busy: false, address: null, expiresAt: null, signingExpiresAt: null, restoring: !!options.transport, remembered: !!this.#read(), error: null, notice: null };
   }
 
   getSnapshot = () => this.#snapshot;
@@ -117,7 +118,7 @@ export class AuthController {
         if (this.#snapshot.address?.toLowerCase() !== login.address.toLowerCase()) {
           this.#endSession(); this.#update({ signingExpiresAt: null });
         }
-        this.#update({ address: login.address, expiresAt: login.expiresAt });
+        this.#update({ address: login.address, expiresAt: login.expiresAt, method: login.method || 'passkey' });
       }
     } catch { if (generation === this.#generation) this.#update({ notice: 'Account service is unavailable. Reconnect before signing.' }); }
     finally { if (generation === this.#generation) this.#update({ restoring: false }); }
@@ -141,6 +142,34 @@ export class AuthController {
       this.lockSigning();
     }
   };
+
+  async authenticateWallet(provider: { request(args: { method: string; params?: unknown[] }): Promise<unknown> }): Promise<boolean> {
+    if (this.#inFlight || !this.#transport) return false;
+    this.#endSession(); this.#inFlight = true;
+    const generation = ++this.#generation;
+    this.#update({ busy: true, signingExpiresAt: null, error: null, notice: null });
+    try {
+      const accounts = await provider.request({ method: 'eth_requestAccounts' });
+      if (!Array.isArray(accounts) || !/^0x[0-9a-fA-F]{40}$/.test(accounts[0])) throw new Error('No wallet account');
+      const address = accounts[0].toLowerCase();
+      const message = await this.#transport.challenge(address, 'wallet');
+      if (generation !== this.#generation) return false;
+      const signature = await provider.request({ method: 'personal_sign', params: [stringToHex(message), address] });
+      if (generation !== this.#generation || typeof signature !== 'string') return false;
+      const current = await provider.request({ method: 'eth_accounts' });
+      if (!Array.isArray(current) || current[0]?.toLowerCase() !== address) throw new Error('Wallet changed');
+      const login = await this.#transport.verify(signature);
+      if (generation !== this.#generation) { await this.#transport.logout(); return false; }
+      if (login.address.toLowerCase() !== address || login.expiresAt <= this.#now()) throw new Error('Invalid login');
+      this.#signedOut = false;
+      this.#update({ address, expiresAt: login.expiresAt, method: 'wallet', restoring: false,
+        notice: 'Signed in with your wallet. Trading confirmations stay in your wallet.' });
+      return true;
+    } catch {
+      if (generation === this.#generation) this.#update({ error: 'Wallet sign-in was cancelled or could not finish. Choose your wallet account and try again.' });
+      return false;
+    } finally { this.#inFlight = false; if (generation === this.#generation) this.#update({ busy: false }); }
+  }
 
   async authenticate(mode: "signup" | "login", name = "Flurbo account", chooseAnother = false, allowNew = false): Promise<boolean> {
     if (this.#inFlight) return false;
@@ -198,7 +227,7 @@ export class AuthController {
       this.#signedOut = false;
       const expiresAt = loginExpiry;
       this.#timer = setTimeout(this.checkExpiry, SESSION_MS);
-      this.#update({ address, expiresAt, signingExpiresAt: this.#now() + SESSION_MS, restoring: false, remembered, notice });
+      this.#update({ method: 'passkey', address, expiresAt, signingExpiresAt: this.#now() + SESSION_MS, restoring: false, remembered, notice });
       return true;
     } catch (error) {
       if (generation === this.#generation) this.#update({ error: friendlyError(error, mode === "signup") });

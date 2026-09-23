@@ -8,10 +8,12 @@ import dashboardHtml from '../../../dashboard/index.html?raw';
 import dashboardCss from '../../../dashboard/styles.css?raw';
 import workspaceCss from './workspace-core.css?raw';
 import './workspace.css';
+import Funding from './Funding';
+const publicTestnet = import.meta.env.PROD;
 
 type Panel = 'trade' | 'positions' | 'activity';
 function CoreMarket({ account, panel }: { account: string | null; panel: Panel }) {
-  const { controller } = useAuth();
+  const { controller, state } = useAuth();
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const shadow = host.current!.shadowRoot || host.current!.attachShadow({ mode: 'open' });
@@ -28,6 +30,15 @@ function CoreMarket({ account, panel }: { account: string | null; panel: Panel }
     main.querySelector('#setup-status')!.textContent = 'Fund your selected account with local test AUSD and MON. Mera and extension wallets have separate addresses.';
     main.querySelector('.wallet-help p:last-child')!.textContent = 'For Mera, unlock signing at the top of this workspace before confirming. Extension wallets use their own confirmation window.';
     main.querySelector('label[for="wallet-provider"]')!.textContent = 'Trading wallet';
+    if (publicTestnet) {
+      (main.querySelector('#setup-wallet') as HTMLElement).hidden = true;
+      (main.querySelector('#setup-wallet') as HTMLElement).style.display = 'none';
+      main.querySelector('.quote-footer')!.textContent = 'Review your quote to approve AUSD or trade. Public Monad testnet assets only.';
+      const bookHelp = main.querySelector('#book .caption');
+      if (bookHelp) bookHelp.textContent = 'Indicative depth only. Execution requires a reviewed quote. Synthetic operator liquidity.';
+      main.querySelector('#setup-status')!.textContent = 'Use Fund your account above to get test AUSD and MON on Monad testnet.';
+      main.querySelector('.wallet-help')!.innerHTML = '<summary>Monad testnet network</summary><p>Chain ID 10143. RPC https://testnet-rpc.monad.xyz. Use public test assets only.</p>';
+    }
     main.querySelector('.trading > .caption')!.textContent = 'Every approval, trade and redemption needs your confirmation. Mera signs here after review; extension wallets open their own prompt.';
     // Progressive disclosure keeps conversion and settlement available without
     // making the first trade compete with every advanced action.
@@ -44,9 +55,9 @@ function CoreMarket({ account, panel }: { account: string | null; panel: Panel }
     main.setAttribute('data-panel', host.current!.dataset.panel || 'trade');
     const provider = meraProvider(controller);
     const unmount = mountDashboard(shadow, { account: account || undefined, consumer: true, credentials: 'same-origin',
-      providers: account ? [{ name: 'Flurbo passkey (Mera)', provider }] : [] });
+      providers: account && state.method === 'passkey' ? [{ name: 'Flurbo passkey (Mera)', provider }] : [] });
     return () => { unmount(); provider.destroy(); };
-  }, [account, controller]);
+  }, [account, controller, state.method]);
   useEffect(() => { host.current?.shadowRoot?.querySelector('main')?.setAttribute('data-panel', panel); }, [panel]);
   return <div ref={host} data-panel={panel} className="core-market" />;
 }
@@ -62,20 +73,21 @@ export default function Workspace() {
       <Link className="workspace-back" href="/"><ArrowLeft size={16} /> Back to the idea</Link>
       <span className="eyebrow">Your workspace</span>
       <nav aria-label="Workspace">{tabs.map(({key,label,icon: Icon}) => <button key={key} type="button" aria-current={panel === key ? 'page' : undefined} onClick={() => setPanel(key)}><Icon size={18}/>{label}{panel === key && <span className="workspace-nav-dot"/>}</button>)}</nav>
-      <div className="workspace-note"><span className="eyebrow">One shared pool</span><p>Separate ideas.<br/><em>Connected possibilities.</em></p><span>Synthetic events on a local Monad fork. Test assets only.</span></div>
-      {address && <button className="workspace-signout" onClick={() => { void controller.signOut('Signed out. Your passkey remains available.'); }}><LogOut size={15}/> Sign out</button>}
+      <div className="workspace-note"><span className="eyebrow">One shared pool</span><p>Separate ideas.<br/><em>Connected possibilities.</em></p><span>{publicTestnet ? 'Synthetic events on public Monad testnet. Test assets only.' : 'Synthetic events on a local Monad fork. Test assets only.'}</span></div>
+      {address && <button className="workspace-signout" onClick={() => { void controller.signOut('Signed out. Your wallet and passkey remain yours.'); }}><LogOut size={15}/> Sign out</button>}
     </aside>
     <div className="workspace-body">
-      <header className="workspace-heading"><div><span className="eyebrow">Flurbo / {panel === 'trade' ? 'Make your move' : panel === 'positions' ? 'Keep the bigger picture' : 'Follow the details'}</span><h1>{panel === 'trade' ? <>A view worth <em>combining.</em></> : panel === 'positions' ? <>Your piece of <em>the picture.</em></> : <>Every move, <em>in view.</em></>}</h1><p>{panel === 'trade' ? 'Choose the outcomes you believe in. Get one price from one shared pool.' : panel === 'positions' ? 'Follow your holdings and what they pay when the outcome is known.' : 'Check transactions, pool contracts and settlement on the local network.'}</p></div><span className="workspace-network"><i/> Local test market</span></header>
+      <header className="workspace-heading"><div><span className="eyebrow">Flurbo / {panel === 'trade' ? 'Make your move' : panel === 'positions' ? 'Keep the bigger picture' : 'Follow the details'}</span><h1>{panel === 'trade' ? <>A view worth <em>combining.</em></> : panel === 'positions' ? <>Your piece of <em>the picture.</em></> : <>Every move, <em>in view.</em></>}</h1><p>{panel === 'trade' ? 'Choose the outcomes you believe in. Get one price from one shared pool.' : panel === 'positions' ? 'Follow your holdings and what they pay when the outcome is known.' : 'Check transactions, pool contracts and settlement on Monad.'}</p></div><span className="workspace-network"><i/> {publicTestnet ? 'Monad testnet' : 'Local test market'}</span></header>
       <section className="workspace-identity" aria-label="Account access">
         <div className="identity-symbol"><Wallet size={20}/></div>
-        <div className="identity-copy"><span className="eyebrow">{address ? 'Your Flurbo account' : 'Make yourself at home'}</span>{state.restoring ? <p>Restoring your session...</p> : address ? <><button title="Copy full account address" onClick={async () => { try { await navigator.clipboard.writeText(address); setCopied(true); } catch { setCopied(false); } }} className="identity-address">{address.slice(0, 8)}...{address.slice(-6)} {copied ? <Check size={14}/> : <Copy size={14}/>}</button><span className="identity-caption">{state.signingExpiresAt ? 'Signing is open for this visit. Login stays active for seven days.' : 'Welcome back. Your login is saved; unlock signing when you want to trade.'}</span></> : <p>Sign in to use your Mera account, or explore with an extension wallet.</p>}</div>
-        {address ? <button className="button button-dark" disabled={state.busy || !!state.signingExpiresAt} onClick={() => void controller.authenticate('login')}><LockKeyhole size={15}/>{state.busy ? 'Confirm your passkey...' : state.signingExpiresAt ? 'Signing unlocked' : 'Unlock signing'}</button> : <Link href="/login" className="button button-dark">Sign in <ArrowUpRight size={16}/></Link>}
+        <div className="identity-copy"><span className="eyebrow">{address ? 'Your Flurbo account' : 'Make yourself at home'}</span>{state.restoring ? <p>Restoring your session...</p> : address ? <><button title="Copy full account address" onClick={async () => { try { await navigator.clipboard.writeText(address); setCopied(true); } catch { setCopied(false); } }} className="identity-address">{address.slice(0, 8)}...{address.slice(-6)} {copied ? <Check size={14}/> : <Copy size={14}/>}</button><span className="identity-caption">{state.method === 'wallet' ? 'Signed in with your wallet. Confirm trades in the selected wallet.' : state.signingExpiresAt ? 'Signing is open for this visit. Login stays active for seven days.' : 'Welcome back. Your login is saved; unlock signing when you want to trade.'}</span></> : <p>Sign in to use your Mera account, or explore with an extension wallet.</p>}</div>
+        {address && state.method === 'wallet' ? <span className="identity-caption">Wallet signing</span> : address ? <button className="button button-dark" disabled={state.busy || !!state.signingExpiresAt} onClick={() => void controller.authenticate('login')}><LockKeyhole size={15}/>{state.busy ? 'Confirm your passkey...' : state.signingExpiresAt ? 'Signing unlocked' : 'Unlock signing'}</button> : <Link href="/login" className="button button-dark">Sign in <ArrowUpRight size={16}/></Link>}
       </section>
       {state.error && <p role="alert" className="auth-error">{state.error}</p>}
       {state.notice && <p role="status" className="auth-feedback">{state.notice}</p>}
+      {publicTestnet && address && <Funding key={address + state.method}/>}
       <CoreMarket account={address} panel={panel}/>
-      <footer className="workspace-footer"><span>One pool. More possibilities.</span><span>Local prototype / AUSD collateral / Synthetic outcomes</span></footer>
+      <footer className="workspace-footer"><span>One pool. More possibilities.</span><span>{publicTestnet ? 'Monad testnet / Test AUSD / Synthetic outcomes' : 'Local prototype / AUSD collateral / Synthetic outcomes'}</span></footer>
     </div>
   </main>;
 }

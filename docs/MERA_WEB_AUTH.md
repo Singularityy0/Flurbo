@@ -1,5 +1,10 @@
 # Mera web account access
 
+Hosted deployment now has a standalone server and external Redis sessions.
+Browser-wallet signature login is also available without a Mera account.
+See [the public testnet deployment guide](PUBLIC_TESTNET_DEPLOYMENT.md) for the
+current hosting path; loopback setup below remains the development workflow.
+
 The consumer website uses `@category-labs/mera` 0.2.0 for real passkey creation
 and sign-in. The user has verified the basic passkey flow on their device.
 A server-verified account session now persists across refresh, and the account
@@ -38,6 +43,8 @@ and verified before issuing an opaque session token. The server stores only toke
 hashes and public session details. Reload restores the account through the server;
 public browser metadata alone never establishes login. Sign-out revokes the token.
 The development server keeps sessions in memory, so restarting it revokes logins.
+The hosted server uses Upstash Redis with expiring hashed tokens and atomic
+one-use challenges. Its cookies also require Secure transport.
 
 The signing key stays in tab memory for one hour and is cleared on page exit or
 sign-out. Reload preserves account access but requires **Unlock signing** before
