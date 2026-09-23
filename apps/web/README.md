@@ -20,7 +20,8 @@ npm run dev
 Open http://localhost:18767. Passkey testing requires `localhost`, not the numeric
 IP address. The server binds only to loopback and requires that
 port to be free. The existing trading dashboard (18765) and learning lab (18766)
-keep their own servers and wallet/API boundaries.
+keep their servers. The consumer workspace reads the existing dashboard API through
+its loopback-only middleware; keep the local Anvil and block helper running.
 
 ```sh
 npm run build
@@ -35,8 +36,9 @@ the consumer page does not require a third-party CDN.
 
 - `/`: landing page, selectable event cards, shared-pool explanation and FAQ.
 - `/login` and `/signup`: Mera passkey account creation and returning sign-in.
-- `/account`: the derived EVM address, copy action, expiry and sign-out. Sessions
-  remain in memory for 15 minutes and lock on reload or page exit.
+- `/account`: the integrated market workspace, positions and activity. Seven-day
+  verified account login survives refresh. Signing access stays in memory for one
+  hour and can be reopened with a passkey after refresh.
 - Unknown routes render a recovery page with a working home link.
 - GSAP owns section entrance animations. Framer Motion owns selection feedback,
   result changes and FAQ expansion. Both respect reduced motion.
@@ -48,16 +50,20 @@ the consumer page does not require a third-party CDN.
   distinguish combined, single-event and empty states. Orbit markers share SVG
   coordinates with their rings so their centers stay on the lines when resized.
 
-The web account flow uses the real Mera SDK. Device verification remains pending.
-It does not establish public trading, server authentication, conditional-claim
-trading or completed partner integrations. Existing chain clients and transaction
-controls remain in `apps/dashboard` and `apps/mobile`. See
+The user verified passkey signup and returning login on their device. This phase
+adds server-verified cookie sessions and connects the existing local execution
+engine to both Mera and browser wallets. The new Mera trading path still needs a
+manual device round trip. Public trading, tradable conditionals and partner
+completion remain pending. See [workspace guide](../../docs/CONSUMER_WORKSPACE.md) and
 [Mera web authentication](../../docs/MERA_WEB_AUTH.md) for the identity contract,
 session boundaries and manual device checks.
 
 ## Hosting later
 
-Build with `apps/web` as the project root and publish `dist/` on a static host.
+Build with `apps/web` as the project root. `dist/` contains the frontend only.
+Account persistence and the MVP need a backend; uploading static files alone is
+not sufficient. The current API middleware deliberately works only in local
+development. See the workspace guide before public deployment.
 Configure an SPA fallback to `index.html` for `/login`, `/signup` and other
 non-asset routes. Confirm deep-link refreshes after deployment. No domain or
 hosting changes are made by the build. Production passkeys are restricted to
@@ -73,4 +79,5 @@ responses. It does not replace testing on a real authenticator.
 Browser review should cover desktop and mobile layouts, both event toggles,
 FAQ expansion, keyboard navigation/Escape, direct account routes and their
 back links, the not-found route, and reduced motion. All interaction prices
-and outcomes remain illustrative; this page does not submit trades.
+on the landing page remain illustrative. The account workspace reads real local
+contract quotes and can submit explicitly reviewed local test transactions.

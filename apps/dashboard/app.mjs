@@ -1,7 +1,9 @@
 import { compileClaim, claimLabel, parseUnits, formatUnits, snapshotFresh } from './claims.mjs';
 import { mountTrading } from './trading-ui.mjs';
 
-const $ = id => document.getElementById(id);
+export function mountDashboard(root = document, options = {}) {
+const $ = id => root.querySelector('#' + id);
+let disposed = false;
 const text = (id, value) => { $(id).textContent = value; };
 function el(tag, value, className) {
   const node = document.createElement(tag);
@@ -10,7 +12,7 @@ function el(tag, value, className) {
   return node;
 }
 let legs = [{ index: 7, yes: true }], customMask = 2, composed, quantityValid = true;
-let data = null, wallet = null, stateBusy = false, quoteBusy = false, quote = null;
+let data = null, wallet = options.account || null, stateBusy = false, quoteBusy = false, quote = null;
 let stateGeneration = 0, quoteGeneration = 0, txGeneration = 0;
 let stateController, quoteController, txController;
 let lastFailure = '', selectedLabels = new Map();
@@ -19,7 +21,7 @@ let trading;
 async function request(path, controller, options = {}) {
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-    const response = await fetch(path, { ...options, signal: controller.signal, cache: 'no-store', credentials: 'omit' });
+    const response = await fetch(path, { ...options, signal: controller.signal, cache: 'no-store', credentials: options.credentials || 'omit' });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Data is unavailable. Try refreshing.');
     return result;
@@ -46,7 +48,7 @@ function preview() {
     composed = compileClaim(legs, $('mode').value, customMask);
     text('compose-error', '');
     text('claim-label', claimLabel(legs, $('mode').value));
-    text('claim-detail', `Pays 1 AUSD per winning unit · scope ${composed.scope}, mask ${composed.mask}`);
+    text('claim-detail', options.consumer ? 'Pays 1 AUSD per winning unit at settlement.' : `Pays 1 AUSD per winning unit · scope ${composed.scope}, mask ${composed.mask}`);
   } catch (error) {
     composed = null;
     text('compose-error', error.message);
@@ -134,7 +136,7 @@ function tick() {
 
 function clearState() {
   data = null;
-  for (const id of ['collateral', 'liability', 'coverage', 'phase', 'bid', 'ask']) text(id, '—');
+  for (const id of ['collateral', 'liability', 'coverage', 'phase', 'bid', 'ask']) text(id, 'Unavailable');
   text('surplus', 'Coverage surplus is not profit'); text('close', 'Close time unavailable');
   text('receipt-backing', 'Receipt backing unavailable'); text('network-name', 'Deployment unavailable');
   text('rules', 'Settlement rules unavailable'); text('resolution', '');
@@ -151,7 +153,7 @@ function renderState() {
   text('close', `Closes ${new Date(data.cluster.closes_at * 1000).toLocaleString()}`);
   text('bid', data.kuru.best_bid_wad === null ? 'No bids' : formatUnits(data.kuru.best_bid_wad, 18));
   text('ask', data.kuru.best_ask_wad === null ? 'No asks' : formatUnits(data.kuru.best_ask_wad, 18));
-  text('receipt-backing', p.receipt_backed ? `${formatUnits(p.receipt_supply_atoms)} receipts · fully escrow-backed` : 'Receipt escrow mismatch — quoting disabled');
+  text('receipt-backing', p.receipt_backed ? `${formatUnits(p.receipt_supply_atoms)} receipts · fully escrow-backed` : 'Receipt escrow mismatch Unavailable quoting disabled');
   text('network-name', `${data.environment === 'local_fork' ? 'Local Monad fork' : 'Monad testnet'} · ${data.chain_id}`);
   text('rules', data.cluster.rules);
   text('resolution', p.resolved ? `Resolved outcome bits: ${p.resolved_state}. Event A is bit 0; H is bit 7.` : 'Settlement is pending. These are synthetic fixtures with a trusted resolver.');
@@ -159,7 +161,7 @@ function renderState() {
   for (const [name, address] of Object.entries({ ...data.contracts, resolver: data.cluster.resolver, 'snapshot hash': data.snapshot.block_hash })) {
     $('contracts').append(el('dt', name), el('dd', address));
   }
-  renderWallet(); tick();
+  renderWallet(); tick(); options.onSnapshot?.(data);
 }
 function renderWallet() {
   const w = data?.wallet;
@@ -183,6 +185,7 @@ function renderWallet() {
   $('wallet-result').append(balances, table, el('p', 'Only the eight base YES claims and your current composed claim are requested. This is not a complete portfolio. Kuru available balances exclude resting-order reserves; wrapped receipts are separate from internal pool holdings.', 'caption'));
 }
 async function refresh() {
+  if (disposed) return;
   const generation = ++stateGeneration;
   stateController?.abort(); stateController = new AbortController(); stateBusy = true;
   $('wallet-result').replaceChildren();
@@ -270,6 +273,8 @@ $('tx-form').addEventListener('submit', async event => {
 });
 
 trading = mountTrading({
+  root,
+  providers: options.providers || [],
   getState: () => data,
   getSelection: () => composed && quantityValid ? { ...composed, quantity: parseUnits($('quantity').value.trim()), label: claimLabel(legs, $('mode').value) } : null,
   readHealth: () => request('/api/health', new AbortController()),
@@ -286,7 +291,18 @@ trading = mountTrading({
     refresh();
   },
 });
+if (wallet) $('wallet').value = wallet;
 renderComposer(); preview(); refresh();
-setInterval(tick, 1000);
-setInterval(() => { if (!document.hidden && !stateBusy && !quoteBusy && !trading.busy) refresh(); }, 15000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { tick(); refresh(); } });
+const tickTimer = setInterval(tick, 1000);
+const refreshTimer = setInterval(() => { if (!document.hidden && !stateBusy && !quoteBusy && !trading.busy) refresh(); }, 15000);
+const visible = () => { if (!document.hidden) { tick(); refresh(); } };
+document.addEventListener('visibilitychange', visible);
+return () => {
+  disposed = true; ++stateGeneration; ++quoteGeneration; ++txGeneration;
+  stateController?.abort(); quoteController?.abort(); txController?.abort();
+  clearInterval(tickTimer); clearInterval(refreshTimer);
+  document.removeEventListener('visibilitychange', visible); trading.destroy();
+};
+}
+
+if (document.querySelector('[data-standalone-dashboard]')) mountDashboard(document);

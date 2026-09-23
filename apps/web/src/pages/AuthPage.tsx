@@ -1,5 +1,5 @@
 import { ArrowUpRight, CircleArrowLeft, LockKeyhole, Copy, LogOut } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { Logo } from "../App";
 import { useAuth } from "../auth/context";
@@ -14,6 +14,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
   const [copyStatus, setCopyStatus] = useState("");
   const isLogin = mode !== "signup";
   const active = !!state.address;
+  useEffect(() => { if (active && !state.busy) navigate('/account'); }, [active, state.busy, navigate]);
   const localHref = policy.localUrl ? new URL(isLogin ? "/login" : "/signup", policy.localUrl).href : undefined;
 
   async function authenticate(chooseAnother = false) {
@@ -49,11 +50,11 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
             <h2>{active ? "You're in." : isLogin ? "Sign in with your passkey." : "One passkey. Your account."}</h2>
             {policy.local && <div className="honesty-note">Local test account only. This passkey will not work on flurbo.singu.online. Do not send real funds to this account.</div>}
             {active ? <>
-              <p className="auth-panel-copy">Your account is open in this tab. Trading is not connected to this account screen yet.</p>
+              <p className="auth-panel-copy">Your account is ready. Opening your workspace.</p>
               <div className="account-address"><span className="eyebrow">Your EVM address</span><code>{state.address}</code></div>
               <button type="button" className="text-link auth-copy" onClick={() => void copyAddress()}><Copy size={15} /> Copy address</button>
               <p className="auth-feedback" role="status">{copyStatus}</p>
-              <p className="auth-panel-copy">This session ends at {new Date(state.expiresAt!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. Reloading or closing this page also locks the account.</p>
+              <p className="auth-panel-copy">Your login stays available for seven days. Signing access can be reopened with your passkey.</p>
               <button type="button" className="button button-dark auth-explore" onClick={() => { controller.signOut("You are signed out. Your passkey stays in your password manager."); navigate("/login"); }}><LogOut size={16} /> Sign out</button>
               <Link href="/#the-idea" className="text-link auth-return">Explore Flurbo <ArrowUpRight size={15} /></Link>
             </> : <>

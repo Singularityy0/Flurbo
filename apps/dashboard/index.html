@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/app.mjs"></script>
 </head>
-<body>
+<body data-standalone-dashboard>
   <a class="skip" href="#main">Skip to dashboard</a>
   <header class="topbar wrap">
     <a class="wordmark" href="/" aria-label="Flurbo home">flurbo<span>.</span></a>
@@ -23,10 +23,10 @@
     <div class="statusbar"><div><span class="status-dot" id="status-dot"></span><strong id="connection">Connecting to local data…</strong><span id="block-label" class="muted"></span></div><button id="refresh" class="button small secondary">Refresh data ↻</button></div>
     <p id="notice" class="notice" role="status">Loading the verified deployment. No wallet is connected.</p>
     <section class="stats" aria-label="Shared pool health">
-      <article><p class="eyebrow">POOL COLLATERAL</p><p class="stat" id="collateral">—</p><span class="muted">AUSD held by the shared pool</span></article>
-      <article><p class="eyebrow">MAXIMUM LIABILITY</p><p class="stat" id="liability">—</p><span class="muted">AUSD needed for outstanding payouts</span></article>
-      <article><p class="eyebrow">COLLATERAL COVERAGE</p><p class="stat" id="coverage">—</p><span class="muted" id="surplus">Coverage surplus is not profit</span></article>
-      <article><p class="eyebrow">MARKET LIFECYCLE</p><p class="stat" id="phase">—</p><span class="muted" id="close">Reading immutable close time</span></article>
+      <article><p class="eyebrow">POOL COLLATERAL</p><p class="stat" id="collateral">Unavailable</p><span class="muted">AUSD held by the shared pool</span></article>
+      <article><p class="eyebrow">MAXIMUM LIABILITY</p><p class="stat" id="liability">Unavailable</p><span class="muted">AUSD needed for outstanding payouts</span></article>
+      <article><p class="eyebrow">COLLATERAL COVERAGE</p><p class="stat" id="coverage">Unavailable</p><span class="muted" id="surplus">Coverage surplus is not profit</span></article>
+      <article><p class="eyebrow">MARKET LIFECYCLE</p><p class="stat" id="phase">Unavailable</p><span class="muted" id="close">Reading immutable close time</span></article>
     </section>
     <div class="workspace">
       <section class="card composer" id="compose" aria-labelledby="compose-title">
@@ -75,7 +75,7 @@
           <button id="check-execution" class="button secondary" hidden>Check submitted transaction</button>
           <button id="clear-tracking" class="button quiet" hidden>Clear tracking after wallet check</button>
         </section>
-        <section class="card book" aria-labelledby="book-title"><div class="section-heading"><h2 id="book-title">The base market</h2><span class="pill">KURU</span></div><p class="muted">Event H · YES receipt / AUSD</p><div class="book-prices"><div><span class="eyebrow">BEST BID</span><strong id="bid">—</strong></div><div><span class="eyebrow">BEST ASK</span><strong id="ask">—</strong></div></div><p class="caption">Indicative top of book. Depth, fees and gas are needed for an executable route. This local book uses synthetic operator liquidity.</p><p id="receipt-backing" class="backing">Receipt backing: checking…</p></section>
+        <section class="card book" aria-labelledby="book-title"><div class="section-heading"><h2 id="book-title">The base market</h2><span class="pill">KURU</span></div><p class="muted">Event H · YES receipt / AUSD</p><div class="book-prices"><div><span class="eyebrow">BEST BID</span><strong id="bid">Unavailable</strong></div><div><span class="eyebrow">BEST ASK</span><strong id="ask">Unavailable</strong></div></div><p class="caption">Indicative top of book. Depth, fees and gas are needed for an executable route. This local book uses synthetic operator liquidity.</p><p id="receipt-backing" class="backing">Receipt backing: checking…</p></section>
       </div>
     </div>
     <section class="card account" id="account" aria-labelledby="account-title"><div class="section-heading"><div><p class="eyebrow">03 / YOUR ACCOUNT</p><h2 id="account-title">Inspect a wallet.</h2></div><span class="pill">READ ONLY</span></div><p class="muted">Paste a public address to view balances. This does not connect or authenticate a wallet.</p><form id="wallet-form" class="input-action"><div class="grow"><label for="wallet">Public wallet address</label><input id="wallet" placeholder="0x…" autocomplete="off" spellcheck="false" maxlength="42"></div><button class="button secondary" type="submit">View balances</button><button class="button quiet" id="wallet-clear" type="button">Clear</button></form><p id="wallet-message" class="caption" role="status">No wallet selected.</p><div id="wallet-result"></div></section>

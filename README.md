@@ -50,9 +50,9 @@ landing design with interactive event cards and Mera passkey signup/sign-in.
 Run `cd apps/web`, `npm ci`, then `npm run dev` to open it at
 http://localhost:18767. Local passkeys are separate test identities. The existing
 local trading and learning dashboards keep their separate ports and functionality.
-Real-device authentication and public HTTPS hosting remain unverified; see the
-[Mera web account test](docs/MERA_WEB_AUTH.md). Account access is not yet connected
-to trading.
+The user verified Mera signup and login. The [consumer workspace](docs/CONSUMER_WORKSPACE.md)
+now connects the local MVP and retains a verified seven-day account login across
+refresh. Mera transaction testing and public HTTPS deployment remain pending.
 
 An offline [ParlayMarket learning comparison](docs/PARLAY_COMPARISON.md) now adds
 an exact pairwise model, cross-entropy gradient updates and explicit virtual

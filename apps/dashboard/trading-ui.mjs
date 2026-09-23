@@ -2,11 +2,12 @@ import { address, assertContext, prepare, prepareRedemption, prepareConversion, 
 import { formatUnits, parseUnits, snapshotFresh } from './claims.mjs';
 
 const KEY = 'flurbo.local.pending.v1';
-const $ = id => document.getElementById(id);
-const text = (id, message) => { $(id).textContent = message; };
 const hashOK = hash => /^0x[0-9a-fA-F]{64}$/.test(hash);
 
 export function mountTrading(hooks) {
+  const $ = id => hooks.root ? hooks.root.querySelector('#' + id) : document.getElementById(id);
+  const text = (id, message) => { $(id).textContent = message; };
+  let disposed = false;
   const providers = [];
   let provider, account = null, review = null, operation = false, checking = false, generation = 0, pending = null, lastHash = '';
   let removeListeners = () => {};
@@ -15,6 +16,10 @@ export function mountTrading(hooks) {
   }
   function persist(value) {
     try {
+      if (disposed) {
+        const current = JSON.parse(sessionStorage.getItem(KEY) || 'null');
+        if (!current?.plan || current.plan.tx?.data !== pending?.plan?.tx?.data || current.plan.account !== pending?.plan?.account) return;
+      }
       if (value) sessionStorage.setItem(KEY, JSON.stringify(value)); else sessionStorage.removeItem(KEY);
     } catch { throw new WalletError('Browser session storage is unavailable. Submission is blocked to avoid losing transaction tracking.'); }
     pending = value;
@@ -32,6 +37,7 @@ export function mountTrading(hooks) {
     text('execution-status', 'Saved transaction tracking is unreadable. Check your wallet, then clear tracking explicitly.');
   }
   function update() {
+    if (disposed) return;
     const locked = operation || Boolean(pending);
     const quote = hooks.getQuote()?.quote;
     const side = quote?.side === 'sell' ? 'sell' : 'buy';
@@ -57,8 +63,8 @@ export function mountTrading(hooks) {
     text('execution-help', !account ? 'Connect your test wallet, then get a pool quote.'
       : resolved ? 'Trading has ended. Select your claim and quantity, then review redemption below.'
       : !quote ? 'Wallet connected. Get a fresh pool quote to enable the buy or sell review.'
-      : review ? 'Click the confirmation button below to open MetaMask.'
-      : `Click Review ${side} to check funding and show the confirmation button. Reviewing does not open MetaMask; confirming does.`);
+      : review ? 'Click the confirmation button below to open your selected wallet.'
+      : `Click Review ${side} to check funding and show the confirmation button. Reviewing does not open your selected wallet; confirming does.`);
     $('execution-help').hidden = locked;
     $('connect-wallet').disabled = locked || providers.length === 0 || Boolean(account);
     $('setup-wallet').disabled = locked || providers.length === 0;
@@ -99,12 +105,15 @@ export function mountTrading(hooks) {
     if (!account) text('signer-status', 'Select a browser wallet and connect your dedicated local test account.');
     update();
   }
-  window.addEventListener('eip6963:announceProvider', event => addProvider(event.detail?.provider, event.detail?.info?.name));
+  const announced = event => addProvider(event.detail?.provider, event.detail?.info?.name);
+  window.addEventListener('eip6963:announceProvider', announced);
+  for (const item of hooks.providers || []) addProvider(item.provider, item.name);
   window.dispatchEvent(new Event('eip6963:requestProvider'));
   addProvider(window.ethereum, 'Browser wallet (injected)');
   if (!providers.length) text('signer-status', 'No browser wallet detected. Open this URL in a desktop browser with your wallet extension, then reload. The in-app browser may not provide a wallet.');
 
   function connected(selected, candidate) {
+    if (disposed) return;
     removeListeners(); provider = selected; account = candidate;
     const changed = () => disconnect('Wallet account or network changed. Reconnect and review again. Any open wallet request must be handled in the wallet.');
     for (const name of ['accountsChanged', 'chainChanged', 'disconnect']) selected.on(name, changed);
@@ -118,7 +127,7 @@ export function mountTrading(hooks) {
     if (!selected) return;
     disconnect('Setting up your selected test account…');
     operation = true; update();
-    text('setup-status', 'Approve account/network prompts in MetaMask. Verifying the local fork before topping up test balances…');
+    text('setup-status', 'Approve account/network prompts in your selected wallet. Verifying the local fork before topping up test balances…');
     try {
       const owner = await setupLocalWallet(selected, hooks);
       connected(selected, owner);
@@ -212,7 +221,7 @@ export function mountTrading(hooks) {
       $('confirm-trade').textContent = plan.kind === 'approve'
         ? (plan.approval === '0' ? 'Confirm allowance reset in wallet' : 'Approve AUSD in wallet')
         : `Confirm ${plan.kind} in wallet`;
-      text('execution-status', `Review the details, then click “${$('confirm-trade').textContent}” to open MetaMask.`);
+      text('execution-status', `Review the details, then click “${$('confirm-trade').textContent}” to open your selected wallet.`);
     } catch (error) { text('execution-status', walletMessage(error)); }
     finally { operation = false; update(); }
   });
@@ -246,7 +255,7 @@ export function mountTrading(hooks) {
     const record = pending; checking = true;
     try {
       const result = await hooks.readTransaction(hash);
-      if (pending !== record) return;
+      if (disposed || pending !== record) return;
       const status = reconcile(record.plan, result.transaction);
       if (status === 'mismatch') {
         text('execution-status', 'Included transaction does not match the reviewed calldata and contract event. Check the wallet; tracking stays locked.'); return;
@@ -284,7 +293,7 @@ export function mountTrading(hooks) {
     persist(null); review = null; text('execution-status', 'Tracking cleared by you. This does not cancel anything in the wallet or on-chain.');
     hooks.invalidateQuote('Tracking cleared. Request a fresh quote.'); update();
   });
-  setInterval(() => { if (pending?.hash) checkPending(); }, 5000);
+  const pendingTimer = setInterval(() => { if (pending?.hash) checkPending(); }, 5000);
   update();
-  return { update, invalidate: () => invalidate(), get busy() { return operation || Boolean(pending) || Boolean(review); } };
+  return { destroy() { disposed = true; ++generation; clearInterval(pendingTimer); removeListeners(); window.removeEventListener('eip6963:announceProvider', announced); }, update, invalidate: () => invalidate(), get busy() { return operation || Boolean(pending) || Boolean(review); } };
 }

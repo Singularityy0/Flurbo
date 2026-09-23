@@ -1,9 +1,10 @@
 # Mera web account access
 
 The consumer website uses `@category-labs/mera` 0.2.0 for real passkey creation
-and sign-in. This is client-side access to a passkey-derived EVM account, not
-a backend login session or authorization system. Trading is not connected to
-this account screen. Native Expo authentication is still separate work.
+and sign-in. The user has verified the basic passkey flow on their device.
+A server-verified account session now persists across refresh, and the account
+workspace connects to local MVP trading. Native Expo authentication is still
+separate work. See [the workspace guide](CONSUMER_WORKSPACE.md).
 
 ## Stable account identity
 
@@ -31,10 +32,19 @@ WebAuthn availability alone does not establish PRF support.
 
 ## Session and storage boundaries
 
-The derived Mera signing session stays in tab memory and ends after 15 minutes,
-sign-out or page exit. Reload requires a new passkey ceremony. Focus and visibility
-checks expire sessions when a suspended tab returns. Ending a pending flow also
-invalidates late results. No transaction-signing method is exposed to the UI yet.
+Account login lasts seven days in an HttpOnly, SameSite=Strict cookie. A one-use,
+five-minute, origin-bound server challenge is signed with the derived Mera account
+and verified before issuing an opaque session token. The server stores only token
+hashes and public session details. Reload restores the account through the server;
+public browser metadata alone never establishes login. Sign-out revokes the token.
+The development server keeps sessions in memory, so restarting it revokes logins.
+
+The signing key stays in tab memory for one hour and is cleared on page exit or
+sign-out. Reload preserves account access but requires **Unlock signing** before
+a Mera transaction. Expiring the signing key does not log the account out. Each
+approval, trade, conversion and redemption requires a separate reviewed action.
+Focus and visibility checks handle suspended tabs; late passkey results cannot
+reopen a cancelled operation.
 
 Local storage contains only a version, RP ID, credential ID and public address,
 under `flurbo.passkey.v1:<rpId>`. These are remembered account hints, not proof of
@@ -48,7 +58,8 @@ derivation; ending the session clears its owned key. JavaScript cannot guarantee
 erasure of immutable mnemonic strings, garbage-collected copies or browser memory.
 The EVM key is derived software key material in the page, not an EVM key kept in
 the authenticator. Same-origin script compromise remains a security boundary.
-There is no secret export, telemetry, server credential database or API session.
+There is no secret export or telemetry. The server verifies account signatures
+but never receives the PRF output, mnemonic, seed or private key.
 
 Recovery depends on retaining access to the same passkey, including a compatible
 provider's synchronization or backup. A replacement passkey creates a different
@@ -69,9 +80,11 @@ npm --prefix apps/web run dev
    account screen should show an EVM address only after successful derivation.
 3. Copy that public address, sign out, then sign in with the same passkey. Confirm
    that the full address matches. Do not share or export any private material.
-4. Reload. The account should be locked and require sign-in again. Cancel a login
-   prompt and confirm that no account opens. Wait 15 minutes after successful
-   sign-in to check automatic expiry, including after switching away from the tab.
+4. Reload. The account and workspace should remain available. **Unlock signing**
+   should reopen signing access with your passkey. Cancel that prompt and verify
+   that account access remains available while signing stays locked. After one
+   hour, only signing access should expire. Sign-out should stay effective after
+   refresh. Upgrading from the old flow requires one fresh sign-in.
 5. Optionally clear this site's local storage and sign in by selecting the saved
    passkey. The same address should return. Do not delete the actual passkey.
 
@@ -83,9 +96,11 @@ behavior, cross-device recovery or a deployed origin.
 
 ## Public hosting handoff
 
-Only the parent domain is registered as of this change. Configure a static host
-for `apps/web`, build with `npm ci && npm run build`, publish `dist/`, and connect
-`flurbo.singu.online` with valid HTTPS. Configure an SPA fallback to `index.html`
+Only the parent domain is registered as of this change. The frontend builds with
+`npm ci && npm run build`. The new session service also requires a deployed backend,
+a shared expiring session store, exact origin checks, Secure cookies and valid
+HTTPS at `flurbo.singu.online`. The local middleware is not a public server and
+must not be exposed or used to proxy local test funding on the public internet. Configure an SPA fallback to `index.html`
 for `/login`, `/signup` and `/account`. Test direct-route reloads. Keep account
 creation disabled on provider preview domains as the current policy requires.
 

@@ -5,6 +5,7 @@ import Home from "./pages/Home";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 import { useAuth } from "./auth/context";
+import Workspace from './pages/Workspace';
 
 export const brand = "flurbo";
 
@@ -114,7 +115,7 @@ export default function App() {
       <Route path="/" component={() => <AppShell><Home /></AppShell>} />
       <Route path="/login" component={() => <AuthShell mode="login" />} />
       <Route path="/signup" component={() => <AuthShell mode="signup" />} />
-      <Route path="/account" component={() => <AuthShell mode="account" />} />
+      <Route path="/account" component={() => <AppShell><Workspace /></AppShell>} />
       <Route component={NotFound} />
     </Switch>
   );
