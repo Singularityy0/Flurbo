@@ -143,7 +143,9 @@ export function mountTrading(hooks) {
           : `Contract deadline: ${new Date(plan.deadline * 1000).toLocaleTimeString()}. Submit this review before the quote expires.`,
       ];
       $('review-details').replaceChildren(...lines.map(line => { const p = document.createElement('p'); p.textContent = line; return p; }));
-      $('confirm-trade').textContent = plan.kind === 'approve' ? 'Confirm approval in wallet' : `Confirm ${plan.kind} in wallet`;
+      $('confirm-trade').textContent = plan.kind === 'approve'
+        ? (plan.approval === '0' ? 'Confirm allowance reset in wallet' : 'Approve AUSD in wallet')
+        : `Confirm ${plan.kind} in wallet`;
       text('execution-status', `Review the details, then click “${$('confirm-trade').textContent}” to open MetaMask.`);
     } catch (error) { text('execution-status', walletMessage(error)); }
     finally { operation = false; update(); }
@@ -191,8 +193,13 @@ export function mountTrading(hooks) {
       }
       if ((status === 'matched' || status === 'reverted') && result.transaction.confirmations >= 2) {
         persist(null); review = null;
+        const completed = record.plan.kind === 'approve'
+          ? (record.plan.approval === '0'
+            ? 'Allowance reset confirmed. No claims bought. Next: get a fresh buy quote and review the AUSD approval.'
+            : 'AUSD approval confirmed. No claims bought. Next: get a fresh buy quote and review the buy.')
+          : `${record.plan.kind === 'buy' ? 'Buy' : 'Sell'} confirmed for ${formatUnits(record.plan.quantity)} claim units (scope ${record.plan.scope}, mask ${record.plan.mask}). Balances are refreshing; do not repeat the trade to refresh them.`;
         text('execution-status', status === 'reverted' ? 'Transaction reverted. No trade or approval was applied. Refresh and review again.'
-          : `${record.plan.kind === 'approve' ? 'Approval' : 'Trade'} confirmed: exact calldata and contract event matched, with ${result.transaction.confirmations} canonical confirmations. Balances are refreshing. Request a new quote for the next step.`);
+          : `${completed} Exact calldata and contract event matched, with ${result.transaction.confirmations} canonical confirmations.`);
         lastHash = hash;
         hooks.invalidateQuote('Transaction completed. Request a fresh quote.');
         hooks.refresh();

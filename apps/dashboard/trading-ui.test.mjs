@@ -18,7 +18,7 @@ async function harness(run, saved) {
       this.calls.push({ method, params });
       if (method === 'eth_sendTransaction') return new Promise((resolve, reject) => { this.resolve = resolve; this.reject = reject; });
       return { eth_requestAccounts: [account], eth_accounts: [account], eth_chainId: '0x279f', eth_getBlockByNumber: { hash },
-        eth_call: '0x' + BigInt(250001).toString(16).padStart(64, '0'), eth_estimateGas: '0x186a0', eth_gasPrice: '0x3b9aca00' }[method];
+        eth_call: '0x' + BigInt(params?.[0]?.data?.startsWith('0x095ea7b3') ? 1 : 250001).toString(16).padStart(64, '0'), eth_estimateGas: '0x186a0', eth_gasPrice: '0x3b9aca00' }[method];
     }
   }
   const provider = new Provider();
@@ -36,7 +36,7 @@ async function harness(run, saved) {
     const controller = mountTrading({ getQuote: () => quote, readSnapshot: async () => snapshot, accountChanged() {},
       readTransaction: async () => ({ transaction: state.tx }), invalidateQuote() {}, refresh() { state.refreshes++; } });
     const click = id => get(id).handlers.click();
-    await run({ get, storage, provider, click, state, controller });
+    await run({ get, storage, provider, click, state, controller, snapshot });
   } finally { for (const [k, value] of Object.entries(previous)) { if (value === undefined) delete globalThis[k]; else globalThis[k] = value; } }
 }
 async function submitting(f) {
@@ -72,8 +72,25 @@ test('confirmation requires two canonical confirmations and exact event before b
   await f.click('check-execution'); assert.equal(f.storage.has(key), true);
   f.state.tx.confirmations = 2;
   await f.click('check-execution'); assert.equal(f.storage.has(key), false);
-  assert.equal(f.state.refreshes, 1); assert.match(f.get('execution-status').textContent, /Trade confirmed/);
+  assert.equal(f.state.refreshes, 1); assert.match(f.get('execution-status').textContent, /Buy confirmed for 1 claim units/);
 }));
+test('allowance reset and approval are explicitly separate from purchasing claims', async () => {
+  for (const allowance of ['1', '0']) await harness(async f => {
+    f.snapshot.wallet.pool_allowance_atoms = allowance;
+    const { task } = await submitting(f);
+    const reset = allowance === '1';
+    assert.equal(f.get('confirm-trade').textContent, reset ? 'Confirm allowance reset in wallet' : 'Approve AUSD in wallet');
+    f.provider.resolve(txHash); await task;
+    const plan = JSON.parse(f.storage.get(key)).plan;
+    assert.equal(plan.kind, 'approve');
+    f.state.tx = { status: 'succeeded', confirmations: 2, sender: account, to: cash, input: plan.tx.data, value_wei: '0',
+      events: [{ kind: 'approval', owner: account, spender: pool, amount_atoms: plan.approval }] };
+    await f.click('check-execution');
+    assert.equal(f.storage.has(key), false);
+    assert.match(f.get('execution-status').textContent, reset ? /Allowance reset confirmed\. No claims bought/ : /AUSD approval confirmed\. No claims bought/);
+    assert.equal(f.provider.calls.filter(c => c.method === 'eth_sendTransaction').length, 1);
+  });
+});
 test('restored unresolved wallet requests lock new actions and are never automatically resubmitted', async () => harness(async f => {
   assert.equal(f.controller.busy, true);
   assert.equal(f.get('connect-wallet').disabled, true);
