@@ -27,12 +27,12 @@ function memoryRedis() {
 test('durable session adapter survives service reconstruction, consumes proofs once and revokes everywhere', async () => {
   let now = Date.now(); const redis = memoryRedis();
   const first = new RedisSessionStore(redis.command,()=>now), restarted = new RedisSessionStore(redis.command,()=>now);
-  const challenge = await first.challenge(signer.address,origin,'wallet');
+  const challenge = await first.challenge(signer.address,origin,'passkey');
   const signature = await signer.signMessage({message:challenge.message});
   const attempts = await Promise.allSettled([first.verify(challenge.id,signature,origin),restarted.verify(challenge.id,signature,origin)]);
   assert.equal(attempts.filter(a=>a.status==='fulfilled').length,1);
   const login = (attempts.find(a=>a.status==='fulfilled') as PromiseFulfilledResult<any>).value;
-  assert.equal((await restarted.read(login.sessionId,origin)).method,'wallet');
+  assert.equal((await restarted.read(login.sessionId,origin)).method,'passkey');
   assert.equal(await restarted.read(login.sessionId,'https://other.example'),null);
   assert.ok(![...redis.data.keys()].some(k=>k.includes(login.sessionId)));
   await restarted.revoke(login.sessionId); assert.equal(await first.read(login.sessionId,origin),null);
@@ -76,14 +76,22 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
     assert.equal((await request('/api/auth/challenge',{address:signer.address},'','flurbo.singu.online','https://evil.example')).status,403);
     assert.equal((await request('/api/local-wallet-setup',{wallet:signer.address})).status,404);
     assert.equal((await request('/api/rpc',{method:'anvil_setBalance',params:[]})).status,400);
-    const challenge=await request('/api/auth/challenge',{address:signer.address,method:'wallet'});
+    assert.equal((await request('/api/auth/challenge',{address:signer.address,method:'wallet'})).status,400);
+    const challenge=await request('/api/auth/challenge',{address:signer.address,method:'passkey'});
     const verified=await request('/api/auth/verify',{signature:await signer.signMessage({message:challenge.json().message})},challenge.headers['set-cookie'][0].split(';')[0]);
     assert.equal(verified.status,200);assert.match(verified.headers['set-cookie'][0],/HttpOnly.*SameSite=Strict.*Secure/);
     const cookie=verified.headers['set-cookie'][0].split(';')[0];
-    assert.equal((await request('/api/auth/session',undefined,cookie)).json().session.method,'wallet');
+    assert.equal((await request('/api/auth/session',undefined,cookie)).json().session.method,'passkey');
     const tx={type:'legacy' as const,chainId:10143,nonce:0,gas:100000n,gasPrice:1000000000n,to:TESTNET.cash as `0x${string}`,value:0n,data:('0x095ea7b3'+pool.slice(2).padStart(64,'0')+'1'.padStart(64,'0')) as `0x${string}`};
     const send=async(value:typeof tx)=>request('/api/rpc',{method:'eth_sendRawTransaction',params:[await signer.signTransaction(value)]},cookie);
     assert.equal((await send(tx)).status,200);
+    const withdrawal={...tx,data:('0xa9059cbb'+'44'.repeat(20).padStart(64,'0')+'1'.padStart(64,'0')) as `0x${string}`};
+    assert.equal((await send(withdrawal)).status,200);
+    for(const recipient of ['00'.repeat(20),pool.slice(2),TESTNET.cash.slice(2),signer.address.slice(2).toLowerCase()]) {
+      assert.equal((await send({...withdrawal,data:('0xa9059cbb'+recipient.padStart(64,'0')+'1'.padStart(64,'0')) as `0x${string}`})).status,403);
+    }
+    assert.equal((await send({...withdrawal,data:(withdrawal.data.slice(0,74)+'0'.repeat(64)) as `0x${string}`})).status,403);
+    assert.equal((await send({...withdrawal,data:('0x23b872dd'+withdrawal.data.slice(10)) as `0x${string}`})).status,403);
     assert.equal((await send({...tx,chainId:143})).status,403);
     assert.equal((await send({...tx,value:1n})).status,403);
     assert.equal((await send({...tx,data:('0x095ea7b3'+'33'.repeat(20).padStart(64,'0')+'1'.padStart(64,'0')) as `0x${string}`})).status,403);
@@ -92,7 +100,7 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
     assert.equal((await send(faucet)).status,200);
     assert.equal((await send({...faucet,value:1n})).status,403);
     assert.equal((await send({...faucet,data:(TESTNET.faucetSelector+'33'.repeat(20).padStart(64,'0')) as `0x${string}`})).status,403);
-    assert.equal(broadcasts,2);
+    assert.equal(broadcasts,3);
     assert.equal((await request('/api/state')).status,503);
     await request('/api/auth/logout',{},cookie); assert.equal((await request('/api/auth/session',undefined,cookie)).json().session,null);
   } finally { globalThis.fetch=originalFetch;server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));assert.equal(dirname(directory),tmpdir());assert.ok(basename(directory).startsWith('flurbo-server-'));await rm(directory,{recursive:true,force:true}); }

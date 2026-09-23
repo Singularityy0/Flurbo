@@ -1,21 +1,28 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { privateKeyToAccount } from 'viem/accounts';
-import { SessionStore } from '../server/session.mjs';
+import { SessionStore, digest } from '../server/session.mjs';
+import { RedisSessionStore } from '../server/redis-session.mjs';
 import { AuthController } from '../src/auth/controller.ts';
 import { authPolicy } from '../src/auth/policy.ts';
 const signer = privateKeyToAccount(('0x' + '11'.repeat(32)) as `0x${string}`);
 const origin = 'https://flurbo.singu.online';
-
-test('wallet authentication uses a signed login message and restores without a Mera account', async () => {
-  const store=new SessionStore();let id='',login:any=null;
-  const transport={async read(){return login;},async challenge(address:string,method?:string){const c=store.challenge(address,origin,method);id=c.id;return c.message;},async verify(signature:string){login=await store.verify(id,signature,origin);return login;},async logout(){login=null;}};
-  const controller=new AuthController({policy:authPolicy(origin,false,true,true),transport});
-  const methods:string[]=[];
-  const provider={async request({method,params}:any){methods.push(method);return method==='personal_sign'?signer.signMessage({message:{raw:params[0]}}):[signer.address];}};
-  assert.equal(await controller.authenticateWallet(provider),true);
-  assert.equal(controller.getSnapshot().method,'wallet');assert.equal(controller.getSnapshot().signingExpiresAt,null);
-  assert.deepEqual(methods,['eth_requestAccounts','personal_sign','eth_accounts']);
-  const restored=new AuthController({policy:authPolicy(origin,false,true,true),transport});await restored.restore();assert.equal(restored.getSnapshot().method,'wallet');
-  await controller.signOut();
+test('wallet login cannot be requested and legacy wallet proofs and sessions are rejected', async () => {
+  const store = new SessionStore();
+  assert.throws(() => store.challenge(signer.address, origin, 'wallet'));
+  const challenge = store.challenge(signer.address, origin);
+  store.challenges.get(digest(challenge.id)).method = 'wallet';
+  await assert.rejects(store.verify(challenge.id, await signer.signMessage({ message: challenge.message }), origin));
+  const legacy = { address: signer.address, expiresAt: Date.now() + 60000, origin, method: 'wallet' };
+  store.sessions.set(digest('legacy'), legacy);
+  assert.equal(store.read('legacy', origin), null);
+  const durable = new RedisSessionStore(async () => JSON.stringify(legacy));
+  assert.equal(await durable.read('legacy', origin), null);
+  const controller = new AuthController({ policy: authPolicy(origin, false, true, true), transport: {
+    async read() { return {...legacy, method:'wallet' as const}; },
+    async challenge() { throw Error('unused'); }, async verify() { throw Error('unused'); }, async logout() {},
+  } });
+  await controller.restore();
+  assert.equal(controller.getSnapshot().address, null);
+  assert.equal('authenticateWallet' in controller, false);
 });

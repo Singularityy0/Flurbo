@@ -3,7 +3,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { Logo } from "../App";
 import { useAuth } from "../auth/context";
-import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
 
 type AuthMode = "login" | "signup" | "account";
 
@@ -13,9 +12,6 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
   const [name, setName] = useState("Flurbo account");
   const [allowNew, setAllowNew] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
-  const [wallets, setWallets] = useState<BrowserWallet[]>([]);
-  const [walletIndex, setWalletIndex] = useState(0);
-  useEffect(() => { setWallets([]); return discoverWallets(wallet => setWallets(list => list.some(item => item.provider === wallet.provider) ? list : [...list, wallet])); }, []);
   const isLogin = mode !== "signup";
   const active = !!state.address;
   useEffect(() => { if (active && !state.busy) navigate('/account'); }, [active, state.busy, navigate]);
@@ -79,12 +75,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
                 {isLogin && state.remembered && <button type="button" className="text-link auth-alternative" disabled={state.busy} onClick={() => void authenticate(true)}>Choose another passkey</button>}
                 {state.busy && <button type="button" className="text-link auth-alternative" onClick={() => controller.signOut("Sign-in cancelled here. Dismiss any remaining device prompt before trying again.")}>Cancel</button>}
               </form>}
-              <div className="auth-wallet-option">
-                <p className="auth-panel-copy">Already use MetaMask or another wallet? Sign in with it. No passkey account is required.</p>
-                {wallets.length > 1 && <label>Wallet<select value={walletIndex} onChange={event => setWalletIndex(Number(event.target.value))} disabled={state.busy}>{wallets.map((wallet, index) => <option key={index} value={index}>{wallet.name}</option>)}</select></label>}
-                <button type="button" className="button button-dark auth-explore" disabled={state.busy || !wallets.length} onClick={() => void controller.authenticateWallet(wallets[walletIndex].provider)}>{wallets.length ? 'Sign in with wallet' : 'Open in a browser with your wallet'}</button>
-                <p className="auth-help">Sign a login message only. No transaction or token approval. A new passkey creates a separate wallet address.</p>
-              </div>
+              <p className="auth-help">Your Mera passkey is your Flurbo login. After signing in, you can trade with this wallet or connect MetaMask.</p>
               {state.error && <p className="auth-error" role="alert">{state.error}</p>}
               <div className="auth-switch">{isLogin ? "New to Flurbo?" : "Already have a passkey?"} <Link href={isLogin ? "/signup" : "/login"}>{isLogin ? "Create an account" : "Sign in"} <ArrowUpRight size={14} /></Link></div>
             </>}

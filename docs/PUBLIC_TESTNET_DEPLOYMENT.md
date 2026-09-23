@@ -12,9 +12,10 @@ research tool and is not included in this deployment.
   store. Server sleep/restart does not intentionally revoke valid login cookies.
 - Seven-day HttpOnly, Secure, SameSite=Strict login cookies. Redis stores hashed
   tokens with expiry; login challenges are consumed atomically and rate limited.
-- Mera passkey login or browser-wallet signature login. A MetaMask user does
-  not have to create a Mera wallet. The two methods do not automatically merge
-  unrelated wallet addresses or move balances.
+- Required Mera passkey signup/login, followed by optional MetaMask trading.
+  The Mera account identity stays fixed when the trading wallet changes.
+  Wallet balances and positions remain separate. Browser wallets never sign up
+  or log in to Flurbo; legacy wallet-login sessions are rejected.
 - Public-testnet quote, approval, buy/sell, conversion and redemption support
   through the existing reviewed execution flow. Snapshot, contract, collateral,
   sender, chain, slippage and receipt checks remain required.
@@ -41,7 +42,7 @@ research tool and is not included in this deployment.
 5. Open the canonical domain. Provider preview URLs intentionally reject account
    access. The health-check endpoint `/healthz` reports service liveness only,
    not contract readiness.
-6. Create a new passkey on the public domain, or sign in with MetaMask. Localhost
+6. Create a new Mera passkey account on the public domain. Localhost
    credentials have a different RP ID and do not recover a public-domain wallet.
    Reload, sign out, log in, and redeploy once to verify session persistence.
 
@@ -66,8 +67,8 @@ is `0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C`, with
 `requestFunds(address)` (selector `0x544c7cf9`). Its request was successfully
 simulated for the deployer against public testnet; nothing was broadcast.
 
-After hosting, sign in with that MetaMask address and use **Fund your account**.
-Alternatively use the official faucet contract's verified explorer write page
+The in-app funding panel funds the signed-in Mera address. To fund the separate
+MetaMask deployer above, use the official faucet contract's verified explorer write page
 with MetaMask on public Monad testnet. Check the transaction receipt and AUSD
 balance, not just the wallet popup. Faucet limits and availability may change.
 
@@ -127,8 +128,10 @@ public Monad RPC; no Anvil process or balance mutation endpoint is started.
 
 - Confirm DNS/HTTPS, direct `/login`, `/signup`, `/account` navigation and a
   session surviving refresh and service restart. Unsigned `/account` redirects.
-- Create/recover a public-domain Mera account; separately sign in with MetaMask
-  without creating a passkey. Verify which address is receiving funds.
+- Create/recover a public-domain Mera account, then optionally connect MetaMask
+  as the trading wallet. Switching wallets must not change the Mera login.
+  Review a small AUSD withdrawal from Mera to a MetaMask receiving address and
+  confirm the exact Transfer event. Open positions must be sold or redeemed first.
 - Fund test assets; check explorer receipts and balances. Verify wrong-network
   and local-fork wallets are rejected even though they share chain ID 10143.
 - Complete approval, single/combined buy and sell, receipt conversion, and

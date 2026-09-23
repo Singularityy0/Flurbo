@@ -7,7 +7,7 @@ import { HDKey, HARDENED_OFFSET } from "@scure/bip32";
 import { entropyToMnemonic, mnemonicToSeedSync } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { SESSION_MS, type AuthPolicy } from "./policy.ts";
-import { hashMessage, hexToBytes, bytesToHex, serializeSignature, stringToHex, type Hex } from 'viem';
+import { hashMessage, hexToBytes, bytesToHex, serializeSignature, type Hex } from 'viem';
 import type { SessionTransport } from './server-session.ts';
 
 type StoragePort = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -112,7 +112,7 @@ export class AuthController {
     try {
       const login = await this.#transport.read();
       if (generation !== this.#generation) return;
-      if (!login || login.expiresAt <= this.#now() || !/^0x[0-9a-fA-F]{40}$/.test(login.address)) {
+      if (!login || login.method === 'wallet' || login.expiresAt <= this.#now() || !/^0x[0-9a-fA-F]{40}$/.test(login.address)) {
         this.#endSession(); this.#update({ address: null, expiresAt: null, signingExpiresAt: null });
       } else {
         if (this.#snapshot.address?.toLowerCase() !== login.address.toLowerCase()) {
@@ -142,34 +142,6 @@ export class AuthController {
       this.lockSigning();
     }
   };
-
-  async authenticateWallet(provider: { request(args: { method: string; params?: unknown[] }): Promise<unknown> }): Promise<boolean> {
-    if (this.#inFlight || !this.#transport) return false;
-    this.#endSession(); this.#inFlight = true;
-    const generation = ++this.#generation;
-    this.#update({ busy: true, signingExpiresAt: null, error: null, notice: null });
-    try {
-      const accounts = await provider.request({ method: 'eth_requestAccounts' });
-      if (!Array.isArray(accounts) || !/^0x[0-9a-fA-F]{40}$/.test(accounts[0])) throw new Error('No wallet account');
-      const address = accounts[0].toLowerCase();
-      const message = await this.#transport.challenge(address, 'wallet');
-      if (generation !== this.#generation) return false;
-      const signature = await provider.request({ method: 'personal_sign', params: [stringToHex(message), address] });
-      if (generation !== this.#generation || typeof signature !== 'string') return false;
-      const current = await provider.request({ method: 'eth_accounts' });
-      if (!Array.isArray(current) || current[0]?.toLowerCase() !== address) throw new Error('Wallet changed');
-      const login = await this.#transport.verify(signature);
-      if (generation !== this.#generation) { await this.#transport.logout(); return false; }
-      if (login.address.toLowerCase() !== address || login.expiresAt <= this.#now()) throw new Error('Invalid login');
-      this.#signedOut = false;
-      this.#update({ address, expiresAt: login.expiresAt, method: 'wallet', restoring: false,
-        notice: 'Signed in with your wallet. Trading confirmations stay in your wallet.' });
-      return true;
-    } catch {
-      if (generation === this.#generation) this.#update({ error: 'Wallet sign-in was cancelled or could not finish. Choose your wallet account and try again.' });
-      return false;
-    } finally { this.#inFlight = false; if (generation === this.#generation) this.#update({ busy: false }); }
-  }
 
   async authenticate(mode: "signup" | "login", name = "Flurbo account", chooseAnother = false, allowNew = false): Promise<boolean> {
     if (this.#inFlight) return false;

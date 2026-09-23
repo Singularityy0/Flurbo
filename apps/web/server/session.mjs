@@ -16,7 +16,7 @@ export class SessionStore {
   }
   challenge(address, origin, method = 'passkey') {
     this.prune();
-    if (!['passkey', 'wallet'].includes(method) || !/^0x[0-9a-fA-F]{40}$/.test(address) || this.challenges.size >= 1000) throw new Error('Invalid or busy login request');
+    if (method !== 'passkey' || !/^0x[0-9a-fA-F]{40}$/.test(address) || this.challenges.size >= 1000) throw new Error('Invalid or busy login request');
     const id = token(), expiresAt = this.now() + 5 * 60_000;
     const message = `Flurbo account login\nOrigin: ${origin}\nAddress: ${address.toLowerCase()}\nNonce: ${token()}\nExpires: ${new Date(expiresAt).toISOString()}\nThis signature opens a seven-day account session. It does not authorize a transaction.`;
     this.challenges.set(digest(id), { address: address.toLowerCase(), origin, message, expiresAt, method });
@@ -26,13 +26,13 @@ export class SessionStore {
     this.prune();
     const key = digest(id || ''), challenge = this.challenges.get(key);
     this.challenges.delete(key); // One attempt, including rejected signatures.
-    if (!challenge || challenge.origin !== origin || !/^0x[0-9a-fA-F]{130}$/.test(signature || '') ||
+    if (!challenge || challenge.method !== 'passkey' || challenge.origin !== origin || !/^0x[0-9a-fA-F]{130}$/.test(signature || '') ||
         !await verifyMessage({ address: challenge.address, message: challenge.message, signature })) throw new Error('Login proof rejected');
     if (this.sessions.size >= 1000) throw new Error('Session capacity reached');
     const session = { address: challenge.address, origin, expiresAt: this.now() + LOGIN_MS, method: challenge.method || 'passkey' }, sessionId = token();
     this.sessions.set(digest(sessionId), session);
     return { sessionId, ...session };
   }
-  read(id, origin) { this.prune(); const value = this.sessions.get(digest(id || '')); return value?.origin === origin ? value : null; }
+  read(id, origin) { this.prune(); const value = this.sessions.get(digest(id || '')); return value?.origin === origin && value.method === 'passkey' ? value : null; }
   revoke(id) { this.sessions.delete(digest(id || '')); }
 }

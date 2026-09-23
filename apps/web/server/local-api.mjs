@@ -1,5 +1,6 @@
 import { SessionStore, cookieValue, LOGIN_MS } from './session.mjs';
 import { parseTransaction, recoverTransactionAddress } from 'viem';
+import { validWithdrawal } from './withdrawal-policy.mjs';
 import { TESTNET } from './network.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
@@ -35,7 +36,9 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (req.method === 'GET' && url.pathname === '/api/auth/session') return send(res, 200, { session: await store.read(sid, origin) });
         if (req.method !== 'POST') return send(res, 405, { error: 'Method unavailable' });
         if (url.pathname === '/api/auth/challenge') {
-          const input = await body(req), challenge = await store.challenge(input.address, origin, input.method);
+          const input = await body(req);
+          if (input.method !== undefined && input.method !== 'passkey') return send(res, 400, { error: 'Use your Flurbo passkey to sign in. Extension wallets are for trading after login.' });
+          const challenge = await store.challenge(input.address, origin, 'passkey');
           res.setHeader('Set-Cookie', cookie('flurbo_challenge', challenge.id, 300));
           return send(res, 200, { message: challenge.message });
         }
@@ -73,7 +76,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           if (!deployment.ok || sender.toLowerCase() !== login.address || tx.chainId !== 10143 || (tx.value ?? 0n) !== 0n || tx.type !== 'legacy' ||
               !tx.gas || tx.gas > 30_000_000n || state.environment !== (hosted ? 'public_testnet' : 'local_fork') ||
               (hosted && (state.chain_id !== 10143 || cash !== TESTNET.cash)) ||
-              !faucet && !(tx.to?.toLowerCase() === cash ? selector === '0x095ea7b3' && tx.data.length === 138 &&
+              !faucet && !(tx.to?.toLowerCase() === cash ? validWithdrawal({ to: tx.to, data: tx.data, account: login.address, cash, pool }) || selector === '0x095ea7b3' && tx.data.length === 138 &&
                 tx.data.slice(10, 74).toLowerCase() === pool?.slice(2).padStart(64, '0')
                 : tx.to?.toLowerCase() === pool && ['0x3e6b6cde', '0xc39849c5', '0xb0a52172', '0xf6c4eade', '0xdf992423'].includes(selector))) return send(res, 403, { error: 'Only this account and the configured Monad contracts are supported' });
         }

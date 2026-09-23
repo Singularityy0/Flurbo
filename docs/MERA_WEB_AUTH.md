@@ -1,7 +1,9 @@
 # Mera web account access
 
 Hosted deployment now has a standalone server and external Redis sessions.
-Browser-wallet signature login is also available without a Mera account.
+Mera passkey signup and login are required. Browser wallets connect only after
+login for trading or as withdrawal destinations; they do not authenticate a
+Flurbo account. Previously issued wallet-login sessions are rejected.
 See [the public testnet deployment guide](PUBLIC_TESTNET_DEPLOYMENT.md) for the
 current hosting path; loopback setup below remains the development workflow.
 

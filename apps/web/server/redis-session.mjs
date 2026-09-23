@@ -44,7 +44,7 @@ export class RedisSessionStore {
     const stored = await this.command('GET', this.key('session', id));
     if (!stored) return null;
     const value = JSON.parse(stored);
-    return value.origin === origin && value.expiresAt > this.now() ? value : null;
+    return value.method === 'passkey' && value.origin === origin && value.expiresAt > this.now() ? value : null;
   }
   async revoke(id) { if (id) await this.command('DEL', this.key('session', id)); }
 }
