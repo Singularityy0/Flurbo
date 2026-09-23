@@ -1,5 +1,5 @@
-import { address, assertContext, prepare, prepareRedemption, sendReviewed, reconcile, setupLocalWallet, walletMessage, WalletError } from './wallet.mjs';
-import { formatUnits, snapshotFresh } from './claims.mjs';
+import { address, assertContext, prepare, prepareRedemption, prepareConversion, sendReviewed, reconcile, setupLocalWallet, walletMessage, WalletError } from './wallet.mjs';
+import { formatUnits, parseUnits, snapshotFresh } from './claims.mjs';
 
 const KEY = 'flurbo.local.pending.v1';
 const $ = id => document.getElementById(id);
@@ -10,6 +10,9 @@ export function mountTrading(hooks) {
   const providers = [];
   let provider, account = null, review = null, operation = false, checking = false, generation = 0, pending = null, lastHash = '';
   let removeListeners = () => {};
+  function conversionQuantity() {
+    try { return parseUnits($('conversion-quantity').value.trim()); } catch { return null; }
+  }
   function persist(value) {
     try {
       if (value) sessionStorage.setItem(KEY, JSON.stringify(value)); else sessionStorage.removeItem(KEY);
@@ -33,6 +36,16 @@ export function mountTrading(hooks) {
     const quote = hooks.getQuote()?.quote;
     const side = quote?.side === 'sell' ? 'sell' : 'buy';
     const state = hooks.getState?.(), selection = hooks.getSelection?.();
+    const conversionQty = conversionQuantity();
+    const connectedWallet = account && state?.wallet?.address === account ? state.wallet : null;
+    const internalH = connectedWallet?.positions.find(p => p.scope === 128 && p.mask === 2)?.quantity_atoms;
+    const canConvert = !locked && connectedWallet && state.conversion_available && snapshotFresh(state.snapshot) && conversionQty;
+    $('review-wrap').disabled = !canConvert || internalH === undefined || BigInt(internalH) < BigInt(conversionQty);
+    $('review-unwrap').disabled = !canConvert || BigInt(connectedWallet.receipt_atoms) < BigInt(conversionQty);
+    $('conversion-quantity').disabled = locked;
+    text('conversion-status', !connectedWallet ? 'Connect your wallet to view convertible H YES balances.'
+      : !conversionQty ? 'Enter a positive conversion quantity with up to six decimal places.'
+      : `H YES in pool: ${formatUnits(internalH)} · Receipts in wallet: ${formatUnits(connectedWallet.receipt_atoms)}. ${!state.conversion_available || !snapshotFresh(state.snapshot) ? 'Conversion unavailable; refresh and check receipt backing.' : 'Only wallet receipts can be unwrapped; Kuru margin is excluded.'}`);
     const owned = state?.wallet?.address === account ? state.wallet.positions.find(p => p.scope === selection?.scope && p.mask === selection?.mask) : null;
     const resolved = state?.pool?.resolved;
     text('settlement-status', !state ? 'Settlement data unavailable.' : !resolved
@@ -131,6 +144,29 @@ export function mountTrading(hooks) {
   $('disconnect-wallet').addEventListener('click', () => disconnect());
   $('slippage').addEventListener('change', () => invalidate('Slippage changed. Review again.'));
   $('cancel-review').addEventListener('click', () => invalidate('Review cancelled. Nothing submitted.'));
+  $('conversion-quantity').addEventListener('input', () => invalidate('Conversion quantity changed. Review again.'));
+  for (const kind of ['wrap', 'unwrap']) $('review-' + kind).addEventListener('click', async () => {
+    const quantity = conversionQuantity();
+    if (!provider || !account || !quantity || pending || operation) return;
+    const current = ++generation, signer = provider, owner = account;
+    review = null; operation = true; update(); text('execution-status', 'Checking H YES holdings, canonical receipt and gas…');
+    try {
+      const state = await hooks.readSnapshot(owner, { scope: 128, mask: 2 });
+      const plan = await prepareConversion(signer, state, kind, owner, quantity);
+      if (current !== generation || signer !== provider || owner !== account) throw new WalletError('Inputs or wallet changed. Review again.');
+      review = plan;
+      const amount = formatUnits(plan.quantity);
+      const lines = [kind === 'wrap' ? `Wrap ${amount} internal H YES units into ${amount} wallet receipts.` : `Burn ${amount} wallet receipts to restore ${amount} internal H YES units.`,
+        `From: ${plan.account}`, `Pool: ${plan.pool}`, `Canonical H YES receipt: ${plan.receipt}`,
+        'No AUSD is spent or paid. No token approval or Kuru order is submitted.',
+        `Proposed gas budget: ${formatUnits(plan.gasBudget, 18)} MON. Review any wallet edits.`,
+        'This review expires within 30 seconds. The conversion contract has no transaction deadline.'];
+      $('review-details').replaceChildren(...lines.map(line => { const p = document.createElement('p'); p.textContent = line; return p; }));
+      $('confirm-trade').textContent = `Confirm ${kind} in wallet`;
+      text('execution-status', 'Review the conversion, then click the confirmation button to open your wallet.');
+    } catch (error) { text('execution-status', walletMessage(error)); }
+    finally { operation = false; update(); }
+  });
   $('review-redeem').addEventListener('click', async () => {
     const selection = hooks.getSelection?.();
     if (!provider || !account || !selection || pending || operation) return;
@@ -223,14 +259,16 @@ export function mountTrading(hooks) {
       }
       if ((status === 'matched' || status === 'reverted') && result.transaction.confirmations >= 2) {
         persist(null); review = null;
-        const completed = record.plan.kind === 'redeem'
+        const completed = ['wrap', 'unwrap'].includes(record.plan.kind)
+          ? `${record.plan.kind === 'wrap' ? 'Wrap' : 'Unwrap'} confirmed: ${formatUnits(record.plan.quantity)} H YES units converted 1:1. No AUSD spent or paid. Balances are refreshing.`
+          : record.plan.kind === 'redeem'
           ? `Redemption confirmed: ${formatUnits(record.plan.quantity)} units burned, ${formatUnits(record.plan.payout)} AUSD paid. Balances are refreshing.`
           : record.plan.kind === 'approve'
           ? (record.plan.approval === '0'
             ? 'Allowance reset confirmed. No claims bought. Next: get a fresh buy quote and review the AUSD approval.'
             : 'AUSD approval confirmed. No claims bought. Next: get a fresh buy quote and review the buy.')
           : `${record.plan.kind === 'buy' ? 'Buy' : 'Sell'} confirmed for ${formatUnits(record.plan.quantity)} claim units (scope ${record.plan.scope}, mask ${record.plan.mask}). Balances are refreshing; do not repeat the trade to refresh them.`;
-        text('execution-status', status === 'reverted' ? 'Transaction reverted. No trade, approval or redemption was applied. Refresh and review again.'
+        text('execution-status', status === 'reverted' ? 'Transaction reverted. No trade, approval, conversion or redemption was applied. Refresh and review again.'
           : `${completed} Exact calldata and contract event matched, with ${result.transaction.confirmations} canonical confirmations.`);
         lastHash = hash;
         hooks.invalidateQuote('Transaction completed. Request a fresh quote.');

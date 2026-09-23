@@ -1,8 +1,58 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makePlan, prepare, makeRedemptionPlan, prepareRedemption, assertContext, sendReviewed, reconcile, setupLocalWallet, encode, boundFor, walletMessage } from './wallet.mjs';
+import { makePlan, prepare, makeRedemptionPlan, prepareRedemption, makeConversionPlan, prepareConversion, assertContext, sendReviewed, reconcile, setupLocalWallet, encode, boundFor, walletMessage } from './wallet.mjs';
 
 const ACCOUNT = '0x' + '11'.repeat(20), POOL = '0x' + '22'.repeat(20), CASH = '0x' + '33'.repeat(20);
+function convertible() {
+  const f = fixture();
+  f.snapshot.contracts.receipt = '0x' + '44'.repeat(20);
+  f.snapshot.conversion_available = true;
+  f.snapshot.pool = { phase: 'resolved', resolved: true, covered: false, receipt_backed: true };
+  f.snapshot.trading_available = false;
+  f.snapshot.wallet.positions = [{ scope: 128, mask: 2, quantity_atoms: '1000000' }];
+  f.snapshot.wallet.receipt_atoms = '1000000';
+  f.overrides.eth_call = () => '0x';
+  return f;
+}
+test('canonical H YES conversions need no approval, pay no AUSD and work after resolution/shortfall', async () => {
+  for (const [kind, selector] of [['wrap', 'b0a52172'], ['unwrap', 'f6c4eade']]) {
+    const f = convertible();
+    const plan = await prepareConversion(f.provider, f.snapshot, kind, ACCOUNT, '500000');
+    assert.equal(plan.kind, kind); assert.equal(plan.scope, 128); assert.equal(plan.mask, 2);
+    assert.equal(plan.tx.data, encode(selector, 7, 1, 500000)); assert.equal(plan.tx.value, '0x0');
+    await sendReviewed(f.provider, plan, f.snapshot);
+    assert.equal(f.calls.filter(c => c.method === 'eth_sendTransaction').length, 1);
+    const event = { kind, owner: ACCOUNT, scope: 128, mask: '2', quantity_atoms: '500000' };
+    const tx = { status: 'succeeded', sender: ACCOUNT, to: POOL, input: plan.tx.data, value_wei: '0', events: [event] };
+    assert.equal(reconcile(plan, tx), 'matched');
+    for (const change of [{ kind: kind === 'wrap' ? 'unwrap' : 'wrap' }, { owner: CASH }, { scope: 3 }, { mask: '1' }, { quantity_atoms: '1' }]) {
+      tx.events = [{ ...event, ...change }]; assert.equal(reconcile(plan, tx), 'mismatch');
+    }
+    tx.events = [event, { ...event }]; assert.equal(reconcile(plan, tx), 'mismatch');
+  }
+});
+test('conversion rejects invalid holdings, stale backing and changed receipts before sending', async () => {
+  for (const change of [f => f.snapshot.wallet.address = CASH, f => f.snapshot.snapshot.stale = true,
+    f => f.snapshot.pool.receipt_backed = false, f => f.snapshot.conversion_available = false,
+    f => f.snapshot.environment = 'public_testnet']) {
+    const f = convertible(); change(f);
+    for (const kind of ['wrap', 'unwrap']) assert.throws(() => makeConversionPlan(f.snapshot, kind, ACCOUNT, '1'));
+  }
+  const f = convertible();
+  for (const kind of ['wrap', 'unwrap']) for (const qty of ['0', '-1', '1000001']) assert.throws(() => makeConversionPlan(f.snapshot, kind, ACCOUNT, qty));
+  f.snapshot.wallet.positions = [{ scope: 3, mask: 8, quantity_atoms: '99999999' }];
+  assert.throws(() => makeConversionPlan(f.snapshot, 'wrap', ACCOUNT, '1'), /internal H YES/);
+  f.snapshot.wallet.receipt_atoms = '0'; f.snapshot.wallet.margin_available_receipt_atoms = '99999999';
+  assert.throws(() => makeConversionPlan(f.snapshot, 'unwrap', ACCOUNT, '1'), /withdrawn first/);
+  const ready = convertible();
+  ready.overrides.eth_call = () => encode('', 1);
+  await assert.rejects(prepareConversion(ready.provider, ready.snapshot, 'wrap', ACCOUNT, '1'), /simulation result/);
+  ready.overrides.eth_call = () => '0x';
+  const plan = await prepareConversion(ready.provider, ready.snapshot, 'wrap', ACCOUNT, '1');
+  ready.snapshot.contracts.receipt = CASH;
+  await assert.rejects(sendReviewed(ready.provider, plan, ready.snapshot), /Receipt or conversion changed/);
+  assert.equal(ready.calls.some(c => c.method === 'eth_sendTransaction'), false);
+});
 function settled() {
   const f = fixture();
   f.snapshot.redemption_available = true; f.snapshot.trading_available = false;

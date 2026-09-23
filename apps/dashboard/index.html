@@ -57,6 +57,11 @@
           <label for="slippage">Slippage limit</label><select id="slippage"><option value="0">0%</option><option value="50" selected>0.5%</option><option value="100">1%</option><option value="300">3%</option><option value="500">5%</option></select>
           <p id="execution-help" class="caption">Connect your test wallet, then get a pool quote.</p>
           <button id="review-trade" class="button primary wide" disabled>Get a quote to review</button>
+          <h3>H YES receipts</h3>
+          <p class="caption">Wrap internal H YES units into ERC-20 receipts for the Kuru base market, or unwrap wallet receipts to sell or redeem through the pool. Conversion is 1:1 and costs gas. Kuru deposits and orders are a separate step.</p>
+          <p id="conversion-status" class="caption" role="status">Connect your wallet to view convertible H YES balances.</p>
+          <label for="conversion-quantity">H YES units to convert</label><input id="conversion-quantity" inputmode="decimal" value="1" autocomplete="off">
+          <div class="wallet-actions"><button id="review-wrap" class="button secondary" disabled>Review wrap</button><button id="review-unwrap" class="button secondary" disabled>Review unwrap</button></div>
           <h3>Settlement &amp; redemption</h3>
           <p id="settlement-status" class="caption" role="status">Waiting for settlement data…</p>
           <p class="caption">Uses the claim and quantity in Your prediction. Winning internal units pay 1 AUSD each. Clearing losing units pays zero and still costs gas. Wrapped receipts must be unwrapped separately.</p>

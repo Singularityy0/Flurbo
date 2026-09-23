@@ -17,6 +17,7 @@ async function harness(run, saved) {
     async request({ method, params }) {
       this.calls.push({ method, params });
       if (method === 'eth_sendTransaction') return new Promise((resolve, reject) => { this.resolve = resolve; this.reject = reject; });
+      if (method === 'eth_call' && ['0xb0a52172', '0xf6c4eade'].includes(params[0].data.slice(0, 10))) return '0x';
       return { eth_requestAccounts: [account], eth_accounts: [account], eth_chainId: '0x279f', eth_getBlockByNumber: { hash },
         eth_call: '0x' + BigInt(params?.[0]?.data?.startsWith('0xdf992423') ? this.redemptionPayout : params?.[0]?.data?.startsWith('0x095ea7b3') ? 1 : 250001).toString(16).padStart(64, '0'), eth_estimateGas: '0x186a0', eth_gasPrice: '0x3b9aca00' }[method];
     }
@@ -32,7 +33,7 @@ async function harness(run, saved) {
     globalThis.window = Object.assign(new EventTarget(), { ethereum: provider, confirm: () => true });
     globalThis.sessionStorage = { getItem: k => storage.get(k) || null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) };
     globalThis.setInterval = fn => { intervals.push(fn); return 1; };
-    get('slippage').value = '50';
+    get('slippage').value = '50'; get('conversion-quantity').value = '1';
     const controller = mountTrading({ getState: () => snapshot, getSelection: () => ({ scope: 3, mask: 8, quantity: '1000000', label: 'A YES AND B YES' }), getQuote: () => quote, readSnapshot: async () => snapshot, accountChanged() {},
       readTransaction: async () => ({ transaction: state.tx }), invalidateQuote() {}, refresh() { state.refreshes++; } });
     const click = id => get(id).handlers.click();
@@ -119,6 +120,34 @@ test('resolved winners and losers use explicit payout review and shared pending 
     await f.click('check-execution');
     assert.match(f.get('execution-status').textContent, winning ? /1 AUSD paid/ : /0 AUSD paid/);
     assert.equal(f.state.refreshes, 1);
+    assert.equal(f.provider.calls.filter(c => c.method === 'eth_sendTransaction').length, 1);
+  });
+});
+
+test('wrap and unwrap use a separate quantity, invalidate edits and block all actions until confirmed', async () => {
+  for (const kind of ['wrap', 'unwrap']) await harness(async f => {
+    f.snapshot.conversion_available = true; f.snapshot.pool.receipt_backed = true;
+    f.snapshot.contracts.receipt = '0x' + '44'.repeat(20);
+    f.snapshot.wallet.positions = [{ scope: 128, mask: 2, quantity_atoms: '2000000' }];
+    f.snapshot.wallet.receipt_atoms = '2000000';
+    await f.click('connect-wallet');
+    assert.equal(f.get('review-' + kind).disabled, false);
+    await f.click('review-' + kind);
+    assert.equal(f.get('confirm-trade').textContent, `Confirm ${kind} in wallet`);
+    f.get('conversion-quantity').value = '0.5'; f.get('conversion-quantity').handlers.input();
+    assert.equal(f.get('confirm-trade').hidden, true);
+    await f.click('review-' + kind);
+    const task = f.click('confirm-trade'); await new Promise(resolve => setImmediate(resolve));
+    const plan = JSON.parse(f.storage.get(key)).plan;
+    assert.equal(plan.quantity, '500000'); assert.equal(plan.scope, 128);
+    for (const id of ['review-wrap', 'review-unwrap', 'review-trade', 'review-redeem', 'setup-wallet', 'conversion-quantity']) assert.equal(f.get(id).disabled, true);
+    await f.click('review-wrap'); await f.click('confirm-trade');
+    f.provider.resolve(txHash); await task;
+    f.state.tx = { status: 'succeeded', confirmations: 2, sender: account, to: pool, input: plan.tx.data, value_wei: '0',
+      events: [{ kind, owner: account, scope: 128, mask: '2', quantity_atoms: '500000' }] };
+    await f.click('check-execution');
+    assert.match(f.get('execution-status').textContent, /0.5 H YES units converted 1:1/);
+    assert.equal(f.state.refreshes, 1); assert.equal(f.storage.has(key), false);
     assert.equal(f.provider.calls.filter(c => c.method === 'eth_sendTransaction').length, 1);
   });
 });
