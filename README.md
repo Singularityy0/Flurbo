@@ -77,8 +77,10 @@ status. The [local dashboard screen](docs/DASHBOARD_SCREEN.md) now runs at
 `http://127.0.0.1:18765/` with a Boolean claim composer, pool quotes, wallet
 inspection and transaction checks. [Local wallet trading](docs/DASHBOARD_TRADING.md)
 now adds bounded approvals, buy/sell, slippage/deadline checks and event-confirmed
-tracking. A seven-transaction disposable-fork rehearsal passes; the user's
-Firefox/MetaMask signing test and full manual lifecycle validation remain next.
+tracking. The user verified Firefox/MetaMask single-event and multi-leg buy/sell.
+[Settlement and redemption](docs/DASHBOARD_REDEMPTION.md) now show final payouts
+and support wallet-signed winning/losing claim redemption, with partial and zero
+payouts verified on a disposable clone. Manual redemption popup testing remains.
 An opt-in **Set up local wallet** button now requests the local network, verifies
 the exact fork and tops up missing test AUSD/MON. Wallet prompts still need approval.
 The [gas optimizations](docs/FACTORED_GAS.md) reduce measured large-graph quote

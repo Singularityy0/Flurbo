@@ -26,8 +26,10 @@ now reads live quotes, coverage, wallet holdings and transaction status. The
 [local screen](DASHBOARD_SCREEN.md) adds a Boolean composer, exact pool quotes,
 wallet inspection and transaction checks. [Local browser-wallet controls](DASHBOARD_TRADING.md)
 now support bounded approvals, buy/sell and canonical event matching, with a
-seven-transaction disposable-clone rehearsal. User Firefox/MetaMask confirmation
-is the next manual gate, followed by full lifecycle tests and remaining partner flows. This engineering test surface does
+seven-transaction disposable-clone rehearsal. The user has verified Firefox/MetaMask
+single-event and multi-leg buy/sell. [Settlement displays and redemption](DASHBOARD_REDEMPTION.md)
+now pass partial-winner/loser tests on a separate clone. Manual redemption popup
+testing and remaining partner flows remain open. This engineering test surface does
 not replace the Expo/Mera/AUSD consumer app or establish partner completion.
 CRE adapters still target the enumerated pool and require a separate port.
 

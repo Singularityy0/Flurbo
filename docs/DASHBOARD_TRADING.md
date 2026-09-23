@@ -3,7 +3,10 @@
 The dashboard now supports browser-wallet connection, bounded AUSD approvals and
 factored pool buy/sell transactions. The user selected **Firefox with MetaMask**
 for the manual signing test. The in-app browser has no detected wallet provider.
-No user-wallet signing test has been completed yet.
+The user verified single-event and A AND B approve/buy/sell round trips in
+Firefox/MetaMask. Chain events confirmed the separate reset/approval/trade steps.
+Settlement and [wallet redemption](DASHBOARD_REDEMPTION.md) are now implemented
+and tested on a separate local clone; a manual redemption popup remains untested.
 
 ## Your first manual trade
 
@@ -28,9 +31,9 @@ No user-wallet signing test has been completed yet.
    **Connect wallet** remains available for an already configured/funded account.
    Never paste a seed phrase or private key into the dashboard, source files or chat.
 5. Select H YES, Buy, quantity 1, and request a pool quote. Choose a slippage limit
-   (default 0.5%), then **Review next step**. Read the account, contract, allowance
+   (default 0.5%), then **Review buy**. Read the account, contract, allowance
    amount or price limit, and proposed gas budget.
-6. If approval is needed, click **Confirm approval in wallet** and review/confirm
+6. If approval is needed, click **Approve AUSD in wallet** and review/confirm
    it in MetaMask. This only approves spending; it does not buy. After two local
    confirmations, request a **new quote** and review again. An insufficient
    nonzero allowance is first reset to zero in its own confirmed transaction.
@@ -132,7 +135,7 @@ concurrent balance changes are all attributable to one transaction.
 
 ## Verification and limits
 
-56 Python tests and 21 JavaScript tests pass, including local funding guards,
+58 Python tests and 25 JavaScript tests pass, including settlement/redemption, local funding guards,
 network setup and wrong-fork rejection, asynchronous duplicate
 submission prevention, account changes while a wallet prompt is open, rejection
 versus uncertain errors, restored pending locks and receipt-event matching.
@@ -174,7 +177,7 @@ manifest, an Anvil client and the matching checkpoint. Both its wallet transport
 and Python bridge are fixed to the disposable loopback port. Do not point another
 service at that port or run a second rehearsal against a clone you want to preserve.
 
-User confirmation in Firefox/MetaMask remains the next manual gate. Settlement,
-redemption, wrapping, Kuru order controls, Mera/Agora mobile, CRE, Envio, Alchemy
+User confirmation of buy/sell in Firefox/MetaMask is complete. Wrapping,
+Kuru order controls, Mera/Agora mobile, CRE, Envio, Alchemy
 and the MetaMask Agent Wallet plugin retain their separate milestones. Browser
 extension support does not establish the Agent Wallet bounty integration.

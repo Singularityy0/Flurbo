@@ -7,8 +7,8 @@ fork. No package install, frontend build, wallet connection or hosting account
 is needed for this screen.
 
 The original read-only screen now also has [local wallet transaction controls](DASHBOARD_TRADING.md)
-for AUSD approvals and pool buy/sell. Kuru orders, resolution and redemption
-controls remain upcoming. It does not replace the Expo/Mera mobile product or complete any
+for AUSD approvals and pool buy/sell, plus [settlement and redemption](DASHBOARD_REDEMPTION.md).
+Kuru orders and resolver controls remain upcoming. It does not replace the Expo/Mera mobile product or complete any
 partner bounty. Tradable conditionals remain a separate accounting milestone.
 
 ## What to try
@@ -138,6 +138,12 @@ node --test apps/dashboard/claims.test.mjs
 node --check apps/dashboard/app.mjs
 ```
 
-Next: the user's Firefox/MetaMask signing test, full manual lifecycle testing
+The user verified Firefox/MetaMask buy/sell. Next: manual redemption popup testing, Kuru controls
 and a hosting decision. Public deployment and the Mera/CRE/Envio/Alchemy/MetaMask
 partner work retain their own completion gates in [the integration checklist](INTEGRATIONS.md).
+
+The September 23 service restore loaded `target/deployments/anvil-state.json`,
+validated the original checkpoint and resumed the same open market. The running
+node writes its next graceful-shutdown snapshot to `anvil-state-restored.json`,
+preserving the original file. Use that newer snapshot for a subsequent restore
+once it exists and has been verified; do not redeploy over the current market.
