@@ -1,5 +1,5 @@
-import { ArrowDownRight, ArrowUpRight, Check, ChevronDown, Sparkles } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ArrowDownRight, ArrowUpRight, Check, ChevronDown } from "lucide-react";
+import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Link } from "wouter";
 import { useReveal } from "../useReveal";
@@ -22,7 +22,7 @@ const events = [
 ];
 
 function ConceptCombiner() {
-  const [selected, setSelected] = useState<string[]>(["one"]);
+  const [selected, setSelected] = useState<string[]>(events.map((event) => event.key));
   const reducedMotion = useReducedMotion();
   const allSelected = selected.length === events.length;
   const combinedCopy = allSelected
@@ -69,14 +69,14 @@ function ConceptCombiner() {
         })}
       </div>
       <div className={`combination-result ${allSelected ? "combination-result-active" : ""}`}>
-        <span className="result-kicker"><Sparkles size={14} /> together, that reads as</span>
         <div role="status" aria-live="polite" aria-atomic="true">
+          <span className="result-kicker">{allSelected ? "Together, that reads as" : selected.length ? "Your selected event" : "No events selected"}</span>
           <motion.p key={combinedCopy} initial={reducedMotion ? false : { opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }} transition={{ duration: reducedMotion ? 0 : 0.2 }}>“{combinedCopy}.”</motion.p>
         </div>
         <div className="result-footer">
-          <span>{allSelected ? "one combined prediction" : "select both to combine"}</span>
-          <span className="result-arrow" aria-hidden="true">↗</span>
+          <span>{allSelected ? "2 events selected · one combined prediction" : `${selected.length} of 2 selected · select both to combine`}</span>
+          <ArrowUpRight size={19} aria-hidden="true" />
         </div>
       </div>
       <p className="stage-footnote">A visual example for learning only. Flurbo is not live here.</p>
@@ -96,11 +96,11 @@ function Home() {
   const [activeFaq, setActiveFaq] = useState<number | null>(0);
   const reducedMotion = useReducedMotion();
 
-  const poolItems = useMemo(() => [
-    { label: "one event", angle: "pool-orbit-a" },
-    { label: "another event", angle: "pool-orbit-b" },
-    { label: "the combination", angle: "pool-orbit-c" },
-  ], []);
+  const poolItems = [
+    { label: "one event", radius: 165, angle: -75, tone: "individual", dx: 14, dy: 0, anchor: "start" },
+    { label: "another event", radius: 200, angle: -35, tone: "individual", dx: -12, dy: -18, anchor: "end" },
+    { label: "the combination", radius: 240, angle: 205, tone: "combined", dx: 10, dy: 28, anchor: "start" },
+  ] as const;
 
   return (
     <main id="main" tabIndex={-1}>
@@ -114,7 +114,7 @@ function Home() {
               <a href="#the-idea" className="button button-dark">See the idea <ArrowDownRight size={17} /></a>
               <a href="#how-it-works" className="text-link">How it works <ArrowUpRight size={15} /></a>
             </div>
-            <p className="micro-note"><span className="micro-dot" /> Preview only — no live markets or accounts yet.</p>
+            <p className="micro-note"><span className="micro-dot" /> Preview only. No live markets or accounts yet.</p>
           </div>
           <div className="hero-art reveal-item reveal-item-late">
             <ConceptCombiner />
@@ -131,7 +131,7 @@ function Home() {
           <div className="statement-aside"><WordmarkRule>the idea</WordmarkRule><span className="aside-index">01</span></div>
           <div className="statement-copy">
             <h2>Questions rarely live alone.</h2>
-            <p>“Will it rain?” and “Will the match sell out?” feel like separate questions — until you realize your answer to one changes how you read the other.</p>
+            <p>“Will it rain?” and “Will the match sell out?” feel like separate questions, until you realize your answer to one changes how you read the other.</p>
             <p className="serif-emphasis">Flurbo gives connected predictions a shared place to meet.</p>
           </div>
         </div>
@@ -157,7 +157,7 @@ function Home() {
             <article className="step-row">
               <span className="step-number">03</span>
               <div className="step-title"><h3>Read the combination plainly.</h3><p>Understand the cost and the possible payout before anything else.</p></div>
-              <span className="step-mark">↗</span>
+              <ArrowUpRight className="step-mark" size={30} aria-hidden="true" />
             </article>
           </div>
         </div>
@@ -170,9 +170,22 @@ function Home() {
           <p>Instead of pricing each question in isolation, Flurbo uses one shared liquidity pool to keep related individual and multi-leg claims coherent.</p>
           <p className="pool-disclaimer">The visual is illustrative. It does not show live liquidity, returns, or a functioning market.</p>
         </div>
-        <div className="pool-visual reveal-item reveal-item-late" aria-label="Illustrative shared pool diagram">
+        <div className="pool-visual reveal-item reveal-item-late" role="img" aria-label="Illustrative shared pool diagram: two individual claims and their combination share one pool.">
           <div className="pool-orbits">
-            {poolItems.map((item) => <div className={`pool-orbit ${item.angle}`} key={item.label}><span>{item.label}</span></div>)}
+            <svg className="pool-orbit-diagram" viewBox="0 0 500 500" aria-hidden="true">
+              {poolItems.map((item) => {
+                // A marker and its ring share the same center and radius at every viewport size.
+                const radians = item.angle * Math.PI / 180;
+                const x = 250 + item.radius * Math.cos(radians);
+                const y = 250 + item.radius * Math.sin(radians);
+                return <g className={`pool-orbit pool-orbit-${item.tone}`} key={item.label}>
+                  <circle className="orbit-ring" cx={250} cy={250} r={item.radius} />
+                  <circle className="orbit-halo" cx={x} cy={y} r={9} />
+                  <circle className="orbit-marker" cx={x} cy={y} r={4} />
+                  <text x={x + item.dx} y={y + item.dy} textAnchor={item.anchor}>{item.label}</text>
+                </g>;
+              })}
+            </svg>
             <div className="pool-core"><span>shared</span><strong>pool</strong><small>coherent by design</small></div>
           </div>
           <div className="pool-legend"><span><i className="legend-dot legend-dot-lime" /> individual claim</span><span><i className="legend-dot legend-dot-soft" /> multi-leg claim</span></div>

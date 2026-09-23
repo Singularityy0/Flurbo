@@ -41,6 +41,10 @@ the consumer page does not require a third-party CDN.
 - Mobile navigation supports keyboard focus, Escape, link selection and outside
   clicks. The layout supports browser zoom; fonts ship with their licenses in
   `public/licenses/`.
+- Consumer copy must not use em dashes or emoji. Use vector icons where useful.
+- Both illustrative events start selected. The result label and selection count
+  distinguish combined, single-event and empty states. Orbit markers share SVG
+  coordinates with their rings so their centers stay on the lines when resized.
 
 This consumer shell does not establish public trading, Mera authentication,
 conditional-claim trading or completed partner integrations. Existing chain

@@ -91,9 +91,9 @@ export default function App() {
   const [location] = useLocation();
   const previousLocation = useRef(location);
   useEffect(() => {
-    document.title = location === "/login" ? "Sign in preview — flurbo"
-      : location === "/signup" ? "Account preview — flurbo"
-      : location === "/" ? "flurbo — combine what you know" : "Page not found — flurbo";
+    document.title = location === "/login" ? "Sign in preview | flurbo"
+      : location === "/signup" ? "Account preview | flurbo"
+      : location === "/" ? "flurbo | combine what you know" : "Page not found | flurbo";
     const changed = previousLocation.current !== location;
     previousLocation.current = location;
     const frame = requestAnimationFrame(() => {
