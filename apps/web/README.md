@@ -17,7 +17,8 @@ npm ci
 npm run dev
 ```
 
-Open http://127.0.0.1:18767. The server binds only to loopback and requires that
+Open http://localhost:18767. Passkey testing requires `localhost`, not the numeric
+IP address. The server binds only to loopback and requires that
 port to be free. The existing trading dashboard (18765) and learning lab (18766)
 keep their own servers and wallet/API boundaries.
 
@@ -33,8 +34,9 @@ the consumer page does not require a third-party CDN.
 ## Scope
 
 - `/`: landing page, selectable event cards, shared-pool explanation and FAQ.
-- `/login` and `/signup`: clearly labelled account previews. No credentials,
-  passkeys or wallet signatures are requested and no account is created.
+- `/login` and `/signup`: Mera passkey account creation and returning sign-in.
+- `/account`: the derived EVM address, copy action, expiry and sign-out. Sessions
+  remain in memory for 15 minutes and lock on reload or page exit.
 - Unknown routes render a recovery page with a working home link.
 - GSAP owns section entrance animations. Framer Motion owns selection feedback,
   result changes and FAQ expansion. Both respect reduced motion.
@@ -46,20 +48,27 @@ the consumer page does not require a third-party CDN.
   distinguish combined, single-event and empty states. Orbit markers share SVG
   coordinates with their rings so their centers stay on the lines when resized.
 
-This consumer shell does not establish public trading, Mera authentication,
-conditional-claim trading or completed partner integrations. Existing chain
-clients and signing controls remain in `apps/dashboard` and `apps/mobile`.
+The web account flow uses the real Mera SDK. Device verification remains pending.
+It does not establish public trading, server authentication, conditional-claim
+trading or completed partner integrations. Existing chain clients and transaction
+controls remain in `apps/dashboard` and `apps/mobile`. See
+[Mera web authentication](../../docs/MERA_WEB_AUTH.md) for the identity contract,
+session boundaries and manual device checks.
 
 ## Hosting later
 
 Build with `apps/web` as the project root and publish `dist/` on a static host.
 Configure an SPA fallback to `index.html` for `/login`, `/signup` and other
 non-asset routes. Confirm deep-link refreshes after deployment. No domain or
-hosting changes are made by the build. Mera passkey setup for
-`flurbo.singu.online` remains a separate integration milestone.
+hosting changes are made by the build. Production passkeys are restricted to
+`https://flurbo.singu.online`. DNS and HTTPS hosting remain pending. Local test
+passkeys are separate identities and only enabled by the development server;
+`npm run preview` does not enable local account creation.
 
 ## Validation
 
+`npm test` exercises the real Mera SDK and key derivation with mocked WebAuthn
+responses. It does not replace testing on a real authenticator.
 `npm run build` runs strict TypeScript checking and the production build.
 Browser review should cover desktop and mobile layouts, both event toggles,
 FAQ expansion, keyboard navigation/Escape, direct account routes and their

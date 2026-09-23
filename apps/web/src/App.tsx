@@ -4,6 +4,7 @@ import { Link, Route, Switch, useLocation } from "wouter";
 import Home from "./pages/Home";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
+import { useAuth } from "./auth/context";
 
 export const brand = "flurbo";
 
@@ -16,6 +17,7 @@ function Logo({ inverse = false }: { inverse?: boolean }) {
 }
 
 function Header() {
+  const { state } = useAuth();
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -58,8 +60,10 @@ function Header() {
           <a href="/#the-idea">The idea</a>
           <a href="/#faq">FAQ</a>
           <span className="nav-rule" aria-hidden="true" />
-          <Link href="/login" className="nav-login">Sign in</Link>
-          <Link href="/signup" className="nav-cta">Create an account <ArrowUpRight size={15} strokeWidth={1.8} /></Link>
+          {state.address ? <Link href="/account" className="nav-cta">Your account <ArrowUpRight size={15} strokeWidth={1.8} /></Link> : <>
+            <Link href="/login" className="nav-login">Sign in</Link>
+            <Link href="/signup" className="nav-cta">Create an account <ArrowUpRight size={15} strokeWidth={1.8} /></Link>
+          </>}
         </nav>
         <button ref={menuButton} className="mobile-menu" type="button" aria-label={open ? "Close navigation" : "Open navigation"} aria-controls="main-nav" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
           {open ? <X size={22} /> : <Menu size={22} />}
@@ -79,7 +83,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function AuthShell({ mode }: { mode: "login" | "signup" }) {
+function AuthShell({ mode }: { mode: "login" | "signup" | "account" }) {
   return (
     <AppShell>
       <AuthPage mode={mode} />
@@ -91,8 +95,9 @@ export default function App() {
   const [location] = useLocation();
   const previousLocation = useRef(location);
   useEffect(() => {
-    document.title = location === "/login" ? "Sign in preview | flurbo"
-      : location === "/signup" ? "Account preview | flurbo"
+    document.title = location === "/login" ? "Sign in | flurbo"
+      : location === "/signup" ? "Create an account | flurbo"
+      : location === "/account" ? "Your account | flurbo"
       : location === "/" ? "flurbo | combine what you know" : "Page not found | flurbo";
     const changed = previousLocation.current !== location;
     previousLocation.current = location;
@@ -109,6 +114,7 @@ export default function App() {
       <Route path="/" component={() => <AppShell><Home /></AppShell>} />
       <Route path="/login" component={() => <AuthShell mode="login" />} />
       <Route path="/signup" component={() => <AuthShell mode="signup" />} />
+      <Route path="/account" component={() => <AuthShell mode="account" />} />
       <Route component={NotFound} />
     </Switch>
   );

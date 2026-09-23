@@ -9,11 +9,12 @@ import "@fontsource/cormorant-garamond/latin-400-italic.css";
 import "@fontsource/cormorant-garamond/latin-500-italic.css";
 import "./styles.css";
 import App from "./App";
+import { AuthProvider } from "./auth/context";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <MotionConfig reducedMotion="user">
-      <App />
+      <AuthProvider><App /></AuthProvider>
     </MotionConfig>
   </StrictMode>,
 );

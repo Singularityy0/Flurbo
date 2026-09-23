@@ -213,6 +213,24 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .auth-switch { margin-top: 23px; color: var(--ink-soft); font-size: 11px; text-align: center; }
 .auth-switch a { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; border-bottom: 1px solid var(--line); color: var(--forest); }
 .auth-footnote { margin: 17px 0 0; color: var(--ink-soft); font-family: var(--serif); font-size: 13px; font-style: italic; text-align: center; }
+.auth-footnote a { text-decoration: underline; text-underline-offset: 3px; }
+.auth-form { margin-top: 28px; }
+.auth-form label { display: block; font-size: 12px; margin-bottom: 8px; }
+.auth-form input[type="text"] { width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; background: rgba(255,255,255,.4); color: var(--forest); font: inherit; }
+.auth-help { margin: 8px 0 18px; color: var(--ink-soft); font-size: 11px; }
+.auth-form .auth-checkbox { display: flex; align-items: flex-start; gap: 10px; margin: 18px 0; line-height: 1.5; }
+.auth-checkbox input { margin: 3px 0 0; accent-color: var(--forest); flex-shrink: 0; }
+.auth-explore { margin-top: 24px; white-space: normal; cursor: pointer; }
+.auth-explore:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+.auth-alternative, .auth-copy, .auth-return { min-height: 44px; margin-top: 12px; cursor: pointer; }
+.auth-alternative:disabled { opacity: .5; cursor: not-allowed; }
+.auth-unavailable { margin-top: 24px; padding: 16px; border: 1px solid var(--line); font-size: 13px; }
+.auth-unavailable .auth-explore { padding-inline: 12px; }
+.auth-error { margin-top: 18px; padding: 12px; border: 1px solid #964835; color: #783320; font-size: 13px; line-height: 1.5; }
+.auth-feedback { margin-top: 12px; color: var(--ink-soft); font-size: 12px; }
+.account-address { margin-top: 24px; padding: 16px; border: 1px solid var(--line); }
+.account-address .eyebrow { display: block; margin-bottom: 12px; }
+.account-address code { display: block; overflow-wrap: anywhere; font-size: 13px; user-select: all; }
 .not-found { min-height: 80vh; padding: 175px 40px; text-align: center; }
 .not-found h1 { margin: 0; font-size: clamp(58px, 9vw, 130px); font-weight: 500; letter-spacing: -.1em; line-height: .85; }
 .not-found p { margin: 30px auto; color: var(--ink-soft); }

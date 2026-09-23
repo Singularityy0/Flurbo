@@ -46,10 +46,13 @@ balances and trading are not connected; native-device validation remains pending
 ## Current phase
 
 The [consumer website](apps/web/README.md) now implements the approved editorial
-landing design with interactive event cards and honest login/signup previews.
+landing design with interactive event cards and Mera passkey signup/sign-in.
 Run `cd apps/web`, `npm ci`, then `npm run dev` to open it at
-http://127.0.0.1:18767. The existing local trading and learning dashboards keep
-their separate ports and functionality. Public accounts are not connected yet.
+http://localhost:18767. Local passkeys are separate test identities. The existing
+local trading and learning dashboards keep their separate ports and functionality.
+Real-device authentication and public HTTPS hosting remain unverified; see the
+[Mera web account test](docs/MERA_WEB_AUTH.md). Account access is not yet connected
+to trading.
 
 An offline [ParlayMarket learning comparison](docs/PARLAY_COMPARISON.md) now adds
 an exact pairwise model, cross-entropy gradient updates and explicit virtual

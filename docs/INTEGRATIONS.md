@@ -102,6 +102,14 @@ The user selected `flurbo.singu.online` for passkeys. EAS profiles now record it
 DNS/HTTPS hosting, the Android signing-certificate association and Mera device
 authentication remain unverified. See [native setup](../apps/mobile/PASSKEY_SETUP.md).
 
+The consumer website now implements Mera 0.2.0 passkey creation, returning sign-in,
+BIP-44 EVM account derivation and memory-only sessions with expiry and sign-out.
+Automated tests use the real SDK with mocked WebAuthn responses. Physical-device
+PRF verification, public HTTPS hosting, native authentication and transaction
+integration remain pending. Localhost accounts are separate test identities.
+See [web authentication and manual checks](MERA_WEB_AUTH.md). This is partial
+integration work, not evidence of a completed Mera bounty.
+
 Read the two papers requested in the idea before the pricing slice. Reviewed
 their mechanism and scope: [ParlayMarket](https://arxiv.org/html/2603.22596v2)
 uses a shared pairwise model with learning/error analysis; its statistical loss
