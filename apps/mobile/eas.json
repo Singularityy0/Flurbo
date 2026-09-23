@@ -6,12 +6,14 @@
   },
   "build": {
     "development": {
+      "env": { "FLURBO_PASSKEY_RP_ID": "flurbo.singu.online" },
       "node": "24.13.0",
       "developmentClient": true,
       "distribution": "internal",
       "android": { "buildType": "apk" }
     },
     "preview": {
+      "env": { "FLURBO_PASSKEY_RP_ID": "flurbo.singu.online" },
       "node": "24.13.0",
       "distribution": "internal",
       "android": { "buildType": "apk" }

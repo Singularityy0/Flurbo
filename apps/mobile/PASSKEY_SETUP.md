@@ -6,10 +6,22 @@ Keep the preview usable without a domain; its sign-in action remains disabled.
 
 ## Choose the identity before creating passkeys
 
-Use a stable HTTPS host you control, including a delegated subdomain on your
-friend's domain. Agree with the owner that you can keep serving its association
-files. Hosting can be chosen later; do not use a disposable preview host for real
-passkeys. Changing the relying party ID does not migrate existing passkeys.
+The selected host is **`flurbo.singu.online`**, under the user's `singu.online`
+domain. The root domain remains available for other projects. Both EAS build
+profiles set this relying party ID. This records the identity only: DNS, HTTPS
+hosting, Android certificate association and Mera sign-in are not yet verified.
+Changing the relying party ID does not migrate existing passkeys.
+
+After selecting a hosting provider, attach `flurbo.singu.online` as its custom
+domain and add the exact DNS record that provider supplies (`flurbo` is the DNS
+record name). Do not guess the CNAME target or IP address. Keep the association
+file on this same HTTPS host, even if the site's deployment URL changes.
+
+For local Metro and association generation in Git Bash:
+
+```bash
+export FLURBO_PASSKEY_RP_ID=flurbo.singu.online
+```
 
 Confirm `android.package` and `ios.bundleIdentifier` in `app.json` before signing
 a build. Their current `dev.flurbo.preview` values are development placeholders.
@@ -53,17 +65,17 @@ Android includes the credential-sharing and URL-handling relations documented by
 It does not add an Android deep-link intent filter to the app.
 
 Expo consumes the same `FLURBO_PASSKEY_RP_ID` to expose `extra.passkeyRpId` and
-add the iOS `webcredentials:<rpId>` associated-domain entitlement. Leave it unset
-until the host is chosen. Set the same value in the native build environment and
-Metro environment; an EAS cloud build will need it configured there separately.
+add the iOS `webcredentials:<rpId>` associated-domain entitlement. The EAS profiles
+now provide the selected host; set that same value in the local Metro environment.
 Regenerate/rebuild the native app after changing associated domains. Signing
 fingerprints and the Apple prefix are not included in Expo's public config.
 
 ## Native validation still required
 
 Android is the selected first test platform, using an EAS cloud build. Account
-login, project linking and EAS signing setup are complete; build and installation
-results still need verification. Android local
+login, project linking, EAS signing setup and preview installation are verified
+by the user. That earlier preview did not verify passkey authentication; rebuild
+when the selected host and certificate association are ready. Android local
 builds would need an SDK/JDK. iOS local builds require a Mac with Xcode; EAS
 internal iPhone distribution requires Apple provisioning and device registration.
 See [Expo internal distribution](https://docs.expo.dev/build/internal-distribution/).
