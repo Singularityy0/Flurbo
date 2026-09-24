@@ -25,7 +25,7 @@ contract DeployPilot {
     address public constant AUSD = 0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC;
 
     function run() external returns (PilotPool pool, PilotResolver resolver) {
-        string memory prepared = vm.readFile("target/deployments/pilot-prepared.json");
+        string memory prepared = vm.readFile(preparedPath());
         address creator = vm.envAddress("FLURBO_DEPLOYER");
         require(creator == vm.parseJsonAddress(prepared, ".creator"), "prepared creator mismatch");
         bytes memory encoded = vm.parseJsonBytes(prepared, ".resolverConfig");
@@ -34,6 +34,9 @@ contract DeployPilot {
         (pool, resolver) = deploy(creator, c);
         writeManifest(pool, resolver);
     }
+
+    function preparedPath() internal pure virtual returns (string memory) { return "target/deployments/pilot-prepared.json"; }
+    function manifestPath() internal pure virtual returns (string memory) { return "target/deployments/pilot-unverified.json"; }
 
     function deploy(address creator, PilotResolver.Config memory c) internal returns (PilotPool pool, PilotResolver resolver) {
         require(block.chainid == 10143 && creator != address(0), "Monad testnet creator required");
@@ -64,6 +67,6 @@ contract DeployPilot {
         vm.serializeAddress(key, "creator", resolver.creator());
         vm.serializeBytes32(key, "draftHash", resolver.draftHash());
         string memory output = vm.serializeBytes32(key, "rulesHash", resolver.rulesHash());
-        vm.writeJson(output, "target/deployments/pilot-unverified.json");
+        vm.writeJson(output, manifestPath());
     }
 }

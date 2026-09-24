@@ -2,6 +2,7 @@ import { encodeAbiParameters, keccak256, parseAbiParameters, type Address, type 
 import { z } from 'zod';
 import { eventDraftSchema, prepareEventDraft } from './event-draft';
 import { releaseTargetForEvent } from './github-release';
+import { validateRehearsalDraft } from './rehearsal';
 
 export const PILOT_CASH = '0xa9012a055bd4e0edff8ce09f960291c09d5322dc';
 export const VOID_POLICY = 'Valid event outcomes stay fixed. Each void event receives equal YES and NO weight, independently of other void events. Each claim pays its average truth-table payout across compatible states, rounded down to test AUSD atoms on each redemption. This is not a refund of purchase cost. Missing evidence, unresolved ambiguity and reviewer nonresponse produce VOID under the fixed deadlines. No creator override or reviewer replacement is permitted.';
@@ -9,6 +10,7 @@ const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/).refine(v => !/^0x0{40}$/
 const duration = (max: number) => z.number().int().min(3600).max(max);
 export const pilotInputSchema = z.object({
   schema: z.literal('flurbo.pilot-publication.v1'),
+  mode: z.enum(['official-releases','rehearsal']).optional(),
   creator: address,
   draft: eventDraftSchema,
   reviewers: z.array(z.object({ name: z.string().trim().min(1).max(100), address }).strict()).min(3).max(5),
@@ -43,8 +45,9 @@ export function preparePilot(input: unknown, now: number) {
   if (value.draft.events.some(e => e.observationEndsAt > now + 90 * 86400)) throw new Error('Observation window exceeds pilot limit');
   if (value.draft.disputeModel !== 'reviewer-panel' || value.draft.exceptionPolicy !== VOID_POLICY || value.draft.disputePolicy !== disputePolicy(value)) throw new Error('Draft must contain the exact reviewed pilot policies');
   const records = new Set<string>();
+  if(value.mode==='rehearsal')validateRehearsalDraft(value.draft);
   for (const event of value.draft.events) {
-    releaseTargetForEvent(value.draft, event.id);
+    if(value.mode!=='rehearsal')releaseTargetForEvent(value.draft, event.id);
     if (records.has(event.source.recordId)) throw new Error('Do not duplicate the same release as separate events');
     records.add(event.source.recordId);
   }
