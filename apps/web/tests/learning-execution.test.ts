@@ -71,6 +71,27 @@ test('wrong account, network, runtime, revision, funding and gas fail before sig
     assert.equal(w.calls.filter(c => c[0] === 'eth_sendTransaction').length, 0);
   }
 });
+test('numeric pending nonces are preserved exactly as hex for tracking and wallet submission', async () => {
+  for (const approval of [true, false]) for (const nonce of [0, 121, Number.MAX_SAFE_INTEGER]) {
+    const { review } = fixture(approval); const w = wallet(review);
+    const provider = { request: (input: any) => input.method === 'eth_getTransactionCount' ? Promise.resolve(nonce) : w.provider.request(input) };
+    const saved: (Pending | null)[] = [];
+    await submitLearning(provider, review, { authorize: async () => {}, current: () => true, now: () => now, save: value => saved.push(value) });
+    const expected = '0x' + BigInt(nonce).toString(16);
+    assert.equal(saved[0]!.nonce, expected); assert.equal(saved[1]!.nonce, expected);
+    const sends = w.calls.filter(c => c[0] === 'eth_sendTransaction');
+    assert.equal(sends.length, 1); assert.equal(sends[0][1][0].nonce, expected);
+  }
+});
+test('invalid and unsafe pending nonces stop before tracking or signing', async () => {
+  for (const nonce of [-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, null, undefined, true, {}, '121', '0x', '0x' + 'f'.repeat(65)]) {
+    const { review } = fixture(); const w = wallet(review);
+    const provider = { request: (input: any) => input.method === 'eth_getTransactionCount' ? Promise.resolve(nonce) : w.provider.request(input) };
+    await assert.rejects(submitLearning(provider, review, { authorize: async () => {}, current: () => true, now: () => now,
+      save: () => assert.fail('invalid nonce must not create pending tracking') }), /invalid pending nonce/);
+    assert.equal(w.calls.filter(c => c[0] === 'eth_sendTransaction').length, 0);
+  }
+});
 test('malformed wallet quantities identify the failed read without exposing provider data or sending', async () => {
   for (const [method, label] of [
     ['eth_chainId', 'chain ID'], ['eth_getBlockByNumber', 'latest block timestamp'],

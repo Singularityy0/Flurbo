@@ -24,9 +24,12 @@ const uint = (value: string, bits = 256) => {
   return BigInt(value);
 };
 const rpcNumber = (value: unknown, source: string) => {
+  // Some injected wallets return the pending nonce as a JS number. Convert only
+  // exact unsigned integers; never round an unsafe value before signing.
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return BigInt(value);
   if (typeof value !== 'string' || !/^0x[0-9a-f]{1,64}$/i.test(value)) {
     const kind = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
-    throw new LearningError(`Wallet returned an invalid ${source} (${kind}); expected a hexadecimal integer. Reconnect and retry the check.`);
+    throw new LearningError(`Wallet returned an invalid ${source} (${kind}); expected a hexadecimal integer or a nonnegative safe integer. Reconnect and retry the check.`);
   }
   return BigInt(value);
 };
