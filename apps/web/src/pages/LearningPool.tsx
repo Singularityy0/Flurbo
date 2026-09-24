@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import LearningExecution from './LearningExecution';
+import type { Review } from '../learning/execution';
 
 type Pool = { schema: string; pool: string; updater: string; block: string; timestamp: string; closesAt: number;
   revision: string; updates: string; collateralAtoms: string; reserveAtoms: string; covered: boolean;
   open: boolean; modelReady: boolean; operator: boolean };
-type Review = { schema: string; expiresAt: number; action: string; updateSimulated: boolean;
-  fundingAtoms: string; quoteBeforeAtoms: string; quoteAfterAtoms: string; movementAtoms: string;
-  modelSha256: string; snapshotSha256: string; quantizationBound: string;
-  snapshot: { blockNumber: string; revision: string }; notice: string };
 const amount = (value: string) => (Number(value) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 });
 
 export default function LearningPool() {
@@ -58,14 +56,14 @@ export default function LearningPool() {
       <p className="auth-help">Pool <code>{pool.pool}</code><br/>Checked {new Date(Number(pool.timestamp) * 1000).toLocaleString()}. Refresh for current state. Closes {new Date(pool.closesAt * 1000).toLocaleString()}.</p>
       <p>The Rust fixture learns from one synthetic A AND B observation. C through H remain independent and untrained. There is no live observation feed or automatic repricing.</p>
       {pool.operator ? <>
-        <p>Operator review prepares an unsigned proposal with at most 1 test AUSD of added funding. It does not open a wallet or submit a transaction.</p>
+        <p>Prepare a proposal with at most 1 test AUSD of added funding, then confirm each action separately in your deployer wallet.</p>
         <button className="button button-dark" disabled={busy || !pool.modelReady || !pool.open || !pool.covered} onClick={() => void load(true)}>Prepare synthetic proposal</button>
         {!pool.modelReady && <p role="status">The Rust fixture is starting or unavailable.</p>}
       </> : <p className="auth-help">Proposal preparation is available to the configured Flurbo operator account.</p>}
       {review && <section aria-label="Unsigned learning review">
         <h3>{expired ? 'Review expired' : 'Review the proposed update'}</h3>
         <p>Snapshot block {review.snapshot.blockNumber}, revision {review.snapshot.revision}. {expired ? 'Prepare a fresh proposal before proceeding.' : `Expires ${new Date(review.expiresAt * 1000).toLocaleTimeString()}.`}</p>
-        <p>Added funding: <strong>{amount(review.fundingAtoms)} test AUSD</strong>. Bias movement: {amount(review.movementAtoms)} AUSD in cost-function units.</p>
+        <p>Maximum added funding: <strong>{amount(review.fundingAtoms)} test AUSD</strong>. Bias movement: {amount(review.movementAtoms)} AUSD in cost-function units.</p>
         <p>Example cost for buying one A AND B share: <strong>{amount(review.quoteBeforeAtoms)} → {amount(review.quoteAfterAtoms)} AUSD</strong>. These are quantity quotes, not probabilities.</p>
         <p>{review.updateSimulated ? 'The exact update call passed simulation at this snapshot.' : 'AUSD approval is required. Only the approval call was simulated. After approval, prepare a fresh proposal to simulate the update itself.'}</p>
         <p className="auth-help">The deployer {pool.updater} signs updates. Your Mera login grants access to this review; it does not authorize transactions for the deployer.</p>
@@ -73,6 +71,7 @@ export default function LearningPool() {
         <details><summary>Model and snapshot evidence</summary><p>Model SHA-256: <code>{review.modelSha256}</code></p><p>Snapshot SHA-256: <code>{review.snapshotSha256}</code></p><p>Quantization variation bound: {review.quantizationBound}. This is numerical conversion evidence, not a statistical loss guarantee.</p></details>
         <p className="auth-help">{review.notice}</p>
       </section>}
+      {pool.operator && <LearningExecution review={review} onInvalidate={() => setReview(null)} onConfirmed={approval => void load(approval)}/>}
     </>}
   </details>;
 }

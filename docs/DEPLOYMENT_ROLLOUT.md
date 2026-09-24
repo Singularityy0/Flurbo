@@ -94,7 +94,7 @@ price updates.
 
 ## Phase 3a: hosted read-only learning review
 
-**Prepared in source; push and verify the Render build.** Activity & network now
+**Hosted and checked by the user.** Activity & network now
 includes the separate learning pool's public status and an unsigned proposal
 review. The existing trading and positions panels still target the ordinary pool.
 The read-only service checks the accepted block hash, all three deployed runtime
@@ -117,11 +117,10 @@ same-origin POST with no custom model, command, address or network input.
 
 The unsigned review expires after five minutes. When allowance is insufficient,
 it explicitly says only the approval was simulated. After approval, preparation
-must run again before an exact update simulation. This slice downloads review
-evidence only: there is no wallet submission button, server-held key, automatic
-approval, update broadcast or live observation ingestion. The next slice adds
-reviewed wallet execution, receipt verification and access to trading on the new
-market while preserving the original market.
+must run again before an exact update simulation. Phase 3a provided downloaded
+review evidence only. Phase 3b below adds reviewed extension-wallet execution;
+consumer trading on the new market is still a subsequent slice. There is no
+server-held key, automatic approval or live observation ingestion.
 
 ### Hosted checks after push
 
@@ -153,8 +152,73 @@ for a new proposal.
 
 The Rust embedding test, authenticated HTTP access checks, proposal failure
 tests, actual Rust/Python integration and frontend production build passed
-locally. Render must still verify the Linux container; local build success is not
-a claim that this new slice is deployed.
+locally. The user subsequently confirmed the hosted checks.
+
+## Phase 3b: reviewed operator wallet execution
+
+**Implemented and locally verified; public wallet execution remains a release
+check.** The learning panel now connects an extension wallet for the immutable
+updater. The existing Mera operator session is checked before preflight and again
+before the wallet prompt. Connecting MetaMask does not create a Flurbo login or
+grant operator access. The ordinary trading pool and its manifest remain intact.
+
+Every transaction is a separate explicit action. The browser reconstructs the
+exact calldata, caps added funding at 1 test AUSD, verifies the wallet account,
+chain, accepted public block, pool/engine/factory runtime hashes, snapshot and
+revision, and simulates the action again. It also estimates gas and checks MON.
+Changing the account, network or displayed review invalidates preflight. An
+already open wallet prompt must still be rejected in the wallet if no longer
+wanted. Update deadlines remain enforced by the contract; approvals do not have
+a contract-enforced deadline and grant only the displayed exact allowance.
+
+Transaction tracking is saved in browser storage before opening the wallet.
+A browser lock prevents concurrent submissions from Flurbo tabs. Reloads restore
+the pending action; rejected prompts clear it, while ambiguous outcomes block a
+new submission until resolved. This stores public review data, nonce and hash,
+never credentials or private keys. A replacement hash can be attached, but must
+match the original sender, nonce, destination and calldata. Clearing tracking
+requires explicit acknowledgement and does not cancel a blockchain transaction.
+
+Confirmation requires the exact transaction and two canonical block
+confirmations, plus either the matching AUSD `Approval` or `BiasUpdated` event.
+The update event must match the proposal hash, next revision, funding cap and
+reviewed reserve. Receipt checks detect a changed canonical block. They run every
+10 seconds for up to two minutes, then remain available through **Check
+confirmation**. No check retries a transaction submission.
+
+### Deployment and manual acceptance
+
+1. Push this focused frontend/shared-ABI change and let Render rebuild. No new
+   contracts or environment values are needed. Keep `FLURBO_MANIFEST_JSON` and
+   the configured Mera operator address unchanged.
+2. Sign in with that Mera account. Open **Activity & network > Learning pool >
+   View pool status**. Connect MetaMask using the immutable deployer
+   `0xf1fea08ebba92ed342acc5639db312c3694bc391` on public Monad testnet.
+3. Prepare a synthetic proposal. Review maximum funding, price change and expiry.
+   If needed, choose **Confirm AUSD approval in wallet** and confirm only that
+   approval. The page verifies its receipt, then prepares a fresh proposal.
+   If preparation hits the 15-second service interval, wait and prepare again.
+4. Review the fresh update and choose **Confirm pricing update in wallet**.
+   Check its receipt, the increased update count and refreshed reserve. A mined
+   transaction alone is not reported as a verified update. Keep the transaction
+   hash for the public acceptance record.
+5. A refresh while pending should restore tracking after loading pool status and
+   reconnecting the deployer. Wrong wallet, wrong chain, expired or changed
+   reviews must not open a transaction prompt. Signing out removes the controls.
+6. Verify ordinary trading and positions still use their original market. This
+   slice does not expose consumer trading on the learning pool. Reapplying this
+   unchanged synthetic model is rejected; live observations need a separate
+   source and ingestion policy.
+
+Validation: all 40 web tests passed, including actual Rust/Python integration,
+along with TypeScript and the production build. A disposable, owned Anvil EVM
+rehearsal ran the browser signing functions against the compiled eight-event
+contracts, confirmed separate approval/update receipts with two blocks, and
+matched the actual Solidity proposal hash. Funding was 515,545 atoms and the
+one-share A AND B quote changed from 259,531 to 279,955 atoms. This used an
+in-memory local fixture identity, not an edit to the public manifest. No public
+transaction was sent during development. Render's container build and the
+user's real extension-wallet confirmations remain the public release checks.
 
 ## Subsequent release gates
 

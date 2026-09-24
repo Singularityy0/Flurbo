@@ -11,6 +11,7 @@ COPY apps/web/package*.json apps/web/
 RUN npm --prefix apps/web ci
 COPY apps/web apps/web
 COPY apps/dashboard apps/dashboard
+COPY config/learning-testnet.json config/learning-testnet.json
 COPY --from=learning-build /app/target/release/examples/parlay_compare bin/flurbo-parlay-compare
 COPY --from=learning-build /app/target/release/examples/parlay_testnet_model bin/flurbo-learning-model
 RUN node --input-type=module -e "import {runComparison} from './apps/web/server/learning-comparison.mjs'; await runComparison();"
@@ -25,6 +26,7 @@ COPY --from=build /app/apps/web/node_modules apps/web/node_modules
 COPY --from=build /app/bin/flurbo-parlay-compare bin/flurbo-parlay-compare
 COPY --from=build /app/bin/flurbo-learning-model bin/flurbo-learning-model
 COPY apps/web/server apps/web/server
+COPY apps/web/shared apps/web/shared
 COPY apps/web/package.json apps/web/package.json
 COPY scripts scripts
 COPY config config

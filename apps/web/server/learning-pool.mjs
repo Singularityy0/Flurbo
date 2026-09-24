@@ -2,30 +2,16 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { encodeFunctionData, decodeFunctionResult, parseAbi } from 'viem';
+import { encodeFunctionData, decodeFunctionResult } from 'viem';
 import { TESTNET } from './network.mjs';
+import { poolAbi, cashAbi, engineAbi } from '../shared/learning-contracts.mjs';
+export { poolAbi, cashAbi, engineAbi };
 
 const digest = data => createHash('sha256').update(data).digest('hex');
 const wire = value => JSON.parse(JSON.stringify(value, (_, item) => typeof item === 'bigint' ? item.toString() : item));
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const OPERATOR = '0xf1fea08ebba92ed342acc5639db312c3694bc391';
 const POOL = '0x094ed5f95188c222a61c27cae24b068120a52dd4';
-const factor = '(uint32 scope, uint128[] values)[]';
-const market = `(uint8 events, uint128 liquidity, uint8 decimals, ${factor} factors, uint8[] order)`;
-const update = `(uint256 chainId, address pool, uint256 expectedRevision, uint256 deadline, uint128 maxFunding, ${factor} bias)`;
-export const poolAbi = parseAbi([
-  ...['revision', 'lastUpdateAt', 'updateCount', 'fundingEpoch'].map(name => `function ${name}() view returns (uint256)`),
-  ...['epochFundingSpent', 'pricingReserve', 'actualRequiredCollateral'].map(name => `function ${name}() view returns (uint128)`),
-  'function funded() view returns (bool)', 'function resolved() view returns (bool)',
-  `function factors() view returns (${factor})`, `function biasFactors() view returns (${factor})`,
-  'function quoteBuy(uint32 scope, uint256 mask, uint128 quantity) view returns (uint128)',
-  `function updateBias(${update} proposal) returns (uint128)`,
-]);
-export const cashAbi = parseAbi(['function balanceOf(address owner) view returns (uint256)',
-  'function allowance(address owner, address spender) view returns (uint256)',
-  'function approve(address spender, uint256 amount) returns (bool)']);
-export const engineAbi = parseAbi([`function reserve(${market} market, ${factor} bias) pure returns (uint128)`,
-  `function quote(${market} market, ${factor} bias, uint32 scope, uint256 mask, uint128 quantity, bool isBuy) pure returns ((uint128 collateral, ${factor} factorsAfter, uint128 maxLiabilityAfter) result, uint128 reserveAfter)`]);
 
 function child(file, args, input, limit, signal) {
   return new Promise((resolve, reject) => {
