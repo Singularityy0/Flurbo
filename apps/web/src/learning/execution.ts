@@ -23,8 +23,11 @@ const uint = (value: string, bits = 256) => {
   if (typeof value !== 'string' || !/^(0|[1-9][0-9]{0,77})$/.test(value) || BigInt(value) >= 1n << BigInt(bits)) throw new LearningError('Invalid review amount.');
   return BigInt(value);
 };
-const rpcNumber = (value: unknown) => {
-  if (typeof value !== 'string' || !/^0x[0-9a-f]{1,64}$/i.test(value)) throw new LearningError('Invalid wallet response.');
+const rpcNumber = (value: unknown, source: string) => {
+  if (typeof value !== 'string' || !/^0x[0-9a-f]{1,64}$/i.test(value)) {
+    const kind = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+    throw new LearningError(`Wallet returned an invalid ${source} (${kind}); expected a hexadecimal integer. Reconnect and retry the check.`);
+  }
   return BigInt(value);
 };
 async function request(provider: Provider, method: string, params: unknown[] = []) {
@@ -65,7 +68,7 @@ export function validateReview(review: Review, now = Date.now(), tracking = fals
 }
 
 async function identity(provider: Provider, owner = true) {
-  if (rpcNumber(await request(provider, 'eth_chainId')) !== 10143n) throw new LearningError('Select public Monad testnet in your wallet.');
+  if (rpcNumber(await request(provider, 'eth_chainId'), 'chain ID') !== 10143n) throw new LearningError('Select public Monad testnet in your wallet.');
   if (owner) {
     const accounts = await request(provider, 'eth_accounts') as string[];
     if (!Array.isArray(accounts) || address(accounts[0]) !== deployment.updater) throw new LearningError(`Select the deployer ${deployment.updater} in your wallet.`);
@@ -76,7 +79,7 @@ async function identity(provider: Provider, owner = true) {
 
 export async function connectOperator(provider: Provider) {
   await provider.request({ method: 'eth_requestAccounts' });
-  if (rpcNumber(await request(provider, 'eth_chainId')) !== 10143n) await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x279f' }] });
+  if (rpcNumber(await request(provider, 'eth_chainId'), 'chain ID') !== 10143n) await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x279f' }] });
   await identity(provider); return deployment.updater;
 }
 
@@ -98,8 +101,8 @@ export async function submitLearning(provider: Provider, review: Review, hooks: 
   const plan = validateReview(review, now());
   await hooks.authorize(); await identity(provider); await runtime(provider);
   const snap = await request(provider, 'eth_getBlockByNumber', [hex(uint(review.snapshot.blockNumber)), false]) as { hash?: string } | null;
-  const head = await request(provider, 'eth_getBlockByNumber', ['latest', false]) as { timestamp: Hex };
-  const age = now() / 1000 - Number(rpcNumber(head.timestamp));
+  const head = await request(provider, 'eth_getBlockByNumber', ['latest', false]) as { timestamp: Hex } | null;
+  const age = now() / 1000 - Number(rpcNumber(head?.timestamp, 'latest block timestamp'));
   if (snap?.hash?.toLowerCase() !== review.snapshot.blockHash.toLowerCase() || age < -15 || age > 180) throw new LearningError('Snapshot changed or wallet RPC is stale. Refresh the proposal.');
   const readRevision = async () => {
     const data = encodeFunctionData({ abi: poolAbi, functionName: 'revision' });
@@ -111,11 +114,11 @@ export async function submitLearning(provider: Provider, review: Review, hooks: 
   const simulation = await request(provider, 'eth_call', [tx, 'latest']) as Hex;
   const result = decodeFunctionResult({ abi: plan.approval ? cashAbi : poolAbi, functionName: plan.approval ? 'approve' : 'updateBias', data: simulation });
   if (plan.approval ? result !== true : typeof result !== 'bigint' || result > plan.proposal.maxFunding) throw new LearningError('Simulation no longer satisfies the review.');
-  const gas = rpcNumber(await request(provider, 'eth_estimateGas', [tx])) * 120n / 100n;
-  const gasPrice = rpcNumber(await request(provider, 'eth_gasPrice'));
+  const gas = rpcNumber(await request(provider, 'eth_estimateGas', [tx]), 'gas estimate') * 120n / 100n;
+  const gasPrice = rpcNumber(await request(provider, 'eth_gasPrice'), 'gas price');
   if (gas <= 0n || gas > 15_000_000n || gasPrice <= 0n || gasPrice > 500_000_000_000n) throw new LearningError('Gas estimate exceeds this testnet signing policy.');
-  if (rpcNumber(await request(provider, 'eth_getBalance', [deployment.updater, 'latest'])) < gas * gasPrice) throw new LearningError('Fund the deployer with test MON for network fees.');
-  const nonce = hex(rpcNumber(await request(provider, 'eth_getTransactionCount', [deployment.updater, 'pending'])));
+  if (rpcNumber(await request(provider, 'eth_getBalance', [deployment.updater, 'latest']), 'MON balance') < gas * gasPrice) throw new LearningError('Fund the deployer with test MON for network fees.');
+  const nonce = hex(rpcNumber(await request(provider, 'eth_getTransactionCount', [deployment.updater, 'pending']), 'pending nonce'));
   await hooks.authorize(); await identity(provider); await readRevision();
   validateReview(review, now());
   if (!hooks.current()) throw new LearningError('Account or review changed. Reconnect and review again.');
@@ -148,10 +151,10 @@ export function matchReceipt(pending: Pending, tx: RpcTx, receipt: RpcReceipt, c
   const plan = validateReview(pending.review, Date.now(), true);
   if (!pending.hash || tx.hash.toLowerCase() !== pending.hash || receipt.transactionHash.toLowerCase() !== pending.hash ||
       address(tx.from) !== deployment.updater || address(receipt.from) !== deployment.updater || address(tx.to) !== plan.to || address(receipt.to) !== plan.to ||
-      tx.input.toLowerCase() !== plan.data.toLowerCase() || rpcNumber(tx.value) !== 0n || rpcNumber(tx.nonce) !== rpcNumber(pending.nonce) ||
-      tx.chainId && rpcNumber(tx.chainId) !== 10143n || tx.blockHash !== receipt.blockHash || tx.blockNumber !== receipt.blockNumber ||
+      tx.input.toLowerCase() !== plan.data.toLowerCase() || rpcNumber(tx.value, 'transaction value') !== 0n || rpcNumber(tx.nonce, 'transaction nonce') !== rpcNumber(pending.nonce, 'saved nonce') ||
+      tx.chainId && rpcNumber(tx.chainId, 'transaction chain ID') !== 10143n || tx.blockHash !== receipt.blockHash || tx.blockNumber !== receipt.blockNumber ||
       canonical.hash !== receipt.blockHash) throw new LearningError('Transaction or canonical receipt does not match the saved review.');
-  if (rpcNumber(head) < rpcNumber(receipt.blockNumber) + 1n) return 'confirming';
+  if (rpcNumber(head, 'latest block number') < rpcNumber(receipt.blockNumber, 'receipt block number') + 1n) return 'confirming';
   if (receipt.status === '0x0') return 'reverted';
   if (receipt.status !== '0x1') throw new LearningError('Unexpected receipt status.');
   const topic = toEventSelector(plan.approval ? 'Approval(address,address,uint256)' : 'BiasUpdated(uint256,bytes32,uint128,uint128)');

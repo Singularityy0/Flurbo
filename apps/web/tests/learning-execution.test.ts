@@ -71,6 +71,25 @@ test('wrong account, network, runtime, revision, funding and gas fail before sig
     assert.equal(w.calls.filter(c => c[0] === 'eth_sendTransaction').length, 0);
   }
 });
+test('malformed wallet quantities identify the failed read without exposing provider data or sending', async () => {
+  for (const [method, label] of [
+    ['eth_chainId', 'chain ID'], ['eth_getBlockByNumber', 'latest block timestamp'],
+    ['eth_estimateGas', 'gas estimate'], ['eth_gasPrice', 'gas price'],
+    ['eth_getBalance', 'MON balance'], ['eth_getTransactionCount', 'pending nonce'],
+  ]) {
+    const { review } = fixture(); const w = wallet(review);
+    const provider = { async request(input: any) {
+      if (input.method === method && method !== 'eth_getBlockByNumber') return { privateProviderDetail: 'must never be displayed' };
+      if (method === 'eth_getBlockByNumber' && input.method === method && input.params[0] === 'latest') return null;
+      return w.provider.request(input);
+    } };
+    await assert.rejects(submitLearning(provider, review, { authorize: async () => {}, current: () => true,
+      save: () => assert.fail('must not save'), now: () => now }), (error: Error) => {
+      assert.ok(error.message.includes(label)); assert.ok(!error.message.includes('privateProviderDetail')); return true;
+    });
+    assert.equal(w.calls.filter(c => c[0] === 'eth_sendTransaction').length, 0);
+  }
+});
 test('logout, UI invalidation and unavailable storage prevent signing', async () => {
   for (const failure of ['auth', 'generation', 'storage']) {
     const { review } = fixture(); const w = wallet(review);

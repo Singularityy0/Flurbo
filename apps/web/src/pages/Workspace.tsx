@@ -102,8 +102,8 @@ export default function Workspace() {
       {state.notice && <p role="status" className="auth-feedback">{state.notice}</p>}
       {publicTestnet && address && <Funding key={address + state.method}/>}
       <CoreMarket account={address} panel={panel}/>
-      {publicTestnet && panel === 'activity' && <LearningComparison key={address}/>}
-      {publicTestnet && panel === 'activity' && <LearningPool key={address}/>}
+      {publicTestnet && panel === 'activity' && <LearningComparison key={`comparison:${address}`}/>}
+      {publicTestnet && panel === 'activity' && <LearningPool key={`pool:${address}`}/>}
       <footer className="workspace-footer"><span>One pool. More possibilities.</span><span>{publicTestnet ? 'Monad testnet / Test AUSD / Synthetic outcomes' : 'Local prototype / AUSD collateral / Synthetic outcomes'}</span></footer>
     </div>
   </main>;
