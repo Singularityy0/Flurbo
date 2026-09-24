@@ -16,9 +16,9 @@ export const pilotPendingKey='flurbo.pilot.pending.v1';
 export type PilotNamespace='pilot'|'rehearsal';
 export const pendingKeyFor=(namespace:PilotNamespace)=>namespace==='pilot'?pilotPendingKey:'flurbo.rehearsal.pending.v1';
 
-export async function pilotRequest<T>(path:string,input?:unknown,namespace:PilotNamespace='pilot'):Promise<T> {
+export async function pilotRequest<T>(path:string,input?:unknown,namespace:PilotNamespace='pilot',signal?:AbortSignal):Promise<T> {
   const response=await fetch('/api/'+namespace+'/'+path,{method:input===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',
-    headers:input===undefined?{}:{'Content-Type':'application/json'},body:input===undefined?undefined:JSON.stringify(input),signal:AbortSignal.timeout(60_000)});
+    headers:input===undefined?{}:{'Content-Type':'application/json'},body:input===undefined?undefined:JSON.stringify(input),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60_000)]):AbortSignal.timeout(60_000)});
   const result=await response.json();
   if(!response.ok) throw new Error(result.error || 'Pilot request failed. Refresh before retrying.');
   return result;

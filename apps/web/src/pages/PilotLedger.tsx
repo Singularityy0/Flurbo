@@ -20,26 +20,32 @@ function claimsFor(state:Account,index:Index|null,owner:string) {
 }
 
 export default function PilotLedger({account,history,namespace='pilot'}:{account:string;history:boolean;namespace?:PilotNamespace}) {
-  const pilotRequest=<T,>(path:string,input?:unknown)=>request<T>(path,input,namespace);
   const [wallet,setWallet]=useState(()=>rememberedWallet(account)),[owner,setOwner]=useState(wallet);
   const [state,setState]=useState<Account|null>(null),[index,setIndex]=useState<Index|null>(null),[holdings,setHoldings]=useState<Holdings|null>(null);
   const [accountError,setAccountError]=useState(''),[historyError,setHistoryError]=useState(''),[holdingsError,setHoldingsError]=useState('');
   const [busy,setBusy]=useState(false),[page,setPage]=useState(0),[claimCount,setClaimCount]=useState(0);
   const [catchingUp,setCatchingUp]=useState(true),[visible,setVisible]=useState(document.visibilityState==='visible');
-  const version=useRef(0),working=useRef(false);
-  useEffect(()=>()=>{version.current++;},[]);
+  const version=useRef(0),active=useRef<AbortController|null>(null),automaticReads=useRef(0);
+  useEffect(()=>()=>{version.current++;active.current?.abort();},[]);
   useEffect(()=>{const timer=setTimeout(()=>void refresh(),0);return()=>clearTimeout(timer);},[]);
   useEffect(()=>{const change=()=>setVisible(document.visibilityState==='visible');document.addEventListener('visibilitychange',change);return()=>document.removeEventListener('visibilitychange',change);},[]);
   useEffect(()=>{
     if(!index || index.complete || busy || !catchingUp || !visible)return;
-    const timer=setTimeout(()=>void refresh(),1500);
+    const timer=setTimeout(()=>void refresh(owner,page,true),1500);
     return()=>clearTimeout(timer);
   },[index,busy,catchingUp,visible,owner,page]);
 
-  async function refresh(next=owner,p=page){
-    if(working.current)return;
+  function pause(){
+    setCatchingUp(false);version.current++;active.current?.abort();active.current=null;setBusy(false);
+  }
+  async function refresh(next=owner,p=page,automatic=false){
     if(!/^0x[0-9a-f]{40}$/i.test(next)){setAccountError('Enter a public wallet address.');return;}
-    working.current=true;const generation=++version.current;
+    const generation=++version.current;
+    active.current?.abort();
+    const controller=new AbortController();active.current=controller;
+    const pilotRequest=<T,>(path:string,input?:unknown)=>request<T>(path,input,namespace,controller.signal);
+    if(!automatic){automaticReads.current=0;setCatchingUp(true);}
+    automaticReads.current++;
     const current=()=>generation===version.current;
     const changed=next.toLowerCase()!==owner.toLowerCase(),cached=changed?null:index;
     setBusy(true);setOwner(next);setPage(p);setAccountError('');setHistoryError('');setHoldingsError('');
@@ -60,7 +66,7 @@ export default function PilotLedger({account,history,namespace='pilot'}:{account
     }
     // History storage or log scans must not gate reads of the user's actual holdings.
     const historyRead=pilotRequest<Index>('history',{}).then(i=>{
-      if(current())setIndex(i);
+      if(current()){setIndex(i);if(!i.complete&&automaticReads.current>=5)setCatchingUp(false);}
       return i;
     },()=>{
       if(current()){setHistoryError('Trade history is temporarily unavailable. Your holdings are loaded separately. Retry shortly.');setCatchingUp(false);}
@@ -78,7 +84,7 @@ export default function PilotLedger({account,history,namespace='pilot'}:{account
       const [i]=await Promise.all([historyRead,accountRead]);
       // Add combinations discovered by this scan without blocking the base positions.
       if(current()&&loaded&&i)await loadHoldings(loaded,i);
-    }finally{working.current=false;if(current())setBusy(false);}
+    }finally{if(current()){active.current=null;setBusy(false);}}
   }
 
   const activity=index?.logs.filter(e=>['Asserted','Disputed','Voted','Finalized','Delivered'].includes(e.name)||Object.values(e.args).some(v=>typeof v==='string'&&v.toLowerCase()===owner.toLowerCase())).reverse()||[];
@@ -98,12 +104,12 @@ export default function PilotLedger({account,history,namespace='pilot'}:{account
     </>:<p>{busy?'Loading your shares...':'Holdings are unavailable. This does not mean you have no shares.'}</p>}
   </>;
   return <div className="portfolio-view">
-    <section className="portfolio-wallet"><div><label>Wallet to view<input value={wallet} disabled={busy} onChange={e=>setWallet(e.target.value)}/></label></div><button className="button button-dark" disabled={busy} onClick={()=>{setCatchingUp(true);void refresh(wallet,0);}}>View wallet</button><button className="button button-outline" disabled={busy} onClick={()=>{setWallet(account);setCatchingUp(true);void refresh(account,0);}}>Use Mera wallet</button><p>Read-only view. Your Mera and MetaMask addresses hold separate positions.</p></section>
-    <div className="portfolio-toolbar"><p className="portfolio-address">Showing {owner}</p><button className="button button-outline" disabled={busy} onClick={()=>{setCatchingUp(true);void refresh();}}>{busy?'Refreshing...':'Refresh'}</button></div>
+    <section className="portfolio-wallet"><div><label>Wallet to view<input value={wallet} onChange={e=>setWallet(e.target.value)}/></label></div><button className="button button-dark" onClick={()=>void refresh(wallet,0)}>View wallet</button><button className="button button-outline" onClick={()=>{setWallet(account);void refresh(account,0);}}>Use Mera wallet</button><p>Read-only view. Your Mera and MetaMask addresses hold separate positions.</p></section>
+    <div className="portfolio-toolbar"><p className="portfolio-address">Showing {owner}</p><button className="button button-outline" onClick={()=>busy?pause():void refresh()}>{busy?'Stop loading':'Refresh'}</button></div>
     {accountError&&<p role="status">{accountError}</p>}
     {state&&<p className="portfolio-freshness">{amount(state.wallet.cash)} test AUSD in this wallet. Checked at block {state.snapshot.blockNumber}.</p>}
     {historyError&&<p role="status">{historyError}</p>}
-    {index&&!index.complete&&<section className="portfolio-wallet"><p>{Math.max(0,index.target-index.through).toLocaleString()} blocks remaining. {catchingUp?'Continues automatically while this page is visible.':'Automatic loading is paused.'}</p><button className="button button-outline" onClick={()=>setCatchingUp(value=>!value)}>{catchingUp?'Pause loading':'Continue loading'}</button></section>}
+    {index&&!index.complete&&<section className="portfolio-wallet"><p>{catchingUp?'Loading more history in the background. You can switch wallets at any time.':'More history is available. Continue when you are ready.'}</p><button className="button button-outline" onClick={()=>catchingUp?pause():void refresh()}>{catchingUp?'Pause loading':'Continue loading'}</button></section>}
     {history?<>
       <div className="portfolio-section-heading"><h2>Your activity</h2></div>
       {index&&<p className="portfolio-freshness">History checked through block {index.through}.{historyError?' Showing the last successful history read.':index.complete?' History is up to date through this checkpoint.':' Earlier activity is still loading.'}</p>}
@@ -111,6 +117,6 @@ export default function PilotLedger({account,history,namespace='pilot'}:{account
       <p className="portfolio-footnote">Includes your wallet activity and the collection's public settlement record.</p>
       {(!index?.complete||historyError)&&holdingsTable}
     </>:holdingsTable}
-    <div className="portfolio-pagination"><button className="button button-outline" disabled={busy||page===0} onClick={()=>void refresh(owner,page-1)}>Previous</button><span>Page {page+1}</span><button className="button button-outline" disabled={busy||(page+1)*30>=(history?activity.length:claimCount)} onClick={()=>void refresh(owner,page+1)}>Next</button></div>
+    <div className="portfolio-pagination"><button className="button button-outline" disabled={page===0} onClick={()=>void refresh(owner,page-1)}>Previous</button><span>Page {page+1}</span><button className="button button-outline" disabled={(page+1)*30>=(history?activity.length:claimCount)} onClick={()=>void refresh(owner,page+1)}>Next</button></div>
   </div>;
 }
