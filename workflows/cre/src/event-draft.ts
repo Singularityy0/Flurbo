@@ -85,7 +85,7 @@ export function prepareEventDraft(input: unknown, now: number) {
   const blockers = [
     'No authenticated official-source report is attached to this draft.',
     'Rule text requires review; schema validation does not establish that outcomes are unambiguous or independent.',
-    'Settlement controller, exception payouts and dispute enforcement are not implemented for this draft.',
+    'This draft alone does not establish a deployed settlement controller, exception payouts or dispute enforcement.',
     'Pool binding, funding, supported claim structure and deployment verification are outstanding.',
   ];
   if (draft.closesAt <= now) blockers.push('Trading close has already passed; choose future dates for a new release.');

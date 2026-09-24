@@ -91,7 +91,7 @@ test('expired drafts remain reproducible but blocked; filled policy text cannot 
   expect(expired.draftHash).toBe(fresh.draftHash);
   expect(expired.blockers.join(' ')).toContain('already passed');
   expect(fresh.deployable).toBe(false);
-  expect(fresh.blockers.join(' ')).toContain('not implemented');
+  expect(fresh.blockers.join(' ')).toContain('does not establish a deployed settlement controller');
 });
 
 test('local review CLI reports valid drafts as blocked and rejects malformed files', async () => {
