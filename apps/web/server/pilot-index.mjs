@@ -17,8 +17,12 @@ export function pilotIndex({manifest,rpc,command,now=Date.now}) {
     const checkpoint=await rpc('eth_getBlockByNumber',['0x'+saved.through.toString(16),false]);
     if(checkpoint?.hash?.toLowerCase()!==saved.hash) saved={through:start,hash:manifest.verifiedBlockHash,logs:[]};
     const head=await rpc('eth_getBlockByNumber',['latest',false]);
-    const tip=Number(BigInt(head.number))-2, targetEnd=Math.min(tip,saved.through+1000);
-    if(targetEnd<=saved.through)return {...saved,target:tip,complete:saved.through>=tip};
+    const tip=Number(BigInt(head.number))-2;
+    // Finish the persisted catch-up snapshot before following newly mined blocks.
+    // A completed snapshot starts a new target on the next explicit refresh.
+    const target=Number.isSafeInteger(saved.target)&&saved.target>saved.through?Math.min(saved.target,tip):tip;
+    const targetEnd=Math.min(target,saved.through+1000);
+    if(targetEnd<=saved.through)return {...saved,target,complete:saved.through>=target};
     const boundaryBefore=await rpc('eth_getBlockByNumber',['0x'+targetEnd.toString(16),false]);
     let end=saved.through,endBefore=null,attempts=0;
     const started=now();
@@ -60,13 +64,13 @@ export function pilotIndex({manifest,rpc,command,now=Date.now}) {
     if(oldBlock?.hash?.toLowerCase()!==saved.hash)throw new Error('Checkpoint changed during scan');
     const merged=[...saved.logs,...logs].sort((a,b)=>a.block-b.block||a.index-b.index);
     const unique=[...new Map(merged.map(l=>[`${l.blockHash}:${l.index}`,l])).values()];
-    const next={through:end,hash:endBlock.hash.toLowerCase(),logs:unique};
+    const next={through:end,hash:endBlock.hash.toLowerCase(),target,logs:unique};
     const encoded=stringify(next);
     // Do not silently discard old activity to stay under a storage quota.
     if(encoded.length>750_000)throw new Error('Pilot index capacity reached; expand the index before continuing');
     const cas="local current=redis.call('GET',KEYS[1]); if (current or '')~=ARGV[1] then return 0 end; redis.call('SET',KEYS[1],ARGV[2]); return 1";
     if(Number(await command('EVAL',cas,1,key,prior||'',encoded))!==1)throw new Error('Index advanced in another request; refresh');
-    return {...JSON.parse(encoded),target:tip,complete:end>=tip};
+    return {...JSON.parse(encoded),complete:end>=target};
   }
   // Portfolio and History can open together. Share a scan in this process;
   // the Redis compare-and-swap still protects different service instances.

@@ -71,3 +71,20 @@ test('slow reads checkpoint completed windows; rejected reads and reorgs never a
   const saved=stored;mode='failure';await assert.rejects(pilotIndex({manifest,rpc,command}).refresh());assert.equal(stored,saved);
   stored=null;mode='reorg';scanned=false;await assert.rejects(pilotIndex({manifest,rpc,command,now:()=>time}).refresh(),/changed/);assert.equal(stored,null);
 });
+
+test('catch-up finishes a fixed persisted target even as new blocks arrive; refresh then starts a new snapshot',async()=>{
+  const hash=(n:number)=>'0x'+n.toString(16).padStart(64,'0');
+  const manifest={pool:'0x'+'11'.repeat(20),resolver:'0x'+'22'.repeat(20),verifiedBlock:'100',verifiedBlockHash:hash(100)};
+  let stored:string|null=null,head=1252;
+  const command=async(...a:any[])=>{if(a[0]==='GET')return stored;assert.equal(a[4],stored||'');stored=a[5];return 1;};
+  const rpc=async(method:string,params:any[])=>{
+    if(method==='eth_getLogs')return [];
+    const n=params[0]==='latest'?head:Number(BigInt(params[0]));return {number:'0x'+n.toString(16),hash:hash(n)};
+  };
+  const index=()=>pilotIndex({manifest,rpc,command,now:()=>0});
+  const first=await index().refresh();assert.equal(first.through,1100);assert.equal(first.target,1250);assert.equal(first.complete,false);
+  head=2252;
+  // Reconstruction simulates a server restart or another instance reading Redis.
+  const second=await index().refresh();assert.equal(second.through,1250);assert.equal(second.target,1250);assert.equal(second.complete,true);
+  const fresh=await index().refresh();assert.equal(fresh.target,2250);assert.equal(fresh.through,2250);assert.equal(fresh.complete,true);
+});
