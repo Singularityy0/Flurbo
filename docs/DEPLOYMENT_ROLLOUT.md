@@ -4,6 +4,13 @@ Checkpoint: 2026-09-24. This document distinguishes release preparation from a
 successful hosted build and a verified public transaction. Older phase documents
 contain historical statements that predate the public testnet deployment.
 
+The next requested release is a real-event Monad testnet pilot with creator,
+trader, asserter, disputer and voter roles. See [the release design](REAL_EVENT_TESTNET.md)
+for new-contract requirements and implementation slices. Crypto ecosystem events
+and an existing dispute oracle (if available on Monad) are selected; exact event
+rules and oracle deployment verification remain open. This is additional implementation work, not a
+configuration switch on the existing synthetic pools.
+
 ## Existing public release
 
 The consumer site at `https://flurbo.singu.online` serves Mera account access,
