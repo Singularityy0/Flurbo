@@ -1,11 +1,13 @@
 # Real-event testnet release
 
-Status: foundation implemented, 2026-09-24. The user requested real events and
-creator, trader, asserter, disputer and voter roles. The selected category is
-crypto ecosystem events with official published results. The preferred dispute
-authority is an existing oracle, conditional on verified Monad integration.
-Specific questions, dates, sources and an operational oracle remain unselected.
-The five-role contract lifecycle is not implemented by this document.
+Status: implementation and isolated testing, 2026-09-24. The separate
+`PilotPool` and `PilotResolver` now implement the five-role lifecycle with a
+fixed named testnet reviewer panel and bounded void settlement. Hosted views,
+reviewed signing, durable evidence/history and publication verification are
+implemented. Nothing in this pilot has been publicly deployed or published.
+Reviewer identities and exact future events/windows still require human input.
+See [the deployment runbook](PILOT_TESTNET_DEPLOYMENT.md) for current evidence,
+remaining integrations and the wallet-operated release sequence.
 
 ## Release objective
 
@@ -48,12 +50,11 @@ continues using Mera for login. Each signed action identifies the actual signer.
 Role overlap and conflicts of interest must be specified before publication.
 
 The user chose to investigate an existing oracle before considering a panel.
-A named panel would change the trust model and requires a separate decision.
+The subsequent instruction to continue the recommended custom workaround is the basis for implementing a named testnet panel. Publication still requires explicit named reviewers and reviewed rules.
 A faucet-funded bond cannot provide meaningful economic resistance to attackers.
 Mera passkeys do not prove that two accounts belong to different people.
 
-The chosen direction needs an existing dispute oracle with verified Monad support
-and an explicitly tested delivery path. UMA-style assertions and disputes are useful
+An external-oracle release would need verified Monad testnet support and an explicitly tested delivery path. The implemented pilot uses its own disclosed panel instead. UMA-style assertions and disputes are useful
 prior art, not evidence that UMA is already integrated or available on Monad.
 See [UMA's oracle lifecycle](https://docs.uma.xyz/protocol-overview/how-does-umas-oracle-work).
 
@@ -67,8 +68,7 @@ See [UMA's oracle lifecycle](https://docs.uma.xyz/protocol-overview/how-does-uma
 5. Asserted: evidence and a candidate outcome open the challenge window.
 6. Unchallenged assertions finalize only after that window. Challenged assertions
    enter adjudication; the contract enforces eligibility and deadlines.
-7. Once every base event has a final valid outcome, the controller constructs the
-   terminal bit vector and calls the pool exactly once.
+7. Once every base event has a final YES, NO or VOID outcome, the controller constructs the valid and void masks and calls the separate pilot pool exactly once.
 8. Winners redeem according to each claim's existing truth table. No separate
    vote or oracle report is required for each conjunction or disjunction.
 
@@ -95,11 +95,11 @@ Missing, conflicting or malformed evidence never becomes an automatic NO.
 
 ## Cancellation and liveness are release gates
 
-The existing pool cannot represent an invalid/void event or refund a cluster.
+The old synthetic pool cannot represent an invalid/void event or refund a cluster. The new PilotPool implements uniform-weight void payouts, not purchase-price refunds.
 Adding a UI label does not change that. Do not hardcode a terminal state to get
 around an unavailable source, tied vote or cancelled event.
 
-Before launch, select and implement a bounded nonresolution policy, including
+The new uniform-void policy and its tests address
 how every outstanding composed claim is valued and collateral remains covered.
 Returning each buyer's original cost is not a valid general policy after resale
 and wrapping. The policy must cover mixed valid/invalid legs, wrapped claims,
@@ -205,18 +205,17 @@ testnet-only optimistic controller: public assertions and challenges, a fixed
 named reviewer set, public votes and a precommitted quorum (for example three
 of five). CRE supplies evidence; the controller enforces finalization. It must
 disclose panel trust and implement cancellation/nonresponse payouts before
-release. This fallback has been recommended, not selected or implemented.
+release. This fallback is now implemented in PilotResolver and PilotPool. It is not publicly deployed or independently audited.
 
 The first [official-source adapter](CRYPTO_EVENT_SOURCES.md) now reads exact
 Geth/Reth stable-release publication records as candidate evidence. This is
-independent progress while the dispute path is undecided; no draft market has
-been published and the live CRE workflow remains synthetic.
+now used by a separate pilot CRE observer that checks chain bindings and retrieves candidate evidence. No market has been published; live pilot CRE simulation/delivery remains a release gate.
 
 ## Remaining decisions and access
 
 1. Choose exact crypto questions, official source records and future windows.
-2. Verify an existing oracle's Monad testnet integration. If none can be verified,
-   discuss the concrete alternatives before changing the user's chosen direction.
+2. Provide three or five independent named reviewers and public signing addresses.
+3. Execute and verify the new deployment, CRE observation, Kuru pair and public acceptance sequence in the runbook.
 
 Candidate source adapters may be tested independently. Freeze the first market's
 questions, deadlines, evidence rules and exception policy before preparing a

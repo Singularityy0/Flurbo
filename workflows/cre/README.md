@@ -1,3 +1,11 @@
+# CRE workflows
+
+The `pilot` target now implements read-only official GitHub release retrieval
+bound to the new pilot pool and resolver. Unit tests and WASM compilation pass.
+A live pilot CLI simulation and public deployment have not run. It does not
+submit authenticated on-chain assertions. See the
+[pilot runbook](../../docs/PILOT_TESTNET_DEPLOYMENT.md) for the separate gates.
+
 # Synthetic CRE settlement simulation
 
 Separate work has begun on [real-event draft validation](../../docs/REAL_EVENT_TESTNET.md#implemented-foundation).

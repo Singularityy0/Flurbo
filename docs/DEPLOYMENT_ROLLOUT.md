@@ -7,9 +7,11 @@ contain historical statements that predate the public testnet deployment.
 The next requested release is a real-event Monad testnet pilot with creator,
 trader, asserter, disputer and voter roles. See [the release design](REAL_EVENT_TESTNET.md)
 for new-contract requirements and implementation slices. Crypto ecosystem events
-and an existing dispute oracle (if available on Monad) are selected; exact event
-rules and oracle deployment verification remain open. This is additional implementation work, not a
-configuration switch on the existing synthetic pools.
+and official-source release templates are selected. A separate custom testnet
+resolver, pool and hosted lifecycle have been implemented and tested locally.
+They are not deployed. See [the pilot runbook](PILOT_TESTNET_DEPLOYMENT.md) for
+the named reviewer requirement, publication gates and test evidence. The old
+synthetic pools cannot be relabelled as this pilot.
 
 ## Existing public release
 
