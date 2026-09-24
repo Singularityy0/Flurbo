@@ -7,6 +7,7 @@ import { localApi } from './local-api.mjs';
 import { hostedConfig } from './network.mjs';
 import { RedisSessionStore, redisCommand } from './redis-session.mjs';
 import { runComparison } from './learning-comparison.mjs';
+import { learningService, learningRpc, loadLearningModel } from './learning-pool.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -17,11 +18,12 @@ const security = {
 };
 
 export function productionServer(config, store, staticRoot = dist) {
-  const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport });
+  const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
+    learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount });
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
     // Liveness only. This deliberately does not claim contracts or RPC are ready.
-    if (req.url === '/healthz' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ service: 'flurbo', chain_state: 'not_checked', learning_comparison: config.learningReport ? 'ready' : config.learningStatus || 'unavailable' })); return; }
+    if (req.url === '/healthz' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ service: 'flurbo', chain_state: 'not_checked', learning_comparison: config.learningReport ? 'ready' : config.learningStatus || 'unavailable', learning_pool: config.learningPool ? 'configured' : 'unavailable', learning_model: config.learningModelStatus || 'unavailable' })); return; }
     if (req.headers.host !== new URL(config.origin).host) { res.writeHead(421); res.end('Use https://flurbo.singu.online'); return; }
     if (!req.url || req.url.length > 4096) { res.writeHead(414); res.end(); return; }
     await api(req, res, async () => {
@@ -55,6 +57,20 @@ async function main() {
     config.learningStatus = 'unavailable';
     console.error('Rust comparison unavailable; comparison API disabled, existing trading service continues');
   });
+  // Optional operator access is a Mera login identity, separate from the immutable
+  // MetaMask updater. Never infer administrator access from a client-supplied wallet.
+  const operatorAccount = process.env.FLURBO_LEARNING_OPERATOR_ACCOUNT?.toLowerCase();
+  config.learningOperatorAccount = /^0x[0-9a-f]{40}$/.test(operatorAccount || '') && !/^0x0{40}$/.test(operatorAccount) ? operatorAccount : null;
+  let learningModel = null;
+  try {
+    const manifest = JSON.parse(await readFile(resolve(root, 'config/learning-testnet.json'), 'utf8'));
+    config.learningPool = learningService({ manifest, rpc: learningRpc(config.rpcUrl), modelReport: () => learningModel });
+    config.learningModelStatus = 'starting';
+    void loadLearningModel().then(report => { learningModel = report; config.learningModelStatus = 'ready'; }).catch(() => {
+      config.learningModelStatus = 'unavailable';
+      console.error('Learning fixture unavailable; proposal preparation disabled');
+    });
+  } catch { console.error('Learning pool configuration unavailable; existing trading continues'); }
   let reader;
   if (process.env.FLURBO_MANIFEST_JSON) {
     const manifest = JSON.parse(process.env.FLURBO_MANIFEST_JSON);

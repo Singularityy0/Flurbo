@@ -75,7 +75,12 @@ embedded Linux check before this phase is called deployed.
 
 ## Phase 2: separate funded learning deployment
 
-**Prepared and simulated; not broadcast.** Follow
+**Deployed and verified on public Monad testnet.** Pool
+`0x094ed5f95188c222a61c27cae24b068120a52dd4` was deployed in transaction
+`0xf3fe8a4c0c02cc01a31b6181c224423de823f33fc3e76aec09bdfc465b7d8000`.
+All four transactions succeeded and the fresh-deployment verifier accepted block
+65,285,695. The verified non-secret snapshot is now in
+`config/learning-testnet.json`. Follow
 [the learning deployment runbook](LEARNING_TESTNET_DEPLOYMENT.md). The separate
 script deploys the existing funded pricing implementation with an eight-event
 configuration, explicit update limits and exact initial subsidy. It never changes
@@ -83,9 +88,73 @@ the ordinary pool or the hosted trading manifest. Its verifier checks compiled
 runtime, immutable configuration, initial state and funding at a pinned block.
 The output is deliberately incompatible with `FLURBO_MANIFEST_JSON`.
 
-Public signing is the remaining deployment step. Hosting proposal review and
-retaining access to both markets are phase 3, before exposing the new pool in the
-consumer flow. Phase 2 alone does not enable automatic learning or price updates.
+Deployment signing is complete. Hosting proposal review and retaining access to
+both markets are phase 3. Phase 2 alone does not enable automatic learning or
+price updates.
+
+## Phase 3a: hosted read-only learning review
+
+**Prepared in source; push and verify the Render build.** Activity & network now
+includes the separate learning pool's public status and an unsigned proposal
+review. The existing trading and positions panels still target the ordinary pool.
+The read-only service checks the accepted block hash, all three deployed runtime
+hashes, pinned state, coverage and freshness before returning data.
+
+The new `parlay_testnet_model` Rust binary trains a two-event synthetic A/B model
+from one observation (target 0.8, field/pair rates 0.1, b=10), then embeds it exactly
+in eight events. C through H are uniform and independent by construction, not
+silently pruned from a trained dense model. Python's existing exact-rational
+builder rejects excessive movement, graph width and quantization error. The EVM
+engine determines funding and before/after quantity quotes. Proposal funding is
+capped at 1 test AUSD and checked against the contract's fixed-epoch cap.
+
+Configure `FLURBO_LEARNING_OPERATOR_ACCOUNT` in Render with the full **Mera login
+address** of the intended operator. Missing or invalid configuration denies all
+proposal preparation. Merely connecting the deployer wallet never grants this
+access. The immutable update signer remains the MetaMask deployer. Status requires
+a Mera session; preparing a proposal also requires the configured account and a
+same-origin POST with no custom model, command, address or network input.
+
+The unsigned review expires after five minutes. When allowance is insufficient,
+it explicitly says only the approval was simulated. After approval, preparation
+must run again before an exact update simulation. This slice downloads review
+evidence only: there is no wallet submission button, server-held key, automatic
+approval, update broadcast or live observation ingestion. The next slice adds
+reviewed wallet execution, receipt verification and access to trading on the new
+market while preserving the original market.
+
+### Hosted checks after push
+
+1. Keep `FLURBO_MANIFEST_JSON` unchanged. The learning deployment uses the separate
+   checked-in public manifest; no new contract deployment is needed.
+2. Set `FLURBO_LEARNING_OPERATOR_ACCOUNT` to the intended Mera account, then
+   deploy. Never enter a private key, seed phrase or wallet password there.
+3. `/healthz` should report `learning_pool: configured` and
+   `learning_model: ready`. These mean configuration and fixture startup only;
+   `chain_state: not_checked` still does not claim live chain readiness.
+4. Sign in and open Activity & network > Learning pool > View pool status. It
+   should show the new pool, covered collateral and a recent block. Check normal
+   trading and positions still use the original market.
+5. From the configured Mera account, prepare a synthetic proposal. Check the
+   funding, quote change, expiry and whether approval or update was simulated.
+   Downloading never sends a transaction. Another Mera account must not see the
+   operator button; its direct proposal request must return 403. Signed-out
+   requests must return 401.
+
+Local validation: the public testnet preparation returned `approval_required`,
+515,545 funding atoms, bias movement 1,283,334 atoms, and an example one-share
+A AND B buy cost changing from 259,531 to 279,955 atoms. No public transaction was
+submitted. A preceding public RPC batch was rejected; failed requests yield no
+review and never send a transaction. The service uses the existing configured
+Alchemy endpoint when available, a 25-second overall deadline, capped batches,
+10-second status caching and one proposal calculation at a time with a 15-second
+minimum interval. The fresh snapshot and simulation are always required again
+for a new proposal.
+
+The Rust embedding test, authenticated HTTP access checks, proposal failure
+tests, actual Rust/Python integration and frontend production build passed
+locally. Render must still verify the Linux container; local build success is not
+a claim that this new slice is deployed.
 
 ## Subsequent release gates
 

@@ -4,7 +4,8 @@ import { validWithdrawal } from './withdrawal-policy.mjs';
 import { TESTNET } from './network.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
-  publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null } = {}) {
+  publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
+  learningPool = null, learningOperatorAccount = null } = {}) {
   const hosted = publicOrigin !== null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
   // A bounded global limit avoids trusting spoofable forwarded IP headers.
@@ -31,6 +32,23 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (++requests > 600) { res.setHeader('Retry-After', '60'); return send(res, 429, { error: 'Service busy. Retry shortly.' }); }
       }
       if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? TESTNET : { environment: 'local_fork', chain_id: 10143 });
+      if (['/api/learning/pool', '/api/learning/proposal'].includes(url.pathname)) {
+        const session = await store.read(sid, origin);
+        if (!session || session.method !== 'passkey') return send(res, 401, { error: 'Sign in with your Flurbo passkey' });
+        if (url.search) return send(res, 400, { error: 'Learning review accepts no query inputs' });
+        const operator = Boolean(learningOperatorAccount && session.address === learningOperatorAccount);
+        if (url.pathname === '/api/learning/pool') {
+          if (req.method !== 'GET') return send(res, 405, { error: 'Pool status is read-only' });
+          if (!learningPool) return send(res, 503, { error: 'Learning pool reader unavailable' });
+          return send(res, 200, { ...await learningPool.status(), operator });
+        }
+        if (req.method !== 'POST') return send(res, 405, { error: 'Use explicit proposal preparation' });
+        if (!operator) return send(res, 403, { error: 'Learning operator account required' });
+        const input = await body(req);
+        if (!input || Array.isArray(input) || typeof input !== 'object' || Object.keys(input).length) return send(res, 400, { error: 'This synthetic fixture accepts no custom inputs' });
+        if (!learningPool) return send(res, 503, { error: 'Learning pool reader unavailable' });
+        return send(res, 200, await learningPool.prepare());
+      }
       if (url.pathname === '/api/learning/comparison') {
         if (req.method !== 'GET') return send(res, 405, { error: 'Comparison is read-only' });
         if (!await store.read(sid, origin)) return send(res, 401, { error: 'Sign in to view the comparison' });

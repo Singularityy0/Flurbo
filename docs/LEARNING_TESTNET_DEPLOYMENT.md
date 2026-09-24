@@ -1,5 +1,11 @@
 # Synthetic learning pool deployment
 
+Deployment completed on 2026-09-24 at
+`0x094ed5f95188c222a61c27cae24b068120a52dd4`, with acceptance at block 65,285,695.
+Do not rerun the deployment commands below for this release. They document the
+completed procedure. Hosted integration progress is in
+[the rollout document](DEPLOYMENT_ROLLOUT.md).
+
 This deploys a separately identified `FundedFactoredPool` on public Monad testnet.
 The current ordinary pool, Kuru pair and user positions remain in place. Do not
 replace Render's `FLURBO_MANIFEST_JSON` with this deployment's output. The hosted
