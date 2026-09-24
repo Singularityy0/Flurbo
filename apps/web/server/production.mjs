@@ -8,6 +8,8 @@ import { hostedConfig } from './network.mjs';
 import { RedisSessionStore, redisCommand } from './redis-session.mjs';
 import { runComparison } from './learning-comparison.mjs';
 import { learningService, learningRpc, loadLearningModel } from './learning-pool.mjs';
+import { pilotService, pilotEvidence, pilotRpc } from './pilot.mjs';
+import { pilotIndex } from './pilot-index.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -20,7 +22,7 @@ const security = {
 export function productionServer(config, store, staticRoot = dist) {
   const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
     learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
-    learningDashboardUrl: config.learningDashboardUrl });
+    learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, evidence: config.pilotEvidence });
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
     // Liveness only. This deliberately does not claim contracts or RPC are ready.
@@ -31,7 +33,7 @@ export function productionServer(config, store, staticRoot = dist) {
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405); res.end(); return; }
       try {
         const pathname = new URL(req.url, config.origin).pathname;
-        const page = ['/', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru'].includes(pathname);
+        const page = ['/', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events'].includes(pathname);
         if (!page && !/^\/(?:assets\/[a-zA-Z0-9_.-]+|favicon\.svg|robots\.txt)$/.test(pathname)) { res.writeHead(404); res.end('Not found'); return; }
         const file = resolve(staticRoot, page ? 'index.html' : pathname.slice(1));
         if (!(await stat(file)).isFile()) throw new Error('Not a file');
@@ -47,6 +49,11 @@ async function main() {
   const config = hostedConfig();
   const store = new RedisSessionStore(redisCommand());
   await store.command('PING');
+  config.pilotEvidence = pilotEvidence(store.command, config.origin);
+  if(process.env.FLURBO_PILOT_MANIFEST_JSON) {
+    config.pilot = pilotService({manifest:JSON.parse(process.env.FLURBO_PILOT_MANIFEST_JSON),rpc:pilotRpc(config.rpcUrl)});
+    config.pilot.index = pilotIndex({manifest:config.pilot.manifest,rpc:pilotRpc(config.rpcUrl),command:store.command});
+  }
   const comparison = new AbortController();
   config.learningStatus = 'starting';
   // Do not hold up account/trading access while a sleeping free-tier server warms.

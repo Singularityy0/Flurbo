@@ -4,10 +4,11 @@ import { validWithdrawal } from './withdrawal-policy.mjs';
 import { kuruCall } from '../shared/kuru.mjs';
 import { TESTNET } from './network.mjs';
 import { learningDeployment } from '../shared/learning-contracts.mjs';
+import { pilotCall } from '../shared/pilot.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
-  learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null } = {}) {
+  learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot = null, evidence = null } = {}) {
   const hosted = publicOrigin !== null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
   // A bounded global limit avoids trusting spoofable forwarded IP headers.
@@ -34,6 +35,59 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (++requests > 600) { res.setHeader('Retry-After', '60'); return send(res, 429, { error: 'Service busy. Retry shortly.' }); }
       }
       if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? TESTNET : { environment: 'local_fork', chain_id: 10143 });
+      if(url.pathname.startsWith('/api/pilot/')) {
+        // Content-addressed evidence is public so counterparties can inspect a cited URI.
+        const evidenceHash=url.pathname.match(/^\/api\/pilot\/evidence\/(0x[0-9a-f]{64})$/)?.[1];
+        if(evidenceHash && req.method==='GET' && !url.search && evidence) {
+          const content=await evidence.get(evidenceHash);
+          res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'public, max-age=31536000, immutable'}); res.end(content); return;
+        }
+        const login=await store.read(sid,origin);
+        if(!login || login.method!=='passkey') return send(res,401,{error:'Sign in with your Flurbo passkey'});
+        if(!pilot) return send(res,503,{error:'The real-event pilot is not published yet. Reviewer identities, final event rules and a verified deployment are required.'});
+        if(req.method==='GET' && url.pathname==='/api/pilot/status') {
+          if([...url.searchParams.keys()].some(k=>k!=='wallet') || url.searchParams.getAll('wallet').length>1) return send(res,400,{error:'Invalid pilot query'});
+          return send(res,200,await pilot.status(url.searchParams.get('wallet')||undefined));
+        }
+        if(url.search) return send(res,400,{error:'Unexpected pilot query'});
+        if(req.method==='POST' && url.pathname==='/api/pilot/prepare') return send(res,200,await pilot.prepare(await body(req)));
+        if(req.method==='POST' && url.pathname==='/api/pilot/position') {
+          const input=await body(req); return send(res,200,await pilot.position(input.owner,input.scope,input.mask));
+        }
+        if(req.method==='POST' && url.pathname==='/api/pilot/positions') {
+          const input=await body(req); return send(res,200,await pilot.positions(input.owner,input.claims));
+        }
+        if(req.method==='POST' && url.pathname==='/api/pilot/history') {
+          const input=await body(req);
+          if(!pilot.index || Object.keys(input).length) return send(res,400,{error:'Pilot history unavailable or unexpected input'});
+          await pilot.snapshot();
+          return send(res,200,await pilot.index.refresh());
+        }
+        if(req.method==='POST' && url.pathname==='/api/pilot/evidence') {
+          if(!evidence) return send(res,503,{error:'Evidence storage unavailable'});
+          const input=await body(req);
+          if(!pilot.manifest.publication.draft.events.some(e=>e.id===input.eventId)) return send(res,400,{error:'Unknown pilot event'});
+          return send(res,200,await evidence.put(input,login.address,pilot.manifest.draftHash));
+        }
+        if(req.method==='POST' && url.pathname==='/api/pilot/rpc') {
+          const input=await body(req);
+          if(!input || !Array.isArray(input.params) || !['eth_chainId','eth_getBlockByNumber','eth_getCode','eth_call','eth_estimateGas','eth_gasPrice','eth_getTransactionCount','eth_getTransactionReceipt','eth_getTransactionByHash','eth_getBalance','eth_sendRawTransaction'].includes(input.method)) return send(res,400,{error:'Unsupported pilot RPC'});
+          if(input.method==='eth_sendRawTransaction') {
+            const raw=input.params[0];
+            if(typeof raw!=='string' || !/^0x[0-9a-f]+$/i.test(raw)) return send(res,400,{error:'Invalid transaction'});
+            const tx=parseTransaction(raw), sender=await recoverTransactionAddress({serializedTransaction:raw});
+            if(sender.toLowerCase()!==login.address || tx.chainId!==10143 || tx.type!=='legacy' || (tx.value??0n)!==0n
+              || !tx.gas || tx.gas>15_000_000n || !tx.gasPrice || tx.gasPrice>500_000_000_000n
+              || !pilotCall({to:tx.to,data:tx.data,manifest:pilot.manifest})) return send(res,403,{error:'Transaction differs from pilot signing policy'});
+            await pilot.snapshot();
+          }
+          const upstream=await fetch(rpcUrl,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:input.method,params:input.params}),signal:AbortSignal.timeout(20_000)});
+          const result=await upstream.json();
+          if(!upstream.ok || result.error) return send(res,400,{error:'Monad rejected the pilot request. Check tracking before retrying.'});
+          return send(res,200,{result:result.result});
+        }
+        return send(res,404,{error:'Unknown pilot endpoint'});
+      }
       if (['/api/learning/pool', '/api/learning/proposal'].includes(url.pathname)) {
         const session = await store.read(sid, origin);
         if (!session || session.method !== 'passkey') return send(res, 401, { error: 'Sign in with your Flurbo passkey' });
