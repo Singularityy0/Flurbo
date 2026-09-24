@@ -52,7 +52,9 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
   const directory = await mkdtemp(join(tmpdir(),'flurbo-server-'));
   await writeFile(join(directory,'index.html'),'<html>Flurbo</html>');
   const store = new SessionStore();
-  const server = productionServer({origin,rpcUrl:TESTNET.rpc},store,directory);
+  const learningReport = {schema:'flurbo.learning-comparison.v1',input:'synthetic',changesExecutablePrices:false};
+  const config = {origin,rpcUrl:TESTNET.rpc,learningReport: learningReport as typeof learningReport | null, learningStatus: 'starting'};
+  const server = productionServer(config,store,directory);
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const port = (server.address() as {port:number}).port;
   function request(path:string,body?:object,cookie='',host='flurbo.singu.online',requestOrigin=origin):Promise<any> {
@@ -76,11 +78,22 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
     assert.equal((await request('/api/auth/challenge',{address:signer.address},'','flurbo.singu.online','https://evil.example')).status,403);
     assert.equal((await request('/api/local-wallet-setup',{wallet:signer.address})).status,404);
     assert.equal((await request('/api/rpc',{method:'anvil_setBalance',params:[]})).status,400);
+    assert.equal((await request('/api/learning/comparison')).status,401);
+    assert.equal((await request('/healthz')).json().learning_comparison,'ready');
     assert.equal((await request('/api/auth/challenge',{address:signer.address,method:'wallet'})).status,400);
     const challenge=await request('/api/auth/challenge',{address:signer.address,method:'passkey'});
     const verified=await request('/api/auth/verify',{signature:await signer.signMessage({message:challenge.json().message})},challenge.headers['set-cookie'][0].split(';')[0]);
     assert.equal(verified.status,200);assert.match(verified.headers['set-cookie'][0],/HttpOnly.*SameSite=Strict.*Secure/);
     const cookie=verified.headers['set-cookie'][0].split(';')[0];
+    assert.deepEqual((await request('/api/learning/comparison',undefined,cookie)).json(),learningReport);
+    config.learningReport = null;
+    assert.equal((await request('/api/learning/comparison',undefined,cookie)).status,503);
+    assert.equal((await request('/healthz')).json().learning_comparison,'starting');
+    assert.equal((await request('/account')).status,200);
+    config.learningReport = learningReport;
+    assert.equal((await request('/api/learning/comparison?command=replay',undefined,cookie)).status,400);
+    assert.equal((await request('/api/learning/comparison',{command:'replay'},cookie)).status,405);
+    assert.equal((await request('/api/learning/comparison',undefined,cookie,'flurbo.singu.online','https://evil.example')).status,403);
     assert.equal((await request('/api/auth/session',undefined,cookie)).json().session.method,'passkey');
     const tx={type:'legacy' as const,chainId:10143,nonce:0,gas:100000n,gasPrice:1000000000n,to:TESTNET.cash as `0x${string}`,value:0n,data:('0x095ea7b3'+pool.slice(2).padStart(64,'0')+'1'.padStart(64,'0')) as `0x${string}`};
     const send=async(value:typeof tx)=>request('/api/rpc',{method:'eth_sendRawTransaction',params:[await signer.signTransaction(value)]},cookie);
@@ -103,5 +116,6 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
     assert.equal(broadcasts,3);
     assert.equal((await request('/api/state')).status,503);
     await request('/api/auth/logout',{},cookie); assert.equal((await request('/api/auth/session',undefined,cookie)).json().session,null);
+    assert.equal((await request('/api/learning/comparison',undefined,cookie)).status,401);
   } finally { globalThis.fetch=originalFetch;server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));assert.equal(dirname(directory),tmpdir());assert.ok(basename(directory).startsWith('flurbo-server-'));await rm(directory,{recursive:true,force:true}); }
 });

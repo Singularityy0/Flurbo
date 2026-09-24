@@ -4,7 +4,7 @@ import { validWithdrawal } from './withdrawal-policy.mjs';
 import { TESTNET } from './network.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
-  publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765' } = {}) {
+  publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null } = {}) {
   const hosted = publicOrigin !== null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
   // A bounded global limit avoids trusting spoofable forwarded IP headers.
@@ -31,6 +31,13 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (++requests > 600) { res.setHeader('Retry-After', '60'); return send(res, 429, { error: 'Service busy. Retry shortly.' }); }
       }
       if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? TESTNET : { environment: 'local_fork', chain_id: 10143 });
+      if (url.pathname === '/api/learning/comparison') {
+        if (req.method !== 'GET') return send(res, 405, { error: 'Comparison is read-only' });
+        if (!await store.read(sid, origin)) return send(res, 401, { error: 'Sign in to view the comparison' });
+        if (url.search) return send(res, 400, { error: 'This comparison accepts no inputs' });
+        const learningReport = getLearningReport();
+        return learningReport ? send(res, 200, learningReport) : send(res, 503, { error: 'Rust comparison is unavailable on this server. Trading is separate.' });
+      }
       if (hosted && url.pathname === '/api/local-wallet-setup') return send(res, 404, { error: 'Local funding is not available on public Monad testnet' });
       if (url.pathname.startsWith('/api/auth/')) {
         if (req.method === 'GET' && url.pathname === '/api/auth/session') return send(res, 200, { session: await store.read(sid, origin) });

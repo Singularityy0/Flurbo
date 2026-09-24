@@ -9,6 +9,7 @@ import dashboardCss from '../../../dashboard/styles.css?raw';
 import workspaceCss from './workspace-core.css?raw';
 import './workspace.css';
 import Funding from './Funding';
+import LearningComparison from './LearningComparison';
 const publicTestnet = import.meta.env.PROD;
 
 type Panel = 'trade' | 'positions' | 'activity';
@@ -100,6 +101,7 @@ export default function Workspace() {
       {state.notice && <p role="status" className="auth-feedback">{state.notice}</p>}
       {publicTestnet && address && <Funding key={address + state.method}/>}
       <CoreMarket account={address} panel={panel}/>
+      {publicTestnet && panel === 'activity' && <LearningComparison key={address}/>}
       <footer className="workspace-footer"><span>One pool. More possibilities.</span><span>{publicTestnet ? 'Monad testnet / Test AUSD / Synthetic outcomes' : 'Local prototype / AUSD collateral / Synthetic outcomes'}</span></footer>
     </div>
   </main>;

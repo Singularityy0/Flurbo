@@ -2,8 +2,10 @@
 
 Flurbo's deployment target is public Monad testnet, chain 10143. All pool,
 receipt, collateral and Kuru transactions stay on Monad. The website, session
-service and read API run on ordinary web hosting. The learning lab is a separate
-research tool and is not included in this deployment.
+service and read API run on ordinary web hosting. The local learning lab and
+funded update transactions remain separate. The next release packages the Rust
+synthetic comparison executable and an authenticated results view; follow the
+[deployment rollout](DEPLOYMENT_ROLLOUT.md) to verify it on Render.
 
 ## What this change provides
 

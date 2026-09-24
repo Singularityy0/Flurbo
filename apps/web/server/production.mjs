@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { localApi } from './local-api.mjs';
 import { hostedConfig } from './network.mjs';
 import { RedisSessionStore, redisCommand } from './redis-session.mjs';
+import { runComparison } from './learning-comparison.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -16,11 +17,11 @@ const security = {
 };
 
 export function productionServer(config, store, staticRoot = dist) {
-  const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store });
+  const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport });
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
     // Liveness only. This deliberately does not claim contracts or RPC are ready.
-    if (req.url === '/healthz' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"service":"flurbo","chain_state":"not_checked"}'); return; }
+    if (req.url === '/healthz' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ service: 'flurbo', chain_state: 'not_checked', learning_comparison: config.learningReport ? 'ready' : config.learningStatus || 'unavailable' })); return; }
     if (req.headers.host !== new URL(config.origin).host) { res.writeHead(421); res.end('Use https://flurbo.singu.online'); return; }
     if (!req.url || req.url.length > 4096) { res.writeHead(414); res.end(); return; }
     await api(req, res, async () => {
@@ -43,6 +44,17 @@ async function main() {
   const config = hostedConfig();
   const store = new RedisSessionStore(redisCommand());
   await store.command('PING');
+  const comparison = new AbortController();
+  config.learningStatus = 'starting';
+  // Do not hold up account/trading access while a sleeping free-tier server warms.
+  void runComparison({ signal: comparison.signal }).then(report => {
+    config.learningReport = report;
+    config.learningStatus = 'ready';
+    console.log('Rust comparison ready: fixed synthetic suite; executable pool prices unchanged');
+  }).catch(() => {
+    config.learningStatus = 'unavailable';
+    console.error('Rust comparison unavailable; comparison API disabled, existing trading service continues');
+  });
   let reader;
   if (process.env.FLURBO_MANIFEST_JSON) {
     const manifest = JSON.parse(process.env.FLURBO_MANIFEST_JSON);
@@ -61,6 +73,7 @@ async function main() {
   const server = productionServer(config, store);
   server.listen(config.port, '0.0.0.0', () => console.log('Flurbo server ready; public trading requires a verified deployment manifest'));
   for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => {
+    comparison.abort();
     server.close(() => process.exit(0)); reader?.kill();
     setTimeout(() => process.exit(0), 5000).unref();
   });

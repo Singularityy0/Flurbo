@@ -39,3 +39,10 @@
 .workspace-funding code { overflow-wrap: anywhere; }
 .auth-wallet-option { margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid #d8ddcf; }
 .auth-wallet-option select, .workspace-funding select { display: block; width: 100%; padding: .7rem; margin: .5rem 0; }
+.learning-comparison summary > span { margin-left: .75rem; }
+.comparison-table { overflow-x: auto; margin: 1rem 0; }
+.comparison-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.comparison-table caption { text-align: left; padding-bottom: 12px; color: var(--ink-soft); }
+.comparison-table th, .comparison-table td { padding: 12px 16px 12px 0; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.comparison-table th { font-weight: 500; }
+.comparison-table td { font-variant-numeric: tabular-nums; }
