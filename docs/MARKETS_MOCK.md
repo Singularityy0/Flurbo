@@ -50,9 +50,21 @@ Paste the copied JSON into Render's `FLURBO_REHEARSAL_MANIFEST_JSON`. Save and
 deploy the latest code. Leave the real pilot manifest setting unchanged. Save a
 copy of this public deployment JSON because `target/` is ignored by Git.
 
-Visit `/markets`, sign in and confirm there are four cards. Choose a prediction,
-select a funded wallet, review, allow payment if requested, then confirm the
-separate buy. Portfolio should show the selected wallet's shares. Mera and
+Visit `/markets`, sign in and confirm there are four cards. Choose a prediction
+and connect a funded wallet. Prices load automatically as the answer and share
+quantity change. Read the displayed maximum spend, click **Buy**, then confirm
+in your wallet. If allowance is insufficient, **Allow payment** appears first;
+the app checks that approval automatically and shows a fresh purchase price.
+Approval alone does not buy shares. Each transaction still requires confirmation.
+
+The selected prediction, answers and quantity are saved in this browser for the
+signed-in account, including after approval completes. Reload reopens the draft;
+reconnect the trading wallet to get a fresh price. Restoring a draft never signs
+or resubmits a transaction. Known pending transaction hashes are checked
+automatically, with a manual check available if polling fails or pauses. A missing
+hash still requires checking wallet activity before continuing. Completed trades
+clear the draft and show **Purchase complete**. Closing an unsent ticket discards
+its draft. Portfolio should show the selected wallet's shares. Mera and
 MetaMask have separate balances. Prices are one-share costs, not a probability
 claim or a guaranteed execution price.
 

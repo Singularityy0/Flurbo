@@ -3,6 +3,7 @@ import { formatUnits, parseUnits, type Hex } from 'viem';
 import { useAuth } from '../auth/context';
 import { describeClaim, walletKey } from '../portfolio';
 import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
+import { readCheckout, saveCheckout, clearCheckout, type CheckoutDraft } from '../checkout';
 import { pilotRequest as request, pilotMera, submitPilot, checkPilotPending, readPilotPending as readPending, pendingKeyFor, validatePilotReview,
   type Provider, type PilotState, type PilotInput, type PilotReview, type PilotPending, type PilotNamespace } from '../pilot';
 import './portfolio.css';
@@ -17,15 +18,18 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
   const pilotRequest=<T,>(path:string,input?:unknown)=>request<T>(path,input,namespace);
   const readPilotPending=()=>readPending(namespace),pilotPendingKey=pendingKeyFor(namespace);
   const {controller,state:auth}=useAuth();
+  const [restored]=useState(()=>{try{const draft=consumer&&auth.address?readCheckout(namespace,auth.address):null;return draft?.event===consumer?.event&&draft?.yes===consumer?.yes?draft:null;}catch{return null;}});
   const [state,setState]=useState<PilotState|null>(null),[notice,setNotice]=useState('Loading the real-event pilot...');
-  const [wallets,setWallets]=useState<BrowserWallet[]>([]),[choice,setChoice]=useState('mera'),[owner,setOwner]=useState('');
+  const [wallets,setWallets]=useState<BrowserWallet[]>([]),[choice,setChoice]=useState(restored?.walletKind==='browser'?'0':'mera'),[owner,setOwner]=useState('');
   const [busy,setBusy]=useState(false),[review,setReview]=useState<PilotReview|null>(null),[pending,setPending]=useState<PilotPending|null>(null);
   const [storageError,setStorageError]=useState(false),[hash,setHash]=useState('');
   const [confirmedHash,setConfirmedHash]=useState(''),[approved,setApproved]=useState<PilotInput|null>(null);
   const [event,setEvent]=useState(0),[outcome,setOutcome]=useState(2),[statement,setStatement]=useState(''),[source,setSource]=useState(''),[attachment,setAttachment]=useState('');
   const [evidence,setEvidence]=useState<{hash:string;uri:string}|null>(null);
-  const [legs,setLegs]=useState<number[]>([consumer?.event??0]),[quantity,setQuantity]=useState('1'),[side,setSide]=useState('buy');
-  const [rule,setRule]=useState('AND'),[answers,setAnswers]=useState<Record<number,boolean>>(consumer?{[consumer.event]:consumer.yes}:{});
+  const [legs,setLegs]=useState<number[]>(restored?.legs||[consumer?.event??0]),[quantity,setQuantity]=useState(restored?.quantity||'1'),[side,setSide]=useState<string>(restored?.side||'buy');
+  const [rule,setRule]=useState('AND'),[answers,setAnswers]=useState<Record<number,boolean>>(restored?.answers||(consumer?{[consumer.event]:consumer.yes}:{}));
+  const [quoting,setQuoting]=useState(false),[quoteTick,setQuoteTick]=useState(0),[completed,setCompleted]=useState(false),[pollPaused,setPollPaused]=useState(false);
+  const quoteVersion=useRef(0),polls=useRef(0);
   const [position,setPosition]=useState<{quantity:string;payoutAtoms:string|null}|null>(null);
   const provider=useRef<Provider|null>(null), generation=useRef(0), live=useRef(true), working=useRef(false), cleanup=useRef(()=>{}), reviewRef=useRef(review);
   reviewRef.current=review;
@@ -47,9 +51,42 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
     window.addEventListener('storage',sync);
     return()=>{live.current=false;generation.current++;cleanup.current();stop();window.removeEventListener('storage',sync);};
   },[]);
-  useEffect(()=>{onBusy(busy||!!review||!!pending||storageError);return()=>onBusy(false);},[busy,review,pending,storageError,onBusy]);
+  useEffect(()=>{onBusy(busy||!consumer&&!!review||!!pending||storageError);return()=>onBusy(false);},[busy,review,pending,storageError,onBusy,!!consumer]);
   useEffect(()=>{setEvidence(null);},[event,outcome,statement,source,attachment]);
   useEffect(()=>{setPosition(null);},[owner,scope,mask]);
+  useEffect(()=>{setCompleted(false);},[scope,mask,quantity,side]);
+  useEffect(()=>{
+    if(!consumer||!auth.address)return;
+    try{
+      if(completed)clearCheckout(namespace,auth.address);
+      else saveCheckout(namespace,auth.address,{event:consumer.event,yes:consumer.yes,legs,answers,quantity,side:side as CheckoutDraft['side'],walletKind:choice==='mera'?'mera':'browser'});
+    }catch{setStorageError(true);setNotice('Your browser could not save this purchase. Enable site storage before continuing.');}
+  },[!!consumer,auth.address,legs,answers,quantity,side,choice,completed]);
+  useEffect(()=>{
+    if(!consumer)return;
+    const version=++quoteVersion.current,controller=new AbortController();
+    setReview(null);reviewRef.current=null;setQuoting(false);
+    if(!owner||!provider.current||pending||completed||storageError)return;
+    if(!/^(0|[1-9][0-9]*)(\.[0-9]{1,6})?$/.test(quantity)||parseUnits(quantity,6)<=0n)return;
+    const walletGeneration=generation.current;
+    const timer=setTimeout(()=>{
+      setQuoting(true);
+      const input={owner,action:side,scope,mask,quantity:parseUnits(quantity,6).toString(),slippageBps:50};
+      void request<PilotReview>('prepare',input,namespace,controller.signal).then(result=>{
+        validatePilotReview(result);
+        if(result.requested.owner.toLowerCase()!==owner||result.requested.action!==side||result.requested.scope!==scope||result.requested.mask!==mask||result.requested.quantity!==input.quantity)throw new Error('Quote differs from your prediction. Refresh the price.');
+        if(live.current&&version===quoteVersion.current&&walletGeneration===generation.current){setReview(result);setNotice('Price ready. Confirm in your wallet when you are ready.');}
+      }).catch(e=>{if(!controller.signal.aborted&&live.current&&version===quoteVersion.current)setNotice(e instanceof Error?e.message:'Price unavailable. Refresh the price.');})
+        .finally(()=>{if(live.current&&version===quoteVersion.current)setQuoting(false);});
+    },350);
+    return()=>{clearTimeout(timer);controller.abort();};
+  },[!!consumer,owner,scope,mask,quantity,side,pending,completed,storageError,quoteTick]);
+  useEffect(()=>{polls.current=0;setPollPaused(false);},[pending?.hash]);
+  useEffect(()=>{
+    if(!consumer||!pending?.hash||pending.login!==auth.address||busy||pollPaused)return;
+    const timer=setTimeout(()=>{polls.current++;void run(async()=>{try{await check();}catch(e){setPollPaused(true);throw e;}finally{if(polls.current>=40)setPollPaused(true);}});},2000);
+    return()=>clearTimeout(timer);
+  },[!!consumer,pending,busy,pollPaused,auth.address]);
   async function connect(){
     cleanup.current(); const version=++generation.current;
     const p:Provider|undefined=choice==='mera'?pilotMera(controller,namespace):wallets[Number(choice)]?.provider;
@@ -77,6 +114,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
   }
   async function confirm(){
     if(!review||!provider.current||!auth.address||pending||storageError)return;
+    if(consumer&&(review.requested.owner.toLowerCase()!==owner||review.requested.action!==side||review.requested.scope!==scope||review.requested.mask!==mask||review.requested.quantity!==parseUnits(quantity,6).toString()))throw new Error('Your prediction changed. Wait for its new price before buying.');
     if(!navigator.locks)throw new Error('Web Locks support is required for submission tracking.');
     const r=review,p=provider.current,version=generation.current,login=auth.address;
     await navigator.locks.request('flurbo-pilot-submit',{ifAvailable:true},async lock=>{
@@ -91,7 +129,8 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
     if(JSON.stringify(readPilotPending())!==JSON.stringify(saved))throw new Error('Tracking changed in another tab');
     if(result==='confirmed'||result==='reverted'){
       save(null);setPosition(null);setConfirmedHash(saved.hash||'');
-      setApproved(result==='confirmed'&&saved.review.action==='approve'?saved.review.requested:null);
+      setApproved(!consumer&&result==='confirmed'&&saved.review.action==='approve'?saved.review.requested:null);
+      if(consumer&&result==='confirmed'&&['buy','sell','redeem'].includes(saved.review.action))setCompleted(true);
       const confirmed=result==='confirmed'?(saved.review.action==='approve'?'Token approval confirmed. The approved action has not been sent. Review it below.':'Exact transaction confirmed. Balances refreshed.'):'Transaction reverted. No successful action was confirmed.';
       try{
         await refresh();
@@ -103,13 +142,12 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
     }
     else setNotice(result==='pending'?'Still pending. Do not submit again.':'Waiting for a second canonical confirmation.');
   }
-  const disabled=busy||!!review||!!pending||storageError;
+  const disabled=busy||!consumer&&!!review||!!pending||storageError;
   const current=state?.cases[event];
   const operatorRun=state?.manifest.publication.reviewerControl==='single-operator';
   if(consumer){
     const question=state?.manifest.publication.draft.events[consumer.event];
     const answerSummary=legs.map(i=>`${state?.manifest.publication.draft.events[i]?.question||'Event '+(i+1)} ${(answers[i]??true)?'Yes':'No'}`).join(' + ');
-    const closed=!!state&&(state.resolved||Date.now()/1000>=state.manifest.publication.draft.closesAt);
     return <div className="consumer-ticket">
       <h2>{legs.length>1?'Your combined prediction':question?.question||'Your selected market'}</h2>
       <p>Practice event. A winning share pays 1 test AUSD. A losing share pays 0. Cancelled outcomes follow the rules below.</p>
@@ -119,10 +157,13 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
         <button className="button button-outline" disabled={disabled||choice==='mera'&&!auth.signingExpiresAt} onClick={()=>void run(connect)}>{owner?'Refresh wallet':'Use this wallet'}</button>
         {owner&&<p>{owner.slice(0,8)}...{owner.slice(-6)}{state?.wallet?` · ${cash(state.wallet.cash)} test AUSD available`:''}</p>}
       </div>
-      {!review&&!pending&&!approved&&<><div className="pilot-fields"><label>Your answer<select aria-label="Your answer" disabled={disabled} value={(answers[consumer.event]??true)?'yes':'no'} onChange={e=>setAnswers(old=>({...old,[consumer.event]:e.target.value==='yes'}))}><option value="yes">Yes</option><option value="no">No</option></select></label><label>Shares<input value={quantity} inputMode="decimal" disabled={disabled} onChange={e=>setQuantity(e.target.value)}/></label></div><label>Action<select value={side} disabled={disabled} onChange={e=>setSide(e.target.value)}><option value="buy">Buy</option><option value="sell">Sell</option><option value="redeem">Collect payout</option></select></label><details><summary>Combine with another prediction</summary><p>Choose up to three events. All your chosen answers must be right to win.</p>{state?.manifest.publication.draft.events.map((e,i)=>i===consumer.event?null:<div className="ticket-combine" key={e.id}><label><input type="checkbox" checked={legs.includes(i)} disabled={disabled||!legs.includes(i)&&legs.length>=3} onChange={()=>setLegs(old=>old.includes(i)?old.filter(v=>v!==i):[...old,i].sort())}/>{e.question}</label>{legs.includes(i)&&<select aria-label={e.question+" answer"} disabled={disabled} value={(answers[i]??true)?"yes":"no"} onChange={e=>setAnswers(old=>({...old,[i]:e.target.value==="yes"}))}><option value="yes">Yes</option><option value="no">No</option></select>}</div>)}</details>{legs.length>1&&<p>{answerSummary}</p>}<div className="pilot-actions"><button className="button button-dark" disabled={disabled||!owner||(closed&&side!=='redeem')} onClick={()=>void run(async()=>{if(!/^(0|[1-9][0-9]*)(\.[0-9]{1,6})?$/.test(quantity))throw new Error('Enter a positive number of shares');await prepare({action:side,scope,mask,quantity:parseUnits(quantity,6).toString(),slippageBps:50});})}>{side==='redeem'?'Review payout':`Review ${side}`}</button><button className="button button-outline" disabled={busy||!owner} onClick={()=>void run(async()=>setPosition(await pilotRequest('position',{owner,scope,mask})))}>View my shares</button></div></>}
-      {approved&&<section className="ticket-review"><h3>Permission granted. Now review your {approved.action}.</h3><p>This is the second step. Your prediction has not been purchased yet.</p><button className="button button-dark" disabled={disabled||owner!==approved.owner.toLowerCase()} onClick={()=>void run(async()=>{const {owner:_owner,...input}=approved;await prepare(input);setApproved(null);})}>Continue to {approved.action}</button><button className="button button-outline" disabled={busy} onClick={()=>setApproved(null)}>Choose another prediction</button></section>}
-      {review&&<section className="ticket-review" aria-label="Transaction review"><h3>{review.action==='approve'?'Step 1 of 2: allow this payment':review.action==='buy'?'Confirm your prediction':review.action==='sell'?'Confirm your sale':'Confirm your payout'}</h3><p>{cash(review.requested.quantity||'0')} shares · {consumerClaim(review.requested,state)}</p>{review.action!=='redeem'&&<p>{review.action==='sell'?'Receive at least':'Spend up to'} <strong>{cash(review.action==='sell'?review.minimumReceivedAtoms!:review.amountAtoms)} test AUSD</strong></p>}<p>{review.action==='approve'?'Your wallet will ask for permission to spend this amount. Buying requires a second confirmation.':'Review the amount, then confirm in your selected wallet.'}</p><details><summary>Payment details</summary><p>Maximum network fee: {formatUnits(BigInt(review.maximumFeeWei),18)} MON. Price tolerance: 0.5%.</p><p>Wallet {review.transaction.from}. Review valid until {date(review.expiresAt)}.</p><p>Contract {review.transaction.to}</p></details><div className="pilot-actions"><button className="button button-dark" disabled={busy||!!pending||choice==='mera'&&!auth.signingExpiresAt} onClick={()=>void run(confirm)}>{review.action==='approve'?'Allow payment':review.action==='buy'?'Confirm buy':review.action==='sell'?'Confirm sell':'Confirm payout'}</button><button className="button button-outline" disabled={busy} onClick={()=>setReview(null)}>Back</button></div></section>}
-      {pending&&<section className="ticket-review"><h3>Waiting for confirmation</h3><p>{pending.hash?'Your transaction was sent. Check its confirmation before continuing.':'Check your wallet activity. A transaction may have been sent; do not repeat it.'}</p>{!pending.hash&&<><label>Transaction hash<input value={hash} onChange={e=>setHash(e.target.value)}/></label><button onClick={()=>void run(async()=>{if(!/^0x[0-9a-f]{64}$/i.test(hash))throw new Error('Paste a valid transaction hash');save({...pending,hash:hash.toLowerCase() as Hex});})}>Find transaction</button></>}<button className="button button-dark" disabled={busy||!pending.hash} onClick={()=>void run(check)}>Check confirmation</button></section>}
+      {!pending&&!completed&&<><div className="pilot-fields"><label>Your answer<select aria-label="Your answer" disabled={disabled} value={(answers[consumer.event]??true)?'yes':'no'} onChange={e=>setAnswers(old=>({...old,[consumer.event]:e.target.value==='yes'}))}><option value="yes">Yes</option><option value="no">No</option></select></label><label>Shares<input value={quantity} inputMode="decimal" disabled={disabled} onChange={e=>setQuantity(e.target.value)}/></label></div><label>Action<select value={side} disabled={disabled} onChange={e=>setSide(e.target.value)}><option value="buy">Buy</option><option value="sell">Sell</option><option value="redeem">Collect payout</option></select></label><details><summary>Combine with another prediction</summary><p>Choose up to three events. All your chosen answers must be right to win.</p>{state?.manifest.publication.draft.events.map((e,i)=>i===consumer.event?null:<div className="ticket-combine" key={e.id}><label><input type="checkbox" checked={legs.includes(i)} disabled={disabled||!legs.includes(i)&&legs.length>=3} onChange={()=>setLegs(old=>old.includes(i)?old.filter(v=>v!==i):[...old,i].sort())}/>{e.question}</label>{legs.includes(i)&&<select aria-label={e.question+" answer"} disabled={disabled} value={(answers[i]??true)?"yes":"no"} onChange={e=>setAnswers(old=>({...old,[i]:e.target.value==="yes"}))}><option value="yes">Yes</option><option value="no">No</option></select>}</div>)}</details>{legs.length>1&&<p>{answerSummary}</p>}<div className="pilot-actions"><button className="button button-outline" disabled={busy||!owner} onClick={()=>void run(async()=>setPosition(await pilotRequest('position',{owner,scope,mask})))}>View my shares</button></div></>}
+      {!pending&&!completed&&owner&&<p role="status">{quoting?'Getting your price...':!review?'Enter your shares to get a price, or refresh the price below.':''}</p>}
+      {!pending&&!completed&&owner&&<button className="text-link" disabled={busy||quoting} onClick={()=>setQuoteTick(n=>n+1)}>Refresh price</button>}
+      {completed&&<section className="ticket-review"><h3>{side==='buy'?'Purchase complete':side==='sell'?'Sale complete':'Payout collected'}</h3><p>Your transaction is confirmed. There is no need to submit it again.</p><a href="/portfolio" className="button button-dark">View portfolio</a><button className="button button-outline" onClick={()=>setCompleted(false)}>Make another trade</button></section>}
+
+      {review&&!pending&&!completed&&<section className="ticket-review" aria-label="Transaction review"><h3>{review.action==='approve'?'Step 1 of 2: allow this payment':review.action==='buy'?'Your purchase':review.action==='sell'?'Confirm your sale':'Confirm your payout'}</h3><p>{cash(review.requested.quantity||'0')} shares · {consumerClaim(review.requested,state)}</p>{review.action!=='redeem'&&<p>{review.action==='sell'?'Receive at least':'Spend up to'} <strong>{cash(review.action==='sell'?review.minimumReceivedAtoms!:review.amountAtoms)} test AUSD</strong></p>}<p>{review.action==='approve'?'First allow this payment in your wallet. We will check it automatically, then show the Buy button. Approval alone does not purchase shares.':'Review the amount, then confirm in your selected wallet.'}</p><details><summary>Payment details</summary><p>Maximum network fee: {formatUnits(BigInt(review.maximumFeeWei),18)} MON. Price tolerance: 0.5%.</p><p>Wallet {review.transaction.from}. Review valid until {date(review.expiresAt)}.</p><p>Contract {review.transaction.to}</p></details><div className="pilot-actions"><button className="button button-dark" disabled={busy||!!pending||choice==='mera'&&!auth.signingExpiresAt} onClick={()=>void run(confirm)}>{review.action==='approve'?'Allow payment':review.action==='buy'?`Buy ${cash(review.requested.quantity||'0')} shares`:review.action==='sell'?'Sell shares':'Collect payout'}</button></div></section>}
+      {pending&&<section className="ticket-review"><h3>Waiting for confirmation</h3><p>{pending.hash?'Your transaction was sent. We are checking confirmation automatically. You can reload this page without losing it.':'Check your wallet activity. A transaction may have been sent; do not repeat it.'}</p>{!pending.hash&&<><label>Transaction hash<input value={hash} onChange={e=>setHash(e.target.value)}/></label><button onClick={()=>void run(async()=>{if(!/^0x[0-9a-f]{64}$/i.test(hash))throw new Error('Paste a valid transaction hash');save({...pending,hash:hash.toLowerCase() as Hex});})}>Find transaction</button></>}<p>{pollPaused?'Automatic checks paused. Check again when ready.':'You do not need to click again.'}</p>{pollPaused&&<button className="button button-dark" disabled={busy||!pending.hash} onClick={()=>{polls.current=0;setPollPaused(false);void run(check);}}>Check confirmation</button>}</section>}
       {position&&<p><strong>{cash(position.quantity)} shares</strong> in your wallet. {position.payoutAtoms===null?'Payout follows settlement.':`${cash(position.payoutAtoms)} test AUSD to collect.`}</p>}
       {confirmedHash&&<p><a href={`https://testnet.monadscan.com/tx/${confirmedHash}`} target="_blank" rel="noreferrer">View confirmed transaction</a></p>}
       {question&&<details><summary>How this market works</summary><p>{question.yesRule}</p><p>{question.noRule}</p><p>{state!.manifest.publication.draft.exceptionPolicy}</p><p>These practice outcomes are scripted. All reviewers are controlled by Flurbo's operator.</p><a href={question.source.referenceUrl} target="_blank" rel="noreferrer">Read practice rules</a></details>}
@@ -155,6 +196,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
 }
 
 function consumerNotice(message:string){
+  if(message==='Submitted. Check confirmation before another action.')return 'Sent to the network. Confirmation is checked automatically.';
   if(message==='Pilot data loaded. Connect a signing wallet to take part.')return 'Choose your wallet to get started.';
   if(message==='Loading the real-event pilot...')return 'Loading your market...';
   if(message==='Wallet connected. Review and confirm each action separately.')return 'Your wallet is ready. Choose your answer and number of shares.';

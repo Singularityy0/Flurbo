@@ -8,6 +8,7 @@ import Pilot from './Pilot';
 import PilotLedger from './PilotLedger';
 import Portfolio from './Portfolio';
 import Funding from './Funding';
+import { readCheckout, clearCheckout } from '../checkout';
 import './workspace.css';
 import './markets.css';
 
@@ -26,7 +27,7 @@ export default function Markets(){
     finally{reading.current=false;if(active.current)setLoading(false);}
   }
   useEffect(()=>{active.current=true;if(browse)void refresh();
-    try{const pending=readPilotPending('rehearsal');if(pending){const scope=pending.review.requested.scope||1;setSelected({event:Number.isInteger(Math.log2(scope))?Math.log2(scope):0,yes:pending.review.requested.mask!=='1'});};}catch{setSelected({event:0,yes:true});}
+    try{const draft=auth.address?readCheckout('rehearsal',auth.address):null,pending=readPilotPending('rehearsal');if(draft)setSelected({event:draft.event,yes:draft.yes});else if(pending){const scope=pending.review.requested.scope||1;setSelected({event:Number.isInteger(Math.log2(scope))?Math.log2(scope):0,yes:pending.review.requested.mask!=='1'});}}catch{setSelected({event:0,yes:true});}
     const timer=setInterval(()=>setClock(Date.now()),1000);
     return()=>{active.current=false;clearInterval(timer);};},[]);
   useEffect(()=>{if(browse)try{sessionStorage.setItem('flurbo.trading.market','rehearsal');}catch{}},[browse]);
@@ -58,7 +59,7 @@ export default function Markets(){
       })}</div>
       {catalog&&!catalog.manifest.publication.draft.events.some(e=>e.question.toLowerCase().includes(query.toLowerCase()))&&<p>No markets match your search.</p>}
       {catalog&&!fresh&&<p role="status" className="market-caption">Refresh prices for a current view. Your final trade is always checked again.</p>}
-      {selected&&<section ref={ticket} tabIndex={-1} className="market-ticket" aria-label="Your prediction"><div className="market-ticket-bar"><span className="eyebrow">Your prediction</span><button aria-label="Close prediction" disabled={ticketBusy} onClick={()=>setSelected(null)}><X size={21}/></button></div><Pilot key={selected.event+':'+selected.yes} namespace="rehearsal" onBusy={setTicketBusy} consumer={{event:selected.event,yes:selected.yes}}/></section>}
+      {selected&&<section ref={ticket} tabIndex={-1} className="market-ticket" aria-label="Your prediction"><div className="market-ticket-bar"><span className="eyebrow">Your prediction</span><button aria-label="Close prediction" disabled={ticketBusy} onClick={()=>{if(auth.address)clearCheckout('rehearsal',auth.address);setSelected(null);}}><X size={21}/></button></div><Pilot key={selected.event+':'+selected.yes} namespace="rehearsal" onBusy={setTicketBusy} consumer={{event:selected.event,yes:selected.yes}}/></section>}
     </>:<>
       <details className="market-archive"><summary>Choose a market collection</summary><label htmlFor="market-collection">Collection</label><select id="market-collection" value={archive} onChange={e=>{setArchive(e.target.value);try{sessionStorage.setItem("flurbo.trading.market",e.target.value);}catch{}}}><option value="rehearsal">Practice markets</option><option value="pilot">Earlier real-event markets</option><option value="original">Earlier demo markets</option><option value="learning">Learning experiment</option></select></details>
       {auth.address&&(archive==='rehearsal'||archive==='pilot'?<PilotLedger key={archive+location} namespace={archive} account={auth.address} history={location==='/history'}/>:<Portfolio key={archive+location} market={archive==='learning'?'learning':'original'} account={auth.address} history={location==='/history'}/>)}

@@ -42,7 +42,7 @@ test('consumer markets show four separate events and preserve the full wallet co
       if(path==='/api/'+namespace+'/markets')return route.fulfill({json:await f.service.markets()});
       if(path==='/api/'+namespace+'/status'){reads++;return route.fulfill({json:await f.service.status(url.searchParams.get('wallet')||undefined)});}
       if(path==='/api/'+namespace+'/prepare')return route.fulfill({json:await f.service.prepare(route.request().postDataJSON())});
-      if(path==='/api/'+namespace+'/position')return route.fulfill({json:{quantity:'1000000',payoutAtoms:null}});
+      if(path==='/api/'+namespace+'/position')return route.fulfill({json:{quantity:'5000000',payoutAtoms:null}});
       if(path==='/api/'+namespace+'/rpc'){
         const request=route.request().postDataJSON();
         const saved=await page.evaluate((namespace:string)=>JSON.parse(localStorage.getItem('flurbo.'+namespace+'.pending.v1')||'null'),namespace);
@@ -59,48 +59,52 @@ test('consumer markets show four separate events and preserve the full wallet co
     await page.getByRole('heading',{name:'Will the new cafe open?',exact:true}).waitFor();
     assert.equal(await page.locator('.market-card').count(),4);
     if(process.env.FLURBO_TEST_SCREENSHOT)await page.screenshot({path:process.env.FLURBO_TEST_SCREENSHOT,fullPage:true});
-    await page.getByRole('button',{name:'Yes: Will the new cafe open?',exact:true}).click();
+    await page.getByRole('button',{name:'No: Will the concert sell out?',exact:true}).click();
     await page.getByLabel('Pay with',{exact:true}).selectOption('0');
     await page.getByRole('button',{name:'Use this wallet',exact:true}).click();
     await page.getByText('Your wallet is ready. Choose your answer and number of shares.').waitFor();
     assert.equal(await page.evaluate((key:string)=>sessionStorage.getItem(key),'flurbo.view-wallet:'+loginAddress),owner);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('flurbo.trading.market')),namespace);
-    await page.getByRole('button',{name:'Review buy',exact:true}).click();
+    await page.getByLabel('Shares',{exact:true}).fill('5');
     await page.getByRole('button',{name:'Allow payment',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),null);
     await page.getByRole('button',{name:'Allow payment',exact:true}).click();
-    await page.getByText('Submitted. Check confirmation before another action.').waitFor();
+    await page.getByText('Sent to the network. Confirmation is checked automatically.').waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
     await page.reload();await page.getByRole('heading',{name:'Waiting for confirmation'}).waitFor();
-    assert.equal(await page.getByRole('button',{name:'Review buy',exact:true}).count(),0);
-    await page.getByRole('button',{name:'Check confirmation',exact:true}).click();
-    await page.getByRole('button',{name:'Continue to buy',exact:true}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Buy 5 shares',exact:true}).count(),0);
+    // Confirmation is checked automatically, without another app click.
+    await page.getByLabel('Shares',{exact:true}).waitFor();
+    assert.equal(await page.getByLabel('Shares',{exact:true}).inputValue(),'5');
+    assert.equal(await page.getByLabel('Your answer',{exact:true}).inputValue(),'no');
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
-    // Reload keeps transaction tracking but deliberately requires reconnecting the signer.
-    await page.getByLabel('Pay with',{exact:true}).selectOption('0');
+    // Approval is already confirmed and tracking cleared. The draft must still reopen.
+    assert.equal(await page.evaluate(()=>localStorage.getItem('flurbo.rehearsal.pending.v1')),null);
+    await page.reload();await page.getByLabel('Shares',{exact:true}).waitFor();
+    assert.equal(await page.getByLabel('Shares',{exact:true}).inputValue(),'5');
+    assert.equal(await page.getByLabel('Your answer',{exact:true}).inputValue(),'no');
     await page.getByRole('button',{name:'Use this wallet',exact:true}).click();
-    await page.getByText('Your wallet is ready. Choose your answer and number of shares.').waitFor();
-    await page.getByRole('button',{name:'Continue to buy',exact:true}).click();
-    await page.getByRole('heading',{name:'Confirm your prediction',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
-    await page.getByRole('button',{name:'Confirm buy',exact:true}).click();
-    await page.getByRole('button',{name:'Check confirmation',exact:true}).click();
-    await page.getByText('Exact transaction confirmed. Balances refreshed.',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Buy 5 shares',exact:true}).click();
+    await page.getByRole('heading',{name:'Purchase complete',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
-    await page.getByText('1 shares',{exact:true}).waitFor();
-    assert.equal(await page.getByRole('heading',{name:'Will the new cafe open?',exact:true}).count(),2);
+    await page.getByText('5 shares',{exact:true}).waitFor();
+    assert.equal(await page.evaluate((login:string)=>localStorage.getItem('flurbo.checkout.v1:rehearsal:'+login),loginAddress),null);
+    assert.equal(await page.getByRole('heading',{name:'Will the concert sell out?',exact:true}).count(),2);
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     if(process.env.FLURBO_TEST_SCREENSHOT)await page.screenshot({path:process.env.FLURBO_TEST_SCREENSHOT.replace('.png','-mobile.png'),fullPage:true});
+    await page.getByRole('button',{name:'Make another trade',exact:true}).click();
     await page.getByText('Combine with another prediction',{exact:true}).click();
     await page.getByRole('checkbox',{name:'Will the night market open?',exact:true}).check();
-    await page.getByRole('button',{name:'Review buy',exact:true}).click();
+
     const reviewPanel=page.getByRole('region',{name:'Transaction review'});
-    await reviewPanel.waitFor();
+    await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.match(await reviewPanel.textContent(),/night market open/);
-    assert.match(await reviewPanel.textContent(),/new cafe open/);
+    assert.match(await reviewPanel.textContent(),/concert sell out/);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
-    await page.getByRole('button',{name:'Back',exact:true}).click();
+
     await page.getByRole('button',{name:'Close prediction'}).click();
     await page.getByRole('textbox',{name:'Search markets'}).fill('concert');
     assert.equal(await page.locator('.market-card').count(),1);
