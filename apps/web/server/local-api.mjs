@@ -1,6 +1,7 @@
 import { SessionStore, cookieValue, LOGIN_MS } from './session.mjs';
 import { parseTransaction, recoverTransactionAddress } from 'viem';
 import { validWithdrawal } from './withdrawal-policy.mjs';
+import { kuruCall } from '../shared/kuru.mjs';
 import { TESTNET } from './network.mjs';
 import { learningDeployment } from '../shared/learning-contracts.mjs';
 
@@ -88,7 +89,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (!['original', 'learning'].includes(market)) return send(res, 400, { error: 'Unknown trading market' });
         if (market === 'learning' && (!hosted || !learningDashboardUrl)) return send(res, 503, { error: 'Learning market unavailable' });
         const selectedDashboard = market === 'learning' ? learningDashboardUrl : dashboardUrl;
-        const allowed = ['eth_chainId', 'eth_getBlockByNumber', 'eth_call', 'eth_estimateGas', 'eth_gasPrice', 'eth_getTransactionCount', 'eth_getTransactionReceipt', 'eth_getBalance', 'eth_sendRawTransaction'];
+        const allowed = ['eth_chainId', 'eth_getBlockByNumber', 'eth_call', 'eth_estimateGas', 'eth_gasPrice', 'eth_getTransactionCount', 'eth_getTransactionReceipt', 'eth_getTransactionByHash', 'eth_getBalance', 'eth_sendRawTransaction'];
         if (!allowed.includes(input.method) || !Array.isArray(input.params)) return send(res, 400, { error: 'Unsupported RPC method' });
         if (hosted && !await store.read(sid, origin)) return send(res, 401, { error: 'Sign in before using the account RPC' });
         if (input.method === 'eth_sendRawTransaction') {
@@ -107,7 +108,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
               !tx.gas || tx.gas > 30_000_000n || state.environment !== (hosted ? 'public_testnet' : 'local_fork') ||
               (hosted && (state.chain_id !== 10143 || cash !== TESTNET.cash)) ||
               !faucet && market === 'learning' && (state.market_id !== 'learning' || pool !== learningDeployment.pool) ||
-              !faucet && !(tx.to?.toLowerCase() === cash ? validWithdrawal({ to: tx.to, data: tx.data, account: login.address, cash, pool }) || selector === '0x095ea7b3' && tx.data.length === 138 &&
+              !faucet && !(market === 'original' && kuruCall({ to: tx.to, data: tx.data, account: login.address, contracts: state.contracts })) && !(tx.to?.toLowerCase() === cash ? validWithdrawal({ to: tx.to, data: tx.data, account: login.address, cash, pool }) || selector === '0x095ea7b3' && tx.data.length === 138 &&
                 tx.data.slice(10, 74).toLowerCase() === pool?.slice(2).padStart(64, '0')
                 : tx.to?.toLowerCase() === pool && (market === 'learning' ? ['0x3e6b6cde', '0xc39849c5', '0xdf992423'] : ['0x3e6b6cde', '0xc39849c5', '0xb0a52172', '0xf6c4eade', '0xdf992423']).includes(selector))) return send(res, 403, { error: 'Only this account and the configured Monad contracts are supported' });
         }
@@ -116,9 +117,13 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (!upstream.ok || result.error) return send(res, 400, { error: 'Monad rejected the request. Check transaction status before retrying.' });
         return send(res, 200, { result: result.result });
       }
-      const readRoutes = ['/api/health', '/api/state', '/api/quote', '/api/transaction', '/api/portfolio'];
+      const readRoutes = ['/api/health', '/api/state', '/api/quote', '/api/transaction', '/api/portfolio', '/api/kuru', '/api/kuru-scan'];
       const learningRoute = url.pathname.startsWith('/api/markets/learning/');
       const readPath = learningRoute ? url.pathname.replace('/api/markets/learning/', '/api/') : url.pathname;
+      if (readPath.startsWith('/api/kuru')) {
+        if (learningRoute) return send(res, 404, { error: 'Kuru is only available for the original pool' });
+        if (!await store.read(sid, origin)) return send(res, 401, { error: 'Sign in to use Kuru' });
+      }
       if (readPath === '/api/portfolio' && !await store.read(sid, origin)) return send(res, 401, { error: 'Sign in to view your portfolio' });
       if (learningRoute) {
         if (!hosted || !learningDashboardUrl) return send(res, 503, { error: 'Learning market unavailable' });
@@ -129,9 +134,9 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
       const input = funding ? await body(req) : undefined;
       const upstream = await fetch(`${learningRoute ? learningDashboardUrl : dashboardUrl}${readPath}${url.search}`, { method: funding ? 'POST' : 'GET', redirect: 'error',
         headers: funding ? { 'Content-Type': 'application/json', Origin: 'http://127.0.0.1:18765' } : {},
-        body: funding ? JSON.stringify(input) : undefined, signal: AbortSignal.timeout(20_000) });
+        body: funding ? JSON.stringify(input) : undefined, signal: AbortSignal.timeout(readPath === '/api/kuru-scan' ? 45_000 : readPath === '/api/kuru' ? 30_000 : 20_000) });
       const result = await upstream.json();
-      if (hosted && upstream.ok && ['state', 'quote', 'transaction', 'portfolio'].includes(readPath.split('/').pop()) &&
+      if (hosted && upstream.ok && ['state', 'quote', 'transaction', 'portfolio', 'kuru', 'kuru-scan'].includes(readPath.split('/').pop()) &&
           (result.environment !== 'public_testnet' || result.chain_id !== 10143 || learningRoute &&
             (result.market_id !== 'learning' || result.contracts?.pool !== learningDeployment.pool || result.contracts?.cash !== TESTNET.cash))) return send(res, 503, { error: 'Public testnet deployment verification required' });
       return send(res, upstream.status, result);

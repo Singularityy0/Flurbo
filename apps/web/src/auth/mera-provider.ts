@@ -1,5 +1,6 @@
 import { bytesToHex, keccak256, serializeTransaction, type Hex } from 'viem';
 import { validWithdrawal } from '../../server/withdrawal-policy.mjs';
+import { kuruCall } from '../../shared/kuru.mjs';
 import { TESTNET } from '../../server/network.mjs';
 import { learningDeployment } from '../../shared/learning-contracts.mjs';
 import type { AuthController } from './controller';
@@ -42,10 +43,11 @@ export function meraProvider(controller: AuthController, market: 'original' | 'l
         const state = await response.json();
         if (!faucet && market === 'learning' && (state.market_id !== 'learning' || state.contracts?.pool !== learningDeployment.pool)) throw new Error('Wrong learning market');
         const selector = input.data?.slice(0, 10);
-        if (faucet ? state.environment !== 'public_testnet' || state.chain_id !== 10143 : !supportedDeployment(state) || ![state.contracts.pool, state.contracts.cash].some((a: string) => a.toLowerCase() === input.to?.toLowerCase()) ||
+        const kuru = market === 'original' && supportedDeployment(state) && kuruCall({ to: input.to, data: input.data, account: owner, contracts: state.contracts });
+        if (!kuru && (faucet ? state.environment !== 'public_testnet' || state.chain_id !== 10143 : !supportedDeployment(state) || ![state.contracts.pool, state.contracts.cash].some((a: string) => a.toLowerCase() === input.to?.toLowerCase()) ||
             !(input.to.toLowerCase() === state.contracts.cash.toLowerCase()
               ? validWithdrawal({ to: input.to, data: input.data, account: owner, cash: state.contracts.cash, pool: state.contracts.pool }) || selector === '0x095ea7b3' && input.data.length === 138 && input.data.slice(10, 74).toLowerCase() === state.contracts.pool.slice(2).toLowerCase().padStart(64, '0')
-              : (market === 'learning' ? ['0x3e6b6cde', '0xc39849c5', '0xdf992423'] : ['0x3e6b6cde', '0xc39849c5', '0xb0a52172', '0xf6c4eade', '0xdf992423']).includes(selector))) throw new Error('Unsupported Monad contract');
+              : (market === 'learning' ? ['0x3e6b6cde', '0xc39849c5', '0xdf992423'] : ['0x3e6b6cde', '0xc39849c5', '0xb0a52172', '0xf6c4eade', '0xdf992423']).includes(selector)))) throw new Error('Unsupported Monad contract');
         const chain = await rpc('eth_chainId');
         if (BigInt(chain) !== 10143n) throw new Error('Wrong Monad network');
         if (!faucet) {
@@ -53,6 +55,7 @@ export function meraProvider(controller: AuthController, market: 'original' | 'l
         if (block?.hash?.toLowerCase() !== state.snapshot.block_hash.toLowerCase()) throw new Error('Monad snapshot changed');
         }
         const nonce = BigInt(await rpc('eth_getTransactionCount', [owner, 'pending']));
+        if (input.nonce !== undefined && BigInt(input.nonce) !== nonce) throw new Error('Wallet nonce changed. Review again.');
         if (nonce > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Nonce out of range');
         const tx = { type: 'legacy' as const, chainId: 10143, nonce: Number(nonce), to: input.to as Hex, data: input.data as Hex,
           gas: BigInt(input.gas), gasPrice: BigInt(input.gasPrice), value: 0n };
@@ -61,7 +64,7 @@ export function meraProvider(controller: AuthController, market: 'original' | 'l
         const serialized = serializeTransaction(tx, { r: bytesToHex(signature.compact.slice(0, 32)), s: bytesToHex(signature.compact.slice(32)), v: 27n + BigInt(signature.recovery) });
         return rpc('eth_sendRawTransaction', [serialized]);
       }
-      if (!['eth_chainId', 'eth_getBlockByNumber', 'eth_call', 'eth_estimateGas', 'eth_gasPrice', 'eth_getBalance', 'eth_getTransactionReceipt'].includes(method)) throw new Error('Unsupported wallet request');
+      if (!['eth_chainId', 'eth_getBlockByNumber', 'eth_call', 'eth_estimateGas', 'eth_gasPrice', 'eth_getBalance', 'eth_getTransactionReceipt', 'eth_getTransactionByHash', 'eth_getTransactionCount'].includes(method)) throw new Error('Unsupported wallet request');
       return rpc(method, params);
     },
   };
