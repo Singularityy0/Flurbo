@@ -15,8 +15,10 @@ guided approval continuation were verified present in the public frontend bundle
 
 ## Phase 1: hosted Rust comparison
 
-**Prepared in source; verify Render after the user commits and pushes.** No new
-environment values, contract deployment or wallet transaction is required.
+**Hosted and ready.** On 2026-09-24 the public `/healthz` returned
+`learning_comparison: ready`, and the user confirmed readiness. No new environment
+values, contract deployment or wallet transaction was required. The authenticated
+report and trading checks below remain the manual release checks.
 
 The Docker build compiles the existing `parlay_compare` Rust executable in a
 separate pinned compiler stage. A Node build check executes its complete fixed
@@ -70,6 +72,20 @@ The `.exe` path above is for Windows Git Bash. Linux uses `parlay_compare` witho
 the suffix. Docker was unavailable on the development machine, so local checks
 do not establish a successful Linux container build. Render must pass the
 embedded Linux check before this phase is called deployed.
+
+## Phase 2: separate funded learning deployment
+
+**Prepared and simulated; not broadcast.** Follow
+[the learning deployment runbook](LEARNING_TESTNET_DEPLOYMENT.md). The separate
+script deploys the existing funded pricing implementation with an eight-event
+configuration, explicit update limits and exact initial subsidy. It never changes
+the ordinary pool or the hosted trading manifest. Its verifier checks compiled
+runtime, immutable configuration, initial state and funding at a pinned block.
+The output is deliberately incompatible with `FLURBO_MANIFEST_JSON`.
+
+Public signing is the remaining deployment step. Hosting proposal review and
+retaining access to both markets are phase 3, before exposing the new pool in the
+consumer flow. Phase 2 alone does not enable automatic learning or price updates.
 
 ## Subsequent release gates
 

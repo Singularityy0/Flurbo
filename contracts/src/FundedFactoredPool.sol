@@ -4,7 +4,7 @@ import {FactoredPool} from "./FactoredPool.sol";
 import {FactoredQuote as Q} from "./FactoredQuote.sol";
 import {FundedPricingEngine} from "./FundedPricingEngine.sol";
 
-/// @notice Local-test learning integration. Not approved for public or real-asset use.
+/// @notice Experimental funded learning integration for synthetic test assets; not approved for real-asset use.
 /// @dev Updater supplies quantized bias tables, not a proof of learning. Settlement uses only actual positions.
 contract FundedFactoredPool is FactoredPool {
     error UnauthorizedUpdater();
