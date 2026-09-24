@@ -12,16 +12,24 @@ export const pilotInputSchema = z.object({
   creator: address,
   draft: eventDraftSchema,
   reviewers: z.array(z.object({ name: z.string().trim().min(1).max(100), address }).strict()).min(3).max(5),
-  independentReviewersConfirmed: z.literal(true),
+  reviewerControl: z.enum(['independent-panel', 'single-operator']).default('independent-panel'),
+  independentReviewersConfirmed: z.boolean(),
   rulesReviewed: z.literal(true),
   bondAtoms: z.string().regex(/^[1-9][0-9]{0,7}$/),
   assertionPeriod: duration(30 * 86400),
   challengePeriod: duration(7 * 86400),
   votingPeriod: duration(7 * 86400),
-}).strict();
+}).strict().superRefine((value,ctx)=>{
+  if(value.independentReviewersConfirmed !== (value.reviewerControl === 'independent-panel')) {
+    ctx.addIssue({code:'custom',path:['independentReviewersConfirmed'],message:'Single-operator mode must disclose false; an independent panel requires true'});
+  }
+});
 
-export function disputePolicy(input: { reviewers: {name: string; address: string}[]; bondAtoms: string; assertionPeriod: number; challengePeriod: number; votingPeriod: number }) {
-  return `Named testnet reviewer panel: ${input.reviewers.map(r => `${r.name} (${r.address.toLowerCase()})`).join(', ')}. Quorum ${Math.floor(input.reviewers.length / 2) + 1} of ${input.reviewers.length} matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: ${input.bondAtoms} atoms each. Assertion window: ${input.assertionPeriod} seconds after observation end. Challenge window: ${input.challengePeriod} seconds after assertion. Vote window: ${input.votingPeriod} seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted.`;
+export function disputePolicy(input: { reviewerControl?: 'independent-panel'|'single-operator'; creator?: string; reviewers: {name: string; address: string}[]; bondAtoms: string; assertionPeriod: number; challengePeriod: number; votingPeriod: number }) {
+  if(input.reviewerControl==='single-operator' && !input.creator) throw new Error('Operator identity is required');
+  const control=input.reviewerControl==='single-operator'
+    ? `Operator-run testnet alpha. All reviewer wallets are controlled by the creator (${input.creator!.toLowerCase()}). These wallets are not independent reviewers. The operator can determine disputed outcomes through the voting quorum. ` : '';
+  return control+`Named testnet reviewer panel: ${input.reviewers.map(r => `${r.name} (${r.address.toLowerCase()})`).join(', ')}. Quorum ${Math.floor(input.reviewers.length / 2) + 1} of ${input.reviewers.length} matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: ${input.bondAtoms} atoms each. Assertion window: ${input.assertionPeriod} seconds after observation end. Challenge window: ${input.challengePeriod} seconds after assertion. Vote window: ${input.votingPeriod} seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted.`;
 }
 
 export const resolverConfigAbi = parseAbiParameters('(address collateral, bytes32 draftHash, uint64 closesAt, bytes32[] eventHashes, uint64[] observationEnds, address[] reviewers, uint128 bond, uint32 assertionPeriod, uint32 challengePeriod, uint32 votingPeriod) config');

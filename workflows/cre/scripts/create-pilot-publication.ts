@@ -7,7 +7,8 @@ import { VOID_POLICY, disputePolicy, preparePilot } from '../src/pilot-config';
 const inputSchema=z.object({
   creator:z.string(),clusterId:z.string(),title:z.string(),closesAt:z.number().int(),
   reviewers:z.array(z.object({name:z.string(),address:z.string()}).strict()),
-  independentReviewersConfirmed:z.literal(true),rulesReviewed:z.literal(true),
+  reviewerControl:z.enum(['independent-panel','single-operator']).default('independent-panel'),
+  independentReviewersConfirmed:z.boolean(),rulesReviewed:z.literal(true),
   bondAtoms:z.string(),assertionPeriod:z.number().int(),challengePeriod:z.number().int(),votingPeriod:z.number().int(),
   events:z.array(z.object({id:z.string(),target:releaseTargetSchema,observationStartsAt:z.number().int(),observationEndsAt:z.number().int()}).strict()).min(2).max(3),
 }).strict();

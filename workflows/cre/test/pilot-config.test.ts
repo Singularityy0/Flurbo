@@ -17,6 +17,21 @@ function fixture() {
 }
 
 describe('pilot publication commitments', () => {
+  test('operator-controlled reviewers require honest disclosure bound into the rules commitment',()=>{
+    const independent=fixture();
+    const operator={...fixture(),reviewerControl:'single-operator' as const,independentReviewersConfirmed:false};
+    expect(()=>preparePilot(operator,now)).toThrow();
+    operator.draft.disputePolicy=disputePolicy(operator);
+    const prepared=preparePilot(operator,now);
+    expect(prepared.publication.independentReviewersConfirmed).toBe(false);
+    expect(prepared.publication.draft.disputePolicy).toContain('not independent reviewers');
+    expect(prepared.draftHash).not.toBe(preparePilot(independent,now).draftHash);
+    expect(()=>preparePilot({...operator,independentReviewersConfirmed:true},now)).toThrow();
+    expect(()=>preparePilot({...operator,reviewerControl:'independent-panel'},now)).toThrow();
+    const duplicate={...operator,reviewers:[operator.reviewers[0],operator.reviewers[0],operator.reviewers[2]]};
+    duplicate.draft.disputePolicy=disputePolicy(duplicate);
+    expect(()=>preparePilot(duplicate,now)).toThrow();
+  });
   test('round trips exact resolver configuration and binds identity', () => {
     const prepared = preparePilot(fixture(), now);
     const [c] = decodeAbiParameters(resolverConfigAbi, prepared.resolverConfig);

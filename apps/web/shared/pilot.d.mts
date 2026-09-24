@@ -7,7 +7,7 @@ export function evidenceURI(value: unknown): boolean;
 export function validClaim(scope: number, mask: bigint, count: number): boolean;
 export type PilotManifest = { status: string; pool: `0x${string}`; resolver: `0x${string}`; rulesHash: string; draftHash: string;
   verifiedBlock: string; verifiedBlockHash: string; codeHashes: Record<string,string>;
-  publication: {creator: string; bondAtoms: string; assertionPeriod: number; challengePeriod: number; votingPeriod: number;
+  publication: {creator: string; reviewerControl?: 'independent-panel'|'single-operator'; bondAtoms: string; assertionPeriod: number; challengePeriod: number; votingPeriod: number;
     reviewers: {name:string;address:string}[];
     draft: {title:string; closesAt:number; exceptionPolicy:string; disputePolicy:string;
       events:{id:string;question:string;yesRule:string;noRule:string;observationStartsAt:number;observationEndsAt:number;source:{referenceUrl:string;recordId:string}}[]}}};

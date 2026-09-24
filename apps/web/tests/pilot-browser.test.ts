@@ -9,6 +9,7 @@ test('real-event flow keeps auth, review, wallet confirmation and reload trackin
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const loginAddress='0x'+'99'.repeat(20);
   const f=pilotFixture();f.options.allowance=1_000_000n;
+  f.manifest.publication.reviewerControl='single-operator';
   let login=true,reads=0;const errors:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
@@ -42,6 +43,7 @@ test('real-event flow keeps auth, review, wallet confirmation and reload trackin
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
     await page.goto('https://flurbo.singu.online/events');
+    await page.getByRole('heading',{name:'Operator-run testnet alpha'}).waitFor();
     await page.getByLabel('Signing wallet',{exact:true}).selectOption('0');
     await page.getByRole('button',{name:'Connect wallet',exact:true}).click();
     await page.getByText('Wallet connected. Review and confirm each action separately.').waitFor();
