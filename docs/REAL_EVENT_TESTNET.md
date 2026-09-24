@@ -5,7 +5,7 @@ Status: implementation and isolated testing, 2026-09-24. The separate
 fixed named testnet reviewer panel and bounded void settlement. Hosted views,
 reviewed signing, durable evidence/history and publication verification are
 implemented. Nothing in this pilot has been publicly deployed or published.
-Reviewer identities and exact future events/windows still require human input.
+The user selected three operator-controlled reviewer wallets and approved the release targets and future windows in `config/pilot-alpha-selection.json`. This is an explicitly centralized operator-run alpha, not independent adjudication. Deployment and public integration checks remain.
 See [the deployment runbook](PILOT_TESTNET_DEPLOYMENT.md) for current evidence,
 remaining integrations and the wallet-operated release sequence.
 
@@ -214,7 +214,7 @@ now used by a separate pilot CRE observer that checks chain bindings and retriev
 ## Remaining decisions and access
 
 1. Choose exact crypto questions, official source records and future windows.
-2. Provide three or five independent named reviewers and public signing addresses.
+2. Reviewer control is now explicitly single-operator for the alpha. The three provided wallets enforce a two-vote threshold but represent one operator.
 3. Execute and verify the new deployment, CRE observation, Kuru pair and public acceptance sequence in the runbook.
 
 Candidate source adapters may be tested independently. Freeze the first market's

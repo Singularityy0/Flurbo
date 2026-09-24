@@ -14,7 +14,7 @@ legs with AND or OR. It does not implement tradable conditional securities.
 The resolver is a custom optimistic testnet contract, not UMA, Reality.eth or
 Kleros. Public assertions and challenges require the fixed test AUSD bond.
 A fixed panel of three or five named reviewers decides disputes with two or
-three matching votes respectively. These people are explicitly trusted.
+three matching votes respectively. The selected alpha is single-operator mode: all three reviewer wallets are controlled by the creator. Two matching wallet votes are required, but this is centralized operator resolution. An independent panel remains a separate supported configuration.
 Test faucet tokens do not establish economic security or Sybil resistance.
 Reviewers cannot assert or challenge using their registered addresses; the
 contract cannot detect another wallet controlled by the same person.
@@ -45,8 +45,7 @@ the same backing and must be unwrapped before pool redemption.
 
 ## Required human inputs
 
-1. Names and public signing addresses of three or five independent people who
-   agree to read evidence and vote before deadlines. Never supply private keys.
+1. Public signing addresses and an accurate control declaration. For this alpha, the user supplied three operator-controlled reviewer wallets. Never supply private keys.
 2. Two or three exact release targets and future UTC windows. Supported source
    templates are `ethereum/go-ethereum` and `paradigmxyz/reth` stable GitHub
    releases with an exact `vMAJOR.MINOR.PATCH` tag. Release publication is not
@@ -56,9 +55,7 @@ the same backing and must be unwrapped before pool redemption.
    is not proof of NO; deletions, revisions and ambiguity require review.
 4. The deployer's wallet confirmations, test AUSD subsidy and test MON fees.
 
-Multiple wallets owned by one person do not constitute an independent panel.
-Do not publish fixture identities or set review declarations merely to pass
-validation. The implementation cannot verify real-world reviewer consent.
+Multiple wallets owned by one person do not constitute an independent panel. Use `reviewerControl: "single-operator"` and `independentReviewersConfirmed: false` for this alpha. This disclosure is included in the committed rule text and prominently shown in the UI. Do not claim these wallets represent independent people. The implementation cannot verify real-world control.
 
 ## Preparation and deployment (Git Bash)
 
@@ -72,7 +69,9 @@ list is a schema guide, not ready-to-deploy values:
 | `clusterId`, `title` | Stable identifier and readable title |
 | `closesAt` | UTC Unix seconds, between one hour and thirty days ahead |
 | `reviewers` | Three or five objects with `name` and `address` |
-| `independentReviewersConfirmed`, `rulesReviewed` | Literal `true` only after review |
+| `reviewerControl` | `single-operator` for this alpha; `independent-panel` only for an actual independent panel |
+| `independentReviewersConfirmed` | `false` in single-operator mode; `true` for a declared independent panel |
+| `rulesReviewed` | Literal `true` only after the questions, dates and policies have been reviewed |
 | `bondAtoms` | Positive decimal string, at most eight digits; 1000000 is 1 test AUSD |
 | `assertionPeriod` | Seconds, 1 hour to 30 days |
 | `challengePeriod`, `votingPeriod` | Seconds, 1 hour to 7 days |
@@ -92,7 +91,7 @@ bun workflows/cre/scripts/prepare-pilot.ts target/deployments/pilot-publication.
 
 Stop on any failed command. Check the exact addresses, question wording, windows
 and policies in both output files. Files under `target/` are ignored artifacts.
-Keep a durable copy of the final public rules and manifest outside build caches.
+The approved selection is `config/pilot-alpha-selection.json`; see [the five-day alpha plan](ALPHA_TESTNET_LAUNCH.md). Keep a durable copy of the final public rules and manifest outside build caches.
 
 The fixed liquidity parameter is 10 AUSD. Initial subsidy is 13.862944 test AUSD
 for two events or 20.794416 for three. It is consumed by funding the pool; gas,
@@ -178,7 +177,7 @@ wallet identity, snapshot or deployment require another review.
 
 Before inviting users, record actual public transaction hashes for:
 
-- Two independent traders buy and sell single and combined claims; `/portfolio`
+- Two distinct test wallets buy and sell single and combined claims; `/portfolio`
   and `/history` show the correct wallet and pool across refresh and login.
 - An asserter publishes retrievable evidence, approves the exact bond, asserts,
   and receives its credit after an unchallenged result.
@@ -233,7 +232,7 @@ an Envio production-scale deployment. Monitor backlog, Redis and RPC usage.
 - CRE unit tests and type checking pass; the observer compiles to WASM. The
   remaining live simulation/delivery gate is explicit above.
 
-These checks are not an independent contract audit. The pilot is testnet-only.
+These checks are not an independent contract audit. The pilot is testnet-only and operator-run.
 Native mobile, tradable conditional claims, historical learning experiments,
 external-oracle integration and remaining partner criteria are separate work.
 
