@@ -1,0 +1,52 @@
+name: Settlement monitor
+on:
+  schedule:
+    - cron: '2-57/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      test_email:
+        description: Send a labelled delivery test for both monitored pools
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+concurrency:
+  group: settlement-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    # Opt-in only. Committing this workflow does not activate delivery.
+    if: vars.FLURBO_MONITOR_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci --omit=dev --ignore-scripts
+        working-directory: apps/web
+      - name: Observe pools and deliver pending alerts
+        env:
+          FLURBO_ALCHEMY_TESTNET_RPC_URL: ${{ secrets.FLURBO_ALCHEMY_TESTNET_RPC_URL }}
+          FLURBO_REHEARSAL_MANIFEST_JSON: ${{ secrets.FLURBO_REHEARSAL_MANIFEST_JSON }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          FLURBO_MONITOR_RESEND_KEY: ${{ secrets.FLURBO_MONITOR_RESEND_KEY }}
+          FLURBO_MONITOR_EMAIL_FROM: ${{ secrets.FLURBO_MONITOR_EMAIL_FROM }}
+          FLURBO_MONITOR_EMAIL_TO: ${{ secrets.FLURBO_MONITOR_EMAIL_TO }}
+          FLURBO_MONITOR_HEALTHCHECK_URL: ${{ secrets.FLURBO_MONITOR_HEALTHCHECK_URL }}
+          TEST_EMAIL: ${{ inputs.test_email }}
+        shell: bash
+        run: |
+          if [ "$TEST_EMAIL" = "true" ]; then
+            node apps/web/scripts/notify-settlement.mjs --test-email
+          else
+            node apps/web/scripts/notify-settlement.mjs
+          fi

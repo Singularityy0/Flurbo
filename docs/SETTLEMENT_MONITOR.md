@@ -44,10 +44,12 @@ Use the existing settlement controls and wallet review for each action. The thre
 
 This is a snapshot checker, not a complete log indexer. An assertion and subsequent finalization between checks can be missed as intermediate transitions. A gap over five minutes is reported only when a later check succeeds. A stopped process cannot alert about its own failure. A single successful run does not establish continuous monitoring.
 
-Email is the selected delivery channel. Keep the recipient in deployment configuration, not source. Delivery is **not active** in this slice. Before unattended settlement, the next slice must provide:
+Email delivery, a Redis outbox and an opt-in GitHub Actions workflow are implemented. See [email setup](SETTLEMENT_EMAIL_SETUP.md). Credentials, inbox delivery and the independent watchdog still need live configuration and acceptance testing. Committing the workflow alone does not activate it.
+
+The chosen free five-minute GitHub schedule is for **supervised testnet** use. It can be delayed or dropped; it does not satisfy the stronger coverage gate below. The hosted runner uses a 15-minute gap alarm to accommodate scheduling jitter; the local checker retains its five-minute diagnostic. Before unattended settlement, require:
 
 - A configured mail provider and sender, with credentials in hosting secrets.
-- Durable notification state separate from chain checkpoints, bounded retries and duplicate suppression; failures must not silently acknowledge an alert.
+- Live verification of durable notification state separate from chain checkpoints, bounded retries and duplicate suppression; failures must not silently acknowledge an alert.
 - A continuously available runner checking each active pool at least once per minute, with durable storage and an independent missed-check watchdog. Sleeping free web hosting alone is insufficient coverage.
 - A test email confirmed in the recipient's inbox, plus an injected RPC-failure alert and a stopped-runner watchdog drill.
 - An operator assigned to every active assertion/challenge/voting window, with wallet access and a rehearsed response. Email alone does not guarantee timely intervention.
@@ -58,7 +60,7 @@ Until those gates pass, actively supervise the deployed settlement windows. Do n
 
 ```bash
 cd apps/web
-node --experimental-strip-types --test tests/settlement-monitor.test.ts tests/pilot.test.ts tests/pilot-index.test.ts
+node --experimental-strip-types --test tests/settlement-email.test.ts tests/settlement-monitor.test.ts tests/pilot.test.ts tests/pilot-index.test.ts
 ```
 
 Fixtures cover exact deadline boundaries, wall-clock skew, disputed and finalized states, separate delivery, collateral shortfall, missing funding, stale/wrong-chain reads, changed blocks, restart/gap handling and preserving the last successful checkpoint on RPC failure. These tests are evidence, not an audit or proof.
