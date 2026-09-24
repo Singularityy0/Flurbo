@@ -1,5 +1,10 @@
 # Synthetic CRE settlement simulation
 
+Separate work has begun on [real-event draft validation](../../docs/REAL_EVENT_TESTNET.md#implemented-foundation).
+`src/event-draft.ts` validates candidate rules and produces an offline draft
+commitment. It does not change this synthetic workflow, fetch official results,
+produce a settlement report or authorize a public deployment.
+
 This is a **synthetic-only, unsigned report preparation workflow** for the
 enumerated reference pool. An HTTP trigger carries local fixture observations;
 the workflow validates them, derives a terminal state and returns the 224-byte
