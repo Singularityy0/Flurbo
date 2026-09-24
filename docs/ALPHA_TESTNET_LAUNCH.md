@@ -64,15 +64,59 @@ Generated ignored artifacts:
 
 The approved configuration hash is
 `0x5b2db8b62a1c98d28d6839862869854591893ef97d7cec90c4f86b73aea38f30`.
-The public Monad deployment simulation succeeded on September 24. It funded
-13.862944 test AUSD and estimated 2.383619707011741969 MON in network fees.
-Foundry labels the native fee as ETH generically; this simulation uses chain
-10143 and its native MON. Recheck fees and funds at broadcast time.
-Simulation addresses and the unverified manifest are not public deployments.
+The user broadcast the deployment on September 24 and verified it at block
+65353564. The durable public manifest is `config/pilot-testnet.json`, copied
+exactly from the verified artifact, including its original index anchor.
 
-## Deployment command (Git Bash)
+| Contract | Monad testnet address |
+| --- | --- |
+| PilotPool | `0x28d5ee02b1eda6959ac3ee5a4f834237c84dee02` |
+| PilotResolver | `0xe72386686b03d7e04554505ea0ef00ffa04ec73e` |
 
-After committing the reviewed files and checking the release targets again:
+The deployment cost reported by Foundry was 1.41252346001371382 MON. Its generic
+ETH fee label means MON on chain 10143. A fresh read at block 65354722 confirmed
+13.862944 test AUSD in the pool, zero outstanding liability and no resolution.
+The hosted service's read-only preparation of a one-share A AND B buy succeeded,
+returning an approval review capped at 0.260829 test AUSD with 0.5% slippage.
+No approval or trade was submitted by this check.
+
+At 17:35 UTC on September 24, direct requests to both exact official GitHub
+release endpoints returned 404. The source adapter classified both as
+`needs-review`, never NO. This direct source check is not a CRE runtime result.
+Two attempts to start the live CRE simulation failed during credential refresh
+with HTTP 500 from the authentication service, before workflow execution.
+Live CRE simulation and authenticated delivery remain pending.
+
+## Next: enable hosted operator testing
+
+Do not deploy these contracts again. The application now loads the checked-in
+`config/pilot-testnet.json` by default after push and Render rollout. An existing
+`FLURBO_PILOT_MANIFEST_JSON` remains an explicit override; remove it if empty or
+stale. Keep original/learning manifests, RPC and Redis settings. No signing keys
+belong in these variables. `FLURBO_PILOT_DISABLED=true` disables hosted pilot
+actions without cancelling contracts or their deadlines.
+
+For the separate public scripted rehearsal, use `FLURBO_REHEARSAL_MANIFEST_JSON`
+and `/rehearsal`. Never replace the real pilot manifest. See
+[the complete mock-testing handoff](MOCK_TESTING.md) for deployment commands,
+shorter rehearsal deadlines, wallet roles and the acceptance checklist.
+
+After Render is live, sign in at `https://flurbo.singu.online/events`. Check both
+release questions, September 30 trading close, October 7 observation end and
+the operator-controlled reviewer disclosure. Select the funded trading wallet,
+review a small buy, confirm any exact allowance approval, then review and
+confirm the buy separately. Verify the same wallet and pilot market in
+`/portfolio` and `/history`. Do not repeat a transaction just because history
+is still catching up; use the pending receipt check.
+
+This enables operator acceptance testing. It does not establish completion of
+the Kuru, CRE or public lifecycle gates below. Assertions on this actual cluster
+are unavailable until its observation window ends; use a separate rehearsal
+for early lifecycle tests. Keep the initial verified manifest anchor unchanged.
+
+## Original deployment command (reference only)
+
+Already completed for the addresses above. Do not rerun for hosted activation:
 
 ```bash
 cd ~/Flurbo
@@ -91,8 +135,8 @@ seeding because the verifier expects a freshly funded pool with no positions.
 
 ## Work through the five-day target
 
-1. Freeze approved operator configuration, commit/push, deploy and verify the
-   new pool/resolver. Keep existing manifests and markets intact.
+1. Completed: approved operator configuration and public pool/resolver deployment
+   verified. Enable the saved manifest on Render for operator acceptance.
 2. Finish verification and hosted routing for the new Kuru receipt pairs. The
    original H YES pair is not a replacement for these pairs.
 3. Run the live CRE observation workflow against the verified pilot, preserve
@@ -106,6 +150,6 @@ seeding because the verifier expects a freshly funded pool with no positions.
    alpha scope passes. If a required integration is unfinished, report that
    explicitly and revise the release target or scope with the user.
 
-No code has been committed or pushed by the agent. No pilot contracts were
-broadcast during preparation. The already supplied three reviewer addresses
-do not require any new private-key disclosure.
+The user performed the public deployment and commits. The agent's post-deploy
+checks were read-only. The already supplied three reviewer addresses do not
+require any new private-key disclosure.

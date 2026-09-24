@@ -1,6 +1,10 @@
 # Real-event pilot deployment
 
-Checkpoint: 2026-09-24. Implemented and locally tested, **not publicly deployed**.
+Checkpoint: 2026-09-24. **Public contracts deployed and verified** at block
+65353564. `config/pilot-testnet.json` preserves the verified public manifest.
+Pool: `0x28d5ee02b1eda6959ac3ee5a4f834237c84dee02`.
+Resolver: `0xe72386686b03d7e04554505ea0ef00ffa04ec73e`.
+Hosted operator acceptance and the integration gates below remain pending.
 The current original and learning pools remain synthetic. Their positions,
 Kuru pair, history and settlement paths are unchanged.
 
@@ -117,15 +121,21 @@ receipts. Verify immediately before trading or seeding Kuru. Verification is
 intentionally an initial-publication check, not a way to replace the index's
 starting block after activity begins.
 
-The verified output is `target/deployments/pilot-testnet.json`. Supply its exact
-JSON as Render's `FLURBO_PILOT_MANIFEST_JSON` only after verification and the
-release gates below. Keep existing original/learning manifests. Existing Redis
-and public-testnet RPC settings are reused. With no pilot manifest, the site
-continues serving existing pools and `/events` explains that publication is
-pending. A malformed configured manifest fails startup rather than inventing
-another market. Removing this variable stops new pilot UI actions but does not
-cancel the contracts or their on-chain deadlines. Preserve manifest access for
-holders and operate finalization/redemption if the UI is unavailable.
+The verified output is `target/deployments/pilot-testnet.json`. The current
+approved public deployment has a durable copy in `config/pilot-testnet.json`,
+loaded by the hosted application by default. `FLURBO_PILOT_MANIFEST_JSON` can
+explicitly override it; malformed overrides fail startup instead of falling
+back. Keep original/learning manifests and existing Redis/RPC settings.
+`FLURBO_PILOT_DISABLED=true` disables its hosted actions. Removing an override
+restores the checked-in deployment, so it is not a disable switch. Disabling UI
+access does not cancel on-chain deadlines; preserve access for finalization and
+redemption. Rehearsal manifests are rejected on the real pilot route.
+
+The optional public scripted rehearsal uses its own manifest, contracts, API,
+page, indexing and pending tracking. Read [MOCK_TESTING.md](MOCK_TESTING.md).
+It proves a manual lifecycle using fixed fixtures, not official-source delivery
+or successful real-market settlement. Complete the release gates below before
+inviting public alpha users.
 
 ## CRE evidence gate
 
@@ -150,6 +160,10 @@ operator-pasted file as a DON-signed result. WASM compilation and unit tests hav
 passed. A successful live pilot simulation, operated collection schedule and
 authenticated automated delivery have **not** been demonstrated. Do not claim
 full CRE partner completion or automatic resolution from these checks.
+
+On September 24, two live CLI attempts failed before execution: the CRE
+credential refresh service returned HTTP 500. Direct public RPC and GitHub
+checks succeeded separately, but do not satisfy the CRE runtime gate.
 
 ## Kuru gate
 
@@ -210,7 +224,9 @@ detects changed bytes, not a dishonest source or a missing backup.
 
 The separate persistent pilot index uses canonical block checks, two-block lag,
 compare-and-swap checkpoints and reorg rebuilding. A request scans at most 1,000
-blocks in 100-block windows. Repeat refresh while explicitly incomplete; do not
+blocks in 100-block windows. Portfolio and History continue bounded reads automatically while visible, with
+a pause control and stop-on-error behavior. Concurrent reads in one process share
+a scan. Do not
 treat incomplete history as proof of zero holdings. Its stored history is capped
 at 750 KB and fails explicitly at capacity. This is a bounded pilot index, not
 an Envio production-scale deployment. Monitor backlog, Redis and RPC usage.

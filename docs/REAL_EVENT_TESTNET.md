@@ -1,11 +1,12 @@
 # Real-event testnet release
 
-Status: implementation and isolated testing, 2026-09-24. The separate
+Status: public contracts deployed and verified, 2026-09-24. The separate
 `PilotPool` and `PilotResolver` now implement the five-role lifecycle with a
 fixed named testnet reviewer panel and bounded void settlement. Hosted views,
 reviewed signing, durable evidence/history and publication verification are
-implemented. Nothing in this pilot has been publicly deployed or published.
-The user selected three operator-controlled reviewer wallets and approved the release targets and future windows in `config/pilot-alpha-selection.json`. This is an explicitly centralized operator-run alpha, not independent adjudication. Deployment and public integration checks remain.
+implemented. The verified public deployment is recorded in `config/pilot-testnet.json`
+at block 65353564. Hosted activation and public acceptance remain pending.
+The user selected three operator-controlled reviewer wallets and approved the release targets and future windows in `config/pilot-alpha-selection.json`. This is an explicitly centralized operator-run alpha, not independent adjudication. Pilot Kuru pairs, live CRE execution/delivery and public lifecycle acceptance remain unfinished.
 See [the deployment runbook](PILOT_TESTNET_DEPLOYMENT.md) for current evidence,
 remaining integrations and the wallet-operated release sequence.
 
