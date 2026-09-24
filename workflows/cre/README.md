@@ -5,6 +5,10 @@ Separate work has begun on [real-event draft validation](../../docs/REAL_EVENT_T
 commitment. It does not change this synthetic workflow, fetch official results,
 produce a settlement report or authorize a public deployment.
 
+The [GitHub release source adapter](../../docs/CRYPTO_EVENT_SOURCES.md) can now
+retrieve reviewed Geth/Reth publication records through a local read-only CLI.
+It produces candidate evidence, not a CRE-authenticated result or final outcome.
+
 This is a **synthetic-only, unsigned report preparation workflow** for the
 enumerated reference pool. An HTTP trigger carries local fixture observations;
 the workflow validates them, derives a terminal state and returns the 224-byte

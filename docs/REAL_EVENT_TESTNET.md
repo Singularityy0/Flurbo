@@ -185,6 +185,14 @@ Checked official sources on 2026-09-24:
   The [deployment repository](https://github.com/RealityETH/reality-eth-monorepo/tree/main/packages/contracts/chains/deployments)
   has a `143/MONAD` directory; neither inspected list establishes chain 10143
   support. An oracle deployment alone does not verify its arbitrator or jurors.
+- Live GitHub API directory checks confirmed Reality.eth has chain `143` and no
+  `10143` entry, and UMA has neither `143.json` nor `10143.json` in its published
+  deployment directory. Reality.eth's Monad entry is `RealityETH-3.2.json`.
+- [Kleros's deployment list](https://docs.kleros.io/developer/deployment-addresses)
+  names Sepolia and Chiado testnet deployments, not Monad. Its
+  [oracle integration guide](https://docs.kleros.io/integrations/types-of-integrations/3.-kleros-oracle-integration)
+  requires an arbitrator proxy as well as Reality.eth. A mainnet oracle alone is
+  not a usable testnet dispute system.
 
 Result: no existing Monad testnet dispute-and-voting path has been verified.
 This is a research limitation, not proof that no integration is possible.
@@ -192,11 +200,24 @@ Next verify supported testnet oracle, arbitrator, bond currency, appeal/finality
 rules and authenticated result delivery before selecting a contract adapter.
 No cross-chain relay, mock, central panel or alternate chain is implicitly approved.
 
+The user asked whether a custom oracle is viable. The proposed fallback is a
+testnet-only optimistic controller: public assertions and challenges, a fixed
+named reviewer set, public votes and a precommitted quorum (for example three
+of five). CRE supplies evidence; the controller enforces finalization. It must
+disclose panel trust and implement cancellation/nonresponse payouts before
+release. This fallback has been recommended, not selected or implemented.
+
+The first [official-source adapter](CRYPTO_EVENT_SOURCES.md) now reads exact
+Geth/Reth stable-release publication records as candidate evidence. This is
+independent progress while the dispute path is undecided; no draft market has
+been published and the live CRE workflow remains synthetic.
+
 ## Remaining decisions and access
 
 1. Choose exact crypto questions, official source records and future windows.
 2. Verify an existing oracle's Monad testnet integration. If none can be verified,
    discuss the concrete alternatives before changing the user's chosen direction.
 
-Then freeze the first market's questions, deadlines, evidence rules and exception
-policy before implementing outcome-specific adapters or publishing a new market.
+Candidate source adapters may be tested independently. Freeze the first market's
+questions, deadlines, evidence rules and exception policy before preparing a
+deployable configuration or publishing a new market.

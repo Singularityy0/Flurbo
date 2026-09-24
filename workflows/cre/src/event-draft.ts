@@ -83,7 +83,7 @@ export function prepareEventDraft(input: unknown, now: number) {
     draft.disputePolicy !== null, draft.disputePolicy ?? '',
   ]);
   const blockers = [
-    'Official-source adapters and evidence retrieval are not implemented for this draft.',
+    'No authenticated official-source report is attached to this draft.',
     'Rule text requires review; schema validation does not establish that outcomes are unambiguous or independent.',
     'Settlement controller, exception payouts and dispute enforcement are not implemented for this draft.',
     'Pool binding, funding, supported claim structure and deployment verification are outstanding.',
