@@ -37,7 +37,9 @@ test('learning reads and signed trades require login and cannot cross into the o
   const approve = (pool: string) => '0x095ea7b3' + pool.slice(2).padStart(64, '0') + '1'.padStart(64, '0');
   try {
     assert.equal((await request('/api/markets/learning/state', undefined, false)).status, 401); assert.equal(urls.length, 0);
-    for (const suffix of ['state?wallet=' + signer.address, 'quote?side=buy&scope=3&mask=8&quantity=1000000', 'transaction?hash=0x' + 'ab'.repeat(32)]) {
+    assert.equal((await request('/api/portfolio?wallet=' + signer.address, undefined, false)).status, 401);
+    assert.equal((await request('/api/markets/learning/portfolio?wallet=' + signer.address, undefined, false)).status, 401);
+    for (const suffix of ['portfolio?wallet=' + signer.address, 'state?wallet=' + signer.address, 'quote?side=buy&scope=3&mask=8&quantity=1000000', 'transaction?hash=0x' + 'ab'.repeat(32)]) {
       assert.equal((await request('/api/markets/learning/' + suffix)).status, 200);
       assert.equal(urls.at(-1), 'http://127.0.0.1:18768/api/' + suffix);
     }

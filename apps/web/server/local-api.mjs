@@ -116,9 +116,10 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (!upstream.ok || result.error) return send(res, 400, { error: 'Monad rejected the request. Check transaction status before retrying.' });
         return send(res, 200, { result: result.result });
       }
-      const readRoutes = ['/api/health', '/api/state', '/api/quote', '/api/transaction'];
+      const readRoutes = ['/api/health', '/api/state', '/api/quote', '/api/transaction', '/api/portfolio'];
       const learningRoute = url.pathname.startsWith('/api/markets/learning/');
       const readPath = learningRoute ? url.pathname.replace('/api/markets/learning/', '/api/') : url.pathname;
+      if (readPath === '/api/portfolio' && !await store.read(sid, origin)) return send(res, 401, { error: 'Sign in to view your portfolio' });
       if (learningRoute) {
         if (!hosted || !learningDashboardUrl) return send(res, 503, { error: 'Learning market unavailable' });
         if (!await store.read(sid, origin)) return send(res, 401, { error: 'Sign in to trade on the learning market' });
@@ -130,7 +131,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         headers: funding ? { 'Content-Type': 'application/json', Origin: 'http://127.0.0.1:18765' } : {},
         body: funding ? JSON.stringify(input) : undefined, signal: AbortSignal.timeout(20_000) });
       const result = await upstream.json();
-      if (hosted && upstream.ok && ['state', 'quote', 'transaction'].includes(readPath.split('/').pop()) &&
+      if (hosted && upstream.ok && ['state', 'quote', 'transaction', 'portfolio'].includes(readPath.split('/').pop()) &&
           (result.environment !== 'public_testnet' || result.chain_id !== 10143 || learningRoute &&
             (result.market_id !== 'learning' || result.contracts?.pool !== learningDeployment.pool || result.contracts?.cash !== TESTNET.cash))) return send(res, 503, { error: 'Public testnet deployment verification required' });
       return send(res, upstream.status, result);

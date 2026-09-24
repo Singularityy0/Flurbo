@@ -33,7 +33,7 @@ def wins(scope, mask, outcome):
 
 
 class DashboardRpc(Rpc):
-    allowed_methods = Rpc.allowed_methods | {"eth_getBalance", "eth_getTransactionByHash", "eth_getTransactionReceipt"}
+    allowed_methods = Rpc.allowed_methods | {"eth_getBalance", "eth_getTransactionByHash", "eth_getTransactionReceipt", "eth_getLogs"}
     _public_lock = threading.Lock()
     _public_reads = deque()
 

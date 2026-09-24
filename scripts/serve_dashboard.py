@@ -22,6 +22,9 @@ def route(model, path):
     if any(len(values) != 1 for values in query.values()):
         raise ValueError("Duplicate query parameter")
     args = {key: values[0] for key, values in query.items()}
+    if parsed.path == "/api/portfolio" and "wallet" in args and not set(args) - {"wallet", "page", "history_page"}:
+        from portfolio_data import portfolio
+        return portfolio(model, args["wallet"], int(args.get("page", "0")), int(args.get("history_page", "0")))
     if parsed.path == "/api/state" and not set(args) - {"wallet", "claims"}:
         claims = None
         if "claims" in args:
