@@ -6,7 +6,7 @@ import { mountTrading } from './trading-ui.mjs';
 
 const account = '0x' + '11'.repeat(20), pool = '0x' + '22'.repeat(20), cash = '0x' + '33'.repeat(20);
 const hash = '0x' + 'aa'.repeat(32), txHash = '0x' + 'bb'.repeat(32), key = 'flurbo.local.pending.v1';
-async function harness(run, saved) {
+async function harness(run, saved, options = {}) {
   const previous = Object.fromEntries(['window', 'document', 'sessionStorage', 'setInterval'].map(k => [k, globalThis[k]]));
   const nodes = new Map(), storage = new Map(saved ? [[key, JSON.stringify(saved)]] : []), intervals = [];
   function node() { return { textContent: '', value: '', hidden: false, disabled: false, children: [], handlers: {},
@@ -35,7 +35,7 @@ async function harness(run, saved) {
     globalThis.setInterval = fn => { intervals.push(fn); return 1; };
     get('slippage').value = '50'; get('conversion-quantity').value = '1';
     const controller = mountTrading({ getState: () => snapshot, getSelection: () => ({ scope: 3, mask: 8, quantity: '1000000', label: 'A YES AND B YES' }), getQuote: () => quote, readSnapshot: async () => snapshot, accountChanged() {},
-      readTransaction: async () => ({ transaction: state.tx }), invalidateQuote() {}, refresh() { state.refreshes++; } });
+      readTransaction: async () => ({ transaction: state.tx }), invalidateQuote() {}, refresh() { state.refreshes++; }, ...options });
     const click = id => get(id).handlers.click();
     await run({ get, storage, provider, click, state, controller, snapshot });
   } finally { for (const [k, value] of Object.entries(previous)) { if (value === undefined) delete globalThis[k]; else globalThis[k] = value; } }
@@ -47,6 +47,21 @@ async function submitting(f) {
   assert.equal(typeof f.provider.resolve, 'function');
   return { task };
 }
+test('learning tracking is isolated and market switching locks through review and submission', async () => {
+  const busy = [], learningKey = 'flurbo.learning.trading.pending.v1';
+  await harness(async f => {
+    assert.equal(f.get('review-trade').disabled, true); // No wallet connected yet, not an original pending lock.
+    await f.click('connect-wallet'); await f.click('review-trade');
+    assert.equal(busy.at(-1), true);
+    await f.click('cancel-review'); assert.equal(busy.at(-1), false);
+    const { task } = await submitting(f);
+    assert.equal(JSON.parse(f.storage.get(learningKey)).hash, null);
+    assert.equal(f.storage.get(key), JSON.stringify({ plan: { account, tx: { data: '0x1234' } }, hash: txHash }));
+    f.provider.resolve(txHash); await task;
+    assert.equal(busy.at(-1), true);
+    assert.equal(JSON.parse(f.storage.get(learningKey)).hash, txHash);
+  }, { plan: { account, tx: { data: '0x1234' } }, hash: txHash }, { marketId: 'learning', onBusy: value => busy.push(value) });
+});
 test('withdrawal has a separate review, shares pending locks and confirms the exact receiving address', async () => harness(async f => {
   const recipient='0x'+'44'.repeat(20);
   await f.click('connect-wallet');

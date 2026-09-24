@@ -1,12 +1,13 @@
 import { bytesToHex, keccak256, serializeTransaction, type Hex } from 'viem';
 import { validWithdrawal } from '../../server/withdrawal-policy.mjs';
 import { TESTNET } from '../../server/network.mjs';
+import { learningDeployment } from '../../shared/learning-contracts.mjs';
 import type { AuthController } from './controller';
 import { WalletError, supportedDeployment } from '../../../dashboard/wallet.mjs';
 
-async function rpc(method: string, params: unknown[] = []) {
+async function rpcRequest(method: string, params: unknown[] = [], market = 'original') {
   const response = await fetch('/api/rpc', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ method, params }), signal: AbortSignal.timeout(20_000) });
+    body: JSON.stringify({ method, params, market }), signal: AbortSignal.timeout(20_000) });
   const value = await response.json();
   if (!response.ok || value.error) throw new WalletError('Monad request failed. Check transaction tracking before retrying.');
   return value.result;
@@ -14,7 +15,9 @@ async function rpc(method: string, params: unknown[] = []) {
 
 // EIP-1193 adapter for the existing, reviewed local execution engine. It exposes
 // no arbitrary message signing or key export to dashboard code.
-export function meraProvider(controller: AuthController) {
+export function meraProvider(controller: AuthController, market: 'original' | 'learning' = 'original') {
+  const rpc = (method: string, params: unknown[] = []) => rpcRequest(method, params, market);
+  const statePath = market === 'learning' ? '/api/markets/learning/state' : '/api/state';
   const listeners = new Map<string, Set<() => void>>();
   let previous = controller.getSnapshot().address;
   const unsubscribe = controller.subscribe(() => {
@@ -34,14 +37,15 @@ export function meraProvider(controller: AuthController) {
         const input = params[0] as Record<string, string>;
         if (!input || input.from?.toLowerCase() !== owner.toLowerCase() || BigInt(input.chainId) !== 10143n || BigInt(input.value) !== 0n) throw new Error('Unsupported transaction');
         const faucet = input.to?.toLowerCase() === TESTNET.faucet && input.data?.toLowerCase() === TESTNET.faucetSelector + owner.toLowerCase().slice(2).padStart(64, '0');
-        const response = await fetch(faucet ? '/api/network' : '/api/state', { cache: 'no-store' });
+        const response = await fetch(faucet ? '/api/network' : statePath, { cache: 'no-store' });
         if (!response.ok) throw new Error('Deployment unavailable');
         const state = await response.json();
+        if (!faucet && market === 'learning' && (state.market_id !== 'learning' || state.contracts?.pool !== learningDeployment.pool)) throw new Error('Wrong learning market');
         const selector = input.data?.slice(0, 10);
         if (faucet ? state.environment !== 'public_testnet' || state.chain_id !== 10143 : !supportedDeployment(state) || ![state.contracts.pool, state.contracts.cash].some((a: string) => a.toLowerCase() === input.to?.toLowerCase()) ||
             !(input.to.toLowerCase() === state.contracts.cash.toLowerCase()
-              ? validWithdrawal({ to: input.to, data: input.data, account: owner, cash: state.contracts.cash, pool: state.contracts.pool }) || selector === '0x095ea7b3'
-              : ['0x3e6b6cde', '0xc39849c5', '0xb0a52172', '0xf6c4eade', '0xdf992423'].includes(selector))) throw new Error('Unsupported Monad contract');
+              ? validWithdrawal({ to: input.to, data: input.data, account: owner, cash: state.contracts.cash, pool: state.contracts.pool }) || selector === '0x095ea7b3' && input.data.length === 138 && input.data.slice(10, 74).toLowerCase() === state.contracts.pool.slice(2).toLowerCase().padStart(64, '0')
+              : (market === 'learning' ? ['0x3e6b6cde', '0xc39849c5', '0xdf992423'] : ['0x3e6b6cde', '0xc39849c5', '0xb0a52172', '0xf6c4eade', '0xdf992423']).includes(selector))) throw new Error('Unsupported Monad contract');
         const chain = await rpc('eth_chainId');
         if (BigInt(chain) !== 10143n) throw new Error('Wrong Monad network');
         if (!faucet) {

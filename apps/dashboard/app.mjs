@@ -19,13 +19,16 @@ let lastFailure = '', selectedLabels = new Map();
 let trading;
 
 const requestCredentials = options.credentials || 'omit';
+const marketId = options.marketId === 'learning' ? 'learning' : 'original';
 async function request(path, controller, options = {}) {
   // Let the gateway's 20-second timeout return its error before aborting locally.
   const timeout = setTimeout(() => controller.abort(), 25000);
   try {
-    const response = await fetch(path, { ...options, signal: controller.signal, cache: 'no-store', credentials: requestCredentials });
+    const selectedPath = marketId === 'learning' ? path.replace(/^\/api\//, '/api/markets/learning/') : path;
+    const response = await fetch(selectedPath, { ...options, signal: controller.signal, cache: 'no-store', credentials: requestCredentials });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Data is unavailable. Try refreshing.');
+    if (/^\/api\/(state|quote|transaction)(\?|$)/.test(path) && (result.market_id || 'original') !== marketId) throw new Error('Market response does not match your selection. Refresh before trading.');
     return result;
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('Request interrupted or timed out. Try again.');
@@ -181,6 +184,7 @@ function renderWallet() {
     ['AUSD balance', w.ausd_atoms, 6], ['Native MON', w.native_balance_wei, 18], ['Wrapped H YES receipts', w.receipt_atoms, 6],
     ['Available Kuru AUSD', w.margin_available_ausd_atoms, 6], ['Available Kuru receipts', w.margin_available_receipt_atoms, 6], ['Pool allowance (AUSD)', w.pool_allowance_atoms, 6],
   ]) {
+    if (amount === null) continue; // This market has no receipt or Kuru integration.
     const cell = el('div'); cell.append(el('strong', formatUnits(amount, decimals)), el('span', label)); balances.append(cell);
   }
   const table = el('table', undefined, 'holdings');
@@ -190,7 +194,7 @@ function renderWallet() {
     const row = el('tr'); row.append(el('td', selectedLabels.get(`${p.scope}:${p.mask}`) || `Scope ${p.scope} · mask ${p.mask}`), el('td', formatUnits(p.quantity_atoms)), el('td', p.settlement), el('td', p.redeemable_atoms === null ? 'Pending' : formatUnits(p.redeemable_atoms))); body.append(row);
   }
   table.append(head, body);
-  $('wallet-result').append(balances, table, el('p', 'Only the eight base YES claims and your current composed claim are requested. This is not a complete portfolio. Kuru available balances exclude resting-order reserves; wrapped receipts are separate from internal pool holdings.', 'caption'));
+  $('wallet-result').append(balances, table, el('p', 'Only the eight base YES claims and your current composed claim are requested. This is not a complete portfolio.' + (marketId === 'learning' ? ' These holdings belong to the learning pool only.' : ' Kuru available balances exclude resting-order reserves; wrapped receipts are separate from internal pool holdings.'), 'caption'));
 }
 async function refresh() {
   if (disposed) return;
@@ -288,6 +292,8 @@ $('tx-form').addEventListener('submit', async event => {
 });
 
 trading = mountTrading({
+  marketId,
+  onBusy: options.onBusy,
   root,
   consumer: Boolean(options.consumer),
   requestQuote: options.consumer ? requestQuote : undefined,

@@ -5,6 +5,38 @@ import {AuthController} from '../src/auth/controller.ts';
 import {authPolicy} from '../src/auth/policy.ts';
 import {meraProvider} from '../src/auth/mera-provider.ts';
 import {TESTNET} from '../server/network.mjs';
+import {learningDeployment} from '../shared/learning-contracts.mjs';
+
+test('Mera learning trades keep market selection through signing and reject approvals for other pools', async () => {
+  const controller = new AuthController({ policy: authPolicy('http://localhost:18767', true, true, true), client: {
+    async createCredential() { throw Error('unused'); }, async getCredential() { return { credentialId: new Uint8Array([1]), prfOutput: new Uint8Array(32).fill(9) }; },
+  } });
+  const provider = meraProvider(controller, 'learning'), originalFetch = globalThis.fetch;
+  const hash = '0x' + 'ab'.repeat(32); let writes = 0, selectedPool = learningDeployment.pool;
+  globalThis.fetch = async (input, options) => {
+    if (input === '/api/markets/learning/state') return Response.json({ environment: 'public_testnet', chain_id: 10143,
+      market_id: 'learning', contracts: { pool: selectedPool, cash: TESTNET.cash }, snapshot: { block_number: 12, block_hash: hash } });
+    assert.equal(input, '/api/rpc');
+    const request = JSON.parse(options!.body as string); assert.equal(request.market, 'learning');
+    if (request.method === 'eth_sendRawTransaction') {
+      const tx = parseTransaction(request.params[0]); assert.ok([learningDeployment.pool, TESTNET.cash].includes(tx.to!.toLowerCase()));
+      writes++; return Response.json({ result: hash });
+    }
+    return Response.json({ result: ({ eth_chainId: '0x279f', eth_getBlockByNumber: { hash }, eth_getTransactionCount: 121 } as any)[request.method] });
+  };
+  try {
+    await controller.authenticate('login'); const owner = controller.getSnapshot().address!;
+    const tx = { from: owner, to: TESTNET.cash, data: '0x095ea7b3' + learningDeployment.pool.slice(2).padStart(64, '0') + '1'.padStart(64, '0'),
+      value: '0x0', chainId: '0x279f', gas: '0x186a0', gasPrice: '0x3b9aca00' };
+    const send = (input: typeof tx) => provider.request({ method: 'eth_sendTransaction', params: [input] });
+    await send(tx);
+    await send({ ...tx, to: learningDeployment.pool, data: '0x3e6b6cde' + '0'.repeat(320) });
+    await assert.rejects(send({ ...tx, data: '0x095ea7b3' + '22'.repeat(20).padStart(64, '0') + '1'.padStart(64, '0') }));
+    for (const data of ['0xb0a52172', '0xf6c4eade', '0xdeadbeef']) await assert.rejects(send({ ...tx, to: learningDeployment.pool, data }));
+    selectedPool = TESTNET.cash as typeof selectedPool;
+    await assert.rejects(send(tx)); assert.equal(writes, 2);
+  } finally { globalThis.fetch = originalFetch; provider.destroy(); await controller.signOut(); }
+});
 
 test('Mera adapter signs exact local transaction and rejects locked, foreign and admin requests', async () => {
   const controller = new AuthController({policy:authPolicy('http://localhost:18767',true,true,true),client:{

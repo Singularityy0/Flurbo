@@ -3,6 +3,19 @@ import assert from 'node:assert/strict';
 import { makePlan, prepare, makeRedemptionPlan, prepareRedemption, makeConversionPlan, prepareConversion, makeWithdrawalPlan, prepareWithdrawal, assertContext, sendReviewed, reconcile, setupLocalWallet, encode, boundFor, walletMessage } from './wallet.mjs';
 
 const ACCOUNT = '0x' + '11'.repeat(20), POOL = '0x' + '22'.repeat(20), CASH = '0x' + '33'.repeat(20);
+test('quotes and reviewed transactions cannot be reused across pool selections', async () => {
+  const f = fixture();
+  const quote = f.quoted || f.quote;
+  f.snapshot.market_id = 'learning';
+  assert.throws(() => makePlan(f.snapshot, quote, ACCOUNT, 50), /matching quote/);
+  quote.market_id = 'learning'; quote.contracts = { ...f.snapshot.contracts };
+  const plan = makePlan(f.snapshot, quote, ACCOUNT, 50);
+  quote.contracts.pool = CASH;
+  assert.throws(() => makePlan(f.snapshot, quote, ACCOUNT, 50), /matching quote/);
+  f.snapshot.contracts.pool = CASH;
+  await assert.rejects(sendReviewed(f.provider, plan, f.snapshot), /Deployment changed/);
+  assert.equal(f.calls.filter(c => c.method === 'eth_sendTransaction').length, 0);
+});
 function convertible() {
   const f = fixture();
   f.snapshot.contracts.receipt = '0x' + '44'.repeat(20);

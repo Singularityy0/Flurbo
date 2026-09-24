@@ -34,6 +34,21 @@ test('activity panels remain unique across repeated navigation and session resto
       assert.equal(await page.locator('summary').filter({ hasText: 'Learning comparison' }).count(), 0);
       assert.equal(await page.locator('summary').filter({ hasText: 'Learning pool' }).count(), 0);
     }
+    const selector = page.getByLabel('Market', { exact: true });
+    await Promise.all([
+      page.waitForRequest((req: any) => new URL(req.url()).pathname === '/api/markets/learning/state'),
+      selector.selectOption('learning'),
+    ]);
+    await page.getByRole('button', { name: 'Explore & trade', exact: true }).click();
+    assert.equal(await page.locator('.core-market .book').isVisible(), false);
+    assert.equal(await page.getByText('H YES receipts', { exact: true }).isVisible(), false);
+    assert.equal(await page.locator('#liability').locator('..').locator('.eyebrow').textContent(), 'COLLATERAL REQUIREMENT');
+    await page.reload();
+    await page.getByRole('button', { name: 'Activity & network', exact: true }).click();
+    assert.equal(await selector.inputValue(), 'learning');
+    await selector.selectOption('original');
+    await page.getByRole('button', { name: 'Explore & trade', exact: true }).click();
+    assert.equal(await page.locator('.core-market .book').isVisible(), true);
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

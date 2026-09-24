@@ -156,8 +156,9 @@ locally. The user subsequently confirmed the hosted checks.
 
 ## Phase 3b: reviewed operator wallet execution
 
-**Implemented and locally verified; public wallet execution remains a release
-check.** The learning panel now connects an extension wallet for the immutable
+**Hosted, with the first public update confirmed.** The user confirmed the update
+count changed to 1, and a subsequent public read corroborated that count and the
+279,955-atom one-share A AND B buy quote. The learning panel connects an extension wallet for the immutable
 updater. The existing Mera operator session is checked before preflight and again
 before the wallet prompt. Connecting MetaMask does not create a Flurbo login or
 grant operator access. The ordinary trading pool and its manifest remain intact.
@@ -218,14 +219,76 @@ matched the actual Solidity proposal hash. Funding was 515,545 atoms and the
 one-share A AND B quote changed from 259,531 to 279,955 atoms. This used an
 in-memory local fixture identity, not an edit to the public manifest. No public
 transaction was sent during development. Render's container build and the
-user's real extension-wallet confirmations remain the public release checks.
+user's real extension-wallet confirmations were the public release checks. The
+user subsequently completed the approval and update and reported Updates = 1.
+
+## Phase 3c: selectable learning-pool trading
+
+**Implemented and locally verified; awaiting push, Render build and public
+trading acceptance.** Signed-in users can select Original pool or Learning pool
+in the workspace. Quotes, allowances, buy/sell reviews, holdings, redemption and
+transaction receipt checks use the selected pool. Mera remains the login method;
+either Mera or a connected extension wallet can sign consumer transactions.
+Consumer trading does not require the operator's Mera account or deployer wallet.
+
+The pools have separate positions and allowances. The wallet's AUSD balance is
+shared. The original pool, its manifest and its H YES receipt/Kuru integrations
+remain accessible. The learning pool has no external receipt or Kuru deployment,
+so those controls and balances are hidden there. Its collateral requirement
+includes the pricing reserve as well as outstanding payouts.
+
+Selection persists within the browser session. Switching rebuilds the trading
+view and clears the previous quote. Switching is disabled during an active
+review, operation or tracked pending transaction. Each market has separate
+pending-transaction storage. The client and server reject cross-market quotes,
+approval destinations and transaction targets. A failed learning reader returns
+unavailable instead of using the original pool as a fallback.
+
+Production starts a second private Python reader on `127.0.0.1:18768`, exposed
+through authenticated `/api/markets/learning/` routes. It verifies the checked-in
+deployment checkpoint and runtime hashes, reads a pinned block, and checks
+collateral and freshness. No new contracts or environment settings are needed.
+Keep `FLURBO_MANIFEST_JSON` and existing operator/RPC settings unchanged.
+
+Positions still list the eight base YES claims plus the currently composed
+claim. This is not a complete portfolio index. Re-select the same combination
+when checking its balance. There is still no live observation ingestion or
+automatic repricing.
+
+### Deployment and manual acceptance
+
+1. Push the reader/API and frontend changes, then let Render build successfully.
+2. Sign in and select **Learning pool**. Check its address is
+   `0x094ed5f95188c222a61c27cae24b068120a52dd4`, its coverage is healthy and the
+   displayed snapshot is fresh. The learning operator panel remains separate.
+3. Select A YES AND B YES, Buy, 1 unit. Connect the funded test wallet. Review
+   and explicitly confirm the approval if needed, then the buy. Wait for the
+   matching trade receipt before checking positions. The selected wallet should
+   hold 1 unit if it started with none.
+4. Sell that 1 unit through a fresh review. Confirm the sell and verify the same
+   composed position returns to zero. Gas and rounding can reduce wallet funds.
+5. Switch to **Original pool**. Verify original holdings, receipt controls and
+   Kuru remain available. Reload and check the selected market is retained.
+6. If the new reader is unavailable, inspect Render logs and RPC configuration.
+   Do not replace the original manifest with the learning manifest or redeploy
+   contracts to resolve a reader failure.
+
+Validation: 46 web tests (including browser and real Rust/Python integration),
+47 dashboard tests, 29 existing Python dashboard tests and 4 learning-reader
+tests passed, along with TypeScript and the frontend production build. Public
+read-only checks returned Updates = 1 and a 279,955-atom A AND B buy quote. An
+owned disposable EVM rehearsal ran the funded update, bought one combined share,
+read holdings changing from 0 to 1, sold it and read 0 again, checking canonical
+buy/sell events. Buy cost was 279,955 atoms and sell proceeds were 279,954 atoms.
+No public trading transaction was submitted during this phase's development.
+Render's container build and the user's public buy/sell remain release checks.
 
 ## Subsequent release gates
 
 | Phase | Concrete work and release gate | Human involvement |
 |---|---|---|
-| 2: learning-enabled testnet pool | Prepare a separately identified `FundedFactoredPool`, verify deployed engine/code/configuration, updater and funding limits, preserve access to the existing pool and its holdings, and rehearse the AUSD lifecycle before enabling public updates. The current pool cannot be upgraded by changing the website. | Review the exact new deployment and funding configuration; sign testnet deployment/approval transactions locally. |
-| 3: hosted update proposals | Connect the Rust model and deterministic builder to pinned public snapshots; expose an operator-only review showing model provenance, revision, price changes and funding. Verify buy/update/sell and reject stale proposals. Start with declared synthetic observations. | Explicitly approve and fund each update. Live observations require a separately specified source and ingestion policy. |
+| 2: learning-enabled testnet pool | Deployed and verified separately; existing pool preserved. | Completed deployment signing. |
+| 3: hosted learning and trading | Synthetic comparison, proposal review and first funded update are hosted and checked. Selectable consumer trading is locally verified and awaiting the Phase 3c release checks. | Push, confirm Render build, then explicitly confirm a public learning-pool buy and sell. Future live observations need a separately specified source and ingestion policy. |
 | 4: Kuru operation | Host the existing scanner in read-only mode first. Verify depth, inventory, fees and gas on the public pair. Add reviewed order/cancel/deposit/withdraw controls; keep any signing keeper separately authorized. | Operator inventory/gas budget and signing policy; real public fill/cancel evidence. |
 | 5: official settlement | Select actual events and resolution rules, implement official-source retrieval, verify the CRE forwarder/workflow on the target network, and deploy a receiver-bound new market. Current immutable resolver remains unchanged. | Event/source selection, CRE access where required and signed deployment. |
 | 6: native mobile and remaining integrations | Finish native Mera authentication/trading, verify Android association and recovery, implement indexing/full portfolio, conditional securities and the remaining partner flows in separate slices. These are implementation tasks, not files merely waiting to be deployed. | Android device/passkey checks, hosting/indexer credentials as needed and missing partner criteria. |

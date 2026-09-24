@@ -1,10 +1,10 @@
 import { address, assertContext, prepare, prepareRedemption, prepareConversion, prepareWithdrawal, sendReviewed, reconcile, setupLocalWallet, walletMessage, WalletError } from './wallet.mjs';
 import { formatUnits, parseUnits, snapshotFresh } from './claims.mjs';
 
-const KEY = 'flurbo.local.pending.v1';
 const hashOK = hash => /^0x[0-9a-fA-F]{64}$/.test(hash);
 
 export function mountTrading(hooks) {
+  const KEY = hooks.marketId === 'learning' ? 'flurbo.learning.trading.pending.v1' : 'flurbo.local.pending.v1';
   const $ = id => hooks.root ? hooks.root.querySelector('#' + id) : document.getElementById(id);
   const text = (id, message) => { $(id).textContent = message; };
   let disposed = false;
@@ -40,6 +40,7 @@ export function mountTrading(hooks) {
   function update() {
     if (disposed) return;
     const locked = operation || Boolean(pending);
+    hooks.onBusy?.(locked || Boolean(review));
     const quote = hooks.getQuote()?.quote;
     const side = (quote?.side || hooks.getSide?.()) === 'sell' ? 'sell' : 'buy';
     const state = hooks.getState?.(), selection = hooks.getSelection?.();

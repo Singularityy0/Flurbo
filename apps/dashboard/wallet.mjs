@@ -71,7 +71,9 @@ export function boundFor(quote, bps) {
 
 export function makePlan(snapshot, quoted, account, bps, now = Date.now() / 1000) {
   account = address(account);
-  if (!supportedDeployment(snapshot) || quoted.environment !== snapshot.environment || quoted.chain_id !== 10143) {
+  if (!supportedDeployment(snapshot) || quoted.environment !== snapshot.environment || quoted.chain_id !== 10143 ||
+      (snapshot.market_id || 'original') !== (quoted.market_id || 'original') ||
+      quoted.contracts && (quoted.contracts.pool !== snapshot.contracts.pool || quoted.contracts.cash !== snapshot.contracts.cash)) {
     throw new WalletError('A verified Monad testnet deployment and matching quote are required.');
   }
   if (!snapshotFresh(snapshot.snapshot, now) || !quoteReviewable(quoted, now) || !snapshot.trading_available) {

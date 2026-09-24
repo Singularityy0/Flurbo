@@ -14,7 +14,8 @@ import LearningPool from './LearningPool';
 const publicTestnet = import.meta.env.PROD;
 
 type Panel = 'trade' | 'positions' | 'activity';
-function CoreMarket({ account, panel }: { account: string | null; panel: Panel }) {
+type Market = 'original' | 'learning';
+function CoreMarket({ account, panel, market, onBusy }: { account: string | null; panel: Panel; market: Market; onBusy(busy: boolean): void }) {
   const { controller, state } = useAuth();
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -65,14 +66,22 @@ function CoreMarket({ account, panel }: { account: string | null; panel: Panel }
     for (const id of ['review-details', 'confirm-trade', 'cancel-review', 'execution-status', 'execution-hash', 'replacement-area', 'check-execution', 'clear-tracking']) {
       advanced.before(main.querySelector('#' + id)!);
     }
+    if (market === 'learning') {
+      (main.querySelector('.book') as HTMLElement).style.display = 'none';
+      (main.querySelector('.advanced-action') as HTMLElement).style.display = 'none';
+      const requirement = main.querySelector('#liability')!.parentElement!;
+      requirement.querySelector('.eyebrow')!.textContent = 'COLLATERAL REQUIREMENT';
+      requirement.querySelector('.muted')!.textContent = 'Covers payouts and the learning pricing reserve';
+    }
     const style = document.createElement('style'); style.textContent = dashboardCss.replace(':root', ':host') + '\n' + workspaceCss;
     shadow.replaceChildren(style, main);
     main.setAttribute('data-panel', host.current!.dataset.panel || 'trade');
-    const provider = meraProvider(controller);
+    const provider = meraProvider(controller, market);
     const unmount = mountDashboard(shadow, { account: account || undefined, consumer: true, credentials: 'same-origin',
+      marketId: market, onBusy,
       providers: account && state.method === 'passkey' ? [{ name: 'Flurbo passkey (Mera)', provider }] : [] });
     return () => { unmount(); provider.destroy(); };
-  }, [account, controller, state.method]);
+  }, [account, controller, state.method, market, onBusy]);
   useEffect(() => { host.current?.shadowRoot?.querySelector('main')?.setAttribute('data-panel', panel); }, [panel]);
   return <div ref={host} data-panel={panel} className="core-market" />;
 }
@@ -81,6 +90,11 @@ export default function Workspace() {
   const { controller, state } = useAuth();
   const [panel, setPanel] = useState<Panel>('trade');
   const [copied, setCopied] = useState(false);
+  const [market, setMarket] = useState<Market>(() => {
+    try { return publicTestnet && sessionStorage.getItem('flurbo.trading.market') === 'learning' ? 'learning' : 'original'; }
+    catch { return 'original'; }
+  });
+  const [marketBusy, setMarketBusy] = useState(false);
   const address = state.address;
   const tabs = [{ key: 'trade', label: 'Explore & trade', icon: Layers3 }, { key: 'positions', label: 'Your positions', icon: Wallet }, { key: 'activity', label: 'Activity & network', icon: Activity }] as const;
   return <main id="main" tabIndex={-1} className="consumer-workspace">
@@ -101,7 +115,19 @@ export default function Workspace() {
       {state.error && <p role="alert" className="auth-error">{state.error}</p>}
       {state.notice && <p role="status" className="auth-feedback">{state.notice}</p>}
       {publicTestnet && address && <Funding key={address + state.method}/>}
-      <CoreMarket account={address} panel={panel}/>
+      {publicTestnet && <section className="workspace-market" aria-label="Trading market">
+        <label htmlFor="trading-market">Market</label>
+        <select id="trading-market" value={market} disabled={marketBusy} onChange={event => {
+          const next = event.target.value as Market;
+          try { sessionStorage.setItem('flurbo.trading.market', next); } catch { /* The selected market still works for this visit. */ }
+          setMarketBusy(false); setMarket(next);
+        }}>
+          <option value="original">Original pool</option><option value="learning">Learning pool</option>
+        </select>
+        <p className="auth-help">{market === 'learning' ? 'Synthetic test market with funded operator price updates. Its positions and pool allowance are separate from the original pool. Kuru and receipt conversion are not enabled here.' : 'Original synthetic market with H YES receipts and Kuru. Your existing positions remain here.'} AUSD wallet funds are shared across both pools.</p>
+        {marketBusy && <p className="auth-help">Finish or cancel the review, or resolve the pending transaction, before switching markets.</p>}
+      </section>}
+      <CoreMarket key={`market:${market}`} account={address} panel={panel} market={market} onBusy={setMarketBusy}/>
       {publicTestnet && panel === 'activity' && <LearningComparison key={`comparison:${address}`}/>}
       {publicTestnet && panel === 'activity' && <LearningPool key={`pool:${address}`}/>}
       <footer className="workspace-footer"><span>One pool. More possibilities.</span><span>{publicTestnet ? 'Monad testnet / Test AUSD / Synthetic outcomes' : 'Local prototype / AUSD collateral / Synthetic outcomes'}</span></footer>

@@ -52,3 +52,7 @@
 .learning-execution label { display: block; margin: .75rem 0; line-height: 1.5; }
 .learning-execution input:not([type="checkbox"]) { display: block; width: 100%; border: 1px solid var(--line); background: var(--ivory); padding: .75rem; }
 .learning-execution input[type="checkbox"] { margin-right: .5rem; }
+.workspace-market { border: 1px solid var(--line); padding: 20px 24px; margin-bottom: 24px; }
+.workspace-market label { display: block; font-size: 12px; margin-bottom: 8px; }
+.workspace-market select { width: 100%; max-width: 360px; border: 1px solid var(--line); background: var(--ivory); color: var(--ink); padding: 12px; border-radius: 12px; }
+.workspace-market p { margin-top: 12px; line-height: 1.6; }
