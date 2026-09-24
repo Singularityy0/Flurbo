@@ -1,0 +1,13 @@
+.pilot-view .portfolio-wallet { display: block; }
+.pilot-view .portfolio-wallet > * + * { margin-top: 1rem; }
+.pilot-events { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,18rem),1fr)); gap: 1rem; }
+.pilot-events h3 { font-size: 1.3rem; line-height: 1.4; }
+.pilot-form label { display: grid; gap: .5rem; }
+.pilot-form textarea { min-height: 7rem; resize: vertical; width: 100%; border: 1px solid var(--border,#d7dacd); background: transparent; border-radius: .4rem; padding: .8rem; color: inherit; font: inherit; }
+.pilot-form fieldset { border: 0; padding: 0; }
+.pilot-form fieldset label { display: flex; align-items: flex-start; gap: .8rem; margin: .7rem 0; }
+.pilot-form fieldset input { width: auto; margin-top: .3rem; }
+.pilot-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.pilot-actions { display: flex; flex-wrap: wrap; gap: .7rem; }
+.pilot-rules p, .pilot-form p { overflow-wrap: anywhere; }
+@media(max-width:600px){ .pilot-fields { grid-template-columns: 1fr; } .pilot-actions .button { width: 100%; } }
