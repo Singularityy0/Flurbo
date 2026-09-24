@@ -38,6 +38,30 @@ test('pilot endpoints require Mera login; public evidence remains readable; raw 
   }finally{globalThis.fetch=original;await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 
+test('rehearsal API is authenticated and cannot sign for the official pool',async()=>{
+  const signer=privateKeyToAccount(('0x'+'11'.repeat(32)) as `0x${string}`),f=pilotFixture(),origin='https://flurbo.singu.online';
+  const rehearsalPool=('0x'+'aa'.repeat(20)) as `0x${string}`;
+  const manifest={...f.manifest,pool:rehearsalPool,publication:{...f.manifest.publication,mode:'rehearsal'}};
+  const rehearsal={manifest,snapshot:async()=>({}),status:async()=>({pool:rehearsalPool})};
+  const store={read:async(id:string)=>id==='fixture'?{address:signer.address.toLowerCase(),method:'passkey'}:null};
+  const server=productionServer({origin,rpcUrl:TESTNET.rpc,pilot:f.service,rehearsal},store);
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const port=(server.address() as {port:number}).port,original=globalThis.fetch;let writes=0;
+  globalThis.fetch=async()=>{writes++;return Response.json({result:hash});};
+  const request=(path:string,body?:unknown,login=true):Promise<number>=>new Promise((resolve,reject)=>{
+    const req=httpRequest({hostname:'127.0.0.1',port,path,method:body?'POST':'GET',headers:{Host:'flurbo.singu.online',Origin:origin,Cookie:login?'flurbo_session=fixture':'','Content-Type':'application/json'}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode!));});req.on('error',reject);req.end(body?JSON.stringify(body):undefined);
+  });
+  const raw=async(spender:`0x${string}`)=>signer.signTransaction({type:'legacy',chainId:10143,nonce:0,to:TESTNET.cash as `0x${string}`,data:encodeFunctionData({abi:pilotCashAbi,functionName:'approve',args:[spender,1000000n]}),value:0n,gas:100000n,gasPrice:1000000000n});
+  try{
+    assert.equal(await request('/api/rehearsal/status',undefined,false),401);
+    assert.equal(await request('/api/rehearsal/status'),200);
+    assert.equal(await request('/api/rehearsal/rpc',{method:'eth_sendRawTransaction',params:[await raw(pool)]}),403);
+    assert.equal(await request('/api/pilot/rpc',{method:'eth_sendRawTransaction',params:[await raw(rehearsalPool)]}),403);
+    assert.equal(await request('/api/rehearsal/rpc',{method:'eth_sendRawTransaction',params:[await raw(rehearsalPool)]}),200);
+    assert.equal(writes,1);
+  }finally{globalThis.fetch=original;await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
 test('pilot Mera adapter signs only own bounded calls with a current nonce and unlocked passkey',async()=>{
   const controller=new AuthController({policy:authPolicy('http://localhost:18767',true,true,true),client:{async createCredential(){throw Error('unused');},async getCredential(){return{credentialId:new Uint8Array([1]),prfOutput:new Uint8Array(32).fill(9)};}}});
   const f=pilotFixture(),provider=pilotMera(controller),original=globalThis.fetch;let writes=0;

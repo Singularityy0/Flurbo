@@ -8,7 +8,7 @@ export function pilotIndex({manifest,rpc,command}) {
   const start=Number(manifest.verifiedBlock);
   const abi=[...resolverAbi,...pilotPoolAbi];
   const stringify=value=>JSON.stringify(value,(_,v)=>typeof v==='bigint'?v.toString():v);
-  async function refresh() {
+  async function scan() {
     const prior=await command('GET',key);
     let saved=prior?JSON.parse(prior):{through:start,hash:manifest.verifiedBlockHash,logs:[]};
     const anchor=await rpc('eth_getBlockByNumber',['0x'+start.toString(16),false]);
@@ -51,6 +51,13 @@ export function pilotIndex({manifest,rpc,command}) {
     const cas="local current=redis.call('GET',KEYS[1]); if (current or '')~=ARGV[1] then return 0 end; redis.call('SET',KEYS[1],ARGV[2]); return 1";
     if(Number(await command('EVAL',cas,1,key,prior||'',encoded))!==1)throw new Error('Index advanced in another request; refresh');
     return {...JSON.parse(encoded),target:tip,complete:end>=tip};
+  }
+  // Portfolio and History can open together. Share a scan in this process;
+  // the Redis compare-and-swap still protects different service instances.
+  let active=null;
+  function refresh() {
+    if(!active) active=scan().finally(()=>{active=null;});
+    return active;
   }
   return {refresh};
 }

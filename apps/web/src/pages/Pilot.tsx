@@ -3,8 +3,8 @@ import { formatUnits, parseUnits, type Hex } from 'viem';
 import { useAuth } from '../auth/context';
 import { describeClaim, walletKey } from '../portfolio';
 import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
-import { pilotRequest, pilotMera, submitPilot, checkPilotPending, readPilotPending, pilotPendingKey, validatePilotReview,
-  type Provider, type PilotState, type PilotInput, type PilotReview, type PilotPending } from '../pilot';
+import { pilotRequest as request, pilotMera, submitPilot, checkPilotPending, readPilotPending as readPending, pendingKeyFor, validatePilotReview,
+  type Provider, type PilotState, type PilotInput, type PilotReview, type PilotPending, type PilotNamespace } from '../pilot';
 import './portfolio.css';
 import './kuru.css';
 import './pilot.css';
@@ -13,12 +13,15 @@ const labels=['Not proposed','NO','YES','VOID'];
 const phases=['Awaiting evidence','Challenge window','Under review','Final result'];
 const date=(seconds:string|number)=>new Date(Number(seconds)*1000).toLocaleString();
 const cash=(atoms:string)=>formatUnits(BigInt(atoms),6);
-export default function Pilot({onBusy}:{onBusy(value:boolean):void}) {
+export default function Pilot({onBusy,namespace='pilot'}:{onBusy(value:boolean):void;namespace?:PilotNamespace}) {
+  const pilotRequest=<T,>(path:string,input?:unknown)=>request<T>(path,input,namespace);
+  const readPilotPending=()=>readPending(namespace),pilotPendingKey=pendingKeyFor(namespace);
   const {controller,state:auth}=useAuth();
   const [state,setState]=useState<PilotState|null>(null),[notice,setNotice]=useState('Loading the real-event pilot...');
   const [wallets,setWallets]=useState<BrowserWallet[]>([]),[choice,setChoice]=useState('mera'),[owner,setOwner]=useState('');
   const [busy,setBusy]=useState(false),[review,setReview]=useState<PilotReview|null>(null),[pending,setPending]=useState<PilotPending|null>(null);
   const [storageError,setStorageError]=useState(false),[hash,setHash]=useState('');
+  const [confirmedHash,setConfirmedHash]=useState(''),[approved,setApproved]=useState<PilotInput|null>(null);
   const [event,setEvent]=useState(0),[outcome,setOutcome]=useState(2),[statement,setStatement]=useState(''),[source,setSource]=useState(''),[attachment,setAttachment]=useState('');
   const [evidence,setEvidence]=useState<{hash:string;uri:string}|null>(null);
   const [legs,setLegs]=useState<number[]>([0]),[quantity,setQuantity]=useState('1'),[side,setSide]=useState('buy');
@@ -49,7 +52,7 @@ export default function Pilot({onBusy}:{onBusy(value:boolean):void}) {
   useEffect(()=>{setPosition(null);},[owner,scope,mask]);
   async function connect(){
     cleanup.current(); const version=++generation.current;
-    const p:Provider|undefined=choice==='mera'?pilotMera(controller):wallets[Number(choice)]?.provider;
+    const p:Provider|undefined=choice==='mera'?pilotMera(controller,namespace):wallets[Number(choice)]?.provider;
     if(!p)throw new Error('Select a wallet');
     const changed=()=>{generation.current++;setOwner('');setReview(null);provider.current=null;setNotice('Wallet changed. Reconnect. Submitted actions remain in tracking.');};
     for(const name of ['accountsChanged','chainChanged','disconnect'])p.on?.(name,changed);
@@ -86,14 +89,27 @@ export default function Pilot({onBusy}:{onBusy(value:boolean):void}) {
     const saved=readPilotPending();if(!saved)return;
     const result=await checkPilotPending(saved);
     if(JSON.stringify(readPilotPending())!==JSON.stringify(saved))throw new Error('Tracking changed in another tab');
-    if(result==='confirmed'||result==='reverted'){save(null);await refresh();setNotice(result==='confirmed'?'Exact transaction confirmed. Review the next action separately.':'Transaction reverted. No successful action was confirmed.');}
+    if(result==='confirmed'||result==='reverted'){
+      save(null);setPosition(null);setConfirmedHash(saved.hash||'');
+      setApproved(result==='confirmed'&&saved.review.action==='approve'?saved.review.requested:null);
+      const confirmed=result==='confirmed'?(saved.review.action==='approve'?'Token approval confirmed. The approved action has not been sent. Review it below.':'Exact transaction confirmed. Balances refreshed.'):'Transaction reverted. No successful action was confirmed.';
+      try{
+        await refresh();
+        const request=saved.review.requested;
+        if(result==='confirmed'&&['buy','sell','redeem'].includes(saved.review.action)&&request.scope===scope&&request.mask===mask&&owner===request.owner.toLowerCase())
+          setPosition(await pilotRequest('position',{owner,scope,mask}));
+        setNotice(confirmed);
+      }catch{setNotice(result==='confirmed'?'Transaction confirmed, but balances could not refresh. Use Refresh pilot; do not repeat the transaction.':'Transaction reverted. Data refresh failed; check the receipt before retrying.');}
+    }
     else setNotice(result==='pending'?'Still pending. Do not submit again.':'Waiting for a second canonical confirmation.');
   }
   const disabled=busy||!!review||!!pending||storageError;
   const current=state?.cases[event];
   const operatorRun=state?.manifest.publication.reviewerControl==='single-operator';
   return <div className="portfolio-view kuru-view pilot-view">
-    <section className="kuru-intro"><span className="eyebrow">Real events / Test assets</span><h2>From a question <em>to an outcome.</em></h2><p>One shared pool for this cluster. Official-source evidence, an open challenge period and a named testnet reviewer panel.</p><p role="status" className="kuru-notice">{notice}</p><button className="button button-outline" disabled={busy} onClick={()=>void run(()=>refresh())}>Refresh pilot</button></section>
+    <section className="kuru-intro"><span className="eyebrow">{namespace==='rehearsal'?'Scripted rehearsal / Test assets':'Real events / Test assets'}</span><h2>From a question <em>to an outcome.</em></h2><p>{namespace==='rehearsal'?'A separate practice pool with scripted outcomes. These are not real-world predictions. Your real-event holdings stay in their original pool.':'One shared pool for this cluster. Official-source evidence, an open challenge period and a named testnet reviewer panel.'}</p>{namespace==='rehearsal'&&<p><a href="/rehearsal-rules" target="_blank" rel="noreferrer">Read the fixed rehearsal instructions</a>. A: YES without a challenge. B: propose YES, challenge with NO, then two reviewers vote NO. C: no assertion, then VOID at its deadline.</p>}<p role="status" className="kuru-notice">{notice}</p><button className="button button-outline" disabled={busy} onClick={()=>void run(()=>refresh())}>Refresh pilot</button></section>
+    {confirmedHash&&<p><a href={`https://testnet.monadscan.com/tx/${confirmedHash}`} target="_blank" rel="noreferrer">View the last checked transaction</a></p>}
+    {approved&&<section className="portfolio-wallet pilot-form"><p>Approval grants token permission. It does not complete the {approved.action}.</p><button className="button button-dark" disabled={disabled||owner!==approved.owner.toLowerCase()} onClick={()=>void run(async()=>{const {owner:_owner,...input}=approved;await prepare(input);setApproved(null);})}>Review approved {approved.action}</button><p>Connect the same trading wallet if it is not already selected.</p></section>}
     {review&&<section className="portfolio-wallet pilot-form" aria-label="Transaction review"><h2>{review.action==='approve'?'Approve token permission':review.action==='buy'?'Buy shares':review.action==='sell'?'Sell shares':'Confirm your action'}</h2>{review.requested.scope!==undefined&&<p>{describeClaim(review.requested.scope,Number(review.requested.mask))}: {cash(review.requested.quantity!)} shares.</p>}<p>{review.notice}</p><p>Wallet {review.transaction.from}</p><p>Contract {review.transaction.to}</p>{review.action==='sell'&&<p>Minimum test AUSD received: {cash(review.minimumReceivedAtoms!)}.</p>}<p>Maximum test AUSD permission or spend: {cash(review.amountAtoms)}. Maximum network fee: {formatUnits(BigInt(review.maximumFeeWei),18)} MON.</p>{review.requested.outcome&&<p>Event {(review.requested.event??0)+1}: {labels[review.requested.outcome]}. Evidence {review.requested.evidenceHash}</p>}<p>Review expires {date(review.expiresAt)}. If fees increase, a fresh review is required.</p><div className="pilot-actions"><button className="button button-dark" disabled={busy||!!pending} onClick={()=>void run(confirm)}>Confirm in wallet</button><button className="button button-outline" disabled={busy} onClick={()=>setReview(null)}>Cancel review</button></div></section>}
     {pending&&<section className="portfolio-wallet pilot-form"><h2>Follow your transaction.</h2><p>{pending.hash||'No hash returned yet. Check wallet activity before doing anything else.'}</p>{!pending.hash&&<><label>Transaction hash<input value={hash} onChange={e=>setHash(e.target.value)}/></label><button className="button button-outline" onClick={()=>void run(async()=>{if(!/^0x[0-9a-f]{64}$/i.test(hash))throw new Error('Paste a transaction hash');save({...pending,hash:hash.toLowerCase() as Hex});})}>Attach hash</button></>}<button className="button button-dark" disabled={busy||!pending.hash} onClick={()=>void run(check)}>Check confirmation</button></section>}
     {state&&<>

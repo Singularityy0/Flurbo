@@ -13,15 +13,17 @@ export type PilotReview={schema:string;manifest:PilotManifest;snapshot:PilotStat
   transaction:{from:Hex;to:Hex;data:Hex;value:Hex;chainId:Hex};notice:string};
 export type PilotPending={review:PilotReview;nonce:Hex;hash:Hex|null;started:number;login:string};
 export const pilotPendingKey='flurbo.pilot.pending.v1';
+export type PilotNamespace='pilot'|'rehearsal';
+export const pendingKeyFor=(namespace:PilotNamespace)=>namespace==='pilot'?pilotPendingKey:'flurbo.rehearsal.pending.v1';
 
-export async function pilotRequest<T>(path:string,input?:unknown):Promise<T> {
-  const response=await fetch('/api/pilot/'+path,{method:input===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',
+export async function pilotRequest<T>(path:string,input?:unknown,namespace:PilotNamespace='pilot'):Promise<T> {
+  const response=await fetch('/api/'+namespace+'/'+path,{method:input===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',
     headers:input===undefined?{}:{'Content-Type':'application/json'},body:input===undefined?undefined:JSON.stringify(input),signal:AbortSignal.timeout(60_000)});
   const result=await response.json();
   if(!response.ok) throw new Error(result.error || 'Pilot request failed. Refresh before retrying.');
   return result;
 }
-async function rpc(method:string,params:unknown[]=[]){ return (await pilotRequest<{result:unknown}>('rpc',{method,params})).result; }
+async function namespaceRpc(namespace:PilotNamespace,method:string,params:unknown[]=[]){ return (await pilotRequest<{result:unknown}>('rpc',{method,params},namespace)).result; }
 const hex=(n:bigint)=>`0x${n.toString(16)}` as Hex;
 export function rpcInteger(value:unknown):bigint {
   if(typeof value==='number' && Number.isSafeInteger(value) && value>=0) return BigInt(value);
@@ -29,7 +31,8 @@ export function rpcInteger(value:unknown):bigint {
   throw new Error('Wallet returned an invalid integer.');
 }
 
-export function pilotMera(controller:AuthController):Provider {
+export function pilotMera(controller:AuthController,namespace:PilotNamespace='pilot'):Provider {
+  const rpc=(method:string,params:unknown[]=[])=>namespaceRpc(namespace,method,params);
   return {async request({method,params=[]}) {
     const owner=controller.getSnapshot().address;
     if(['eth_accounts','eth_requestAccounts'].includes(method)) return owner?[owner]:[];
@@ -37,7 +40,7 @@ export function pilotMera(controller:AuthController):Provider {
     controller.checkExpiry();
     if(!owner || !controller.getSnapshot().signingExpiresAt) throw new Error('Unlock Mera signing before confirming.');
     const tx=params[0] as Record<string,string>;
-    const state=await pilotRequest<PilotState>('status');
+    const state=await pilotRequest<PilotState>('status',undefined,namespace);
     if(tx.from?.toLowerCase()!==owner.toLowerCase() || rpcInteger(tx.chainId)!==10143n || rpcInteger(tx.value)!==0n
       || !pilotCall({to:tx.to,data:tx.data,manifest:state.manifest})) throw new Error('Unsupported pilot transaction');
     const nonce=rpcInteger(await rpc('eth_getTransactionCount',[owner,'pending']));
@@ -74,11 +77,12 @@ export function validatePilotReview(r:PilotReview,now=Date.now(),tracking=false)
   return plan;
 }
 
-export function readPilotPending():PilotPending|null {
-  const raw=localStorage.getItem(pilotPendingKey);
+export function readPilotPending(namespace:PilotNamespace='pilot'):PilotPending|null {
+  const raw=localStorage.getItem(pendingKeyFor(namespace));
   if(!raw) return null;
   if(raw.length>100_000) throw new Error('Saved transaction is invalid. Do not resubmit.');
   const value=JSON.parse(raw) as PilotPending;
+  if((value.review.manifest.publication.mode==='rehearsal')!==(namespace==='rehearsal'))throw new Error('Saved transaction belongs to a different market');
   validatePilotReview(value.review,Date.now(),true); rpcInteger(value.nonce);
   if(value.hash!==null && !/^0x[0-9a-f]{64}$/i.test(value.hash) || !Number.isFinite(value.started)) throw new Error('Invalid transaction tracking');
   return value;
@@ -122,6 +126,8 @@ export async function submitPilot(p:Provider,r:PilotReview,login:string,save:(va
 }
 
 export async function checkPilotPending(saved:PilotPending) {
+  const namespace=saved.review.manifest.publication.mode==='rehearsal'?'rehearsal':'pilot';
+  const rpc=(method:string,params:unknown[]=[])=>namespaceRpc(namespace,method,params);
   validatePilotReview(saved.review,Date.now(),true);
   if(!saved.hash) throw new Error('Attach the transaction hash from wallet activity. Do not repeat the action.');
   const tx=await rpc('eth_getTransactionByHash',[saved.hash]) as {hash:string;chainId:string;blockNumber:string;blockHash:string;from:string;to:string;input:string;value:string;nonce:string}|null;

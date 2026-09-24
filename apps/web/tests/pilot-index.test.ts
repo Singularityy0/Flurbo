@@ -22,3 +22,14 @@ test('persistent pilot index resumes, rejects concurrent updates and rebuilds af
   reorg=true;const rebuilt=await pilotIndex({manifest,rpc,command}).refresh();assert.equal(rebuilt.logs.length,0);assert.equal(rebuilt.hash,hash(1108));
   stored=null;conflict=true;await assert.rejects(pilotIndex({manifest,rpc,command}).refresh());assert.equal(stored,null);
 });
+
+test('simultaneous readers share one scan and a failed scan can be retried',async()=>{
+  const hash='0x'+'11'.repeat(32);
+  let attempts=0,fail=true;
+  const index=pilotIndex({manifest:{pool:'0x'+'22'.repeat(20),resolver:'0x'+'33'.repeat(20),verifiedBlock:'100',verifiedBlockHash:hash},
+    command:async()=>{attempts++;await new Promise(resolve=>setTimeout(resolve,5));if(fail)throw new Error('Redis unavailable');return null;},
+    rpc:async()=>({number:'0x66',hash})});
+  const first=index.refresh(),second=index.refresh();assert.equal(first,second);
+  const rejected=await Promise.allSettled([first,second]);assert.ok(rejected.every(r=>r.status==='rejected'));assert.equal(attempts,1);
+  fail=false;assert.equal((await index.refresh()).complete,true);assert.equal(attempts,2);
+});

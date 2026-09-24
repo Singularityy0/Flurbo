@@ -8,8 +8,8 @@ import { hostedConfig } from './network.mjs';
 import { RedisSessionStore, redisCommand } from './redis-session.mjs';
 import { runComparison } from './learning-comparison.mjs';
 import { learningService, learningRpc, loadLearningModel } from './learning-pool.mjs';
-import { pilotService, pilotEvidence, pilotRpc } from './pilot.mjs';
-import { pilotIndex } from './pilot-index.mjs';
+import { pilotEvidence } from './pilot.mjs';
+import { configurePilot, configureRehearsal } from './pilot-config.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -22,18 +22,23 @@ const security = {
 export function productionServer(config, store, staticRoot = dist) {
   const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
     learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
-    learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, evidence: config.pilotEvidence });
+    learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, rehearsal: config.rehearsal, evidence: config.pilotEvidence });
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
     // Liveness only. This deliberately does not claim contracts or RPC are ready.
-    if (req.url === '/healthz' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ service: 'flurbo', chain_state: 'not_checked', learning_comparison: config.learningReport ? 'ready' : config.learningStatus || 'unavailable', learning_pool: config.learningPool ? 'configured' : 'unavailable', learning_model: config.learningModelStatus || 'unavailable' })); return; }
+    if (req.url === '/healthz' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ service: 'flurbo', chain_state: 'not_checked', learning_comparison: config.learningReport ? 'ready' : config.learningStatus || 'unavailable', learning_pool: config.learningPool ? 'configured' : 'unavailable', learning_model: config.learningModelStatus || 'unavailable', pilot_pool: config.pilot ? 'configured' : 'disabled', pilot_address: config.pilot?.manifest.pool || null, pilot_rules_hash: config.pilot?.manifest.rulesHash || null, rehearsal_pool: config.rehearsal ? 'configured' : 'disabled', rehearsal_address: config.rehearsal?.manifest.pool || null, rehearsal_rules_hash: config.rehearsal?.manifest.rulesHash || null })); return; }
     if (req.headers.host !== new URL(config.origin).host) { res.writeHead(421); res.end('Use https://flurbo.singu.online'); return; }
+    if(req.url==='/rehearsal-rules'&&req.method==='GET'){
+      res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+      res.end(JSON.stringify({schema:'flurbo-rehearsal.v1',notice:'Scripted testnet fixtures only. These records do not describe real-world events and must never settle the official release market.',
+        fixtures:[{event:'A',result:'YES',exercise:'Unchallenged assertion'},{event:'B',result:'NO',exercise:'Intentionally propose YES, challenge with NO, two reviewers vote NO'},{event:'C',result:null,exercise:'No assertion; finalize VOID after its assertion deadline'}]}));return;
+    }
     if (!req.url || req.url.length > 4096) { res.writeHead(414); res.end(); return; }
     await api(req, res, async () => {
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405); res.end(); return; }
       try {
         const pathname = new URL(req.url, config.origin).pathname;
-        const page = ['/', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events'].includes(pathname);
+        const page = ['/', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal'].includes(pathname);
         if (!page && !/^\/(?:assets\/[a-zA-Z0-9_.-]+|favicon\.svg|robots\.txt)$/.test(pathname)) { res.writeHead(404); res.end('Not found'); return; }
         const file = resolve(staticRoot, page ? 'index.html' : pathname.slice(1));
         if (!(await stat(file)).isFile()) throw new Error('Not a file');
@@ -50,10 +55,9 @@ async function main() {
   const store = new RedisSessionStore(redisCommand());
   await store.command('PING');
   config.pilotEvidence = pilotEvidence(store.command, config.origin);
-  if(process.env.FLURBO_PILOT_MANIFEST_JSON) {
-    config.pilot = pilotService({manifest:JSON.parse(process.env.FLURBO_PILOT_MANIFEST_JSON),rpc:pilotRpc(config.rpcUrl)});
-    config.pilot.index = pilotIndex({manifest:config.pilot.manifest,rpc:pilotRpc(config.rpcUrl),command:store.command});
-  }
+  config.pilot = await configurePilot({rpcUrl:config.rpcUrl,command:store.command});
+  config.rehearsal = await configureRehearsal({rpcUrl:config.rpcUrl,command:store.command});
+  if(config.rehearsal&&config.pilot&&(config.rehearsal.manifest.pool===config.pilot.manifest.pool||config.rehearsal.manifest.resolver===config.pilot.manifest.resolver))throw new Error('Rehearsal and real pilot must be separate');
   const comparison = new AbortController();
   config.learningStatus = 'starting';
   // Do not hold up account/trading access while a sleeping free-tier server warms.

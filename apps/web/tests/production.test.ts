@@ -75,6 +75,8 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
     assert.equal((await request('/account')).status,200); // Client route waits for verified auth.
     assert.equal((await request('/portfolio')).status,200);
     assert.equal((await request('/history')).status,200);
+    assert.equal((await request('/rehearsal')).status,200);
+    assert.equal((await request('/rehearsal-rules')).json().fixtures[1].result,'NO');
     assert.equal((await request('/.env')).status,404);
     assert.equal((await request('/api/network',undefined,'','evil.example')).status,421);
     assert.equal((await request('/api/auth/challenge',{address:signer.address},'','flurbo.singu.online','https://evil.example')).status,403);
@@ -82,6 +84,8 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
     assert.equal((await request('/api/rpc',{method:'anvil_setBalance',params:[]})).status,400);
     assert.equal((await request('/api/learning/comparison')).status,401);
     assert.equal((await request('/healthz')).json().learning_comparison,'ready');
+    assert.equal((await request('/healthz')).json().pilot_pool,'disabled');
+    assert.equal((await request('/healthz')).json().rehearsal_pool,'disabled');
     assert.equal((await request('/api/auth/challenge',{address:signer.address,method:'wallet'})).status,400);
     const challenge=await request('/api/auth/challenge',{address:signer.address,method:'passkey'});
     const verified=await request('/api/auth/verify',{signature:await signer.signMessage({message:challenge.json().message})},challenge.headers['set-cookie'][0].split(';')[0]);

@@ -125,6 +125,7 @@ export default function App() {
       : location === "/history" ? "Your history | flurbo"
       : location === "/kuru" ? "Kuru order book | flurbo"
       : location === "/events" ? "Real events | flurbo"
+      : location === "/rehearsal" ? "Testnet rehearsal | flurbo"
       : location === "/" ? "flurbo | combine what you know" : "Page not found | flurbo";
     const changed = previousLocation.current !== location;
     previousLocation.current = location;
@@ -146,6 +147,7 @@ export default function App() {
       <Route path="/history" component={AccountRoute} />
       <Route path="/kuru" component={AccountRoute} />
       <Route path="/events" component={AccountRoute} />
+      <Route path="/rehearsal" component={AccountRoute} />
       <Route component={NotFound} />
     </Switch>
   );
