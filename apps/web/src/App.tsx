@@ -6,6 +6,7 @@ import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 import { useAuth } from "./auth/context";
 import Workspace from './pages/Workspace';
+import Markets from './pages/Markets';
 
 export const brand = "flurbo";
 
@@ -57,11 +58,11 @@ function Header() {
           onClick={(event) => {
             if ((event.target as HTMLElement).closest("a")) setOpen(false);
           }}>
-          <a href="/#how-it-works">How it works</a>
+          {isHome || !state.address ? <><a href="/#how-it-works">How it works</a>
           <a href="/#the-idea">The idea</a>
-          <a href="/#faq">FAQ</a>
+          <a href="/#faq">FAQ</a></> : <><Link href="/markets">Markets</Link><Link href="/portfolio">Portfolio</Link><Link href="/history">History</Link></>}
           <span className="nav-rule" aria-hidden="true" />
-          {state.address ? <Link href="/account" className="nav-cta">Your account <ArrowUpRight size={15} strokeWidth={1.8} /></Link> : <>
+          {state.address ? (isHome ? <Link href="/markets" className="nav-cta">Explore markets <ArrowUpRight size={15} strokeWidth={1.8} /></Link> : <Link href="/" className="nav-login">About Flurbo</Link>) : <>
             <Link href="/login" className="nav-login">Sign in</Link>
             <Link href="/signup" className="nav-cta">Create an account <ArrowUpRight size={15} strokeWidth={1.8} /></Link>
           </>}
@@ -93,6 +94,7 @@ function AuthShell({ mode }: { mode: "login" | "signup" | "account" }) {
 }
 
 function AccountRoute() {
+  const [location] = useLocation();
   const { controller, state } = useAuth();
   const [, navigate] = useLocation();
   const authenticated = !!state.address && state.expiresAt !== null && state.expiresAt > Date.now();
@@ -111,7 +113,7 @@ function AccountRoute() {
   // server-backed login has been restored. Remembered addresses are not login.
   return <AppShell>{state.restoring
     ? <main id="main" tabIndex={-1} className="auth-page"><p role="status">Checking your session...</p></main>
-    : authenticated ? <Workspace /> : null}</AppShell>;
+    : authenticated ? (['/markets','/portfolio','/history'].includes(location) ? <Markets /> : <Workspace />) : null}</AppShell>;
 }
 
 export default function App() {
@@ -120,6 +122,7 @@ export default function App() {
   useEffect(() => {
     document.title = location === "/login" ? "Sign in | flurbo"
       : location === "/signup" ? "Create an account | flurbo"
+      : location === "/markets" ? "Markets | flurbo"
       : location === "/account" ? "Your account | flurbo"
       : location === "/portfolio" ? "Your portfolio | flurbo"
       : location === "/history" ? "Your history | flurbo"
@@ -130,7 +133,7 @@ export default function App() {
     const changed = previousLocation.current !== location;
     previousLocation.current = location;
     const frame = requestAnimationFrame(() => {
-      const anchor = document.getElementById(window.location.hash.slice(1));
+      const anchor = window.location.hash ? document.getElementById(window.location.hash.slice(1)) : null;
       if (anchor) anchor.scrollIntoView();
       else if (changed) window.scrollTo({ top: 0, behavior: "instant" });
       if (changed) document.getElementById("main")?.focus({ preventScroll: true });
@@ -142,6 +145,7 @@ export default function App() {
       <Route path="/" component={() => <AppShell><Home /></AppShell>} />
       <Route path="/login" component={() => <AuthShell mode="login" />} />
       <Route path="/signup" component={() => <AuthShell mode="signup" />} />
+      <Route path="/markets" component={AccountRoute} />
       <Route path="/account" component={AccountRoute} />
       <Route path="/portfolio" component={AccountRoute} />
       <Route path="/history" component={AccountRoute} />

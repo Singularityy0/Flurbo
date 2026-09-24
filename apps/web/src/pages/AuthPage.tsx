@@ -14,12 +14,12 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
   const [copyStatus, setCopyStatus] = useState("");
   const isLogin = mode !== "signup";
   const active = !!state.address;
-  useEffect(() => { if (active && !state.busy) navigate('/account'); }, [active, state.busy, navigate]);
+  useEffect(() => { if (active && !state.busy) navigate('/markets'); }, [active, state.busy, navigate]);
   const localHref = policy.localUrl ? new URL(isLogin ? "/login" : "/signup", policy.localUrl).href : undefined;
 
   async function authenticate(chooseAnother = false) {
     const succeeded = await controller.authenticate(isLogin ? "login" : "signup", name, chooseAnother, allowNew);
-    if (succeeded) navigate("/account");
+    if (succeeded) navigate("/markets");
   }
   function submit(event: FormEvent) { event.preventDefault(); void authenticate(); }
   async function copyAddress() {

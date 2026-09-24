@@ -4,12 +4,12 @@ import { resolverAbi,pilotPoolAbi,pilotCashAbi } from '../shared/pilot.mjs';
 
 export const owner=('0x'+'11'.repeat(20)) as Hex, pool=('0x'+'22'.repeat(20)) as Hex, resolver=('0x'+'33'.repeat(20)) as Hex;
 export const hash=('0x'+'44'.repeat(32)) as Hex, rules=('0x'+'55'.repeat(32)) as Hex, code='0x6000' as Hex;
-export function pilotFixture(now=Math.floor(Date.now()/1000)) {
+export function pilotFixture(now=Math.floor(Date.now()/1000),count=2) {
   const manifest:any={schema:'flurbo.pilot-manifest.v1',status:'verified_pilot_snapshot',chainId:10143,pool,resolver,rulesHash:rules,draftHash:rules,
     verifiedBlock:'90',verifiedBlockHash:hash,codeHashes:{[pool]:keccak256(code),[resolver]:keccak256(code)},
     publication:{creator:owner,bondAtoms:'1000000',assertionPeriod:3600,challengePeriod:3600,votingPeriod:3600,
       reviewers:[{name:'Test Alice',address:'0x'+'66'.repeat(20)},{name:'Test Bob',address:'0x'+'77'.repeat(20)},{name:'Test Carol',address:'0x'+'88'.repeat(20)}],
-      draft:{title:'Explicit test fixtures',closesAt:now+86400,exceptionPolicy:'Test void policy',disputePolicy:'Test panel policy',events:[0,1].map(i=>({id:`event-${i}`,question:`Test event ${i+1}`,yesRule:'Test YES rule',noRule:'Test NO rule',observationStartsAt:now+86401,observationEndsAt:now+90000,source:{referenceUrl:'https://github.com/ethereum/go-ethereum/releases',recordId:'fixture'}}))}}};
+      draft:{title:'Explicit test fixtures',closesAt:now+86400,exceptionPolicy:'Test void policy',disputePolicy:'Test panel policy',events:Array.from({length:count},(_,i)=>i).map(i=>({id:`event-${i}`,question:`Test event ${i+1}`,yesRule:'Test YES rule',noRule:'Test NO rule',observationStartsAt:now+86401,observationEndsAt:now+90000,source:{referenceUrl:'https://github.com/ethereum/go-ethereum/releases',recordId:'fixture'}}))}}};
   const options={allowance:0n,chain:10143n,changed:false,failSimulation:false};
   const rpc=async(method:string,params:any[]=[])=>{
     if(method==='eth_chainId')return '0x'+options.chain.toString(16);

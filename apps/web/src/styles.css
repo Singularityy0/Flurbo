@@ -326,8 +326,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 
 /* Accessibility refinements retain the approved palette and composition. */
-.skip-link { position: fixed; z-index: 100; top: 12px; left: 12px; padding: 12px 18px; background: var(--forest); color: var(--ivory); transform: translateY(-180%); }
-.skip-link:focus { transform: translateY(0); }
+.skip-link { position: fixed; z-index: 100; top: 12px; left: 12px; padding: 12px 18px; background: var(--forest); color: var(--ivory); width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.skip-link:focus-visible { width: auto; height: auto; clip-path: none; }
 main:focus { outline: none; }
 section[id] { scroll-margin-top: 24px; }
 .mobile-menu, .nav-cta { min-height: 44px; }

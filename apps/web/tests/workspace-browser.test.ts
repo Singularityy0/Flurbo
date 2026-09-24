@@ -30,9 +30,10 @@ test('activity panels remain unique across repeated navigation and session resto
       assert.equal(await page.locator('summary').filter({ hasText: 'Learning comparison' }).count(), 1);
       assert.equal(await page.locator('summary').filter({ hasText: 'Learning pool' }).count(), 1);
       await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-      await page.getByRole('link', { name: 'Portfolio', exact: true }).click();
+      await page.locator('.workspace-sidebar').getByRole('link', { name: 'Portfolio', exact: true }).click();
       assert.equal(await page.locator('summary').filter({ hasText: 'Learning comparison' }).count(), 0);
       assert.equal(await page.locator('summary').filter({ hasText: 'Learning pool' }).count(), 0);
+      await page.goto('https://flurbo.singu.online/account');
     }
     await page.getByRole('link', { name: 'Explore & trade', exact: true }).click();
     const selector = page.getByLabel('Market', { exact: true });
@@ -93,6 +94,7 @@ test('portfolio and history deep links restore auth, show full discovered claims
       const relative = path.startsWith('/assets/') ? path.slice(1) : 'index.html';
       return route.fulfill({ body: await readFile(new URL('../dist/' + relative, import.meta.url)), contentType: relative.endsWith('.js') ? 'text/javascript' : relative.endsWith('.css') ? 'text/css' : relative.endsWith('.woff2') ? 'font/woff2' : 'text/html' });
     });
+    await page.addInitScript(()=>sessionStorage.setItem('flurbo.trading.market','original'));
     await page.goto('https://flurbo.singu.online/portfolio');
     await page.getByRole('progressbar').waitFor();
     assert.equal(await page.getByText('No open positions here.').count(), 0);
@@ -121,7 +123,8 @@ test('portfolio and history deep links restore auth, show full discovered claims
     await page.getByRole('button', { name: 'Next', exact: true }).click();
     await page.getByText('Sold', { exact: true }).waitFor();
     await page.reload(); await page.getByText('Bought', { exact: true }).waitFor();
-    await page.getByLabel('Market', { exact: true }).selectOption('learning');
+    await page.getByText('Choose a market collection',{exact:true}).click();
+    await page.getByLabel('Collection', { exact: true }).selectOption('learning');
     await page.getByText('Bought', { exact: true }).waitFor();
     await page.getByLabel('Wallet to view').fill(other);
     await page.getByRole('button', { name: 'View wallet', exact: true }).click();

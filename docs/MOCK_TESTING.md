@@ -1,3 +1,5 @@
+> Consumer entry: `/markets`. Four separate practice questions replace the operator workspace as the post-login destination. See [MARKETS_MOCK.md](MARKETS_MOCK.md) for the shorter setup.
+
 # Mock-testing handoff
 
 September 24, 2026. The code is prepared for hosted trading tests and a separate
@@ -34,16 +36,16 @@ This check cannot establish real passkey UX, Redis persistence, or wallet fills.
 
 ## Prepare the public settlement rehearsal
 
-This creates a **different three-event pool and resolver** on public Monad
+This creates a **different four-event pool and resolver** on public Monad
 testnet. It does not change the real Geth/Reth cluster, its dates or its holdings.
-The rehearsal needs 20.794416 test AUSD for initial liquidity, plus deployment
-gas. A September 24 dry run estimated 2.42241243 MON in fees; recheck the current
+The rehearsal needs 27.725888 test AUSD for initial liquidity, plus deployment
+gas. A September 24 dry run estimated 2.414071737011891979 MON in fees; recheck the current
 estimate. Foundry's generic ETH label means MON on chain 10143.
 
-Prepare when ready to deploy, not hours in advance. Trading closes two hours
+Prepare when ready to deploy, not hours in advance. Trading closes twenty-four hours
 after preparation; the observation window ends two minutes after that. Assertion,
 challenge and voting windows are each one hour. Deployment must happen within
-one hour of preparation. Expect roughly three hours to finish the planned
+twenty-three hours of preparation. Expect roughly twenty-five hours to finish the planned
 scenario, allowing more time if assertions or challenges are delayed.
 
 ```bash
@@ -157,7 +159,8 @@ After observation end, expand **Propose, challenge or review an outcome**:
 3. **C, VOID:** submit no assertion. After its assertion deadline, select C and
    review/confirm deadline finalization. The result must be VOID.
 4. After A's challenge deadline, select A and finalize its unchallenged YES.
-   When all three cards are final, review and confirm settlement delivery once.
+   Also assert D as YES and finalize D after its challenge window.
+   When all four cards are final, review and confirm settlement delivery once.
 5. Select your original trading wallet and **Redeem settled shares** for the
    exact claims held. A YES AND B NO AND C YES pays **0.5 test AUSD per share**;
    A YES pays 1 and A NO pays 0. VOID averages compatible states; it does not
@@ -178,7 +181,7 @@ export PATH="$HOME/.foundry/bin:$HOME/.bun/bin:$PATH"
 bun workflows/cre/scripts/run-mock.mjs
 ```
 
-This runs the lifecycle contract tests and an actual three-event EVM rehearsal,
+This runs the lifecycle contract tests and an actual four-event EVM rehearsal,
 using only a disposable Anvil on `127.0.0.1:18549`. It refuses an occupied port,
 does not use your keystore or public RPC, advances only that disposable clock,
 and stops its own process. Results are in `target/mock-testing/rehearsal.json`
@@ -189,7 +192,7 @@ and adjacent logs. Existing local nodes and public manifests are untouched.
 Passed locally: 68 ordinary web tests, 37 workflow tests, production build and
 type checks; desktop/mobile pilot and rehearsal approval/buy/reload flows;
 portfolio automatic catch-up and pause-on-error; original Kuru browser checks;
-16 pilot lifecycle tests; two deployment tests; actual three-event local
+17 pilot lifecycle tests; two deployment tests; actual four-event local
 approval, buy/sell, evidence, unchallenged result, dispute, votes, VOID, delivery,
 redemption and both bond withdrawals. The public rehearsal deployment simulation
 also passed without broadcasting.
