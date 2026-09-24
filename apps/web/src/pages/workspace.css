@@ -56,3 +56,8 @@
 .workspace-market label { display: block; font-size: 12px; margin-bottom: 8px; }
 .workspace-market select { width: 100%; max-width: 360px; border: 1px solid var(--line); background: var(--ivory); color: var(--ink); padding: 12px; border-radius: 12px; }
 .workspace-market p { margin-top: 12px; line-height: 1.6; }
+.workspace-sidebar nav a { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 12px; border-radius: 5px; font-size: 12px; transition: background .2s; }
+.workspace-sidebar nav a:hover { background: var(--ivory-deep); }
+.workspace-sidebar nav a[aria-current] { background: var(--forest); color: var(--ivory); }
+.workspace-sidebar nav a[aria-disabled], .workspace-sidebar nav button:disabled { opacity: .55; cursor: default; }
+@media(max-width:760px) { .workspace-sidebar nav a { font-size: 10px; padding: 10px 8px; gap: 7px; white-space: nowrap; } }

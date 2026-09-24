@@ -31,7 +31,7 @@ export function productionServer(config, store, staticRoot = dist) {
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405); res.end(); return; }
       try {
         const pathname = new URL(req.url, config.origin).pathname;
-        const page = ['/', '/login', '/signup', '/account'].includes(pathname);
+        const page = ['/', '/login', '/signup', '/account', '/portfolio', '/history'].includes(pathname);
         if (!page && !/^\/(?:assets\/[a-zA-Z0-9_.-]+|favicon\.svg|robots\.txt)$/.test(pathname)) { res.writeHead(404); res.end('Not found'); return; }
         const file = resolve(staticRoot, page ? 'index.html' : pathname.slice(1));
         if (!(await stat(file)).isFile()) throw new Error('Not a file');

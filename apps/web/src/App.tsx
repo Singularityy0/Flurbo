@@ -121,6 +121,8 @@ export default function App() {
     document.title = location === "/login" ? "Sign in | flurbo"
       : location === "/signup" ? "Create an account | flurbo"
       : location === "/account" ? "Your account | flurbo"
+      : location === "/portfolio" ? "Your portfolio | flurbo"
+      : location === "/history" ? "Your history | flurbo"
       : location === "/" ? "flurbo | combine what you know" : "Page not found | flurbo";
     const changed = previousLocation.current !== location;
     previousLocation.current = location;
@@ -138,6 +140,8 @@ export default function App() {
       <Route path="/login" component={() => <AuthShell mode="login" />} />
       <Route path="/signup" component={() => <AuthShell mode="signup" />} />
       <Route path="/account" component={AccountRoute} />
+      <Route path="/portfolio" component={AccountRoute} />
+      <Route path="/history" component={AccountRoute} />
       <Route component={NotFound} />
     </Switch>
   );

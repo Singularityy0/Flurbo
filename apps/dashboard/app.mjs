@@ -310,6 +310,7 @@ trading = mountTrading({
   invalidateQuote,
   refresh,
   accountChanged: account => {
+    options.onWallet?.(account);
     invalidateQuote('Wallet changed. Request a fresh quote.');
     wallet = account; $('wallet').value = account || '';
     if (!account) text('wallet-message', 'No wallet selected.');

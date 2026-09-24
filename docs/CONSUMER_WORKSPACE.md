@@ -1,5 +1,11 @@
 # Consumer workspace
 
+Current public deployment: `/account` provides trading and network tools;
+[`/portfolio` and `/history`](PORTFOLIO_HISTORY.md) provide separate authenticated
+holdings and activity pages. The local scaffold description below is historical;
+the new portfolio replaces the requested-claims consumer tab. Public deployment
+status is tracked in [the rollout](DEPLOYMENT_ROLLOUT.md).
+
 Open `http://localhost:18767/account` with `npm --prefix apps/web run dev` running.
 Keep the existing local Anvil (18545), dashboard service (18765) and block helper
 running as described in [dashboard setup](DASHBOARD_SCREEN.md). The new workspace

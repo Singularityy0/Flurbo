@@ -224,8 +224,8 @@ user subsequently completed the approval and update and reported Updates = 1.
 
 ## Phase 3c: selectable learning-pool trading
 
-**Implemented and locally verified; awaiting push, Render build and public
-trading acceptance.** Signed-in users can select Original pool or Learning pool
+**Deployed and checked by the user.** The user confirmed the learning-pool trading
+acceptance step works. Signed-in users can select Original pool or Learning pool
 in the workspace. Quotes, allowances, buy/sell reviews, holdings, redemption and
 transaction receipt checks use the selected pool. Mera remains the login method;
 either Mera or a connected extension wallet can sign consumer transactions.
@@ -283,12 +283,22 @@ buy/sell events. Buy cost was 279,955 atoms and sell proceeds were 279,954 atoms
 No public trading transaction was submitted during this phase's development.
 Render's container build and the user's public buy/sell remain release checks.
 
+## Phase 3d: dedicated portfolio and history
+
+**Implemented and locally checked; awaiting deployment and public UI acceptance.**
+`/portfolio` discovers internal positions from each pool's full event history and
+verifies current balances. `/history` lists successful pool actions. Both require
+Mera login, preserve the existing design, and allow viewing the selected trading
+wallet independently of the Mera login address. Initial indexing displays progress
+rather than incorrect zero balances. Read [the portfolio runbook](PORTFOLIO_HISTORY.md)
+for RPC limits, cache behavior, coverage and deployment checks.
+
 ## Subsequent release gates
 
 | Phase | Concrete work and release gate | Human involvement |
 |---|---|---|
 | 2: learning-enabled testnet pool | Deployed and verified separately; existing pool preserved. | Completed deployment signing. |
-| 3: hosted learning and trading | Synthetic comparison, proposal review and first funded update are hosted and checked. Selectable consumer trading is locally verified and awaiting the Phase 3c release checks. | Push, confirm Render build, then explicitly confirm a public learning-pool buy and sell. Future live observations need a separately specified source and ingestion policy. |
+| 3: hosted learning and trading | Synthetic comparison, proposal review, first funded update and selectable trading are hosted and checked. Dedicated portfolio/history routes await deployment and UI acceptance. | Push and confirm Render build, then inspect known positions and transactions. Future live observations need a separately specified source and ingestion policy. |
 | 4: Kuru operation | Host the existing scanner in read-only mode first. Verify depth, inventory, fees and gas on the public pair. Add reviewed order/cancel/deposit/withdraw controls; keep any signing keeper separately authorized. | Operator inventory/gas budget and signing policy; real public fill/cancel evidence. |
 | 5: official settlement | Select actual events and resolution rules, implement official-source retrieval, verify the CRE forwarder/workflow on the target network, and deploy a receiver-bound new market. Current immutable resolver remains unchanged. | Event/source selection, CRE access where required and signed deployment. |
 | 6: native mobile and remaining integrations | Finish native Mera authentication/trading, verify Android association and recovery, implement indexing/full portfolio, conditional securities and the remaining partner flows in separate slices. These are implementation tasks, not files merely waiting to be deployed. | Android device/passkey checks, hosting/indexer credentials as needed and missing partner criteria. |

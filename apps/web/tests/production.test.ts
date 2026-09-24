@@ -73,6 +73,8 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
   };
   try {
     assert.equal((await request('/account')).status,200); // Client route waits for verified auth.
+    assert.equal((await request('/portfolio')).status,200);
+    assert.equal((await request('/history')).status,200);
     assert.equal((await request('/.env')).status,404);
     assert.equal((await request('/api/network',undefined,'','evil.example')).status,421);
     assert.equal((await request('/api/auth/challenge',{address:signer.address},'','flurbo.singu.online','https://evil.example')).status,403);
