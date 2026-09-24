@@ -10,7 +10,7 @@ const inputSchema=z.object({
   reviewerControl:z.enum(['independent-panel','single-operator']).default('independent-panel'),
   independentReviewersConfirmed:z.boolean(),rulesReviewed:z.literal(true),
   bondAtoms:z.string(),assertionPeriod:z.number().int(),challengePeriod:z.number().int(),votingPeriod:z.number().int(),
-  events:z.array(z.object({id:z.string(),target:releaseTargetSchema,observationStartsAt:z.number().int(),observationEndsAt:z.number().int()}).strict()).min(2).max(3),
+  events:z.array(z.object({id:z.string(),target:releaseTargetSchema,observationStartsAt:z.number().int(),observationEndsAt:z.number().int()}).strict()).min(2).max(4),
 }).strict();
 if(process.argv.length!==3)throw new Error('Usage: bun scripts/create-pilot-publication.ts <reviewed-selection.json>');
 const input=inputSchema.parse(await Bun.file(process.argv[2]).json());

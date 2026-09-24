@@ -19,7 +19,7 @@ interface PilotDeployVm {
     function writeJson(string calldata, string calldata) external;
 }
 
-/// @notice Explicit deployment of a separate 2/3-event testnet pilot. Never changes the existing pools.
+/// @notice Explicit deployment of a separate 2-4 event testnet pilot. Never changes the existing pools.
 contract DeployPilot {
     PilotDeployVm private constant vm = PilotDeployVm(address(uint160(uint256(keccak256("hevm cheat code")))));
     address public constant AUSD = 0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC;

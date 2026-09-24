@@ -54,7 +54,7 @@ export async function verifyPilot(prepared: ReturnType<typeof preparePilot>, dep
     await check(resolver,resolverAbi,'observationEnds',config.observationEnds[i],[BigInt(i)]);
     if((await read(resolver,resolverAbi,'caseState',[i])).phase!==0) throw new Error('Pilot already has outcome activity');
   }
-  const funding=config.eventHashes.length===2 ? 13_862_944n : 20_794_416n;
+  const funding=BigInt(config.eventHashes.length) * 6_931_472n;
   for(const [name,value] of Object.entries({resolver,collateral:PILOT_CASH,settlementRulesHash:rulesHash,eventCount:config.eventHashes.length,
     liquidity:10_000_000,collateralDecimals:6,closesAt:config.closesAt,funded:true,resolved:false,requiredFunding:funding,requiredCollateral:0,resolvedState:0,voidMask:0})) await check(pool,pilotPoolAbi,name,value);
   await check(pool,pilotPoolAbi,'eliminationOrder',config.eventHashes.map((_,i)=>i));

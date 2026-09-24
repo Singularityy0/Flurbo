@@ -7,7 +7,7 @@ import {FactoredBaseToken} from "./FactoredBaseToken.sol";
 import {FactoredBaseTokenFactory} from "./FactoredBaseTokenFactory.sol";
 
 /// @notice Separate Monad testnet pool with precommitted uniform-void settlement.
-/// @dev Pricing remains factored. Settlement enumerates at most eight states for this 2/3-event pilot.
+/// @dev Pricing remains factored. Settlement enumerates at most sixteen states for this bounded 2-4 event pilot.
 contract PilotPool is FactoredTrading {
     using P for P.Book;
     error InvalidSettlement();
@@ -34,7 +34,7 @@ contract PilotPool is FactoredTrading {
     constructor(address token, uint8 events_, uint128 b, uint64 closeTime, uint8[] memory order_, address resolver_, bytes32 rulesHash)
         FactoredTrading(token, events_, b, closeTime, order_)
     {
-        if (block.chainid != 10143 || events_ < 2 || events_ > 3 || resolver_.code.length == 0 || rulesHash == bytes32(0)) {
+        if (block.chainid != 10143 || events_ < 2 || events_ > 4 || resolver_.code.length == 0 || rulesHash == bytes32(0)) {
             revert InvalidConfiguration();
         }
         resolver = resolver_;

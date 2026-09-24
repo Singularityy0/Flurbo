@@ -42,7 +42,7 @@ export const eventDraftSchema = z.object({
     observationStartsAt: timestamp,
     observationEndsAt: timestamp,
     source: sourceSchema,
-  }).strict()).min(2).max(3),
+  }).strict()).min(2).max(4),
   // Null is an explicit unanswered release question, not a default policy.
   exceptionPolicy: text(4096).nullable(),
   disputeModel: z.enum(['undecided', 'reviewer-panel', 'external-oracle', 'permissionless-voting']),

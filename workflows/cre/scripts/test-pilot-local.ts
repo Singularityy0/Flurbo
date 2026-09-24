@@ -38,7 +38,7 @@ const now=Number(BigInt((await rpc('eth_getBlockByNumber',['latest',false])).tim
 const policy={creator,reviewerControl:'single-operator' as const,reviewers:reviewers.slice(0,3).map((address,i)=>({name:`Fixture wallet ${i+1}`,address})),bondAtoms:'1000000',assertionPeriod:3600,challengePeriod:3600,votingPeriod:3600};
 const input={schema:'flurbo.pilot-publication.v1',mode:'rehearsal',independentReviewersConfirmed:false,rulesReviewed:true,...policy,
   draft:{schema:'flurbo.event-draft.v1',status:'draft',chainId:10143,clusterId:'public-rehearsal-local-test-only',title:REHEARSAL_TITLE,closesAt:now+7200,
-    events:[0,1,2].map(bit=>rehearsalEvent(bit,now+7300,now+8000)),
+    events:[0,1,2,3].map(bit=>rehearsalEvent(bit,now+7300,now+8000)),
     disputeModel:'reviewer-panel',disputePolicy:disputePolicy(policy),exceptionPolicy:VOID_POLICY}};
 const prepared=preparePilot(input,now);
 const [config]=decodeAbiParameters(resolverConfigAbi,prepared.resolverConfig);
@@ -46,14 +46,14 @@ const resolver=await deploy('PilotResolver',[config]);
 async function read(to:Hex,abi:any,name:string,args:any[]=[]) { return decodeFunctionResult({abi,functionName:name,data:await rpc('eth_call',[{to,data:encodeFunctionData({abi,functionName:name,args})},'latest'])}) as any; }
 async function call(from:Hex,to:Hex,abi:any,name:string,args:any[]=[]) { return send(from,to,encodeFunctionData({abi,functionName:name,args})); }
 const rulesHash=await read(resolver,resolverAbi,'rulesHash');
-const pool=await deploy('PilotPool',[cash,3,10_000_000n,BigInt(now+7200),[0,1,2],resolver,rulesHash]);
+const pool=await deploy('PilotPool',[cash,4,10_000_000n,BigInt(now+7200),[0,1,2,3],resolver,rulesHash]);
 await call(creator,resolver,artifacts.PilotResolver.abi,'bindPool',[pool]);
 for(const owner of [creator,alice,bob]) await call(creator,cash,artifacts.MockCollateral.abi,'mint',[owner,100_000_000n]);
 const funding=await read(pool,pilotPoolAbi,'requiredFunding');
 await call(creator,cash,pilotCashAbi,'approve',[pool,funding]);
 await call(creator,pool,artifacts.PilotPool.abi,'fund');
 await call(creator,cash,pilotCashAbi,'approve',[pool,0n]);
-for(let i=0;i<3;i++) await call(creator,pool,artifacts.PilotPool.abi,'createBaseToken',[i,true]);
+for(let i=0;i<4;i++) await call(creator,pool,artifacts.PilotPool.abi,'createBaseToken',[i,true]);
 const manifest=await verifyPilot(prepared,{pool,resolver},rpc,artifacts,now);
 const service=pilotService({manifest,rpc,now:()=>clock});
 let clock=now;
@@ -71,6 +71,8 @@ await action(alice,'buy',{scope:7,mask:'32',quantity:'2000000',slippageBps:50});
 let position=await service.position(alice,7,'32');
 if(position.quantity!=='2000000')throw new Error('Buy missing from holdings');
 await action(alice,'sell',{scope:7,mask:'32',quantity:'1000000',slippageBps:50});
+await action(alice,'buy',{scope:8,mask:'2',quantity:'1000000',slippageBps:50});
+if((await service.markets()).prices.length!==4)throw new Error('Four separate markets required');
 clock=now+8000;await rpc('evm_setNextBlockTimestamp',[clock]);await rpc('evm_mine');
 const memory=new Map<string,string>();
 const evidence=pilotEvidence(async(...command:any[])=>{if(command[0]==='EVAL')return 1;if(command[0]==='SET'){if(!memory.has(command[1]))memory.set(command[1],command[2]);return 'OK';}return memory.get(command[1]);},'https://flurbo.singu.online');
@@ -82,12 +84,15 @@ const correct=await evidence.put({eventId:'rehearsal-1',outcome:1,statement:'Scr
 await action(alice,'assertOutcome',{event:1,outcome:2,evidenceHash:wrong.hash,evidenceURI:wrong.uri});
 await action(bob,'dispute',{event:1,outcome:1,evidenceHash:correct.hash,evidenceURI:correct.uri});
 for(const reviewer of reviewers.slice(0,2))await action(reviewer,'vote',{event:1,outcome:1,evidenceHash:correct.hash,evidenceURI:correct.uri});
+const fourth=await evidence.put({eventId:'rehearsal-3',outcome:2,statement:'Scripted fixture D is YES. This is not a real result.',sourceURL:'https://flurbo.singu.online/rehearsal-rules',attachment:'fixture D'},alice,manifest.draftHash);
+await action(alice,'assertOutcome',{event:3,outcome:2,evidenceHash:fourth.hash,evidenceURI:fourth.uri});
 // A finalizes unchallenged. C has no assertion and becomes VOID.
 clock+=3601;await rpc('evm_setNextBlockTimestamp',[clock]);await rpc('evm_mine');
-await action(bob,'finalize',{event:0});await action(bob,'finalize',{event:2});await action(bob,'deliver');
+await action(bob,'finalize',{event:0});await action(bob,'finalize',{event:2});await action(bob,'finalize',{event:3});await action(bob,'deliver');
 position=await service.position(alice,7,'32');
 if(position.payoutAtoms!=='500000')throw new Error('Partial void payout mismatch');
 await action(alice,'redeem',{scope:7,mask:'32',quantity:'1000000'});
+await action(alice,'redeem',{scope:8,mask:'2',quantity:'1000000'});
 await action(alice,'withdrawBond');
 await action(bob,'withdrawBond');
 const final=await service.status(alice);

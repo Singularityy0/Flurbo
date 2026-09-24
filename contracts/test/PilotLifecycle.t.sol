@@ -45,6 +45,25 @@ contract PilotLifecycleTest {
         deploy(3, 3);
     }
 
+    function testFourEventsTradeAndSettleWithOneVoid() public {
+        deploy(4, 3);
+        buy(8, 2, 2e6);
+        buy(12, 8, 2e6);
+        vm.prank(ALICE); pool.sell(8, 2, 1e6, 0, 1999);
+        vm.warp(3000);
+        propose(0, R.Outcome.Yes);
+        propose(1, R.Outcome.No);
+        propose(3, R.Outcome.Yes);
+        vm.warp(6601);
+        for (uint8 i; i < 4; ++i) resolver.finalize(i);
+        resolver.deliver();
+        assert(pool.resolvedState() == 9 && pool.voidMask() == 4);
+        assert(pool.requiredCollateral() == 2e6);
+        vm.prank(ALICE); assert(pool.redeem(8, 2, 1e6) == 1e6);
+        vm.prank(ALICE); assert(pool.redeem(12, 8, 2e6) == 1e6);
+        assert(pool.requiredCollateral() == 0);
+    }
+
     function deploy(uint8 count, uint8 reviewers) internal {
         resolver = new R(config(count, reviewers));
         uint8[] memory order = new uint8[](count);
@@ -316,7 +335,7 @@ contract PilotLifecycleTest {
         c = config(3, 3); c.challengePeriod = 1; badConfig(c);
         c = config(3, 3); c.bond = 0; badConfig(c);
         c = config(3, 3); c.draftHash = 0; badConfig(c);
-        badConfig(config(4, 3)); badConfig(config(2, 4));
+        badConfig(config(5, 3)); badConfig(config(2, 4));
         R second = new R(config(3, 3));
         rejects(address(second), address(this), abi.encodeCall(second.bindPool, (address(pool))));
         rejects(address(resolver), address(this), abi.encodeCall(resolver.bindPool, (address(pool))));

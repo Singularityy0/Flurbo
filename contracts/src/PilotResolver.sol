@@ -78,7 +78,7 @@ contract PilotResolver is ReentrancyGuard {
 
     constructor(Config memory c) {
         if (block.chainid != 10143 || c.collateral.code.length == 0 || c.draftHash == 0 || c.closesAt <= block.timestamp
-            || c.eventHashes.length < 2 || c.eventHashes.length > 3 || c.eventHashes.length != c.observationEnds.length
+            || c.eventHashes.length < 2 || c.eventHashes.length > 4 || c.eventHashes.length != c.observationEnds.length
             || (c.reviewers.length != 3 && c.reviewers.length != 5) || c.bond == 0
             || c.assertionPeriod < 1 hours || c.challengePeriod < 1 hours || c.votingPeriod < 1 hours
             || c.assertionPeriod > 30 days || c.challengePeriod > 7 days || c.votingPeriod > 7 days) revert InvalidConfig();
