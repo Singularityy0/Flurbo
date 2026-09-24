@@ -48,8 +48,9 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         const login=await store.read(sid,origin);
         if(!login || login.method!=='passkey') return send(res,401,{error:'Sign in with your Flurbo passkey'});
         if(!pilot) return send(res,503,{error:isRehearsal?'The separate rehearsal is not deployed and configured yet. The real-event market remains unchanged.':'The real-event pilot is not published yet. Reviewer identities, final event rules and a verified deployment are required.'});
-        if(req.method==='GET' && url.pathname==='/api/pilot/status') {
+        if(req.method==='GET' && ['/api/pilot/status','/api/pilot/account'].includes(url.pathname)) {
           if([...url.searchParams.keys()].some(k=>k!=='wallet') || url.searchParams.getAll('wallet').length>1) return send(res,400,{error:'Invalid pilot query'});
+          if(url.pathname==='/api/pilot/account') return send(res,200,await pilot.account(url.searchParams.get('wallet')));
           return send(res,200,await pilot.status(url.searchParams.get('wallet')||undefined));
         }
         if(url.search) return send(res,400,{error:'Unexpected pilot query'});
@@ -64,8 +65,12 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if(req.method==='POST' && url.pathname==='/api/pilot/history') {
           const input=await body(req);
           if(!pilot.index || Object.keys(input).length) return send(res,400,{error:'Pilot history unavailable or unexpected input'});
-          await pilot.snapshot();
-          return send(res,200,await pilot.index.refresh());
+          try {
+            await pilot.snapshot();
+            return send(res,200,await pilot.index.refresh());
+          } catch {
+            return send(res,503,{error:'Trade history is temporarily unavailable. Your on-chain holdings are loaded separately. Retry shortly.'});
+          }
         }
         if(req.method==='POST' && url.pathname==='/api/pilot/evidence') {
           if(!evidence) return send(res,503,{error:'Evidence storage unavailable'});

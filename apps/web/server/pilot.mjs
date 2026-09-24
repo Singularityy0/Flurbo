@@ -16,11 +16,18 @@ export function pilotRpc(endpoint,request=fetch) {
     if(!['eth_chainId','eth_getBlockByNumber','eth_getCode','eth_call','eth_estimateGas','eth_gasPrice','eth_getLogs'].includes(method))throw new Error('Pilot service is read-only');
     const callId=++id;
     const response=await request(endpoint,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:callId,method,params}),signal:AbortSignal.timeout(15_000)});
-    if(!response.ok)throw new Error('Pilot RPC unavailable');
+    if(!response.ok && ![400,413].includes(response.status))throw new Error('Pilot RPC unavailable');
     const chunks=[];let size=0;
     for await(const chunk of response.body){size+=chunk.length;if(size>1_000_000)throw new Error('Pilot RPC response too large');chunks.push(chunk);}
     const result=JSON.parse(Buffer.concat(chunks).toString('utf8'));
-    if(result.id!==callId||result.jsonrpc!=='2.0'||result.error||!Object.hasOwn(result,'result'))throw new Error('Pilot RPC rejected the read');
+    if(result.id!==callId||result.jsonrpc!=='2.0')throw new Error('Pilot RPC rejected the read');
+    if(result.error) {
+      // Keep provider details (which may contain credentials) out of errors.
+      const error=new Error('Pilot RPC rejected the read');
+      if(method==='eth_getLogs' && /block range|range.{0,40}(limit|large|exceed)|limit.{0,40}range|too many (results|logs)|response size/i.test(String(result.error.message||''))) error.code='LOG_RANGE_LIMIT';
+      throw error;
+    }
+    if(!response.ok||!Object.hasOwn(result,'result'))throw new Error('Pilot RPC rejected the read');
     return result.result;
   };
 }
@@ -50,6 +57,13 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     return {blockNumber:BigInt(head.number).toString(),blockHash:head.hash.toLowerCase(),timestamp:Number(BigInt(head.timestamp))};
   }
   async function stable(s) { if((await rpc('eth_getBlockByNumber',[tagFor(s),false]))?.hash?.toLowerCase()!==s.blockHash) throw new Error('Snapshot changed'); }
+  async function account(owner) {
+    owner=address(owner);
+    const s=await snapshot();
+    const cash=await read(pilotCash,pilotCashAbi,'balanceOf',[owner],tagFor(s));
+    await stable(s);
+    return json({manifest,snapshot:s,wallet:{address:owner,cash}});
+  }
   async function status(owner) {
     if(owner) address(owner);
     const s=await snapshot(), tag=tagFor(s);
@@ -154,7 +168,7 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     }
     await stable(s);return json({snapshot:s,owner,rows});
   }
-  return {manifest,status,markets,prepare,snapshot,position,positions};
+  return {manifest,status,account,markets,prepare,snapshot,position,positions};
 }
 
 export function pilotEvidence(command, origin, now=()=>Date.now()) {

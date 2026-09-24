@@ -28,6 +28,9 @@ test('pilot endpoints require Mera login; public evidence remains readable; raw 
     assert.equal(await request('/api/pilot/status',undefined,false),401);
     assert.equal(await request('/api/pilot/markets',undefined,false),401);
     assert.equal(await request('/api/pilot/markets'),200);
+    assert.equal(await request('/api/pilot/account?wallet='+owner,undefined,false),401);
+    assert.equal(await request('/api/pilot/account?wallet='+owner),200);
+    assert.equal(await request('/api/pilot/account?wallet='+owner+'&wallet='+owner),400);
     assert.equal(await request('/api/pilot/prepare',{owner,action:'deliver'},false),401);
     assert.equal(await request('/api/pilot/status'),200);
     assert.equal(await request('/api/pilot/evidence/'+hash,undefined,false),200);

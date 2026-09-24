@@ -83,3 +83,26 @@ test('pilot review validates caller intent and saves tracking before sending, in
   assert.throws(()=>validatePilotReview(review,(review.expiresAt+1)*1000));
   assert.throws(()=>rpcInteger(Number.MAX_SAFE_INTEGER+1));
 });
+
+test('account read avoids resolver case scans but still verifies deployment and snapshot',async()=>{
+  const f=pilotFixture();let reads=0;
+  const service=pilotService({manifest:f.manifest,rpc:async(method:string,params:any[])=>{
+    reads++;if(method==='eth_call'){
+      const {functionName}=decodeFunctionData({abi:[...resolverAbi,...pilotPoolAbi,...pilotCashAbi],data:params[0].data});
+      assert.ok(['pool','settlementRulesHash','balanceOf'].includes(functionName));
+    }
+    return f.rpc(method,params);
+  }});
+  const result=await service.account(owner);assert.equal(result.wallet.cash,'100000000');assert.equal(result.wallet.address,owner);assert.equal(reads,9);
+  await assert.rejects(service.account('invalid'));
+  f.options.changed=true;await assert.rejects(service.account(owner));
+});
+
+test('log range errors are classified without exposing upstream details; transport failures are not range errors',async()=>{
+  const rejected=(message:string,status=200)=>pilotRpc('https://monad-testnet.g.alchemy.com/v2/test-key',async(_url:any,init:any)=>Response.json({jsonrpc:'2.0',id:JSON.parse(init.body).id,error:{code:-32602,message}},{status}));
+  await assert.rejects(rejected('eth_getLogs block range limit: secret-key')('eth_getLogs',[]),(e:any)=>e.code==='LOG_RANGE_LIMIT'&&!e.message.includes('secret-key'));
+  await assert.rejects(rejected('eth_getLogs block range limit: secret-key',400)('eth_getLogs',[]),(e:any)=>e.code==='LOG_RANGE_LIMIT'&&!e.message.includes('secret-key'));
+  await assert.rejects(rejected('rate limit reached')('eth_getLogs',[]),(e:any)=>e.code===undefined);
+  await assert.rejects(rejected('block range limit')('eth_call',[]),(e:any)=>e.code===undefined);
+  await assert.rejects(rejected('block range limit',429)('eth_getLogs',[]),(e:any)=>e.code===undefined);
+});
