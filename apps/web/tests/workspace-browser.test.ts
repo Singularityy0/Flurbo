@@ -62,7 +62,7 @@ test('portfolio and history deep links restore auth, show full discovered claims
   const account = '0x2ff9ca4cb64fa82915144e8d9cf6a6ceddaa35e3', other = '0x' + '11'.repeat(20);
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-    let signedIn = true, indexing = true, requests = 0;
+    let signedIn = true, indexing = true, requests = 0, interrupted = false, unavailable = false;
     const errors: string[] = [];
     page.on('pageerror', (e: Error) => errors.push(e.message));
     await page.route('**/*', async (route: any) => {
@@ -70,8 +70,13 @@ test('portfolio and history deep links restore auth, show full discovered claims
       if (path === '/api/auth/session') return route.fulfill({ json: { session: signedIn ? { address: account, method: 'passkey', expiresAt: Date.now() + 3600000 } : null } });
       if (path.startsWith('/api/') && path.endsWith('/portfolio')) {
         requests++;
+        if (interrupted || unavailable) {
+          interrupted = false;
+          return route.fulfill({ status: 503, json: { error: 'eth_getCode: transport or JSON failure; remote details withheld' } });
+        }
         const wallet = url.searchParams.get('wallet'), empty = wallet === other, learning = path.includes('/learning/');
         const complete = !indexing; indexing = false;
+        if (!complete) interrupted = true;
         return route.fulfill({ json: {
           market_id: learning ? 'learning' : 'original', wallet_address: wallet, contracts: { pool: '0x' + '33'.repeat(20), cash: '0x' + '44'.repeat(20) },
           index: { complete, from_block: 100, through_block: complete ? 200 : 150, target_block: 200 },
@@ -91,6 +96,8 @@ test('portfolio and history deep links restore auth, show full discovered claims
     await page.goto('https://flurbo.singu.online/portfolio');
     await page.getByRole('progressbar').waitFor();
     assert.equal(await page.getByText('No open positions here.').count(), 0);
+    await page.getByText('The network read was interrupted. Retrying from the last verified block...').waitFor();
+    assert.equal(await page.getByRole('progressbar').isVisible(), true);
     await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     assert.match(await page.title(), /portfolio/);
     assert.equal(await page.locator('.core-market').count(), 0);
@@ -98,6 +105,18 @@ test('portfolio and history deep links restore auth, show full discovered claims
     await page.getByRole('link', { name: 'History', exact: true }).click();
     await page.getByText('Bought', { exact: true }).waitFor();
     assert.equal(new URL(page.url()).pathname, '/history');
+    unavailable = true;
+    const beforeFailure = requests;
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.getByText(/We could not verify your activity with Monad/).waitFor();
+    assert.equal(requests - beforeFailure, 3);
+    assert.equal(await page.getByText('No pool activity yet.').count(), 0);
+    await new Promise(resolve => setTimeout(resolve, 2200));
+    assert.equal(requests - beforeFailure, 3, 'persistent failures must stop automatic reads');
+    unavailable = false;
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.getByText('Bought', { exact: true }).waitFor();
+    assert.equal(await page.getByText(/We could not verify your activity with Monad/).count(), 0);
     if (process.env.FLURBO_TEST_SCREENSHOT) await page.screenshot({ path: process.env.FLURBO_TEST_SCREENSHOT.replace('.png', '-history.png'), fullPage: true });
     await page.getByRole('button', { name: 'Next', exact: true }).click();
     await page.getByText('Sold', { exact: true }).waitFor();

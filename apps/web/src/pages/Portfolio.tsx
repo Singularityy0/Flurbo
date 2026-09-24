@@ -9,31 +9,50 @@ export default function Portfolio({ account, market, history = false }: { accoun
   const [draft, setDraft] = useState(wallet);
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState('');
+  const [retrying, setRetrying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(0);
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
-    const controller = new AbortController(); let stopped = false, timer: ReturnType<typeof setTimeout>;
-    setData(null); setError('');
+    let controller: AbortController, stopped = false, failures = 0, timer: ReturnType<typeof setTimeout>;
+    setData(null); setError(''); setRetrying(false);
     async function load() {
+      if (stopped) return;
+      controller = new AbortController();
       setBusy(true);
+      let retryable = true;
       const timeout = setTimeout(() => controller.abort(), 25000);
       try {
         const base = market === 'learning' ? '/api/markets/learning' : '/api';
         const query = new URLSearchParams({ wallet, [history ? 'history_page' : 'page']: String(page) });
         const response = await fetch(`${base}/portfolio?${query}`, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+        retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+        // A successful response with invalid JSON can be a transient proxy error.
+        if (response.ok) retryable = true;
         const value = await response.json();
         if (!response.ok) throw new Error(value.error || 'Portfolio unavailable. Please retry.');
+        retryable = false;
         if (value.market_id !== market || value.wallet_address !== wallet.toLowerCase() || !value.index || !value.snapshot) throw new Error('Portfolio response does not match this wallet and market.');
         if (!stopped) {
+          failures = 0; setError(''); setRetrying(false);
           setData(value);
           if (!value.index.complete) timer = setTimeout(load, 1500);
         }
-      } catch (e) { if (!stopped) setError(e instanceof Error && e.name !== 'AbortError' ? e.message : 'The read timed out. Retry to resume the scan.'); }
+      } catch (e) {
+        if (!stopped) {
+          if (retryable && failures < 2) {
+            failures++; setRetrying(true);
+            timer = setTimeout(load, failures * 2000);
+          } else {
+            setRetrying(false);
+            setError(retryable ? 'We could not verify your activity with Monad. Refresh to resume the scan. This read does not change your holdings.' : e instanceof Error ? e.message : 'Activity unavailable. Please refresh.');
+          }
+        }
+      }
       finally { clearTimeout(timeout); if (!stopped) setBusy(false); }
     }
     void load();
-    return () => { stopped = true; controller.abort(); clearTimeout(timer); };
+    return () => { stopped = true; controller?.abort(); clearTimeout(timer); };
   }, [wallet, market, history, page, refresh]);
   const complete = data?.index.complete;
   const total = (history ? data?.history_count : data?.position_count) || 0;
@@ -53,7 +72,8 @@ export default function Portfolio({ account, market, history = false }: { accoun
     <div className="portfolio-toolbar"><div><span className="eyebrow">{market === 'learning' ? 'Learning pool' : 'Original pool'}</span><p className="portfolio-address">{wallet}</p></div>
       <button className="button button-outline" disabled={busy} onClick={() => setRefresh(n => n + 1)}><RefreshCw size={14} className={busy ? 'portfolio-spin' : ''}/>{busy ? 'Reading...' : 'Refresh'}</button></div>
     {error && <p className="auth-error" role="alert">{error}</p>}
-    {!complete && !error && <div className="portfolio-empty" role="status"><Layers3 size={26}/><h2>Finding your {history ? 'activity' : 'positions'}.</h2><p>Reading pool activity from deployment. Your balances will appear when the scan is complete.</p>{data && <><progress aria-label="History scan progress" value={Math.max(0, data.index.through_block - data.index.from_block + 1)} max={Math.max(1, data.index.target_block - data.index.from_block + 1)}/><p>Scanned through block {data.index.through_block.toLocaleString()} of {data.index.target_block.toLocaleString()}. You can leave and resume later.</p></>}</div>}
+    {retrying && <p role="status">The network read was interrupted. Retrying from the last verified block...</p>}
+    {!complete && (!error || data) && <div className="portfolio-empty" role="status"><Layers3 size={26}/><h2>{error ? 'Scan paused.' : `Finding your ${history ? 'activity' : 'positions'}.`}</h2><p>Reading pool activity from deployment. Your balances will appear when the scan is complete.</p>{data && <><progress aria-label="History scan progress" value={Math.max(0, data.index.through_block - data.index.from_block + 1)} max={Math.max(1, data.index.target_block - data.index.from_block + 1)}/><p>Scanned through block {data.index.through_block.toLocaleString()} of {data.index.target_block.toLocaleString()}. You can leave and resume later.</p></>}</div>}
     {complete && <>
       <p className="portfolio-freshness" role="status">{data.snapshot.stale ? 'This snapshot is older. Refresh for current balances.' : 'Read from Monad testnet'} · Block {data.snapshot.block_number.toLocaleString()}</p>
       {!history && <div className="portfolio-metrics"><article><span className="eyebrow">Available AUSD</span><strong>{amount(data.ausd_atoms)}</strong><p>Wallet funds shared across both pools</p></article><article><span className="eyebrow">Open positions</span><strong>{data.position_count}</strong><p>All nonzero internal claims in this pool</p></article>{data.receipt_atoms != null && <article><span className="eyebrow">Wrapped H YES</span><strong>{amount(data.receipt_atoms)}</strong><p>Wallet receipts, separate from pool claims</p></article>}</div>}

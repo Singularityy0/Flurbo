@@ -13,10 +13,30 @@ from scan_arbitrage import address, block_info
 
 STARTS = {"0x162ca69cea4306e2e184dc9be8b226580970607b": 65122647,
           "0x094ed5f95188c222a61c27cae24b068120a52dd4": 65285614}
+CREATIONS = {
+    "0x162ca69cea4306e2e184dc9be8b226580970607b": "0x12ac19fb7d0bb4c6c94f351210e2e5a095cf1d953fa21af76310ba5f84f37cb9",
+    "0x094ed5f95188c222a61c27cae24b068120a52dd4": "0xf3fe8a4c0c02cc01a31b6181c224423de823f33fc3e76aec09bdfc465b7d8000",
+}
 TOPICS = [TRADED, REDEEMED, WRAPPED, UNWRAPPED]
 LOCK = threading.Lock()
 CACHE = OrderedDict()
 PAGE_SIZE = 20
+
+
+def verify_creation(model, pool, start):
+    # A creation receipt proves the scan boundary without archive-state reads.
+    # begin() still checks the deployed runtime and manifest at the current head.
+    tx = CREATIONS[pool]
+    receipt = model.rpc("eth_getTransactionReceipt", [tx])
+    if (not isinstance(receipt, dict) or hash32(receipt.get("transactionHash")) != tx
+            or quantity(receipt.get("status")) != 1
+            or receipt.get("to", "missing") is not None
+            or address(receipt.get("contractAddress")) != pool
+            or quantity(receipt.get("blockNumber")) != start or start > model.number):
+        raise CheckError("Portfolio deployment boundary could not be verified")
+    number, _, block_hash = block_info(model.rpc("eth_getBlockByNumber", [hex(start), False]))
+    if number != start or block_hash != hash32(receipt.get("blockHash")):
+        raise CheckError("Portfolio deployment receipt is no longer canonical. Retry.")
 
 
 def portfolio(model, wallet, page=0, history_page=0):
@@ -43,8 +63,7 @@ def read(model, wallet, page, history_page):
         del CACHE[key]  # A changed checkpoint invalidates all derived history.
         cached = None
     if cached is None:
-        if model.rpc("eth_getCode", [pool, hex(start - 1)]) != "0x" or model.rpc("eth_getCode", [pool, hex(start)]) == "0x":
-            raise CheckError("Portfolio deployment boundary could not be verified")
+        verify_creation(model, pool, start)
         public = isinstance(model.rpc, DashboardRpc) and urlsplit(model.rpc.url).hostname == 'testnet-rpc.monad.xyz'
         cached = {"end": start - 1, "hash": block_info(model.rpc("eth_getBlockByNumber", [hex(start - 1), False]))[2], "events": [], "span": 100 if public else 5000}
     first = cached["end"] + 1

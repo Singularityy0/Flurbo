@@ -38,8 +38,10 @@ Existing transaction inspection and pending-trade tracking remain available.
 - Authenticated GET `/api/portfolio?wallet=0x...&page=0&history_page=0` reads the
   original pool. `/api/markets/learning/portfolio` reads the learning pool.
 - The existing verified readers check network, runtime and deployment anchor.
-  Discovery begins at the known public pool creation block, after checking code
-  is absent in the preceding block and present at creation. Initial deployment
+  Discovery begins at the known public pool creation block, after verifying the
+  pinned successful creation receipt, contract address and canonical block hash.
+  This avoids requiring archive-state `eth_getCode` reads. Current runtime checks
+  remain mandatory. Missing or mismatched creation evidence stops the scan. Initial deployment
   trades are included even when they precede the verified manifest checkpoint.
 - Pool logs are scanned in bounded ranges and cached across wallets inside the
   reader process. The public Monad RPC has a 100-block range limit; the reader
@@ -50,7 +52,10 @@ Existing transaction inspection and pending-trade tracking remain available.
   malformed, wrong-contract or inconsistent events are rejected. Existing final
   snapshot checks run before committing the cache.
 - An incomplete scan returns progress, not empty balances. The page continues
-  reads until caught up, stops on errors and offers retry. It never sends a
+  reads until caught up. Interrupted reads and temporary service failures retry
+  twice (after two and four seconds); persistent failures stop and offer Refresh.
+  Partial progress stays visible, and no failed range is skipped. Authentication
+  errors and mismatched wallet/market responses are not automatically retried. It never sends a
   transaction. Results display their observed block and stale-snapshot warning.
 - The cache is in memory and restarts after a reader restart or redeploy. The
   first public-endpoint scan can take minutes; subsequent wallets reuse it.

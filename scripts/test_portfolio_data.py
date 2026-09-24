@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from dashboard_data import Dashboard, DashboardRpc, TRADED, REDEEMED, WRAPPED, UNWRAPPED
 from check_monad_readiness import CheckError
-from portfolio_data import portfolio, CACHE, STARTS
+from portfolio_data import portfolio, CACHE, STARTS, CREATIONS
 from serve_dashboard import route
 
 POOL = next(iter(STARTS))
@@ -27,9 +27,12 @@ class Model(Dashboard):
         self.number = START + 10
         self.logs, self.ranges, self.balances = [], [], {(3, 8): 1000000}
         self.reject, self.reorg, self.during_scan, self.resolved = False, None, False, False
+        self.creation = {'transactionHash': CREATIONS[POOL], 'status': '0x1', 'to': None,
+                         'contractAddress': POOL, 'blockNumber': hex(START), 'blockHash': '0x' + word(START)}
     def begin(self): self.tag = hex(self.number)
     def rpc(self, method, params):
-        if method == 'eth_getCode': return '0x' if int(params[1], 16) < START else '0x6001'
+        if method == 'eth_getCode': raise CheckError('Archive state is unavailable')
+        if method == 'eth_getTransactionReceipt': return self.creation
         if method == 'eth_getBlockByNumber':
             n = int(params[0], 16)
             return {'number': hex(n), 'timestamp': '0x10', 'hash': '0x' + word(n + (1 if self.reorg == n else 0))}
@@ -48,6 +51,40 @@ class Model(Dashboard):
 
 class PortfolioTests(unittest.TestCase):
     def setUp(self): CACHE.clear(); self.model = Model()
+
+    def test_creation_receipt_replaces_archive_reads_and_includes_creation_block_events(self):
+        m = self.model; m.logs = [log(START, 0)]
+        self.assertEqual(portfolio(m, WALLET)['history_count'], 1)
+        self.assertEqual(m.ranges[0][0], START)
+
+    def test_invalid_creation_receipt_never_starts_or_caches_a_scan(self):
+        original = dict(self.model.creation)
+        for field, value in [('transactionHash', '0x' + word(1)), ('status', '0x0'),
+                             ('to', OTHER), ('contractAddress', OTHER), ('blockNumber', hex(START + 1)),
+                             ('blockHash', '0x' + word(1)), ('status', 1)]:
+            with self.subTest(field=field, value=value):
+                self.model.creation = {**original, field: value}
+                with self.assertRaises(CheckError): portfolio(self.model, WALLET)
+                self.assertFalse(CACHE); self.assertFalse(self.model.ranges)
+        self.model.creation = None
+        with self.assertRaises(CheckError): portfolio(self.model, WALLET)
+        self.assertFalse(CACHE)
+
+    def test_creation_reorg_and_future_boundary_are_rejected(self):
+        m = self.model; m.reorg = START
+        with self.assertRaises(CheckError): portfolio(m, WALLET)
+        self.assertFalse(CACHE)
+        m.reorg = None; m.number = START - 1
+        with self.assertRaises(CheckError): portfolio(m, WALLET)
+        self.assertFalse(CACHE)
+
+    def test_receipt_transport_failure_can_be_retried_without_skipping_history(self):
+        m = self.model
+        with patch.object(m, 'rpc', side_effect=CheckError('Receipt read interrupted')):
+            with self.assertRaises(CheckError): portfolio(m, WALLET)
+        self.assertFalse(CACHE); self.assertFalse(m.ranges)
+        m.logs = [log(START, 0)]
+        self.assertEqual(portfolio(m, WALLET)['history_count'], 1)
 
     def test_discovers_unselected_combinations_and_checks_current_holdings(self):
         m = self.model
@@ -135,6 +172,7 @@ class PortfolioTests(unittest.TestCase):
         portfolio(m, WALLET)
         learning = list(STARTS)[1]
         m.m = {**m.m, 'pool': learning, 'updater': WALLET}
+        m.creation = {**m.creation, 'transactionHash': CREATIONS[learning], 'contractAddress': learning}
         m.logs = []
         with patch.dict(STARTS, {learning: START}):
             result = portfolio(m, WALLET)
