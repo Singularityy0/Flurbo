@@ -76,6 +76,8 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
     assert.equal((await request('/portfolio')).status,200);
     assert.equal((await request('/history')).status,200);
     assert.equal((await request('/rehearsal')).status,200);
+    assert.equal((await request('/markets')).status,200);
+    assert.equal((await request('/rehearsal-rules')).json().fixtures.length,4);
     assert.equal((await request('/rehearsal-rules')).json().fixtures[1].result,'NO');
     assert.equal((await request('/.env')).status,404);
     assert.equal((await request('/api/network',undefined,'','evil.example')).status,421);

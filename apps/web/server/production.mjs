@@ -31,14 +31,14 @@ export function productionServer(config, store, staticRoot = dist) {
     if(req.url==='/rehearsal-rules'&&req.method==='GET'){
       res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
       res.end(JSON.stringify({schema:'flurbo-rehearsal.v1',notice:'Scripted testnet fixtures only. These records do not describe real-world events and must never settle the official release market.',
-        fixtures:[{event:'A',result:'YES',exercise:'Unchallenged assertion'},{event:'B',result:'NO',exercise:'Intentionally propose YES, challenge with NO, two reviewers vote NO'},{event:'C',result:null,exercise:'No assertion; finalize VOID after its assertion deadline'}]}));return;
+        fixtures:[{event:'A',result:'YES',exercise:'Unchallenged assertion'},{event:'B',result:'NO',exercise:'Intentionally propose YES, challenge with NO, two reviewers vote NO'},{event:'C',result:null,exercise:'No assertion; finalize VOID after its assertion deadline'},{event:'D',result:'YES',exercise:'Unchallenged assertion'}]}));return;
     }
     if (!req.url || req.url.length > 4096) { res.writeHead(414); res.end(); return; }
     await api(req, res, async () => {
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405); res.end(); return; }
       try {
         const pathname = new URL(req.url, config.origin).pathname;
-        const page = ['/', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal'].includes(pathname);
+        const page = ['/', '/markets', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal'].includes(pathname);
         if (!page && !/^\/(?:assets\/[a-zA-Z0-9_.-]+|favicon\.svg|robots\.txt)$/.test(pathname)) { res.writeHead(404); res.end('Not found'); return; }
         const file = resolve(staticRoot, page ? 'index.html' : pathname.slice(1));
         if (!(await stat(file)).isFile()) throw new Error('Not a file');

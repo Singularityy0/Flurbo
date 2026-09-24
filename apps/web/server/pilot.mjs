@@ -27,7 +27,7 @@ export function pilotRpc(endpoint,request=fetch) {
 
 export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)}) {
   if(manifest?.schema!=='flurbo.pilot-manifest.v1' || manifest.status!=='verified_pilot_snapshot' || manifest.chainId!==10143
-    || ![2,3].includes(manifest.publication?.draft?.events?.length) || ![3,5].includes(manifest.publication?.reviewers?.length)) throw new Error('Verified pilot manifest required');
+    || ![2,3,4].includes(manifest.publication?.draft?.events?.length) || ![3,5].includes(manifest.publication?.reviewers?.length)) throw new Error('Verified pilot manifest required');
   address(manifest.pool); address(manifest.resolver);
   for(const key of [manifest.pool,manifest.resolver]) if(!/^0x[0-9a-f]{64}$/.test(manifest.codeHashes?.[key]||'')) throw new Error('Compiled pilot evidence required');
   const tagFor = s=>'0x'+BigInt(s.blockNumber).toString(16);
@@ -66,6 +66,16 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
       wallet:owner?{address:owner,cash:await read(pilotCash,pilotCashAbi,'balanceOf',[owner],tag),credits:await read(manifest.resolver,resolverAbi,'credits',[owner],tag),
         reviewer:await read(manifest.resolver,resolverAbi,'isReviewer',[owner],tag)}:null};
     await stable(s); return json(result);
+  }
+  // One verified snapshot for the browse page. Prices are one-share buy costs,
+  // never promises of execution or wallet approvals.
+  async function markets() {
+    const s=await snapshot(),tag=tagFor(s);
+    const open=s.timestamp<manifest.publication.draft.closesAt && !await read(manifest.pool,pilotPoolAbi,'resolved',[],tag);
+    const prices=await Promise.all(manifest.publication.draft.events.map(async(_,event)=>({event,
+      yes:open?await read(manifest.pool,pilotPoolAbi,'quoteBuy',[2**event,2n,1_000_000n],tag):null,
+      no:open?await read(manifest.pool,pilotPoolAbi,'quoteBuy',[2**event,1n,1_000_000n],tag):null})));
+    await stable(s);return json({manifest,snapshot:s,open,prices});
   }
   async function prepare(input) {
     if(!input || typeof input!=='object' || Array.isArray(input) || Object.keys(input).some(k=>!['owner','action','event','outcome','evidenceHash','evidenceURI','scope','mask','quantity','slippageBps'].includes(k))) throw new Error('Invalid action');
@@ -144,7 +154,7 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     }
     await stable(s);return json({snapshot:s,owner,rows});
   }
-  return {manifest,status,prepare,snapshot,position,positions};
+  return {manifest,status,markets,prepare,snapshot,position,positions};
 }
 
 export function pilotEvidence(command, origin, now=()=>Date.now()) {

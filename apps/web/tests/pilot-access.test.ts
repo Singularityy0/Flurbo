@@ -26,6 +26,8 @@ test('pilot endpoints require Mera login; public evidence remains readable; raw 
   const submit=async(raw:string)=>request('/api/pilot/rpc',{method:'eth_sendRawTransaction',params:[raw]});
   try{
     assert.equal(await request('/api/pilot/status',undefined,false),401);
+    assert.equal(await request('/api/pilot/markets',undefined,false),401);
+    assert.equal(await request('/api/pilot/markets'),200);
     assert.equal(await request('/api/pilot/prepare',{owner,action:'deliver'},false),401);
     assert.equal(await request('/api/pilot/status'),200);
     assert.equal(await request('/api/pilot/evidence/'+hash,undefined,false),200);

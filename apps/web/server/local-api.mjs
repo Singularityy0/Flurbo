@@ -53,6 +53,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           return send(res,200,await pilot.status(url.searchParams.get('wallet')||undefined));
         }
         if(url.search) return send(res,400,{error:'Unexpected pilot query'});
+        if(req.method==='GET' && url.pathname==='/api/pilot/markets') return send(res,200,await pilot.markets());
         if(req.method==='POST' && url.pathname==='/api/pilot/prepare') return send(res,200,await pilot.prepare(await body(req)));
         if(req.method==='POST' && url.pathname==='/api/pilot/position') {
           const input=await body(req); return send(res,200,await pilot.position(input.owner,input.scope,input.mask));
