@@ -77,7 +77,7 @@ def block_info(block):
     return quantity(block.get("number")), quantity(block.get("timestamp")), block["hash"].lower()
 
 
-def scan(config, rpc, now=None):
+def scan(config, rpc, now=None, comparison_only=False):
     clock = time.time if now is None else lambda: now
     c = validate(config, int(clock()))
     if quantity(rpc("eth_chainId", [])) != c["chain_id"]:
@@ -93,6 +93,15 @@ def scan(config, rpc, now=None):
             tx["from"] = sender
         return words(rpc("eth_call", [tx, tag]), count)
 
+    if hasattr(rpc, "prefetch"):
+        # Batch independent deployment reads on hosted readers. Calls stay pinned
+        # to the same block; this never batches signing or changes freshness gates.
+        reads = [("eth_getCode", [c[key], tag]) for key in ("executor", "pool", "market", "receipt", "cash")]
+        reads += [("eth_call", [{"to": c["executor"], "data": abi(selector)}, tag]) for selector in SELECTORS.values()]
+        reads += [("eth_call", [{"to": c["pool"], "data": abi("7220c660", c["scope"], c["mask"])}, tag]),
+                  ("eth_call", [{"to": c["market"], "data": abi("90c9427c")}, tag]),
+                  ("eth_call", [{"to": c["pool"], "data": abi("39a3a99a")}, tag])]
+        rpc.prefetch(reads)
     for key in ("executor", "pool", "market", "receipt", "cash"):
         code = rpc("eth_getCode", [c[key], tag])
         if not isinstance(code, str) or not re.fullmatch(r"0x(?:[0-9a-fA-F]{2})+", code):
@@ -167,12 +176,19 @@ def scan(config, rpc, now=None):
     if block_info(rpc("eth_getBlockByNumber", [tag, False])) != (number, timestamp, block_hash):
         raise CheckError("Snapshot changed; discard the entire scan")
     head, _, _ = block_info(rpc("eth_getBlockByNumber", ["latest", False]))
-    if not number <= head <= number + c["max_head_advance"] or int(clock()) >= deadline:
+    expired = not number <= head <= number + c["max_head_advance"] or int(clock()) >= deadline
+    if expired and not comparison_only:
         raise CheckError("Scan expired or head advanced; discard candidates")
-    if int(clock()) - timestamp > c["max_block_age_seconds"] or int(clock()) - c["price_observed_at"] > c["max_price_age_seconds"]:
+    expired = expired or int(clock()) - timestamp > c["max_block_age_seconds"] or int(clock()) - c["price_observed_at"] > c["max_price_age_seconds"]
+    if expired and not comparison_only:
         raise CheckError("Price or block freshness expired during scan")
     results.sort(key=lambda row: row.get("net_after_allowance_atoms", -1), reverse=True)
-    return {"read_only": True, "status": "complete", "chain_id": c["chain_id"],
+    if comparison_only:
+        for row in results:
+            row.pop("unsigned_transaction", None)
+            if expired and row["status"] == "simulated_candidate":
+                row["status"] = "expired_candidate"
+    return {"read_only": True, "status": "expired" if expired else "complete", "chain_id": c["chain_id"],
             "block_number": number, "block_hash": block_hash, "candidates": results,
             "conversion": {"mon_ausd_price_e6": c["mon_ausd_price_e6"], "observed_at": c["price_observed_at"],
                            "source": "operator-supplied; freshness checked, not independently verified"},

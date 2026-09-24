@@ -101,6 +101,20 @@ class FakeRpc:
 
 
 class ScannerTests(unittest.TestCase):
+    def test_expired_comparison_never_returns_executable_candidates(self):
+        c = fixture()
+        rpc = FakeRpc(c)
+        rpc.advance = 11
+        result = scan(c, rpc, now=1000, comparison_only=True)
+        self.assertEqual(result["status"], "expired")
+        self.assertTrue(all(row["status"] == "expired_candidate" and "unsigned_transaction" not in row for row in result["candidates"]))
+        rpc = FakeRpc(c)
+        rpc.advance = 11
+        with self.assertRaises(CheckError): scan(c, rpc, now=1000)
+        rpc = FakeRpc(c)
+        rpc.reorg = True
+        with self.assertRaises(CheckError): scan(c, rpc, now=1000, comparison_only=True)
+
     def test_candidates_use_conservative_gas_exact_calldata_and_one_block(self):
         c = fixture()
         rpc = FakeRpc(c)
