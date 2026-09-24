@@ -47,7 +47,7 @@ export function releaseTargetForEvent(rawDraft: unknown, eventId: string) {
   const target = releaseTargetSchema.parse({ repository: repo, tag: releaseTag });
   const expected = releaseEvent(target, event.id, event.observationStartsAt, event.observationEndsAt);
   if (event.question !== expected.question || event.yesRule !== expected.yesRule || event.noRule !== expected.noRule
-    || Object.entries(expected.source).some(([key, value]) => event.source[key as keyof typeof event.source] !== value)) {
+    || Object.entries(expected.source).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).some(([key, value]) => event.source[key as keyof typeof event.source] !== value)) {
     throw new Error('Event rules do not match the supported release template');
   }
   return { target, event };
