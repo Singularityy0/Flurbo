@@ -19,7 +19,8 @@ const security = {
 
 export function productionServer(config, store, staticRoot = dist) {
   const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
-    learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount });
+    learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
+    learningDashboardUrl: config.learningDashboardUrl });
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
     // Liveness only. This deliberately does not claim contracts or RPC are ready.
@@ -71,7 +72,15 @@ async function main() {
       console.error('Learning fixture unavailable; proposal preparation disabled');
     });
   } catch { console.error('Learning pool configuration unavailable; existing trading continues'); }
-  let reader;
+  let reader, learningReader;
+  if (config.learningPool) {
+    config.learningDashboardUrl = 'http://127.0.0.1:18768';
+    learningReader = spawn(process.env.PYTHON || 'python3', ['scripts/serve_dashboard.py', '--manifest',
+      'config/learning-testnet.json', '--learning-market', '--port', '18768',
+      '--provider', process.env.FLURBO_ALCHEMY_TESTNET_RPC_URL ? 'alchemy' : 'public'], { cwd: root, stdio: 'inherit', windowsHide: true });
+    learningReader.on('error', () => console.error('Learning market reader could not start; requests will remain unavailable'));
+    learningReader.on('exit', () => console.error('Learning market reader stopped; requests will remain unavailable'));
+  }
   if (process.env.FLURBO_MANIFEST_JSON) {
     const manifest = JSON.parse(process.env.FLURBO_MANIFEST_JSON);
     if (manifest.environment !== 'public_testnet' || manifest.status !== 'verified_snapshot' || manifest.chain_id !== 10143) throw new Error('Verified public Monad testnet manifest required');
@@ -90,7 +99,7 @@ async function main() {
   server.listen(config.port, '0.0.0.0', () => console.log('Flurbo server ready; public trading requires a verified deployment manifest'));
   for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => {
     comparison.abort();
-    server.close(() => process.exit(0)); reader?.kill();
+    server.close(() => process.exit(0)); reader?.kill(); learningReader?.kill();
     setTimeout(() => process.exit(0), 5000).unref();
   });
 }

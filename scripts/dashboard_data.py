@@ -319,7 +319,7 @@ class Dashboard:
             if not isinstance(tx_input, str) or not re.fullmatch(r"0x(?:[0-9a-fA-F]{2}){0,32768}", tx_input):
                 raise CheckError("Malformed transaction input")
             item.update(input=tx_input.lower(), value_wei=str(quantity(tx.get("value", "0x0"))))
-            item["targets_demo"] = item["to"] in [self.m[k] for k in ("pool", "receipt", "market", "cash", "margin", "executor")]
+            item["targets_demo"] = item["to"] in [self.m[k] for k in ("pool", "receipt", "market", "cash", "margin", "executor") if k in self.m]
         if receipt is not None:
             if not isinstance(receipt, dict) or hash32(receipt.get("transactionHash")) != tx_hash:
                 raise CheckError("Receipt response mismatch")

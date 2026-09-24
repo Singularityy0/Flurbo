@@ -121,17 +121,22 @@ def main():
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--provider", choices=("local", "public", "alchemy"), default="local")
     parser.add_argument("--port", type=int, default=18765)
+    parser.add_argument("--learning-market", action="store_true", help="Read the separate verified public learning pool")
     parser.add_argument("--enable-local-wallet-setup", action="store_true", help="Allow fixed test-balance top-ups on local Anvil only")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("Use a port between 1024 and 65535")
     if args.enable_local_wallet_setup and args.provider != "local":
         parser.error("Automatic test funding may only be enabled with --provider local")
+    if args.learning_market and (args.provider == "local" or args.enable_local_wallet_setup):
+        parser.error("The learning market reader requires public testnet")
     network = json.loads(CONFIG.read_text())["networks"]["testnet"]
     endpoint = rpc_endpoint(network, args.provider, os.environ)
 
     def factory():
-        return Dashboard(json.loads(args.manifest.read_text()), network, DashboardRpc(endpoint),
+        from learning_dashboard import LearningDashboard
+        reader = LearningDashboard if args.learning_market else Dashboard
+        return reader(json.loads(args.manifest.read_text()), network, DashboardRpc(endpoint),
                          "local_fork" if args.provider == "local" else "public_testnet")
 
     local_setup = None

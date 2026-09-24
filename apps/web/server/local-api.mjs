@@ -2,10 +2,11 @@ import { SessionStore, cookieValue, LOGIN_MS } from './session.mjs';
 import { parseTransaction, recoverTransactionAddress } from 'viem';
 import { validWithdrawal } from './withdrawal-policy.mjs';
 import { TESTNET } from './network.mjs';
+import { learningDeployment } from '../shared/learning-contracts.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
-  learningPool = null, learningOperatorAccount = null } = {}) {
+  learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null } = {}) {
   const hosted = publicOrigin !== null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
   // A bounded global limit avoids trusting spoofable forwarded IP headers.
@@ -83,6 +84,10 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
       }
       if (url.pathname === '/api/rpc' && req.method === 'POST') {
         const input = await body(req);
+        const market = input.market ?? 'original';
+        if (!['original', 'learning'].includes(market)) return send(res, 400, { error: 'Unknown trading market' });
+        if (market === 'learning' && (!hosted || !learningDashboardUrl)) return send(res, 503, { error: 'Learning market unavailable' });
+        const selectedDashboard = market === 'learning' ? learningDashboardUrl : dashboardUrl;
         const allowed = ['eth_chainId', 'eth_getBlockByNumber', 'eth_call', 'eth_estimateGas', 'eth_gasPrice', 'eth_getTransactionCount', 'eth_getTransactionReceipt', 'eth_getBalance', 'eth_sendRawTransaction'];
         if (!allowed.includes(input.method) || !Array.isArray(input.params)) return send(res, 400, { error: 'Unsupported RPC method' });
         if (hosted && !await store.read(sid, origin)) return send(res, 401, { error: 'Sign in before using the account RPC' });
@@ -94,16 +99,17 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           const tx = parseTransaction(serializedTransaction);
           const sender = await recoverTransactionAddress({ serializedTransaction });
           const faucet = hosted && tx.to?.toLowerCase() === TESTNET.faucet && tx.data?.toLowerCase() === TESTNET.faucetSelector + login.address.slice(2).padStart(64, '0');
-          const deployment = faucet ? Response.json({ environment: 'public_testnet', chain_id: 10143, contracts: { cash: TESTNET.cash } }) : await fetch(`${dashboardUrl}/api/state`, { redirect: 'error', signal: AbortSignal.timeout(20_000) });
+          const deployment = faucet ? Response.json({ environment: 'public_testnet', chain_id: 10143, contracts: { cash: TESTNET.cash } }) : await fetch(`${selectedDashboard}/api/state`, { redirect: 'error', signal: AbortSignal.timeout(20_000) });
           const state = await deployment.json();
           const cash = state.contracts?.cash?.toLowerCase(), pool = state.contracts?.pool?.toLowerCase();
           const selector = tx.data?.slice(0, 10);
           if (!deployment.ok || sender.toLowerCase() !== login.address || tx.chainId !== 10143 || (tx.value ?? 0n) !== 0n || tx.type !== 'legacy' ||
               !tx.gas || tx.gas > 30_000_000n || state.environment !== (hosted ? 'public_testnet' : 'local_fork') ||
               (hosted && (state.chain_id !== 10143 || cash !== TESTNET.cash)) ||
+              !faucet && market === 'learning' && (state.market_id !== 'learning' || pool !== learningDeployment.pool) ||
               !faucet && !(tx.to?.toLowerCase() === cash ? validWithdrawal({ to: tx.to, data: tx.data, account: login.address, cash, pool }) || selector === '0x095ea7b3' && tx.data.length === 138 &&
                 tx.data.slice(10, 74).toLowerCase() === pool?.slice(2).padStart(64, '0')
-                : tx.to?.toLowerCase() === pool && ['0x3e6b6cde', '0xc39849c5', '0xb0a52172', '0xf6c4eade', '0xdf992423'].includes(selector))) return send(res, 403, { error: 'Only this account and the configured Monad contracts are supported' });
+                : tx.to?.toLowerCase() === pool && (market === 'learning' ? ['0x3e6b6cde', '0xc39849c5', '0xdf992423'] : ['0x3e6b6cde', '0xc39849c5', '0xb0a52172', '0xf6c4eade', '0xdf992423']).includes(selector))) return send(res, 403, { error: 'Only this account and the configured Monad contracts are supported' });
         }
         const upstream = await fetch(rpcUrl, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: input.method, params: input.params }), signal: AbortSignal.timeout(20_000) });
         const result = await upstream.json();
@@ -111,15 +117,22 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         return send(res, 200, { result: result.result });
       }
       const readRoutes = ['/api/health', '/api/state', '/api/quote', '/api/transaction'];
+      const learningRoute = url.pathname.startsWith('/api/markets/learning/');
+      const readPath = learningRoute ? url.pathname.replace('/api/markets/learning/', '/api/') : url.pathname;
+      if (learningRoute) {
+        if (!hosted || !learningDashboardUrl) return send(res, 503, { error: 'Learning market unavailable' });
+        if (!await store.read(sid, origin)) return send(res, 401, { error: 'Sign in to trade on the learning market' });
+      }
       const funding = !hosted && req.method === 'POST' && url.pathname === '/api/local-wallet-setup';
-      if (!(req.method === 'GET' && readRoutes.includes(url.pathname)) && !funding) return send(res, 404, { error: 'Unknown workspace endpoint' });
+      if (!(req.method === 'GET' && readRoutes.includes(readPath)) && !funding) return send(res, 404, { error: 'Unknown workspace endpoint' });
       const input = funding ? await body(req) : undefined;
-      const upstream = await fetch(`${dashboardUrl}${url.pathname}${url.search}`, { method: funding ? 'POST' : 'GET', redirect: 'error',
+      const upstream = await fetch(`${learningRoute ? learningDashboardUrl : dashboardUrl}${readPath}${url.search}`, { method: funding ? 'POST' : 'GET', redirect: 'error',
         headers: funding ? { 'Content-Type': 'application/json', Origin: 'http://127.0.0.1:18765' } : {},
         body: funding ? JSON.stringify(input) : undefined, signal: AbortSignal.timeout(20_000) });
       const result = await upstream.json();
-      if (hosted && upstream.ok && ['state', 'quote', 'transaction'].includes(url.pathname.split('/').pop()) &&
-          (result.environment !== 'public_testnet' || result.chain_id !== 10143)) return send(res, 503, { error: 'Public testnet deployment verification required' });
+      if (hosted && upstream.ok && ['state', 'quote', 'transaction'].includes(readPath.split('/').pop()) &&
+          (result.environment !== 'public_testnet' || result.chain_id !== 10143 || learningRoute &&
+            (result.market_id !== 'learning' || result.contracts?.pool !== learningDeployment.pool || result.contracts?.cash !== TESTNET.cash))) return send(res, 503, { error: 'Public testnet deployment verification required' });
       return send(res, upstream.status, result);
     } catch { return send(res, 503, { error: 'Service unavailable or request rejected. Refresh before retrying. No automatic transaction retry is performed.' }); }
   };
