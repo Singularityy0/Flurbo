@@ -2,6 +2,7 @@ import { ArrowUpRight, Menu, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, Route, Switch, useLocation } from "wouter";
 import Home from "./pages/Home";
+import Docs from './pages/Docs';
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 import { useAuth } from "./auth/context";
@@ -64,6 +65,7 @@ function Header() {
           {isHome || !state.address ? <><a href="/#how-it-works">How it works</a>
           <a href="/#the-idea">The idea</a>
           <a href="/#faq">FAQ</a></> : <><Link href="/markets">Markets</Link><Link href="/portfolio">Portfolio</Link><Link href="/history">History</Link><Link href="/fund">Get test funds</Link></>}
+          <Link href="/docs" aria-current={location === '/docs' ? 'page' : undefined}>Docs</Link>
           <span className="nav-rule" aria-hidden="true" />
           {state.address ? (isHome ? <Link href="/markets" className="nav-cta">Explore markets <ArrowUpRight size={15} strokeWidth={1.8} /></Link> : <Link href="/" className="nav-login">About Flurbo</Link>) : <>
             <Link href="/login" className="nav-login">Sign in</Link>
@@ -128,6 +130,7 @@ export default function App() {
       : location === "/signup" ? "Create an account | flurbo"
       : location.startsWith("/markets") ? "Markets | flurbo"
       : location === "/fund" ? "Get test funds | flurbo"
+      : location === "/docs" ? "Documentation | flurbo"
       : location === "/account" ? "Your account | flurbo"
       : location === "/portfolio" ? "Your portfolio | flurbo"
       : location === "/history" ? "Your history | flurbo"
@@ -149,6 +152,7 @@ export default function App() {
   return (
     <Switch>
       <Route path="/" component={() => <AppShell><Home /></AppShell>} />
+      <Route path="/docs" component={() => <AppShell><Docs /></AppShell>} />
       <Route path="/login" component={() => <AuthShell mode="login" />} />
       <Route path="/signup" component={() => <AuthShell mode="signup" />} />
       <Route path="/markets" component={AccountRoute} />

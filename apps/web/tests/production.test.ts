@@ -87,6 +87,10 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     assert.equal((await request('/history')).status,200);
     assert.equal((await request('/rehearsal')).status,404);
     assert.equal((await request('/markets')).status,200);
+    const docs = await request('/docs',undefined,'','flurbo.singu.online','');
+    assert.equal(docs.status,200);
+    assert.match(docs.headers['content-security-policy'],/script-src 'self'/);
+    assert.equal(docs.headers['cache-control'],'no-store');
     assert.equal((await request('/markets/rehearsal/1')).status,200);
     assert.equal((await request('/markets/practice-'+'12'.repeat(20)+'/0')).status,200);
     assert.equal((await request('/markets/unknown/99')).status,404);
