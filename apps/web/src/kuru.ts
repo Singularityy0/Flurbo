@@ -1,4 +1,5 @@
 import { decodeEventLog, decodeFunctionResult, encodeFunctionData, type Hex } from 'viem';
+import { appFetch as fetch } from './platform-fetch.ts';
 import { kuruAbi, marginAbi, tokenAbi, kuruCall, type Contracts } from '../shared/kuru.mjs';
 
 export type Provider = { request(input: { method: string; params?: unknown[] }): Promise<unknown>; on?(name: string, fn: () => void): void; removeListener?(name: string, fn: () => void): void };

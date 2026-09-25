@@ -1,4 +1,5 @@
 import { bytesToHex, keccak256, serializeTransaction, type Hex } from 'viem';
+import { appFetch as fetch } from '../platform-fetch.ts';
 import { validWithdrawal } from '../../server/withdrawal-policy.mjs';
 import { kuruCall } from '../../shared/kuru.mjs';
 import { TESTNET } from '../../server/network.mjs';

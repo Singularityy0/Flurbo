@@ -2,7 +2,7 @@
   "expo": {
     "name": "Flurbo",
     "slug": "flurbo-mobile",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "icon": "./assets/brand/icon.png",
     "scheme": "flurbo",
     "orientation": "portrait",
@@ -17,7 +17,7 @@
       "bundleIdentifier": "dev.flurbo.preview"
     },
     "android": {
-      "versionCode": 3,
+      "versionCode": 4,
       "package": "dev.flurbo.preview",
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/adaptive-foreground.png",

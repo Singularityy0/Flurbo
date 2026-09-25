@@ -17,6 +17,31 @@ APK digest. The production server serves it at
 `https://flurbo.singu.online/.well-known/assetlinks.json`, without authentication
 or a redirect, after this update is deployed. This does not upload a keystore.
 Keep using the same EAS-managed signing key and verify the next APK's signer.
+The Expo plugin `plugins/with-passkey-association.cjs` also installs the Android
+app-side `asset_statements` metadata and its web relationship string. The plugin
+escapes JSON quotes once for the non-translatable Android resource. Verify the
+generated `strings.xml`, since config introspection can show extra escaping.
+
+On September 25, build `317d7f66-161d-4db2-8282-96d3a9f73b4d` (0.3.0 / code 4)
+was checked and its APK signing-block certificate matched the fingerprint above.
+Its SHA-256 file digest is
+`1643081a342f5ed6a5b8008c03957b3da589db95eb655364bd811077c0233662`.
+This certificate extraction is not a cryptographic APK signature verification.
+
+The live endpoint initially published only `get_login_creds`. Google's check for
+that relation returned `linked: true`, but its `handle_all_urls` check did not.
+That earlier check was insufficient to validate Android passkeys. The server now
+publishes both relations, matching the local association generator and
+[Google's passkey sharing guidance](https://codelabs.developers.google.com/seamless-credential-sharing).
+Deploy the corrected server, verify that both relations are present in the live
+JSON, and check each relation through Google's Digital Asset Links API. The
+existing 0.3.0 APK can then be retried; this server correction needs no APK rebuild.
+Cached association results may take time to refresh. Do not delete an existing
+passkey or create a replacement account to troubleshoot an association failure.
+
+Association checks do not prove that the password manager returns PRF output. Native errors now
+distinguish missing credentials, cancellation, interrupted prompts, PRF failure,
+an explicit RP validation failure and a subsequent backend-session failure.
 `FLURBO_ANDROID_CERT_SHA256` optionally overrides the certificate list (empty
 disables the endpoint). Multiple certificates are comma-separated.
 
@@ -28,7 +53,8 @@ certificate. Check the endpoint after deploying, then rebuild the native APK.
 The selected host is **`flurbo.singu.online`**, under the user's `singu.online`
 domain. The root domain remains available for other projects. Both EAS build
 profiles set this relying party ID. DNS, HTTPS hosting and web Mera sign-in are
-already working. The new Android association still needs to be deployed and tested.
+already working. The Android app-side declaration requires the new signed APK;
+physical-device passkey and PRF acceptance remains necessary.
 Changing the relying party ID does not migrate existing passkeys.
 
 Keep the association on this same HTTPS host, even if the hosting provider changes.

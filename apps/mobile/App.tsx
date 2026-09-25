@@ -1,157 +1,134 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { ActivityIndicator, AppState, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { AppState, BackHandler, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
-import { account } from './src/native-account';
-import { RP_ID } from './src/account';
+import { auth, initialize, storage } from './src/runtime';
+import { externalWallet, type WalletKind } from './src/wallet';
+import { transactions } from './src/transactions';
+import { operations, prepareFaucet, type FaucetReview } from './src/operations';
+import { type PilotNamespace } from '../web/src/pilot';
+import { Markets } from './src/Markets';
+import { Ledger } from './src/Ledger';
+import { WhatIf } from './src/WhatIf';
+import { Settlement } from './src/Settlement';
+import { Kuru, Learning } from './src/Advanced';
+import { Legacy } from './src/Legacy';
 import { balanceTarget } from './src/config';
 import { formatAmount, readBalance, type WalletBalance } from './src/balance';
 import { readPerplContext, type PerplContext } from './src/perpl';
+import { api } from './src/api';
+import { useRequest } from './src/hooks';
+import { Button, Card, Choice, Copy, External, Field, Heading, Notice, Title, colors, s } from './src/ui';
 
-function Button({ title, onPress, disabled = false, secondary = false }: { title: string; onPress: () => void; disabled?: boolean; secondary?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
-    style={({ pressed }) => [styles.button, secondary && styles.secondary, disabled && styles.disabled, pressed && styles.pressed]}>
-    <Text style={[styles.buttonText, secondary && styles.secondaryText]}>{title}</Text>
-  </Pressable>;
+type Page = 'markets' | 'whatif' | 'portfolio' | 'history' | 'wallet' | 'tools' | 'settlement' | 'kuru' | 'learning' | 'legacy' | 'withdraw' | 'perpl' | 'transaction' | 'about';
+function Wallet({ kind, setKind, onWithdraw }: { kind: WalletKind; setKind: (kind: WalletKind) => void; onWithdraw: () => void }) {
+  const login = useSyncExternalStore(auth.subscribe, auth.getSnapshot), wallet = useSyncExternalStore(externalWallet.subscribe, externalWallet.getSnapshot);
+  const operation = useSyncExternalStore(operations.subscribe, operations.getSnapshot);
+  const owner = kind === 'mera' ? login.address : wallet.address;
+  const balance = useRequest<WalletBalance>(), faucet = useRequest<FaucetReview>();
+  const [notice, setNotice] = useState('');
+  const refresh = () => owner && void balance.run(signal => readBalance(balanceTarget, owner, signal), true);
+  useEffect(() => { balance.cancel(true); faucet.cancel(true); refresh(); return () => { balance.cancel(); faucet.cancel(); }; }, [owner]);
+  return <><Title>Your wallet.</Title><Copy>Mera is your Flurbo account. Choose which wallet to trade with below.</Copy>
+    <Card><Heading>Flurbo account</Heading><Copy>{login.address}</Copy><Button secondary title="Copy Mera address" onPress={() => void Clipboard.setStringAsync(login.address!).then(() => setNotice('Mera address copied.'))} />
+      <Button title={login.busy ? 'Opening passkey...' : login.signingExpiresAt ? 'Lock signing' : 'Unlock Mera signing'} disabled={login.busy} onPress={() => login.signingExpiresAt ? auth.lockSigning() : void auth.authenticate('login')} /><Copy small>Your login is remembered by the server. Signing is unlocked temporarily and locks when the app goes into the background.</Copy><Notice>{login.error || login.notice}</Notice>
+    </Card>
+    <Choice value={kind} options={[{ value: 'mera', label: 'Mera wallet' }, { value: 'metamask', label: 'MetaMask' }]} onChange={setKind} />
+    {kind === 'metamask' && <Card><Heading>MetaMask trading wallet</Heading><Copy>{wallet.address ?? 'Connect your Monad testnet account.'}</Copy><Button title={wallet.busy ? 'Waiting for MetaMask...' : 'Connect MetaMask'} disabled={wallet.busy} onPress={() => void externalWallet.connect()} />{wallet.address && <Button title="Disconnect MetaMask" secondary onPress={() => void externalWallet.disconnect().catch(() => setNotice('Disconnected locally. Check MetaMask connections if needed.'))} />}<Notice>{wallet.error}</Notice><Copy small>Connecting MetaMask does not create or replace your Flurbo account.</Copy></Card>}
+    {owner && <Card><Copy small>SELECTED TRADING WALLET</Copy><Copy>{owner}</Copy><Button secondary title="Copy trading address" onPress={() => void Clipboard.setStringAsync(owner).then(() => setNotice('Trading address copied.'))} />
+      <Heading>{balance.value ? formatAmount(balance.value.ausd, 6) : 'Unavailable'} test AUSD</Heading><Copy>{balance.value ? formatAmount(balance.value.mon, 18) : 'Unavailable'} test MON</Copy><Button secondary title={balance.busy ? 'Cancel balance check' : 'Refresh balance'} onPress={() => balance.busy ? balance.cancel() : refresh()} /><Notice>{balance.error}</Notice>
+      <Copy small>AUSD funds trades. MON pays network fees. Never send mainnet assets to these testnet addresses.</Copy><External title="Get test MON" url="https://faucet.monad.xyz" />
+      <Button title="Review test AUSD request" disabled={faucet.busy || operation.busy || !!operation.pending} onPress={() => void faucet.run(() => prepareFaucet(kind, owner), true)} /><Notice>{faucet.error}</Notice>
+      {faucet.value && <><Copy small>Request test AUSD for {faucet.value.tx.from}. Maximum fee: {faucet.value.fee} test MON. Faucet limits may apply. No allowance is granted.</Copy><Button title="Confirm faucet request" disabled={operation.busy || !!operation.pending} onPress={() => void operations.faucet(kind, faucet.value!, () => faucet.isCurrent(faucet.value!))} /></>}
+      <Button secondary title="Withdraw available AUSD" onPress={onWithdraw} />
+    </Card>}
+    <Notice>{notice}</Notice><Button secondary title="Sign out of Flurbo" onPress={() => void auth.signOut()} />
+  </>;
 }
-function Home() {
-  const auth = useSyncExternalStore(account.subscribe, account.getSnapshot);
-  const [tab, setTab] = useState<'wallet' | 'perpl'>('wallet');
-  const [balance, setBalance] = useState<WalletBalance | null>(null);
-  const [markets, setMarkets] = useState<PerplContext | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [balanceError, setBalanceError] = useState<string | null>(null);
-  const [marketError, setMarketError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const request = useRef<AbortController | null>(null);
-  const generation = useRef(0);
-  const ready = Platform.OS !== 'web' && Constants.expoConfig?.extra?.passkeyRpId === RP_ID;
+function Pending() {
+  const tx = useSyncExternalStore(transactions.subscribe, transactions.getSnapshot), op = useSyncExternalStore(operations.subscribe, operations.getSnapshot);
+  const [hash, setHash] = useState(''), [error, setError] = useState('');
+  const pending = tx.pending ?? op.pending?.value, busy = tx.busy || op.busy;
   useEffect(() => {
-    void account.restore();
+    if (!pending?.hash) return;
+    let polls = 0;
+    const tick = setInterval(() => { if (AppState.currentState === 'active' && ++polls <= 5) void (tx.pending ? transactions.check() : operations.check()); if (polls >= 5) clearInterval(tick); }, 6000);
+    return () => clearInterval(tick);
+  }, [pending?.hash]);
+  if (!pending) return <Notice>{tx.notice || op.notice}</Notice>;
+  return <Card><Heading>Transaction in progress</Heading><Copy>{tx.pending ? tx.notice : op.notice}</Copy>
+    {pending.hash ? <External title="View on Monad explorer" url={`https://testnet.monadscan.com/tx/${pending.hash}`} /> : <><Field label="Transaction hash from wallet activity" value={hash} onChange={setHash} /><Button secondary title="Attach transaction hash" disabled={busy} onPress={() => void (tx.pending ? transactions.attachHash(hash) : operations.attachHash(hash)).catch(e => setError(e.message))} /></>}
+    <Button title={busy ? 'Checking...' : 'Check confirmation'} disabled={busy} onPress={() => void (tx.pending ? transactions.check() : operations.check())} /><Notice>{error}</Notice><Copy small>Do not repeat this action while its outcome is unknown. Tracking stays saved when you leave this screen.</Copy>
+  </Card>;
+}
+function Perpl() {
+  const data = useRequest<PerplContext>();
+  useEffect(() => { void data.run(signal => readPerplContext(balanceTarget.token, signal)); }, []);
+  return <><Title>Perpl.</Title><Copy>Live testnet perpetual market prices.</Copy><Notice>{data.error}</Notice><Button secondary title="Refresh prices" onPress={() => void data.run(signal => readPerplContext(balanceTarget.token, signal))} />
+    {data.value?.markets.map(m => <Card key={m.id}><Heading>{m.name}</Heading><Copy>{(m.mark / 10 ** m.decimals).toLocaleString()} AUSD</Copy><Copy small>{m.open ? 'Open' : 'Closed'}</Copy></Card>)}
+    <Notice>Perpl trading is not enabled in Flurbo yet. It requires Perpl to approve the integration origin. This screen only reads prices.</Notice></>;
+}
+function TransactionLookup() {
+  const [hash, setHash] = useState(''), read = useRequest<any>();
+  return <><Title>Follow a transaction.</Title><Field label="Monad testnet transaction hash" value={hash} onChange={setHash} /><Button title="Check status" disabled={read.busy || !/^0x[0-9a-f]{64}$/i.test(hash)} onPress={() => void read.run(signal => api('/api/transaction?hash=' + hash, undefined, signal), true)} /><Notice>{read.error}</Notice>{read.value && <Card><Heading>{read.value.status}</Heading><Copy small>{read.value.sender}</Copy><External title="View transaction" url={`https://testnet.monadscan.com/tx/${hash}`} /></Card>}</>;
+}
+function Main() {
+  const login = useSyncExternalStore(auth.subscribe, auth.getSnapshot), wallet = useSyncExternalStore(externalWallet.subscribe, externalWallet.getSnapshot);
+  const [ready, setReady] = useState(false), [initError, setInitError] = useState(''), [page, setPage] = useState<Page>('markets'), [kind, setKind] = useState<WalletKind>('mera'), [namespace, setNamespace] = useState<PilotNamespace>('rehearsal');
+  async function boot() {
+    setInitError('');
+    try { await initialize(); transactions.restore(); operations.restore(); setReady(true); }
+    catch { setInitError('The app could not restore account or transaction tracking. Restart before trading. Your passkey has not been replaced.'); }
+  }
+  useEffect(() => {
+    void boot();
     const subscription = AppState.addEventListener('change', state => {
-      if (state === 'background') {
-        // The native credential prompt can change activity while no key is open.
-        if (!account.getSnapshot().busy) account.lock();
-        request.current?.abort(); generation.current++; setBusy(false);
-      }
+      if (state === 'background' && !auth.getSnapshot().busy) auth.lockSigning();
+      if (state === 'active') auth.checkExpiry();
     });
-    return () => { subscription.remove(); account.lock(); request.current?.abort(); generation.current++; };
+    return () => { subscription.remove(); auth.lockSigning(); };
   }, []);
+  useEffect(() => { const subscription = BackHandler.addEventListener('hardwareBackPress', () => { if (page !== 'markets') { setPage('markets'); return true; } return false; }); return () => subscription.remove(); }, [page]);
   useEffect(() => {
-    request.current?.abort(); generation.current++;
-    setBalance(null); setBalanceError(null); setNotice(null);
-    void refresh(auth.address);
-  }, [auth.address]);
-  async function refresh(owner = auth.address) {
-    request.current?.abort();
-    const controller = new AbortController(); request.current = controller;
-    const current = ++generation.current;
-    setBusy(true); setBalanceError(null); setMarketError(null);
-    const fresh = () => generation.current === current && !controller.signal.aborted;
-    await Promise.allSettled([
-      owner ? readBalance(balanceTarget, owner, controller.signal).then(value => { if (fresh()) setBalance(value); })
-        .catch(() => { if (fresh()) setBalanceError('Your balance could not be refreshed. Pull down to try again.'); }) : Promise.resolve(),
-      readPerplContext(balanceTarget.token, controller.signal).then(value => { if (fresh()) setMarkets(value); })
-        .catch(() => { if (fresh()) setMarketError('Perpl prices are unavailable. Pull down to try again.'); }),
-    ]);
-    if (fresh()) setBusy(false);
+    if (!login.address) { setPage('markets'); setKind('mera'); return; }
+    const saved = storage.getItem(`flurbo.mobile.wallet-kind:${login.address}`);
+    setKind(saved === 'metamask' ? 'metamask' : 'mera');
+    if (saved === 'metamask') void externalWallet.initialize();
+  }, [login.address]);
+  function chooseWallet(value: WalletKind) {
+    setKind(value);
+    try { if (login.address) storage.setItem(`flurbo.mobile.wallet-kind:${login.address}`, value); }
+    catch { setInitError('Wallet preference could not be saved. Restart before trading.'); }
+    if (value === 'metamask') void externalWallet.initialize();
   }
-  async function authenticate(mode: 'login' | 'signup', another = false) {
-    await account.authenticate(mode, another);
-    if (AppState.currentState !== 'active') account.lock();
-  }
-  const walletBalance = balance?.owner === auth.address ? balance : null;
-  return <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
-    <StatusBar style="dark" />
-    <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={busy} onRefresh={() => void refresh()} tintColor={colors.ink} />}>
-      <View style={styles.row}><Text style={styles.wordmark}>flurbo<Text style={styles.dot}>.</Text></Text>
-        <View style={styles.badge}><Text style={styles.badgeText}>MONAD TESTNET</Text></View></View>
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>YOUR VIEW, ON THE MOVE</Text>
-        <Text accessibilityRole="header" style={styles.headline}>{tab === 'wallet' ? 'A little more\npossibility.' : 'A different\nkind of market.'}</Text>
-        <Text style={styles.intro}>{tab === 'wallet' ? 'Your Flurbo wallet. One passkey to get started.' : 'Explore Perpl perpetuals, with test AUSD on Monad.'}</Text>
-      </View>
-      <View style={styles.tabs} accessibilityRole="tablist">
-        {(['wallet', 'perpl'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: tab === value }} onPress={() => setTab(value)} style={[styles.tab, tab === value && styles.activeTab]}>
-          <Text style={[styles.tabText, tab === value && styles.activeText]}>{value === 'wallet' ? 'Your wallet' : 'Perpl markets'}</Text></Pressable>)}
-      </View>
-      {!!notice && <Text accessibilityLiveRegion="polite" style={styles.caption}>{notice}</Text>}
-      {tab === 'wallet' && <>
-        {!auth.address ? <View style={styles.card}>
-          <Text style={styles.eyebrow}>WELCOME TO FLURBO</Text>
-          <Text accessibilityRole="header" style={styles.sectionTitle}>Make yourself at home.</Text>
-          <Text style={styles.body}>Use your Flurbo passkey, or create an account. Your device helps you sign in without a password.</Text>
-          <Button title={auth.busy ? 'Opening passkey…' : 'Sign in with passkey'} disabled={!ready || auth.busy} onPress={() => void authenticate('login')} />
-          <Button title="Create an account" secondary disabled={!ready || auth.busy} onPress={() => void authenticate('signup')} />
-          <Text style={styles.caption}>Already use Flurbo on the web? Choose that same passkey to access the same wallet. A new passkey creates a different wallet.</Text>
-          {!ready && <Text style={styles.error}>Use a native Flurbo build configured for flurbo.singu.online. Browser preview and Expo Go cannot validate native passkeys.</Text>}
-        </View> : <>
-          <View style={styles.balanceCard}>
-            <Text style={styles.balanceEyebrow}>YOUR TEST AUSD</Text>
-            <Text style={styles.balanceNumber}>{walletBalance ? formatAmount(walletBalance.ausd, 6) : 'Unavailable'}</Text>
-            <Text style={styles.balanceCaption}>Wallet balance · Monad testnet</Text><View style={styles.balanceRule} />
-            <Text style={styles.balanceCaption}>{walletBalance ? `${formatAmount(walletBalance.mon, 18)} test MON for network fees` : 'Refresh to check your on-chain balance'}</Text>
-            {walletBalance && <Text style={styles.balanceCaption}>Last checked {new Date(walletBalance.checkedAt).toLocaleTimeString()}{busy ? ' · Refreshing' : ''}</Text>}
-          </View>
-          {balanceError && <Text accessibilityLiveRegion="polite" style={styles.error}>{balanceError}{walletBalance ? ' The amount above is from the previous check.' : ''}</Text>}
-          <View style={styles.card}>
-            <Text style={styles.eyebrow}>YOUR MERA WALLET</Text><Text selectable style={styles.address}>{auth.address}</Text>
-            <Text style={styles.body}>{auth.unlockedUntil ? 'Passkey verified on this device. Signing locks when you leave the app.' : 'Your wallet is remembered. Use your passkey to unlock it.'}</Text>
-            <Button title="Copy wallet address" secondary onPress={() => {
-              void Clipboard.setStringAsync(auth.address!).then(() => setNotice('Wallet address copied.')).catch(() => setNotice('Could not copy. Press and hold the address to copy it.'));
-            }} />
-            <Button title={auth.busy ? 'Opening passkey…' : auth.unlockedUntil ? 'Lock signing' : 'Unlock with passkey'} disabled={auth.busy || !ready} onPress={() => auth.unlockedUntil ? account.lock() : void authenticate('login')} />
-            <Button title="Use another passkey" secondary disabled={auth.busy || !ready} onPress={() => void authenticate('login', true)} />
-          </View>
-          <View style={styles.card}>
-            <Text accessibilityRole="header" style={styles.sectionTitle}>Add a little possibility.</Text>
-            <Text style={styles.body}>Send test AUSD and test MON to the address above on Monad testnet. AUSD is your balance; MON pays network fees.</Text>
-            <Button title="Get test MON in browser" secondary onPress={() => { void Linking.openURL('https://faucet.monad.xyz').catch(() => setNotice('Could not open the faucet. Try again.')); }} />
-            <Text style={styles.caption}>Test assets only. A MetaMask wallet has its own balance. Never send mainnet assets to testnet.</Text>
-            <Text selectable style={styles.caption}>AUSD contract: {balanceTarget.token.toLowerCase()}</Text>
-          </View>
-          <Button title="Sign out on this device" secondary disabled={auth.busy} onPress={() => void account.signOut()} />
-        </>}
-        {auth.error && <Text accessibilityLiveRegion="polite" style={styles.error}>{auth.error}</Text>}
+  const owner = kind === 'mera' ? login.address : wallet.address;
+  const allowed = Platform.OS !== 'web' && Constants.expoConfig?.extra?.passkeyRpId === 'flurbo.singu.online';
+  const signIn = async (signup = false, another = false) => { await auth.authenticate(signup ? 'signup' : 'login', 'Flurbo account', another); await storage.flush().catch(() => setInitError('Account metadata could not be saved. Restart before trading.')); if (AppState.currentState !== 'active') auth.lockSigning(); };
+  return <SafeAreaView style={s.screen} edges={['top', 'bottom']}><StatusBar style="dark" /><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={[s.row, { paddingHorizontal: 22, paddingVertical: 14, justifyContent: 'space-between' }]}><Text style={{ fontSize: 29, fontWeight: '700', letterSpacing: -1.7, color: colors.ink }}>flurbo<Text style={{ color: colors.lime }}>.</Text></Text><Copy small>MONAD TESTNET</Copy></View>
+    <ScrollView key={page} keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
+      {!ready ? <><Title>Welcome to Flurbo.</Title><Notice>{initError || 'Restoring your account and saved transactions...'}</Notice>{initError && <Button title="Retry" onPress={() => void boot()} />}</> : !login.address ? <>
+        <Copy small>ONE SHARED MARKET</Copy><Title>A view worth combining.</Title><Copy>Explore individual predictions and see how the market prices the relationships between events.</Copy>
+        <Card><Heading>Your account starts with a passkey.</Heading><Copy>Sign in using the same passkey you use on flurbo.singu.online. MetaMask can be connected for trading after sign-in.</Copy><Button title={login.busy ? 'Opening passkey...' : 'Sign in with passkey'} disabled={login.busy || !allowed} onPress={() => void signIn()} /><Button secondary title="Create a Flurbo account" disabled={login.busy || !allowed} onPress={() => void signIn(true)} /><Button secondary title="Choose another passkey" disabled={login.busy || !allowed} onPress={() => void signIn(false, true)} /><Notice>{login.error || login.notice}</Notice>
+          {!allowed && <Notice>Install the signed Flurbo build configured for flurbo.singu.online. Expo Go and browser previews cannot unlock this account.</Notice>}<Copy small>Android: use Google Password Manager with your existing Google account and screen lock. A localhost passkey belongs to a different site.</Copy></Card>
+      </> : <><Notice>{initError}</Notice><Pending />
+        {['markets', 'whatif', 'portfolio', 'history', 'settlement'].includes(page) && <Choice value={namespace} options={[{ value: 'rehearsal', label: 'Practice markets' }, { value: 'pilot', label: 'Release events' }]} onChange={setNamespace} />}
+        {page === 'markets' && <Markets namespace={namespace} kind={kind} onPortfolio={() => setPage('portfolio')} />}
+        {page === 'whatif' && <WhatIf namespace={namespace} />}
+        {(page === 'portfolio' || page === 'history') && <Ledger key={`${namespace}:${page}`} namespace={namespace} address={owner ?? login.address} mera={login.address} history={page === 'history'} />}
+        {page === 'wallet' && <Wallet kind={kind} setKind={chooseWallet} onWithdraw={() => setPage('withdraw')} />}
+        {page === 'settlement' && <Settlement namespace={namespace} kind={kind} />}
+        {page === 'kuru' && <Kuru kind={kind} />}{page === 'learning' && <Learning />}
+        {(page === 'legacy' || page === 'withdraw') && <Legacy key={page} kind={kind} initialAction={page === 'withdraw' ? 'withdraw' : 'buy'} />}
+        {page === 'perpl' && <Perpl />}{page === 'transaction' && <TransactionLookup />}
+        {page === 'tools' && <><Title>Explore more.</Title>{([['settlement', 'Resolution and evidence'], ['kuru', 'Kuru receipt market'], ['legacy', 'Earlier pools and receipts'], ['learning', 'Learning experiment'], ['transaction', 'Check a transaction'], ['perpl', 'Perpl prices'], ['about', 'About Flurbo']] as [Page, string][]).map(([p, title]) => <Button key={p} secondary title={title} onPress={() => setPage(p)} />)}</>}
+        {page === 'about' && <><Title>One pool. More possibilities.</Title><Copy>Flurbo brings individual and combined predictions into one shared market, letting you see how the market prices relationships between events.</Copy><Copy>Practice markets use test AUSD on Monad testnet. Public blockchain transactions reveal wallet activity. This preview does not offer private participation or AI settlement.</Copy><Copy small>Version {Constants.expoConfig?.version}. Passkey host: flurbo.singu.online.</Copy></>}
+        {!['markets', 'whatif', 'portfolio', 'history', 'wallet', 'tools'].includes(page) && <Button secondary title="Back to more" onPress={() => setPage('tools')} />}
       </>}
-      {tab === 'perpl' && <>
-        <View style={styles.card}>
-          <Text style={styles.eyebrow}>PERPL · MARKET PREVIEW</Text><Text style={styles.sectionTitle}>Follow the market.</Text>
-          <Text style={styles.body}>Perpetuals track asset prices. They are separate from Flurbo's Yes and No predictions.</Text>
-          <Text style={styles.caption}>Live market data only. Native Perpl account setup and order placement are not enabled in this build.</Text>
-          {markets && <Text style={styles.caption}>Perpl currently requires {formatAmount(markets.minimumDeposit, 6)} test AUSD to open an exchange account. Your wallet balance stays separate until you deposit.</Text>}
-        </View>
-        {marketError && <Text accessibilityLiveRegion="polite" style={styles.error}>{marketError}{markets ? ' Previous prices remain below.' : ''}</Text>}
-        {!markets && busy && <ActivityIndicator accessibilityLabel="Loading Perpl markets" color={colors.ink} />}
-        {markets?.markets.map(market => <View key={market.id} style={styles.marketCard}>
-          <View style={styles.row}><Text style={styles.sectionTitle}>{market.symbol}</Text><Text style={styles.marketPrice}>{formatAmount(String(market.mark), market.decimals, market.decimals)}</Text></View>
-          <View style={styles.row}><Text style={styles.caption}>{market.name}</Text><Text style={styles.caption}>{market.open ? 'Mark price · USD' : 'Market closed'}</Text></View>
-        </View>)}
-        {markets && <Text style={styles.caption}>Checked {new Date(markets.checkedAt).toLocaleTimeString()}. Pull down to refresh. A mark price is not an executable quote.</Text>}
-      </>}
-      <Button title={busy ? 'Restart refresh' : 'Refresh balances and markets'} secondary onPress={() => void refresh()} />
-      <View style={styles.footer}><Text style={styles.body}>One pool. More possibilities.</Text><Text style={styles.caption}>Native preview · Test assets only</Text></View>
     </ScrollView>
-  </SafeAreaView>;
+    {ready && login.address && <View style={{ borderTopWidth: 1, borderColor: colors.line, padding: 8 }}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 5 }}><Choice value={page} options={[{ value: 'markets', label: 'Markets' }, { value: 'whatif', label: 'What if' }, { value: 'portfolio', label: 'Portfolio' }, { value: 'history', label: 'History' }, { value: 'wallet', label: 'Wallet' }, { value: 'tools', label: 'More' }]} onChange={setPage} /></ScrollView></View>}
+  </KeyboardAvoidingView></SafeAreaView>;
 }
-export default function App() { return <SafeAreaProvider><Home /></SafeAreaProvider>; }
-const colors = { paper: '#F5F3EC', ink: '#192D23', muted: '#667068', accent: '#DAF76B', border: '#D7DBD0' };
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.paper }, content: { paddingHorizontal: 22, paddingTop: 12, paddingBottom: 28, gap: 20, width: '100%', maxWidth: 640, alignSelf: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },
-  wordmark: { color: colors.ink, fontSize: 34, fontWeight: '800', letterSpacing: -2 }, dot: { color: '#7F9530' },
-  badge: { borderRadius: 20, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 8 }, badgeText: { color: colors.muted, fontSize: 10, fontWeight: '700', letterSpacing: 1 },
-  hero: { paddingTop: 28, paddingBottom: 8, gap: 14 }, eyebrow: { color: colors.muted, fontSize: 10, fontWeight: '700', letterSpacing: 1.5 },
-  headline: { color: colors.ink, fontSize: 44, lineHeight: 49, fontWeight: '600', letterSpacing: -2 }, intro: { color: colors.muted, fontSize: 16, lineHeight: 24, maxWidth: 330 },
-  tabs: { flexDirection: 'row', padding: 4, borderWidth: 1, borderColor: colors.border, borderRadius: 30, gap: 4 }, tab: { flex: 1, minHeight: 48, justifyContent: 'center', alignItems: 'center', padding: 10, borderRadius: 24 }, activeTab: { backgroundColor: colors.ink },
-  tabText: { color: colors.ink, fontSize: 14, fontWeight: '600' }, activeText: { color: colors.paper },
-  card: { borderRadius: 22, backgroundColor: '#FBFAF6', borderWidth: 1, borderColor: colors.border, padding: 22, gap: 16 }, sectionTitle: { color: colors.ink, fontSize: 24, fontWeight: '600', letterSpacing: -0.8 },
-  body: { color: colors.muted, fontSize: 15, lineHeight: 23 }, caption: { color: colors.muted, fontSize: 12, lineHeight: 19 },
-  button: { backgroundColor: colors.ink, minHeight: 50, borderRadius: 26, justifyContent: 'center', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 18 }, buttonText: { color: colors.paper, fontSize: 14, fontWeight: '600', textAlign: 'center' },
-  secondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border }, secondaryText: { color: colors.ink }, disabled: { opacity: 0.5 }, pressed: { opacity: 0.75 },
-  balanceCard: { backgroundColor: colors.ink, borderRadius: 24, padding: 24, gap: 12 }, balanceEyebrow: { color: colors.accent, fontSize: 11, letterSpacing: 1.5, fontWeight: '600' }, balanceNumber: { color: colors.paper, fontSize: 40, fontWeight: '500', letterSpacing: -1.8 },
-  balanceCaption: { color: '#C3CBBE', fontSize: 12, lineHeight: 18 }, balanceRule: { height: 1, backgroundColor: '#496050', marginVertical: 8 }, address: { color: colors.ink, fontSize: 14, lineHeight: 23 },
-  error: { color: '#973D2E', fontSize: 13, lineHeight: 21 }, marketCard: { borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: 20, gap: 10 }, marketPrice: { color: colors.ink, fontSize: 22, fontWeight: '500' }, footer: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 24, gap: 8 },
-});
+export default function App() { return <SafeAreaProvider><Main /></SafeAreaProvider>; }

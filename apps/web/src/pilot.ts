@@ -1,4 +1,5 @@
 import { bytesToHex, keccak256, serializeTransaction, type Hex } from 'viem';
+import { appFetch as fetch } from './platform-fetch.ts';
 import { pilotCall, type PilotManifest } from '../shared/pilot.mjs';
 import type { AuthController } from './auth/controller';
 

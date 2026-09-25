@@ -1,5 +1,6 @@
 import { createPasskeyWithPrfOutput, getPasskeyPrfOutput, isMeraError, type WebAuthnClient } from '@category-labs/mera';
 import { deriveAccount } from './identity.ts';
+import { passkeyErrorMessage } from './passkey-errors.ts';
 
 export const RP_ID = 'flurbo.singu.online';
 export const ACCOUNT_KEY = 'flurbo.mobile.account.v1';
@@ -82,9 +83,7 @@ export class MobileAccount {
       this.update({ address: record.address, remembered: true, unlockedUntil });
       return true;
     } catch (error) {
-      if (generation === this.generation) this.update({ error: isMeraError(error) && error.code === 'PRF_UNAVAILABLE'
-        ? 'This passkey provider cannot unlock a Mera wallet. Try a provider with PRF support. If a passkey was saved, try signing in before creating another.'
-        : 'Passkey access did not finish. Try your existing passkey again. This Android build must be linked to flurbo.singu.online.' });
+      if (generation === this.generation) this.update({ error: passkeyErrorMessage(error) });
       return false;
     } finally {
       result?.prfOutput.fill(0); derived?.session.end();

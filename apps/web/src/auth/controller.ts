@@ -66,6 +66,7 @@ export class AuthController {
   #transport?: SessionTransport;
   #client?: WebAuthnClient;
   #now: () => number;
+  #errorMessage: typeof friendlyError;
   #key: string;
   #session?: Secp256k1SigningSession;
   #timer?: ReturnType<typeof setTimeout>;
@@ -75,12 +76,13 @@ export class AuthController {
   #listeners = new Set<() => void>();
   #snapshot: AuthSnapshot;
 
-  constructor(options: { policy: AuthPolicy; storage?: StoragePort; client?: WebAuthnClient; now?: () => number; transport?: SessionTransport }) {
+  constructor(options: { policy: AuthPolicy; storage?: StoragePort; client?: WebAuthnClient; now?: () => number; transport?: SessionTransport; errorMessage?: typeof friendlyError }) {
     this.policy = options.policy;
     this.#storage = options.storage;
     this.#transport = options.transport;
     this.#client = options.client;
     this.#now = options.now ?? Date.now;
+    this.#errorMessage = options.errorMessage ?? friendlyError;
     this.#key = `flurbo.passkey.v1:${this.policy.rpId ?? "unavailable"}`;
     this.#snapshot = { method: 'passkey', busy: false, address: null, expiresAt: null, signingExpiresAt: null, restoring: !!options.transport, remembered: !!this.#read(), error: null, notice: null };
   }
@@ -202,7 +204,7 @@ export class AuthController {
       this.#update({ method: 'passkey', address, expiresAt, signingExpiresAt: this.#now() + SESSION_MS, restoring: false, remembered, notice });
       return true;
     } catch (error) {
-      if (generation === this.#generation) this.#update({ error: friendlyError(error, mode === "signup") });
+      if (generation === this.#generation) this.#update({ error: this.#errorMessage(error, mode === "signup") });
       return false;
     } finally {
       result?.prfOutput.fill(0);

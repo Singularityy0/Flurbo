@@ -14,6 +14,7 @@
 !/apps/mobile/metro.config.js
 !/apps/mobile/tsconfig.json
 !/apps/mobile/src
+!/apps/mobile/plugins
 !/apps/mobile/assets
 /apps/mobile/assets/*
 !/apps/mobile/assets/brand
@@ -25,6 +26,40 @@
 !/config
 /config/*
 !/config/monad-readiness.json
+!/config/learning-testnet.json
+
+# Shared execution validators and pure helpers, not the web server or its secrets.
+!/apps/web
+/apps/web/*
+!/apps/web/src
+/apps/web/src/*
+!/apps/web/src/auth
+/apps/web/src/auth/*
+!/apps/web/src/auth/controller.ts
+!/apps/web/src/auth/policy.ts
+!/apps/web/src/auth/server-session.ts
+!/apps/web/src/auth/mera-provider.ts
+!/apps/web/src/learning
+/apps/web/src/learning/*
+!/apps/web/src/learning/execution.ts
+!/apps/web/src/platform-fetch.ts
+!/apps/web/src/pilot.ts
+!/apps/web/src/pilot-claims.ts
+!/apps/web/src/portfolio.ts
+!/apps/web/src/kuru.ts
+!/apps/web/shared
+/apps/web/shared/*
+!/apps/web/shared/pilot.mjs
+!/apps/web/shared/kuru.mjs
+!/apps/web/shared/learning-contracts.mjs
+!/apps/web/server
+/apps/web/server/*
+!/apps/web/server/network.mjs
+!/apps/web/server/withdrawal-policy.mjs
+!/apps/dashboard
+/apps/dashboard/*
+!/apps/dashboard/claims.mjs
+!/apps/dashboard/wallet.mjs
 
 # These exclusions also apply to any future files within included source folders.
 node_modules/
