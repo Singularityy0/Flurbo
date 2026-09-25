@@ -8,6 +8,7 @@ import Pilot from './Pilot';
 import PilotLedger from './PilotLedger';
 import Portfolio from './Portfolio';
 import Funding from './Funding';
+import WhatIf from './WhatIf';
 import { readCheckout, clearCheckout } from '../checkout';
 import './workspace.css';
 import './markets.css';
@@ -59,6 +60,7 @@ export default function Markets(){
       })}</div>
       {catalog&&!catalog.manifest.publication.draft.events.some(e=>e.question.toLowerCase().includes(query.toLowerCase()))&&<p>No markets match your search.</p>}
       {catalog&&!fresh&&<p role="status" className="market-caption">Refresh prices for a current view. Your final trade is always checked again.</p>}
+      {catalog&&<WhatIf key={catalog.manifest.pool} manifest={catalog.manifest}/>}
       {selected&&<section ref={ticket} tabIndex={-1} className="market-ticket" aria-label="Your prediction"><div className="market-ticket-bar"><span className="eyebrow">Your prediction</span><button aria-label="Close prediction" disabled={ticketBusy} onClick={()=>{if(auth.address)clearCheckout('rehearsal',auth.address);setSelected(null);}}><X size={21}/></button></div><Pilot key={selected.event+':'+selected.yes} namespace="rehearsal" onBusy={setTicketBusy} consumer={{event:selected.event,yes:selected.yes}}/></section>}
     </>:<>
       <details className="market-archive"><summary>Choose a market collection</summary><label htmlFor="market-collection">Collection</label><select id="market-collection" value={archive} onChange={e=>{setArchive(e.target.value);try{sessionStorage.setItem("flurbo.trading.market",e.target.value);}catch{}}}><option value="rehearsal">Practice markets</option><option value="pilot">Earlier real-event markets</option><option value="original">Earlier demo markets</option><option value="learning">Learning experiment</option></select></details>
