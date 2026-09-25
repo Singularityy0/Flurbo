@@ -21,6 +21,9 @@ Flurbo prediction-pool trades do not substitute for that Perpl requirement.
 - Live Perpl testnet market discovery. Validates chain 10143, the pinned exchange,
   collateral token linkage and six-decimal AUSD before displaying prices.
 - Cream, green and lime native screens. Perpl is explicitly a read-only preview.
+- Branded launcher icon, Android adaptive/themed icons and a cream splash screen.
+  Artwork in `assets/brand` reuses the website's f-and-dot favicon. PNGs are
+  bundled into EAS builds; changing native branding requires a new APK.
 - Hosted Android `/.well-known/assetlinks.json`, with the public certificate
   extracted from the previous EAS preview APK. See `PASSKEY_SETUP.md`.
 
@@ -55,13 +58,13 @@ npm run export:native
 Tests include derivation parity against the website, so install `apps/web`
 dependencies before running tests from a fresh checkout. The EAS build itself
 does not include or depend on web source. `.easignore` includes mobile source,
-package files, passkey config and the public network registry only.
+package files, branding PNGs, passkey config and the public network registry only.
 
 ## Android preview build
 
 The existing project is `@singuu/flurbo-mobile`, project ID
 `f8b90478-5afc-472b-91ca-67e5437e87e8`. Keep its EAS-managed signing key.
-This update uses app version 0.2.0 and Android versionCode 2.
+This update uses app version 0.2.0 and Android versionCode 3.
 
 First deploy the association endpoint on the website and verify its public JSON.
 Then, in Git Bash from `apps/mobile`:

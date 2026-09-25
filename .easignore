@@ -14,6 +14,11 @@
 !/apps/mobile/metro.config.js
 !/apps/mobile/tsconfig.json
 !/apps/mobile/src
+!/apps/mobile/assets
+/apps/mobile/assets/*
+!/apps/mobile/assets/brand
+/apps/mobile/assets/brand/*
+!/apps/mobile/assets/brand/*.png
 !/apps/mobile/scripts
 /apps/mobile/scripts/*
 !/apps/mobile/scripts/passkey-config.cjs
