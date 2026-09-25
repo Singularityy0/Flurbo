@@ -50,7 +50,7 @@ export default function WhatIf({manifest,namespace='rehearsal'}:{manifest:PilotS
   function missing(key:Metric){return result?.values[key]===null?<small>{result.reasons[key]==='rare_condition'?'This condition is too rare to display reliably.':'Precision is insufficient at this snapshot.'}</small>:null;}
   return <section className="what-if" aria-labelledby="what-if-heading">
     <header className="what-if-heading"><div><span className="eyebrow">See the connection</span><h2 id="what-if-heading">What <em>if?</em></h2></div><span className="market-badge">Read-only exploration</span></header>
-    <p>How does one answer change the market-implied chance of another? Choose two questions to explore them together.</p>
+    <p>What chance does the market imply for one answer, assuming another is known? Choose two questions to explore them together.</p>
     <div className="what-if-controls">
       <label><span id="what-if-a-label">Question to explore</span><select aria-labelledby="what-if-a-label" value={a} onChange={e=>select('a',Number(e.target.value))}>{events.map((event,i)=><option key={event.id} value={i}>{event.question}</option>)}</select></label>
       <label><span id="what-if-b-label">Suppose this question resolves</span><select aria-labelledby="what-if-b-label" value={b} onChange={e=>select('b',Number(e.target.value))}>{events.map((event,i)=><option key={event.id} value={i}>{event.question}</option>)}</select></label>

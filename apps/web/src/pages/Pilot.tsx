@@ -82,6 +82,14 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
     },350);
     return()=>{clearTimeout(timer);controller.abort();};
   },[!!consumer,owner,scope,mask,quantity,side,pending,completed,storageError,quoteTick]);
+  useEffect(()=>{
+    if(!consumer||!review||busy||pending)return;
+    const timer=setTimeout(()=>{
+      reviewRef.current=null;setReview(null);
+      setNotice('This price has expired. Refresh the price before confirming. No transaction was sent.');
+    },Math.max(0,review.expiresAt*1000-Date.now()));
+    return()=>clearTimeout(timer);
+  },[!!consumer,review,busy,pending]);
   useEffect(()=>{polls.current=0;setPollPaused(false);},[pending?.hash]);
   useEffect(()=>{
     if(!consumer||!pending?.hash||pending.login!==auth.address||busy||pollPaused)return;
@@ -90,9 +98,10 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
   },[!!consumer,pending,busy,pollPaused,auth.address]);
   async function connect(){
     cleanup.current(); const version=++generation.current;
+    provider.current=null;reviewRef.current=null;setOwner('');setReview(null);setPosition(null);
     const p:Provider|undefined=choice==='mera'?pilotMera(controller,namespace):wallets[Number(choice)]?.provider;
     if(!p)throw new Error('Select a wallet');
-    const changed=()=>{generation.current++;setOwner('');setReview(null);provider.current=null;setNotice('Wallet changed. Reconnect. Submitted actions remain in tracking.');};
+    const changed=()=>{generation.current++;reviewRef.current=null;setOwner('');setReview(null);provider.current=null;setNotice('Wallet changed. Reconnect. Submitted actions remain in tracking.');};
     for(const name of ['accountsChanged','chainChanged','disconnect'])p.on?.(name,changed);
     cleanup.current=()=>{for(const name of ['accountsChanged','chainChanged','disconnect'])p.removeListener?.(name,changed);};
     const accounts=await p.request({method:'eth_requestAccounts'}) as string[];
@@ -140,7 +149,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
         if(result==='confirmed'&&['buy','sell','redeem'].includes(saved.review.action)&&request.scope===scope&&request.mask===mask&&owner===request.owner.toLowerCase())
           setPosition(await pilotRequest('position',{owner,scope,mask}));
         setNotice(confirmed);
-      }catch{setNotice(result==='confirmed'?'Transaction confirmed, but balances could not refresh. Use Refresh pilot; do not repeat the transaction.':'Transaction reverted. Data refresh failed; check the receipt before retrying.');}
+      }catch{setNotice(result==='confirmed'?'Transaction confirmed, but balances could not refresh. Check Portfolio for your holdings; do not repeat the transaction.':'Transaction reverted. Data refresh failed; check the receipt before retrying.');}
     }
     else setNotice(result==='pending'?'Still pending. Do not submit again.':'Waiting for a second canonical confirmation.');
   }
@@ -152,7 +161,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
     const answerSummary=legs.map(i=>`${state?.manifest.publication.draft.events[i]?.question||'Event '+(i+1)} ${(answers[i]??true)?'Yes':'No'}`).join(' + ');
     return <div className="consumer-ticket">
       <h2>{legs.length>1?'Your combined prediction':question?.question||'Your selected market'}</h2>
-      <p>Practice event. A winning share pays 1 test AUSD. A losing share pays 0. Cancelled outcomes follow the rules below.</p>
+      <p>Practice event. A winning share pays 1 test AUSD; a losing share pays 0. An unresolved outcome (VOID) can produce a partial payout under the rules below.</p>
       <p className="ticket-status" role="status">{busy?'Working...':consumerNotice(notice)}</p>
       <div className="ticket-wallet"><label htmlFor="consumer-wallet">Pay with</label><select id="consumer-wallet" value={choice} disabled={disabled} onChange={e=>{cleanup.current();generation.current++;setChoice(e.target.value);setOwner('');provider.current=null;}}><option value="mera">My Flurbo wallet</option>{wallets.map((w,i)=><option key={i} value={i}>{w.name}</option>)}</select>
         {choice==='mera'&&!auth.signingExpiresAt&&<button className="button button-outline" disabled={busy||auth.busy} onClick={()=>void controller.authenticate('login')}>Unlock Flurbo wallet</button>}
@@ -167,7 +176,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
       {review&&!pending&&!completed&&<section className="ticket-review" aria-label="Transaction review"><h3>{review.action==='approve'?'Step 1 of 2: allow this payment':review.action==='buy'?'Your purchase':review.action==='sell'?'Confirm your sale':'Confirm your payout'}</h3><p>{cash(review.requested.quantity||'0')} shares · {consumerClaim(review.requested,state)}</p>{review.action!=='redeem'&&<p>{review.action==='sell'?'Receive at least':'Spend up to'} <strong>{cash(review.action==='sell'?review.minimumReceivedAtoms!:review.amountAtoms)} test AUSD</strong></p>}<p>{review.action==='approve'?'First allow this payment in your wallet. We will check it automatically, then show the Buy button. Approval alone does not purchase shares.':'Review the amount, then confirm in your selected wallet.'}</p><details><summary>Payment details</summary><p>Maximum network fee: {formatUnits(BigInt(review.maximumFeeWei),18)} MON. Price tolerance: 0.5%.</p><p>Wallet {review.transaction.from}. Review valid until {date(review.expiresAt)}.</p><p>Contract {review.transaction.to}</p></details><div className="pilot-actions"><button className="button button-dark" disabled={busy||!!pending||choice==='mera'&&!auth.signingExpiresAt} onClick={()=>void run(confirm)}>{review.action==='approve'?'Allow payment':review.action==='buy'?`Buy ${cash(review.requested.quantity||'0')} shares`:review.action==='sell'?'Sell shares':'Collect payout'}</button></div></section>}
       {pending&&<section className="ticket-review"><h3>Waiting for confirmation</h3><p>{pending.hash?'Your transaction was sent. We are checking confirmation automatically. You can reload this page without losing it.':'Check your wallet activity. A transaction may have been sent; do not repeat it.'}</p>{!pending.hash&&<><label>Transaction hash<input value={hash} onChange={e=>setHash(e.target.value)}/></label><button onClick={()=>void run(async()=>{if(!/^0x[0-9a-f]{64}$/i.test(hash))throw new Error('Paste a valid transaction hash');save({...pending,hash:hash.toLowerCase() as Hex});})}>Find transaction</button></>}<p>{pollPaused?'Automatic checks paused. Check again when ready.':'You do not need to click again.'}</p>{pollPaused&&<button className="button button-dark" disabled={busy||!pending.hash} onClick={()=>{polls.current=0;setPollPaused(false);void run(check);}}>Check confirmation</button>}</section>}
       {position&&<p><strong>{cash(position.quantity)} shares</strong> in your wallet. {position.payoutAtoms===null?'Payout follows settlement.':`${cash(position.payoutAtoms)} test AUSD to collect.`}</p>}
-      {confirmedHash&&<p><a href={`https://testnet.monadscan.com/tx/${confirmedHash}`} target="_blank" rel="noreferrer">View confirmed transaction</a></p>}
+      {confirmedHash&&<p><a href={`https://testnet.monadscan.com/tx/${confirmedHash}`} target="_blank" rel="noreferrer">View transaction</a></p>}
       {question&&<details><summary>How this market works</summary><p>{question.yesRule}</p><p>{question.noRule}</p><p>{state!.manifest.publication.draft.exceptionPolicy}</p><p>These practice outcomes are scripted. All reviewers are controlled by Flurbo's operator.</p><a href={question.source.referenceUrl} target="_blank" rel="noreferrer">Read practice rules</a></details>}
     </div>;
   }
@@ -198,6 +207,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
 }
 
 function consumerNotice(message:string){
+  if(message==='Wallet request rejected.')return 'You cancelled the wallet confirmation. Nothing was submitted. Refresh the price when you want to try again.';
   if(message==='Submitted. Check confirmation before another action.')return 'Sent to the network. Confirmation is checked automatically.';
   if(message==='Pilot data loaded. Connect a signing wallet to take part.')return 'Choose your wallet to get started.';
   if(message==='Loading the real-event pilot...')return 'Loading your market...';

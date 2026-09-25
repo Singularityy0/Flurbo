@@ -15,9 +15,16 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
   let login=true,reads=0;const errors:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
+    await page.clock.install();
     page.on('pageerror',(error:Error)=>errors.push(error.message));
     await page.addInitScript(({owner,hash,code,namespace}:any)=>{
-      (window as any).ethereum={request:async({method}:any)=>{
+      const listeners=new Map<string,Set<()=>void>>();
+      (window as any).walletEvent=(name:string)=>listeners.get(name)?.forEach(fn=>fn());
+      (window as any).ethereum={
+        on:(name:string,fn:()=>void)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name)!.add(fn);},
+        removeListener:(name:string,fn:()=>void)=>listeners.get(name)?.delete(fn),
+        request:async({method}:any)=>{
+        if(method==='eth_requestAccounts'&&sessionStorage.getItem('wallet.rejectConnect'))throw Object.assign(new Error('Rejected'),{code:4001});
         if(['eth_accounts','eth_requestAccounts'].includes(method))return[owner];
         if(method==='eth_chainId')return'0x279f';
         if(method==='eth_getBlockByNumber')return{number:'0x65',hash};
@@ -28,9 +35,12 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
         if(method==='eth_getBalance')return'0xde0b6b3a7640000';
         if(method==='eth_getTransactionCount')return 121;
         if(method==='eth_sendTransaction'){
+          if(sessionStorage.getItem('wallet.rejectSend')){sessionStorage.removeItem('wallet.rejectSend');throw Object.assign(new Error('Rejected'),{code:4001});}
           const pending=JSON.parse(localStorage.getItem('flurbo.'+namespace+'.pending.v1')||'null');
           if(!pending||pending.hash!==null)throw new Error('Pending intent must be stored first');
-          sessionStorage.setItem('pilot.sends',String(Number(sessionStorage.getItem('pilot.sends')||0)+1));return hash;
+          sessionStorage.setItem('pilot.sends',String(Number(sessionStorage.getItem('pilot.sends')||0)+1));
+          if(sessionStorage.getItem('wallet.unknownSend'))throw new Error('Provider disconnected');
+          return hash;
         }
         throw new Error(method);
       }};
@@ -68,6 +78,25 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     await page.getByLabel('Shares',{exact:true}).fill('5');
     await page.getByRole('button',{name:'Allow payment',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),null);
+    // Rejection clears the unsent intent and never counts as a purchase.
+    await page.evaluate(()=>sessionStorage.setItem('wallet.rejectSend','1'));
+    await page.getByRole('button',{name:'Allow payment',exact:true}).click();
+    await page.waitForFunction((ns:string)=>localStorage.getItem('flurbo.'+ns+'.pending.v1')===null,namespace);
+    await page.getByRole('button',{name:'Refresh price',exact:true}).click();
+    await page.getByRole('button',{name:'Allow payment',exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),null);
+    // A failed reconnect must not leave the earlier signer/review available.
+    await page.evaluate(()=>sessionStorage.setItem('wallet.rejectConnect','1'));
+    await page.getByRole('button',{name:'Refresh wallet',exact:true}).click();
+    await page.getByRole('button',{name:'Use this wallet',exact:true}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Allow payment',exact:true}).count(),0);
+    await page.evaluate(()=>sessionStorage.removeItem('wallet.rejectConnect'));
+    await page.getByRole('button',{name:'Use this wallet',exact:true}).click();
+    await page.getByRole('button',{name:'Allow payment',exact:true}).waitFor();
+    await page.evaluate(()=>(window as any).walletEvent('accountsChanged'));
+    await page.getByText('Wallet changed. Reconnect. Submitted actions remain in tracking.').waitFor();
+    assert.equal(await page.getByRole('button',{name:'Allow payment',exact:true}).count(),0);
+    await page.getByRole('button',{name:'Use this wallet',exact:true}).click();
     await page.getByRole('button',{name:'Allow payment',exact:true}).click();
     await page.getByText('Sent to the network. Confirmation is checked automatically.').waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
@@ -106,7 +135,27 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     assert.match(await reviewPanel.textContent(),/concert sell out/);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
 
-    await page.getByRole('button',{name:'Close prediction'}).click();
+    // Expiry removes an actionable price without sending or silently renewing it.
+    await page.clock.fastForward(301_000);
+    await page.getByText('This price has expired. Refresh the price before confirming. No transaction was sent.').waitFor();
+    assert.equal(await page.getByRole('button',{name:'Buy 5 shares',exact:true}).count(),0);
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
+    await page.clock.setFixedTime(new Date());
+    await page.getByRole('button',{name:'Refresh price',exact:true}).click();
+    await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
+    // A missing response may follow a broadcast. Preserve intent across reload;
+    // never make another purchase available until the original is reconciled.
+    await page.evaluate(()=>sessionStorage.setItem('wallet.unknownSend','1'));
+    await page.getByRole('button',{name:'Buy 5 shares',exact:true}).click();
+    await page.getByRole('heading',{name:'Waiting for confirmation'}).waitFor();
+    await page.reload();
+    await page.getByRole('heading',{name:'Waiting for confirmation'}).waitFor();
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'3');
+    assert.equal(await page.getByRole('button',{name:'Buy 5 shares',exact:true}).count(),0);
+    const unresolved=await page.evaluate((ns:string)=>JSON.parse(localStorage.getItem('flurbo.'+ns+'.pending.v1')!),namespace);
+    assert.equal(unresolved.hash,null);
+    assert.equal(unresolved.review.requested.scope,3);
+    await page.goto('https://flurbo.singu.online/markets');
     await page.getByRole('textbox',{name:'Search markets'}).fill('concert');
     assert.equal(await page.locator('.market-card').count(),1);
     login=false;const before=reads;await page.goto('https://flurbo.singu.online/markets');await page.waitForURL('**/login');assert.equal(reads,before);

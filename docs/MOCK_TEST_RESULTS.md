@@ -90,3 +90,38 @@ path applies; do not report the originally intended YES/NO exercise as passed.
 The local checker reported a gap since its previous local checkpoint. This does
 not establish a GitHub Actions outage or continuous hosted monitoring. No
 transaction or email was sent by this read-only check.
+
+
+## October readiness and consumer regression checkpoint, 25 September 2026
+
+The saved read-only report at `target/mock-testing/october-demo-readiness.json`
+records all five checks passing at **2026-09-25T09:45:56Z**, with status
+`ready_for_manual_trading_checks`. Pool:
+`0x085b951ed24bbae44add2f9ff2b8198cd7517a07`. Hosted collection binding,
+login guards, page/security headers, live quotes/collateral and live What-if
+calculations passed. This supersedes the earlier missing hosted diagnostic.
+It is a point-in-time observation, not continuous availability.
+
+Consumer QA passed the production build/typecheck and **10 targeted tests**:
+`checkout`, `pilot-access`, `pilot-browser`, `markets-browser` and
+`what-if-browser`. Browser coverage uses mocked providers and API responses,
+not real wallet confirmations. Both practice namespace variants exercise:
+
+- Rejected approval leaves no pending intent or submitted transaction.
+- Failed reconnect and account changes remove the previous signer and review.
+- Approval confirmation survives reload and does not buy shares by itself.
+- One confirmed buy completes the purchase and remembers its claim for Portfolio.
+- Expired prices stop offering confirmation; refreshing never sends a transaction.
+- A lost submission response keeps its intent after reload and blocks another buy.
+- Desktop/mobile layout, login guards and read-only What-if behavior.
+
+Copy now separates payout from profit, purchase quotes from What-if probabilities,
+and unresolved (VOID) outcomes from cancellation. The landing page and README
+reflect the hosted practice demo. No collateral, pricing or settlement rules
+changed. These changes still require a commit and hosting rollout.
+
+The manual wallet and public settlement rows above remain unverified by this
+checkpoint. After rollout, check one rejected prompt and one single-share buy
+with the intended wallet on the hosted October collection; confirm the same
+wallet and collection in Portfolio. Complete public settlement/redemption at
+the committed deadlines. Do not buy a second time to make a pending trade appear.

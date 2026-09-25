@@ -195,7 +195,7 @@ function Home() {
       <section className="status-section section-light">
         <div className="status-grid">
           <span className="eyebrow">Where it stands</span>
-          <div className="status-copy"><h2>Built for Monad.</h2><p>Flurbo brings individual and combined predictions into one shared pool on Monad. The testnet beta uses synthetic events and test AUSD. Native mobile accounts and tradable conditional securities are still in development.</p></div>
+          <div className="status-copy"><h2>Built for Monad.</h2><p>Flurbo brings individual and combined predictions into one shared pool on Monad. The consumer demo uses scripted practice events and test AUSD. What-if explores pricing without placing a trade. Native mobile acceptance and tradable conditional positions remain unfinished.</p></div>
           <div className="status-stamp"><span className="stamp-dot" /> testnet beta<br /><small>last updated · 2026</small></div>
         </div>
       </section>
@@ -206,8 +206,8 @@ function Home() {
           <div className="faq-list">
             {[
               ["What is Flurbo, in one sentence?", "A shared liquidity pool that prices related individual and multi-leg yes-or-no claims together, so their relationships stay coherent."],
-              ["Is Flurbo live?", "Flurbo is preparing its public Monad testnet beta. Trading requires an open, funded and verified deployment. This version uses synthetic events and test assets; it is not a mainnet market."],
-              ["What does ‘cost and payout’ mean here?", "Conceptually, the cost is what you pay to take a position; the payout is what the claim could return if it resolves in your favor. A future Flurbo experience would make both visible before you act."],
+              ["Is Flurbo live?", "Flurbo is available for practice on Monad testnet. Sign in to explore the markets, trade with test AUSD and view your holdings. Practice outcomes are scripted, and trading stops at the published closing time."],
+              ["What does ‘cost and payout’ mean here?", "Cost is the test AUSD you pay for your shares. A winning share pays 1 test AUSD and a losing share pays 0. Unresolved outcomes follow the published VOID rules and can pay a fraction. Payout is the total returned, not profit: subtract your purchase cost and network fees. What-if probabilities are not purchase quotes."],
               ["Can I create an account?", "Create your Flurbo account with a Mera passkey. After signing in, trade with your Mera wallet or connect MetaMask. You can send available AUSD from Mera to a MetaMask address on the same Monad network. Localhost passkeys belong to the development site."],
             ].map(([question, answer], index) => {
               const open = activeFaq === index;

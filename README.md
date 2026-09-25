@@ -1,8 +1,9 @@
 # Flurbo
 
-An on-chain combinatorial market maker for prediction markets: one shared
-liquidity pool that coherently prices multi-leg claims through a deterministic
-cost function, with tradable conditional claims as a planned extension.
+Flurbo brings individual and combined predictions into one shared market,
+letting users see how the market prices relationships between events.
+The current consumer demo uses practice markets on Monad testnet and test AUSD.
+What-if is read-only; tradable conditional positions remain research.
 
 ## Product direction
 
@@ -51,8 +52,11 @@ Run `cd apps/web`, `npm ci`, then `npm run dev` to open it at
 http://localhost:18767. Local passkeys are separate test identities. The existing
 local trading and learning dashboards keep their separate ports and functionality.
 The user verified Mera signup and login. The [consumer workspace](docs/CONSUMER_WORKSPACE.md)
-now connects the local MVP and retains a verified seven-day account login across
-refresh. Mera transaction testing and public HTTPS deployment remain pending.
+retains a seven-day account login across refresh. The hosted testnet site is
+available at [flurbo.singu.online](https://flurbo.singu.online). Signing unlock
+is separate from login, and Mera and external wallets hold separate positions.
+Hosted read-only checks do not replace real-wallet and settlement acceptance;
+see [mock test results](docs/MOCK_TEST_RESULTS.md).
 
 An offline [ParlayMarket learning comparison](docs/PARLAY_COMPARISON.md) now adds
 an exact pairwise model, cross-entropy gradient updates and explicit virtual
