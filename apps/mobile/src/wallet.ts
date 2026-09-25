@@ -1,3 +1,4 @@
+import {linkTradingWallet,linkedWallets} from '../../web/src/wallet-links';
 import SignClient from '@walletconnect/sign-client';
 import { Linking } from 'react-native';
 import { api } from './api';
@@ -47,7 +48,7 @@ export const externalWallet = {
       if (!client) throw new Error('Wallet connection is unavailable.');
       const login = auth.getSnapshot().address;
       const { uri, approval } = await client.connect({ requiredNamespaces: {
-        eip155: { chains: [CHAIN], methods: ['eth_sendTransaction'], events: ['chainChanged', 'accountsChanged'] },
+        eip155: { chains: [CHAIN], methods: ['eth_sendTransaction','personal_sign'], events: ['chainChanged', 'accountsChanged'] },
       } });
       const approved = approval();
       // Attach rejection handling before leaving the app so expiry is never unhandled.
@@ -55,7 +56,15 @@ export const externalWallet = {
       if (uri) await Linking.openURL(`https://metamask.app.link/wc?uri=${encodeURIComponent(uri)}`);
       const session = await approved;
       if (auth.getSnapshot().address !== login) { await client.disconnect({ topic: session.topic, reason: { code: 6000, message: 'Flurbo login changed' } }); return; }
-      const address = sessionAddress(session); topic = session.topic; update({ address });
+      const address = sessionAddress(session);
+      await linkTradingWallet({request:async input=>{
+        if(input.method==='eth_accounts')return [sessionAddress(client!.session.get(session.topic))];
+        if(input.method!=='personal_sign')throw Error('Unsupported account-link request');
+        const response=client!.request({topic:session.topic,chainId:CHAIN,request:{method:input.method,params:input.params??[]}});
+        void response.catch(()=>undefined);void Linking.openURL('https://metamask.app.link/').catch(()=>undefined);return response;
+      }},login!,address,()=>auth.getSnapshot().address===login);
+      if(auth.getSnapshot().address!==login)throw Error('Flurbo account changed');
+      topic = session.topic; update({ address });
     } catch { topic = undefined; update({ address: null, error: 'MetaMask connection did not finish. Open MetaMask, select Monad testnet, then reconnect.' }); }
     finally { update({ busy: false }); }
   },
@@ -80,6 +89,8 @@ export function tradingProvider(kind: WalletKind, namespace: PilotNamespace): Pr
     if (input.method === 'eth_accounts' || input.method === 'eth_requestAccounts') return [selected];
     if (input.method === 'eth_chainId') return '0x279f';
     if (input.method === 'eth_sendTransaction') {
+      const links=await linkedWallets();
+      if(links.account!==login||!links.wallets.includes(selected))throw Error('Connect MetaMask once to link it to this Flurbo account.');
       checkWalletTransaction(input.params?.[0], selected);
       await storage.flush();
       if (auth.getSnapshot().address !== login || topic !== connection || snapshot.address !== selected) throw new Error('Account changed before opening MetaMask. Review again.');

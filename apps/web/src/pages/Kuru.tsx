@@ -1,3 +1,4 @@
+import { linkTradingWallet } from '../wallet-links';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'wouter';
 import { formatUnits } from 'viem';
@@ -45,6 +46,8 @@ export default function Kuru({ onBusy, onConvert }: { onBusy(busy: boolean): voi
     cleanup.current = () => { for (const name of ['accountsChanged', 'chainChanged', 'disconnect']) p.removeListener?.(name, changed); };
     const accounts = await p.request({ method: 'eth_requestAccounts' }) as string[];
     if (!Array.isArray(accounts) || !/^0x[0-9a-f]{40}$/i.test(accounts[0])) throw new Error('No wallet account returned.');
+    if(!auth.address)throw Error('Sign in first.');
+    await linkTradingWallet(p,auth.address,accounts[0],()=>live.current&&version===generation.current);
     const next = await loadState(accounts[0]);
     if (!live.current || version !== generation.current) throw new Error('Wallet changed during connection. Reconnect.');
     provider.current = p; setOwner(accounts[0].toLowerCase());

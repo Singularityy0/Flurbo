@@ -16,6 +16,7 @@ test('combined shares appear in a fresh browser before history responds, with no
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/account')return route.fulfill({json:{...await f.service.account(url.searchParams.get('wallet')),claimScopes:[1,2,3]}});
       if(path==='/api/rehearsal/history'){await gate;return route.fulfill({status:503,json:{error:'History unavailable'}}).catch(()=>{});}
@@ -37,7 +38,7 @@ test('combined shares appear in a fresh browser before history responds, with no
     assert.equal(await page.evaluate(()=>localStorage.length),0);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     // Other traders' active scopes must not be displayed as this wallet's holdings.
-    await page.getByRole('textbox',{name:'Wallet to view'}).fill(login);await page.getByRole('button',{name:'View wallet',exact:true}).click();
+    await page.getByText('Look up another address',{exact:true}).evaluate((el:any)=>el.parentElement.open=true);await page.getByRole('textbox',{name:'Wallet to view'}).fill(login);await page.getByRole('button',{name:'View wallet',exact:true}).click();
     await page.getByText('No shares in the claims checked so far. Combinations may still be loading.',{exact:true}).waitFor();
     assert.equal(await page.getByRole('cell',{name:'10',exact:true}).count(),0);
     release();assert.deepEqual(errors,[]);
@@ -56,6 +57,7 @@ test('pilot portfolio loads remembered wallet and catches up without repeat clic
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/pilot/account')return route.fulfill({json:await fixture.service.account(owner)});
       if(path==='/api/pilot/history'){
@@ -71,7 +73,7 @@ test('pilot portfolio loads remembered wallet and catches up without repeat clic
     await page.getByRole('button',{name:'Pause loading'}).waitFor();
     await page.getByText('Test event 1 + Test event 2',{exact:true}).waitFor();
     assert.equal(scans,2);
-    assert.equal(await page.getByRole('textbox',{name:'Wallet to view'}).inputValue(),owner);
+    assert.equal(await page.getByText('Wallet '+owner.slice(0,8)+'…'+owner.slice(-6),{exact:true}).count(),1);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     fail=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
     await page.getByText('Trade history is temporarily unavailable. Your holdings are loaded separately. Retry shortly.',{exact:true}).waitFor();
@@ -97,6 +99,7 @@ test('practice history outage still shows owned shares; recovery shows the bet a
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;requests.push(path);
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/account')return failAccount?route.fulfill({status:503,json:{error:'Account unavailable'}}):route.fulfill({json:await fixture.service.account(url.searchParams.get('wallet'))});
       if(path==='/api/rehearsal/history'){
@@ -127,7 +130,7 @@ test('practice history outage still shows owned shares; recovery shows the bet a
     await page.goto('https://flurbo.singu.online/portfolio');
     await page.getByRole('cell',{name:'10',exact:true}).waitFor();
     await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();
-    failAccount=true;await page.getByRole('textbox',{name:'Wallet to view'}).fill(login);await page.getByRole('button',{name:'View wallet',exact:true}).click();
+    failAccount=true;await page.getByText('Look up another address',{exact:true}).evaluate((el:any)=>el.parentElement.open=true);await page.getByRole('textbox',{name:'Wallet to view'}).fill(login);await page.getByRole('button',{name:'View wallet',exact:true}).click();
     await page.getByText('Wallet details could not be refreshed. Retry shortly.',{exact:true}).waitFor();
     assert.equal(await page.getByRole('cell',{name:'10',exact:true}).count(),0);
     failAccount=false;await page.getByRole('button',{name:'Refresh',exact:true}).click();
@@ -160,6 +163,7 @@ test('switch wallets during pending reads; late replies cannot overwrite the new
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/account'){
         const address=url.searchParams.get('wallet')!;if(holdAccount&&address===login)await accountGate;
@@ -179,19 +183,20 @@ test('switch wallets during pending reads; late replies cannot overwrite the new
     });
     await page.goto('https://flurbo.singu.online/portfolio');
     for(let n=0;!heldPosition&&n<200;n++)await page.waitForTimeout(10);assert.equal(heldPosition,true);
+    await page.getByText('Look up another address',{exact:true}).click();
     assert.equal(await page.getByRole('textbox',{name:'Wallet to view'}).isEnabled(),true);
     assert.equal(await page.getByRole('button',{name:'View wallet',exact:true}).isEnabled(),true);
-    await page.getByRole('textbox',{name:'Wallet to view'}).fill(login);await page.getByRole('button',{name:'View wallet',exact:true}).click();
+    await page.getByText('Look up another address',{exact:true}).evaluate((el:any)=>el.parentElement.open=true);await page.getByRole('textbox',{name:'Wallet to view'}).fill(login);await page.getByRole('button',{name:'View wallet',exact:true}).click();
     await page.getByRole('cell',{name:'3',exact:true}).waitFor();releaseOld();await page.waitForTimeout(100);
     assert.equal(await page.getByRole('cell',{name:'10',exact:true}).count(),0);
     assert.ok(await page.evaluate(()=>(window as any).cancelledReads)>=2);
     holdAccount=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
     await page.getByRole('button',{name:'Stop loading',exact:true}).waitFor();
-    await page.getByRole('textbox',{name:'Wallet to view'}).fill(other);
+    await page.getByText('Look up another address',{exact:true}).evaluate((el:any)=>el.parentElement.open=true);await page.getByRole('textbox',{name:'Wallet to view'}).fill(other);
     await page.getByRole('button',{name:'View wallet',exact:true}).click();
     await page.getByRole('cell',{name:'7',exact:true}).waitFor();releaseAccount();await page.waitForTimeout(100);
     assert.equal(await page.getByRole('cell',{name:'3',exact:true}).count(),0);
-    assert.equal(await page.locator('.portfolio-address').innerText(),'Showing '+other);
+    assert.equal(await page.getByRole('textbox',{name:'Wallet to view'}).inputValue(),other);
     assert.equal(await page.evaluate((login:string)=>sessionStorage.getItem('flurbo.view-wallet:'+login),login),other);
     assert.deepEqual(errors,[]);
   }finally{releaseOld();releaseAccount();await browser.close();}
@@ -206,6 +211,7 @@ test('automatic catch-up stops after five batches; Stop loading cancels an activ
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/account/wallets')return route.fulfill({json:{account:owner,wallets:[owner]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/account')return route.fulfill({json:await fixture.service.account(owner)});
       if(path==='/api/rehearsal/positions')return route.fulfill({json:{snapshot:{blockNumber:'200'},rows:[]}});

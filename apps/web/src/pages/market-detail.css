@@ -19,6 +19,14 @@
 .detail-holdings small { color:#667268; }
 .detail-trade .consumer-ticket>h2 { font-size:1.15rem;margin-top:14px; }
 .detail-trade .consumer-ticket { padding:0; }
+.detail-trade .ticket-wallet { display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap; }
+.detail-trade .ticket-wallet>div { display:grid;gap:6px; }
+.detail-trade .ticket-wallet .button { margin:0; }
+.detail-trade .ticket-wallet small { color:#667268; }
+.consumer-ticket .pilot-actions,.consumer-ticket .ticket-review { display:flex;flex-wrap:wrap;gap:12px; }
+.consumer-ticket .ticket-review>h3,.consumer-ticket .ticket-review>p,.consumer-ticket .ticket-review>details { flex-basis:100%;margin:0; }
+.consumer-ticket .pilot-actions { margin-top:16px; }
+.consumer-ticket .ticket-status:empty { display:none; }
 .price-history svg { display:block;width:100%;height:auto;margin:18px 0;overflow:visible; }
 .price-history svg text { fill:#667268;font-size:12px; }
 .price-legend,.price-ranges { display:flex;gap:16px;flex-wrap:wrap; }

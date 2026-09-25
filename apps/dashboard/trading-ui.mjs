@@ -168,6 +168,8 @@ export function mountTrading(hooks) {
       const candidate = address(accounts[0]);
       const state = await hooks.readSnapshot(candidate);
       await assertContext(selected, state, candidate);
+      await hooks.verifyWallet?.(selected, candidate);
+      await assertContext(selected, state, candidate);
       connected(selected, candidate);
     } catch (error) { text('signer-status', walletMessage(error)); }
     finally { operation = false; update(); }

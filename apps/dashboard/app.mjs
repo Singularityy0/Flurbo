@@ -300,6 +300,7 @@ trading = mountTrading({
   canRequestQuote: () => Boolean(composed && quantityValid && data?.trading_available && snapshotFresh(data.snapshot) && Date.now() / 1000 < data.cluster.closes_at && !stateBusy && !quoteBusy),
   getSide: () => $('side').value,
   providers: options.providers || [],
+  verifyWallet: options.verifyWallet,
   getState: () => data,
   getSelection: () => composed && quantityValid ? { ...composed, quantity: parseUnits($('quantity').value.trim()), label: claimLabel(legs, $('mode').value) } : null,
   readHealth: () => request('/api/health', new AbortController()),

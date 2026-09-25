@@ -49,12 +49,17 @@ Refresh retains account access for seven days. Mera signs only the login proof;
 its signing session ends immediately afterward. MetaMask is the only transaction
 wallet offered by the web and native apps. See [Mera authentication](MERA_WEB_AUTH.md).
 
+MetaMask addresses now link to the Mera account with a one-time ownership
+signature. Portfolio and History load all verified links across devices instead
+of asking for a trading address. See [account wallets](ACCOUNT_WALLETS.md) for
+storage, migration, ownership and privacy limits.
+
 1. Sign in with Mera, then connect MetaMask on Monad testnet. Fund the MetaMask
    address with test MON and test AUSD; do not fund the Mera account for trading.
 2. Select a prediction and amount. Confirm any required AUSD approval in MetaMask,
    then confirm the purchase. Approval alone does not buy shares.
-3. Check Portfolio for the selected MetaMask address. Earlier holdings at other
-   addresses remain available through the read-only address lookup.
+3. Check Portfolio for all MetaMask addresses linked to the Mera account. Link
+   each earlier trading wallet once to include its existing holdings automatically.
 4. Reload during a pending transaction. Its saved record must remain and reconcile
    against a canonical receipt before another submission is allowed.
 5. Reject a wallet prompt, change MetaMask accounts or networks, and sign out.

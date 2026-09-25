@@ -3,11 +3,13 @@ import { TESTNET } from './network.mjs';
 import { learningDeployment } from '../shared/learning-contracts.mjs';
 import { evidenceAssistant } from './evidence-assistant.mjs';
 import { priceHistory } from './price-history.mjs';
+import { walletLinks } from './wallet-links.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
   learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {} } = {}) {
   const hosted = publicOrigin !== null;
+  const links = walletLinks({command:store.command});
   const priceArchives=new WeakMap();
   const assistant=publishedPilot&&store.command?evidenceAssistant({manifest:publishedPilot.manifest,command:store.command,...evidenceOptions}):null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
@@ -35,6 +37,23 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (++requests > 600) { res.setHeader('Retry-After', '60'); return send(res, 429, { error: 'Service busy. Retry shortly.' }); }
       }
       if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? TESTNET : { environment: 'local_fork', chain_id: 10143 });
+      if (url.pathname.startsWith('/api/account/wallets')) {
+        const login=await store.read(sid,origin);
+        if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
+        if(hosted&&!store.command)return send(res,503,{error:'Account wallet storage is unavailable.'});
+        if(url.search)return send(res,400,{error:'Unexpected wallet query.'});
+        if(req.method==='GET'&&url.pathname==='/api/account/wallets')return send(res,200,await links.list(login.address,origin));
+        if(req.method!=='POST')return send(res,405,{error:'Method not allowed.'});
+        const input=await body(req);
+        try {
+          if(url.pathname==='/api/account/wallets/challenge'&&Object.keys(input).join(',')==='wallet')return send(res,200,await links.challenge(login.address,input.wallet,origin,sid));
+          if(url.pathname==='/api/account/wallets/verify'&&Object.keys(input).sort().join(',')==='id,signature'&&typeof input.id==='string'&&typeof input.signature==='string')return send(res,200,await links.verify(login.address,input.id,input.signature,origin,sid));
+        } catch(e) {
+          const safe=/^(Choose a MetaMask|Too many linking|Wallet proof rejected|This MetaMask wallet|This account has reached)/.test(e.message);
+          return send(res,safe?400:503,{error:safe?e.message:'Account wallet storage is unavailable. Retry linking shortly.'});
+        }
+        return send(res,400,{error:'Invalid wallet linking request.'});
+      }
       if(url.pathname==='/api/evidence-beta'){
         const login=await store.read(sid,origin);
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey'});

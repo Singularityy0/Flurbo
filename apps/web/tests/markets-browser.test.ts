@@ -12,7 +12,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
   f.manifest.publication.draft.events.forEach((e:any,i:number)=>e.question=['Will the night market open?','Will the concert sell out?','Will it rain on Saturday?','Will the new cafe open?'][i]);
   f.manifest.publication.reviewerControl='single-operator';
   {f.manifest.publication.mode='rehearsal';f.manifest.publication.draft.title='Public rehearsal: scripted settlement checks';}
-  let login=true,reads=0,historyReads=0;const errors:string[]=[];
+  let login=true,reads=0,historyReads=0,linked=false;const errors:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
     await page.clock.install();
@@ -25,6 +25,8 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
         removeListener:(name:string,fn:()=>void)=>listeners.get(name)?.delete(fn),
         request:async({method}:any)=>{
         if(method==='eth_requestAccounts'&&sessionStorage.getItem('wallet.rejectConnect'))throw Object.assign(new Error('Rejected'),{code:4001});
+        if(method==='wallet_requestPermissions')return [];
+        if(method==='personal_sign'){if(sessionStorage.getItem('wallet.rejectLink'))throw Error('Link signature rejected');sessionStorage.setItem('link.signatures',String(Number(sessionStorage.getItem('link.signatures')||0)+1));return '0x'+'11'.repeat(65);}
         if(['eth_accounts','eth_requestAccounts'].includes(method))return[owner];
         if(method==='eth_chainId')return'0x279f';
         if(method==='eth_getBlockByNumber')return{number:'0x65',hash};
@@ -49,6 +51,9 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
       const url=new URL(route.request().url()),path=url.pathname;
       if(path.endsWith('/history'))historyReads++;
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:namespace,collections:[{namespace,label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/account/wallets')return route.fulfill({json:{account:loginAddress,wallets:linked?[owner]:[]}});
+      if(path==='/api/account/wallets/challenge'){assert.equal(route.request().postDataJSON().wallet,owner);return route.fulfill({json:{id:'fixture-proof',message:'Link this MetaMask wallet to your Flurbo account; no transaction.'}});}
+      if(path==='/api/account/wallets/verify'){assert.equal(route.request().postDataJSON().id,'fixture-proof');linked=true;return route.fulfill({json:{account:loginAddress,wallets:[owner]}});}
       if(path==='/api/auth/session')return route.fulfill({json:{session:login?{address:loginAddress,method:'passkey',expiresAt:Date.now()+3600_000}:null}});
       if(path==='/api/'+namespace+'/markets')return route.fulfill({json:await f.service.markets()});
       if(path==='/api/'+namespace+'/price-history'){
@@ -91,12 +96,20 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     assert.equal(await page.getByRole('heading',{name:'Trade history',exact:true}).count(),0);
     assert.equal(historyReads,0);
     assert.equal(await page.getByRole('button',{name:/Unlock.*wallet|Unlock signing/i}).count(),0);
-    assert.equal(await page.getByText('MetaMask trading wallet',{exact:true}).count(),1);
+    assert.equal(await page.locator('.ticket-wallet').getByText('MetaMask',{exact:true}).count(),1);
     assert.equal(await page.locator('#consumer-wallet').count(),0);
     const connectStyle = await page.getByRole('button',{name:'Connect MetaMask',exact:true}).evaluate((el:any)=>({height:el.getBoundingClientRect().height,border:getComputedStyle(el).borderStyle}));
     assert.ok(connectStyle.height>=44);assert.equal(connectStyle.border,'solid');
+    await page.evaluate(()=>sessionStorage.setItem('wallet.rejectLink','1'));
+    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
+    await page.getByText('Link signature rejected',{exact:true}).waitFor();
+    assert.equal(linked,false);assert.equal(await page.getByRole('button',{name:'Allow payment',exact:true}).count(),0);
+    await page.evaluate(()=>sessionStorage.removeItem('wallet.rejectLink'));
     await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
     await page.getByText('Your wallet is ready. Choose your answer and number of shares.').waitFor();
+    assert.equal(linked,true);assert.equal(await page.evaluate(()=>sessionStorage.getItem('link.signatures')),'1');
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),null);
+
     assert.equal(await page.evaluate((key:string)=>sessionStorage.getItem(key),'flurbo.view-wallet:'+loginAddress),owner);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('flurbo.trading.market')),namespace);
     await page.getByLabel('Shares',{exact:true}).fill('5');
@@ -111,7 +124,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),null);
     // A failed reconnect must not leave the earlier signer/review available.
     await page.evaluate(()=>sessionStorage.setItem('wallet.rejectConnect','1'));
-    await page.getByRole('button',{name:'Reconnect MetaMask',exact:true}).click();
+    await page.getByRole('button',{name:'Switch wallet',exact:true}).click();
     await page.getByRole('button',{name:'Connect MetaMask',exact:true}).waitFor();
     assert.equal(await page.getByRole('button',{name:'Allow payment',exact:true}).count(),0);
     await page.evaluate(()=>sessionStorage.removeItem('wallet.rejectConnect'));

@@ -20,8 +20,8 @@ function claimsFor(state:Account,index:Index|null,owner:string,namespace:PilotNa
   return portfolioClaims(events,state.claimScopes||[],rememberedClaims(namespace,state.manifest.pool,owner,events),indexed);
 }
 
-export default function PilotLedger({account,history,namespace='pilot'}:{account:string;history:boolean;namespace?:PilotNamespace}) {
-  const [wallet,setWallet]=useState(()=>rememberedWallet(account)),[owner,setOwner]=useState(wallet);
+export default function PilotLedger({account,history,namespace='pilot',initialWallet,linked=false}:{account:string;history:boolean;namespace?:PilotNamespace;initialWallet?:string;linked?:boolean}) {
+  const [wallet,setWallet]=useState(()=>initialWallet??rememberedWallet(account)),[owner,setOwner]=useState(wallet);
   const [state,setState]=useState<Account|null>(null),[index,setIndex]=useState<Index|null>(null),[holdings,setHoldings]=useState<Holdings|null>(null);
   const [accountError,setAccountError]=useState(''),[historyError,setHistoryError]=useState(''),[holdingsError,setHoldingsError]=useState('');
   const [busy,setBusy]=useState(false),[page,setPage]=useState(0),[claimCount,setClaimCount]=useState(0);
@@ -105,8 +105,8 @@ export default function PilotLedger({account,history,namespace='pilot'}:{account
     </>:<p>{busy?'Loading your shares...':'Holdings are unavailable. This does not mean you have no shares.'}</p>}
   </>;
   return <div className="portfolio-view">
-    <section className="portfolio-wallet"><div><label>Wallet to view<input value={wallet} onChange={e=>setWallet(e.target.value)}/></label></div><button className="button button-dark" onClick={()=>void refresh(wallet,0)}>View wallet</button><p>Read-only view. Enter your MetaMask address, or any address holding earlier positions.</p></section>
-    <div className="portfolio-toolbar"><p className="portfolio-address">Showing {owner}</p><button className="button button-outline" onClick={()=>busy?pause():void refresh()}>{busy?'Stop loading':'Refresh'}</button></div>
+    {!linked&&<section className="portfolio-wallet"><div><label>Wallet to view<input value={wallet} onChange={e=>setWallet(e.target.value)}/></label></div><button className="button button-dark" onClick={()=>void refresh(wallet,0)}>View wallet</button><p>Read-only view. Enter your MetaMask address, or any address holding earlier positions.</p></section>}
+    <div className="portfolio-toolbar"><p className="portfolio-address">{linked?'':`Showing ${owner}`}</p><button className="button button-outline" onClick={()=>busy?pause():void refresh()}>{busy?'Stop loading':'Refresh'}</button></div>
     {accountError&&<p role="status">{accountError}</p>}
     {state&&<p className="portfolio-freshness">{amount(state.wallet.cash)} test AUSD in this wallet. Checked at block {state.snapshot.blockNumber}.</p>}
     {historyError&&<p role="status">{historyError}</p>}

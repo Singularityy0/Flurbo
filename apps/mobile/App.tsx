@@ -10,7 +10,7 @@ import { transactions } from './src/transactions';
 import { operations, prepareFaucet, type FaucetReview } from './src/operations';
 import { type PilotNamespace } from '../web/src/pilot';
 import { Markets } from './src/Markets';
-import { Ledger } from './src/Ledger';
+import { AccountLedger } from './src/AccountLedger';
 import { WhatIf } from './src/WhatIf';
 import { Settlement } from './src/Settlement';
 import { Kuru, Learning } from './src/Advanced';
@@ -109,7 +109,7 @@ function Main() {
         {['markets', 'whatif', 'portfolio', 'history', 'settlement'].includes(page) && <Choice value={namespace} options={[{ value: 'rehearsal', label: 'Practice markets' }, { value: 'pilot', label: 'Release events' }]} onChange={setNamespace} />}
         {page === 'markets' && <Markets namespace={namespace} kind={kind} onPortfolio={() => setPage('portfolio')} />}
         {page === 'whatif' && <WhatIf namespace={namespace} />}
-        {(page === 'portfolio' || page === 'history') && <Ledger key={`${namespace}:${page}`} namespace={namespace} address={owner ?? ''} history={page === 'history'} />}
+        {(page === 'portfolio' || page === 'history') && <AccountLedger key={`${namespace}:${page}:${login.address}`} namespace={namespace} account={login.address!} history={page === 'history'} />}
         {page === 'wallet' && <Wallet kind={kind} onWithdraw={() => setPage('withdraw')} />}
         {page === 'settlement' && <Settlement namespace={namespace} kind={kind} />}
         {page === 'kuru' && <Kuru kind={kind} />}{page === 'learning' && <Learning />}

@@ -1,3 +1,5 @@
+import {linkTradingWallet} from '../wallet-links';
+import AccountPortfolio from './AccountPortfolio';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useSearch } from 'wouter';
 import { ArrowUpRight, ArrowLeft, Layers3, Wallet, Activity, LogOut, Copy, Check } from 'lucide-react';
@@ -10,10 +12,8 @@ import './workspace.css';
 import Funding from './Funding';
 import LearningComparison from './LearningComparison';
 import LearningPool from './LearningPool';
-import Portfolio from './Portfolio';
 import Kuru from './Kuru';
 import Pilot from './Pilot';
-import PilotLedger from './PilotLedger';
 import { isPracticeNamespace } from '../pilot';
 import { walletKey, tradingWalletKey, rememberedTradingWallet } from '../portfolio';
 const publicTestnet = import.meta.env.PROD;
@@ -82,7 +82,7 @@ function CoreMarket({ account, panel, market, onBusy }: { account: string | null
     shadow.replaceChildren(style, main);
     main.setAttribute('data-panel', host.current!.dataset.panel || 'trade');
     const unmount = mountDashboard(shadow, { account: account ? rememberedTradingWallet(account) || undefined : undefined, consumer: true, credentials: 'same-origin',
-      marketId: market, onBusy,
+      marketId: market, onBusy, verifyWallet: async (p, wallet) => {if(!account)throw Error('Sign in first.');await linkTradingWallet(p,account,wallet);},
       onWallet: selected => { if (account && selected) { try { sessionStorage.setItem(walletKey(account), selected); sessionStorage.setItem(tradingWalletKey(account), selected); } catch { /* Optional view preference. */ } } },
       providers: [] });
     return () => { unmount(); };
@@ -145,7 +145,7 @@ export default function Workspace() {
         <p className="auth-help">{market === 'rehearsal' ? 'Separate scripted testnet rehearsal. These outcomes are fixtures, not real events.' : market === 'pilot' ? 'Separate real-event pool with official-source questions and a named testnet reviewer panel. Publication requires verified deployment.' : market === 'learning' ? 'Synthetic test market with funded operator price updates. Its positions and pool allowance are separate from the original pool. Kuru and receipt conversion are not enabled here.' : 'Original synthetic market with H YES receipts and Kuru. Your existing positions remain here.'} AUSD wallet funds can be used across these pools. Positions and allowances are separate.</p>
         {marketBusy && <p className="auth-help">Finish or cancel the review, or resolve the pending transaction, before switching markets.</p>}
       </section>}
-      {pilotPage ? (rehearsalPage&&!rehearsalNamespace?<p role="alert">Unknown practice collection.</p>:<Pilot key={`pilot:${rehearsalNamespace}:${rehearsalPage}:${address}`} namespace={rehearsalPage?rehearsalNamespace!:'pilot'} onBusy={setMarketBusy}/>) : kuruPage ? <Kuru key={`kuru:${address}`} onBusy={setMarketBusy} onConvert={() => { try { sessionStorage.setItem('flurbo.trading.market', 'original'); } catch { /* View preference only. */ } setMarket('original'); }}/> : address && (market === 'pilot'||market==='rehearsal') && (portfolioPage || historyPage) ? <PilotLedger key={`${address}:${location}:${market}`} namespace={market==='rehearsal'?'rehearsal':'pilot'} account={address} history={historyPage}/> : address && (portfolioPage || historyPage) ? <Portfolio key={`${address}:${market}:${location}`} account={address} market={market === 'learning' ? 'learning' : 'original'} history={historyPage}/> : (market === 'pilot'||market==='rehearsal') ? <Pilot key={`pilot-market:${market}:${address}`} namespace={market==='rehearsal'?'rehearsal':'pilot'} onBusy={setMarketBusy}/> : <CoreMarket key={`market:${market}`} account={address} panel={panel} market={market} onBusy={setMarketBusy}/>}
+      {pilotPage ? (rehearsalPage&&!rehearsalNamespace?<p role="alert">Unknown practice collection.</p>:<Pilot key={`pilot:${rehearsalNamespace}:${rehearsalPage}:${address}`} namespace={rehearsalPage?rehearsalNamespace!:'pilot'} onBusy={setMarketBusy}/>) : kuruPage ? <Kuru key={`kuru:${address}`} onBusy={setMarketBusy} onConvert={() => { try { sessionStorage.setItem('flurbo.trading.market', 'original'); } catch { /* View preference only. */ } setMarket('original'); }}/> : address && (portfolioPage || historyPage) ? <AccountPortfolio key={address+market+location} account={address} namespace={market} history={historyPage}/> : (market === 'pilot'||market==='rehearsal') ? <Pilot key={`pilot-market:${market}:${address}`} namespace={market==='rehearsal'?'rehearsal':'pilot'} onBusy={setMarketBusy}/> : <CoreMarket key={`market:${market}`} account={address} panel={panel} market={market} onBusy={setMarketBusy}/>}
       {publicTestnet && panel === 'activity' && !historyPage && !kuruPage && !pilotPage && market !== 'pilot' && market !== 'rehearsal' && <LearningComparison key={`comparison:${address}`}/>}
       {publicTestnet && panel === 'activity' && !historyPage && !kuruPage && !pilotPage && market !== 'pilot' && market !== 'rehearsal' && <LearningPool key={`pool:${address}`}/>}
       <footer className="workspace-footer"><span>One pool. More possibilities.</span><span>{(rehearsalPage || market==='rehearsal' && !kuruPage) ? 'Scripted public testnet rehearsal. Test assets only.' : (pilotPage || market === 'pilot' && !kuruPage) ? 'Monad testnet / Real-event pilot / Test AUSD' : publicTestnet ? 'Monad testnet / Test AUSD / Synthetic outcomes' : 'Local prototype / AUSD collateral / Synthetic outcomes'}</span></footer>

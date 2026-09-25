@@ -4,8 +4,8 @@ import { Link } from 'wouter';
 import { amount, describeClaim, rememberedWallet, walletKey, type Market, type Portfolio as Data } from '../portfolio';
 import './portfolio.css';
 
-export default function Portfolio({ account, market, history = false }: { account: string; market: Market; history?: boolean }) {
-  const [wallet, setWallet] = useState(() => rememberedWallet(account));
+export default function Portfolio({ account, market, history = false, initialWallet, linked=false }: { account: string; market: Market; history?: boolean; initialWallet?:string; linked?:boolean }) {
+  const [wallet, setWallet] = useState(() => initialWallet ?? rememberedWallet(account));
   const [draft, setDraft] = useState(wallet);
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState('');
@@ -63,12 +63,12 @@ export default function Portfolio({ account, market, history = false }: { accoun
     try { sessionStorage.setItem(walletKey(account), next); } catch { /* Read access works without storage. */ }
   };
   return <section className="portfolio-view" aria-label={history ? 'Trading history' : 'Portfolio'}>
-    <form className="portfolio-wallet" onSubmit={event => { event.preventDefault(); chooseWallet(draft.trim()); }}>
+    {!linked&&<form className="portfolio-wallet" onSubmit={event => { event.preventDefault(); chooseWallet(draft.trim()); }}>
       <div><label htmlFor="portfolio-wallet">Wallet to view</label><input id="portfolio-wallet" autoComplete="off" spellCheck={false} value={draft} onChange={event => setDraft(event.target.value)} /></div>
       <button className="button button-dark" type="submit">View wallet</button>
 
       <p>Read-only view. Your MetaMask address is remembered for this browser session. You can also look up an address holding earlier positions.</p>
-    </form>
+    </form>}
     <div className="portfolio-toolbar"><div><span className="eyebrow">{market === 'learning' ? 'Learning pool' : 'Original pool'}</span><p className="portfolio-address">{wallet}</p></div>
       <button className="button button-outline" disabled={busy || !wallet} onClick={() => setRefresh(n => n + 1)}><RefreshCw size={14} className={busy ? 'portfolio-spin' : ''}/>{busy ? 'Reading...' : 'Refresh'}</button></div>
     {!wallet && <p>Connect MetaMask on a market page, or enter your public wallet address above to view your holdings.</p>}

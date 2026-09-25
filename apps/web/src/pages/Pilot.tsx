@@ -1,3 +1,4 @@
+import { linkTradingWallet } from '../wallet-links';
 import { useEffect, useRef, useState } from 'react';
 import { formatUnits, parseUnits, type Hex } from 'viem';
 import { useAuth } from '../auth/context';
@@ -96,16 +97,20 @@ export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirme
     const timer=setTimeout(()=>{polls.current++;void run(async()=>{try{await check();}catch(e){setPollPaused(true);throw e;}finally{if(polls.current>=40)setPollPaused(true);}});},2000);
     return()=>clearTimeout(timer);
   },[!!consumer,pending,busy,pollPaused,auth.address]);
-  async function connect(){
+  async function connect(switchAccount=false){
     cleanup.current(); const version=++generation.current;
     provider.current=null;reviewRef.current=null;setOwner('');onTradingWalletChange?.('');setReview(null);setPosition(null);
     const p:Provider|undefined=wallets[Number(choice)]?.provider;
     if(!p)throw new Error('Open this site in MetaMask’s browser or install the MetaMask extension, then reconnect.');
+    if(switchAccount)await p.request({method:'wallet_requestPermissions',params:[{eth_accounts:{}}]});
     const changed=()=>{generation.current++;reviewRef.current=null;setOwner('');setReview(null);provider.current=null;onTradingWalletChange?.('');setNotice('Wallet changed. Reconnect. Submitted actions remain in tracking.');};
     for(const name of ['accountsChanged','chainChanged','disconnect'])p.on?.(name,changed);
     cleanup.current=()=>{for(const name of ['accountsChanged','chainChanged','disconnect'])p.removeListener?.(name,changed);};
     const accounts=await p.request({method:'eth_requestAccounts'}) as string[];
     if(!Array.isArray(accounts)||!/^0x[0-9a-f]{40}$/i.test(accounts[0]||''))throw new Error('No wallet account returned');
+    if(!auth.address)throw Error('Sign in first.');
+    setNotice('Confirm the account link in MetaMask if requested.');
+    await linkTradingWallet(p,auth.address,accounts[0],()=>live.current&&version===generation.current);
     await refresh(accounts[0]); if(!live.current||version!==generation.current)return;
     if(auth.address)try{sessionStorage.setItem(walletKey(auth.address),accounts[0].toLowerCase());sessionStorage.setItem(tradingWalletKey(auth.address),accounts[0].toLowerCase());}catch{ /* Optional read-only preference. */ }
     provider.current=p;setOwner(accounts[0].toLowerCase());onTradingWalletChange?.(accounts[0].toLowerCase());setNotice('Wallet connected. Review and confirm each action separately.');
@@ -161,14 +166,13 @@ export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirme
     const answerSummary=legs.map(i=>`${state?.manifest.publication.draft.events[i]?.question||'Event '+(i+1)} ${(answers[i]??true)?'Yes':'No'}`).join(' + ');
     return <div className="consumer-ticket">
       <h2>{legs.length>1?'Your combined prediction':'Your prediction'}</h2>
-      <p>{isPracticeNamespace(namespace)?'Practice event. ':''}A winning share pays 1 test AUSD; a losing share pays 0. An unresolved outcome (VOID) can produce a partial payout under the rules below.</p>
+      <p className="market-caption">Win: 1 test AUSD per share. Void payouts follow the market rules.</p>
       <p className="ticket-status" role="status">{busy?'Working...':consumerNotice(notice)}</p>
-      <div className="ticket-wallet"><strong>MetaMask trading wallet</strong>{wallets.length>1&&<><label htmlFor="consumer-wallet">MetaMask connection</label><select id="consumer-wallet" value={choice} disabled={disabled} onChange={e=>{cleanup.current();generation.current++;setChoice(e.target.value);setOwner('');setReview(null);reviewRef.current=null;onTradingWalletChange?.('');provider.current=null;}}>{wallets.map((w,i)=><option key={i} value={i}>{w.name} {i+1}</option>)}</select></>}
-        <p className="market-caption">Your Mera passkey signs you in. MetaMask holds your funds and confirms trades.</p>
-        <button className={owner?"button button-outline":"button button-dark"} disabled={disabled} onClick={()=>void run(connect)}>{owner?'Reconnect MetaMask':'Connect MetaMask'}</button>
-        {owner&&<p>{owner.slice(0,8)}...{owner.slice(-6)}{state?.wallet?` · ${cash(state.wallet.cash)} test AUSD available`:''}</p>}
+      <div className="ticket-wallet">
+        <div><strong>{owner ? `${owner.slice(0,6)}…${owner.slice(-4)}` : 'MetaMask'}</strong>{owner&&state?.wallet&&<small>{cash(state.wallet.cash)} test AUSD</small>}</div>
+        <button className={owner?"button button-outline":"button button-dark"} disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':'Connect MetaMask'}</button>
       </div>
-      {!pending&&!completed&&<><div className="pilot-fields"><label>Your answer<select aria-label="Your answer" disabled={disabled} value={(answers[consumer.event]??true)?'yes':'no'} onChange={e=>setAnswers(old=>({...old,[consumer.event]:e.target.value==='yes'}))}><option value="yes">Yes</option><option value="no">No</option></select></label><label>Shares<input value={quantity} inputMode="decimal" disabled={disabled} onChange={e=>setQuantity(e.target.value)}/></label></div><label>Action<select value={side} disabled={disabled} onChange={e=>setSide(e.target.value)}><option value="buy">Buy</option><option value="sell">Sell</option><option value="redeem">Collect payout</option></select></label><details><summary>Combine with another prediction</summary><p>Choose up to three events. All your chosen answers must be right to win.</p>{state?.manifest.publication.draft.events.map((e,i)=>i===consumer.event?null:<div className="ticket-combine" key={e.id}><label><input type="checkbox" checked={legs.includes(i)} disabled={disabled||!legs.includes(i)&&legs.length>=3} onChange={()=>setLegs(old=>old.includes(i)?old.filter(v=>v!==i):[...old,i].sort())}/>{e.question}</label>{legs.includes(i)&&<select aria-label={e.question+" answer"} disabled={disabled} value={(answers[i]??true)?"yes":"no"} onChange={e=>setAnswers(old=>({...old,[i]:e.target.value==="yes"}))}><option value="yes">Yes</option><option value="no">No</option></select>}</div>)}</details>{legs.length>1&&<p>{answerSummary}</p>}<div className="pilot-actions"><button className="button button-outline" disabled={busy||!owner} onClick={()=>void run(async()=>setPosition(await pilotRequest('position',{owner,scope,mask})))}>View my shares</button></div></>}
+      {!pending&&!completed&&<><div className="pilot-fields"><label>Your answer<select aria-label="Your answer" disabled={disabled} value={(answers[consumer.event]??true)?'yes':'no'} onChange={e=>setAnswers(old=>({...old,[consumer.event]:e.target.value==='yes'}))}><option value="yes">Yes</option><option value="no">No</option></select></label><label>Shares<input value={quantity} inputMode="decimal" disabled={disabled} onChange={e=>setQuantity(e.target.value)}/></label></div><label>Action<select value={side} disabled={disabled} onChange={e=>setSide(e.target.value)}><option value="buy">Buy</option><option value="sell">Sell</option><option value="redeem">Collect payout</option></select></label><details><summary>Combine with another prediction</summary><p>Choose up to three events. All your chosen answers must be right to win.</p>{state?.manifest.publication.draft.events.map((e,i)=>i===consumer.event?null:<div className="ticket-combine" key={e.id}><label><input type="checkbox" checked={legs.includes(i)} disabled={disabled||!legs.includes(i)&&legs.length>=3} onChange={()=>setLegs(old=>old.includes(i)?old.filter(v=>v!==i):[...old,i].sort())}/>{e.question}</label>{legs.includes(i)&&<select aria-label={e.question+" answer"} disabled={disabled} value={(answers[i]??true)?"yes":"no"} onChange={e=>setAnswers(old=>({...old,[i]:e.target.value==="yes"}))}><option value="yes">Yes</option><option value="no">No</option></select>}</div>)}</details>{legs.length>1&&<p>{answerSummary}</p>}</>}
       {!pending&&!completed&&owner&&<p role="status">{quoting?'Getting your price...':!review?'Enter your shares to get a price, or refresh the price below.':''}</p>}
       {!pending&&!completed&&owner&&<button className="text-link" disabled={busy||quoting} onClick={()=>setQuoteTick(n=>n+1)}>Refresh price</button>}
       {completed&&<section className="ticket-review"><h3>{side==='buy'?'Purchase complete':side==='sell'?'Sale complete':'Payout collected'}</h3><p>Your transaction is confirmed. There is no need to submit it again.</p><a href="/portfolio" className="button button-dark">View portfolio</a><button className="button button-outline" onClick={()=>setCompleted(false)}>Make another trade</button></section>}

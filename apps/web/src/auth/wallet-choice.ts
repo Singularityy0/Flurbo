@@ -14,6 +14,6 @@ export function discoverWallets(receive: (wallet: BrowserWallet) => void) {
   window.addEventListener('eip6963:announceProvider', announced);
   window.dispatchEvent(new Event('eip6963:requestProvider'));
   const injected = (window as unknown as {ethereum?: BrowserWallet['provider']}).ethereum;
-  if (isMetaMask(injected)) add({ name: 'MetaMask', provider: injected! });
+  if (!seen.size && isMetaMask(injected)) add({ name: 'MetaMask', provider: injected! });
   return () => window.removeEventListener('eip6963:announceProvider', announced);
 }

@@ -70,6 +70,7 @@ test('portfolio and history deep links restore auth, show full discovered claims
     await page.route('**/*', async (route: any) => {
       const url = new URL(route.request().url()), path = url.pathname;
       if (path === '/api/practice-collections') return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'Practice markets',pool:'0x'+'22'.repeat(20),closesAt:1900000000}]}});
+      if(path==='/api/account/wallets')return route.fulfill({json:{account:account,wallets:[account]}});
       if (path === '/api/auth/session') return route.fulfill({ json: { session: signedIn ? { address: account, method: 'passkey', expiresAt: Date.now() + 3600000 } : null } });
       if (path.startsWith('/api/') && path.endsWith('/portfolio')) {
         requests++;
@@ -128,12 +129,13 @@ test('portfolio and history deep links restore auth, show full discovered claims
     await page.getByText('Choose a market collection',{exact:true}).click();
     await page.getByLabel('Collection', { exact: true }).selectOption('learning');
     await page.getByText('Bought', { exact: true }).waitFor();
-    await page.getByLabel('Wallet to view').fill(other);
+    await page.getByText('Look up another address',{exact:true}).evaluate((el:any)=>el.parentElement.open=true);await page.getByLabel('Wallet to view').fill(other);
     await page.getByRole('button', { name: 'View wallet', exact: true }).click();
     await page.getByText('No pool activity yet.').waitFor();
     await page.getByRole('link', { name: 'Portfolio', exact: true }).click();
-    await page.getByText('No open positions here.').waitFor();
-    await page.getByLabel('Wallet to view').fill(account);await page.getByRole('button', { name: 'View wallet', exact: true }).click();
+    // A diagnostic lookup never replaces the account's default linked-wallet view.
+    await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
+    await page.getByText('Look up another address',{exact:true}).evaluate((el:any)=>el.parentElement.open=true);await page.getByLabel('Wallet to view').fill(account);await page.getByRole('button', { name: 'View wallet', exact: true }).click();
     await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

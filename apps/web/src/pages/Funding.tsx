@@ -1,3 +1,4 @@
+import { linkTradingWallet } from '../wallet-links';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/context';
 import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
@@ -28,6 +29,9 @@ export default function Funding() {
       if (await p.request({method:'eth_chainId'}) !== '0x279f') throw new Error('Select Monad testnet in MetaMask, then reconnect.');
       if (version !== generation.current) throw new Error('Wallet changed. Reconnect MetaMask.');
       const address = accounts[0].toLowerCase();
+      if(!state.address)throw Error('Sign in first.');
+      await linkTradingWallet(p,state.address,address,()=>version===generation.current);
+      if(version!==generation.current)throw Error('Wallet changed. Reconnect.');
       providerRef.current = p; setOwner(address);
       if (state.address) try { sessionStorage.setItem(walletKey(state.address), address); sessionStorage.setItem(tradingWalletKey(state.address), address); } catch {}
       setMessage('MetaMask connected. Fund this address with test MON, then request test AUSD.');
