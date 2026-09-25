@@ -5,12 +5,14 @@ import { evidenceAssistant } from './evidence-assistant.mjs';
 import { priceHistory } from './price-history.mjs';
 import { walletLinks } from './wallet-links.mjs';
 import { isTestingOperator, DEFAULT_TESTING_OPERATOR } from './testing-access.mjs';
+import {holderAuthorizer} from './holder-challenge.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
-  testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {} } = {}) {
+  testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {} } = {}) {
   const hosted = publicOrigin !== null;
   const links = walletLinks({command:store.command});
+  const authorizeHolder=holderAuthorizer(challengeOptions);
   const priceArchives=new WeakMap();
   const assistant=publishedPilot&&store.command?evidenceAssistant({manifest:publishedPilot.manifest,command:store.command,...evidenceOptions}):null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
@@ -126,7 +128,31 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if(req.method==='POST' && url.pathname==='/api/pilot/prepare') {
           const input = await body(req);
           if (!['buy','sell','redeem','dispute','withdrawBond'].includes(input?.action) && !isTestingOperator(login, testingOperatorAccount)) return send(res,403,{error:'Testing tools are restricted to the operator.'});
+          if(input?.action==='dispute'){
+            if(input.authorization||input.signature)return send(res,400,{error:'Request a fresh account eligibility check.'});
+            if(hosted&&!store.command)return send(res,503,{error:'Account wallet storage is unavailable.'});
+            const {wallets}=await links.list(login.address,origin),{stake,...action}=input;
+            if(!wallets.includes(input.owner?.toLowerCase())||!wallets.includes(stake?.holder?.toLowerCase()))return send(res,403,{error:'Link both MetaMask wallets to your Flurbo account before challenging.'});
+            if(!pilot.challengeStake||!(await pilot.challengeStake(input.event,stake)).eligible)return send(res,403,{error:'Your account needs shares in this event to challenge its answer.'});
+            if(pilot.manifest.challengePolicy){
+              try{return send(res,200,await pilot.prepare({...action,...await authorizeHolder(pilot,login,wallets,input)}));}
+              catch{return send(res,503,{error:'Challenge authorization could not be prepared. Refresh eligibility and retry before the deadline.'});}
+            }
+            return send(res,200,await pilot.prepare(action));
+          }
           return send(res,200,await pilot.prepare(input));
+        }
+        if(req.method==='POST'&&url.pathname==='/api/pilot/challenge-eligibility'){
+          if(hosted&&!store.command)return send(res,503,{error:'Account wallet storage is unavailable.'});
+          const input=await body(req);
+          if(!input||Object.keys(input).some(k=>!['owner','event','cursor','stake'].includes(k)))return send(res,400,{error:'Invalid eligibility request.'});
+          const {wallets}=await links.list(login.address,origin);
+          if(!wallets.includes(input.owner?.toLowerCase()))return send(res,403,{error:'Link this MetaMask wallet to your Flurbo account first.'});
+          if(input.stake){
+            if(!wallets.includes(input.stake.holder?.toLowerCase()))return send(res,403,{error:'Qualifying shares must belong to this Flurbo account.'});
+            return send(res,200,await pilot.challengeStake(input.event,input.stake));
+          }
+          return send(res,200,await pilot.challengeEligibility(wallets,input.event,input.cursor??0));
         }
         if(req.method==='POST' && url.pathname==='/api/pilot/position') {
           const input=await body(req); return send(res,200,await pilot.position(input.owner,input.scope,input.mask));

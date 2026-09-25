@@ -13,6 +13,7 @@ export const pilotInputSchema = z.object({
   schema: z.literal('flurbo.pilot-publication.v1'),
   mode: z.enum(['official-releases','rehearsal','ethereum-activity']).optional(),
   creator: address,
+  challengePolicy: z.object({version:z.literal('account-holders-v1'),authority:address}).strict().optional(),
   draft: eventDraftSchema,
   reviewers: z.array(z.object({ name: z.string().trim().min(1).max(100), address }).strict()).min(3).max(5),
   reviewerControl: z.enum(['independent-panel', 'single-operator']).default('independent-panel'),
@@ -28,11 +29,12 @@ export const pilotInputSchema = z.object({
   }
 });
 
-export function disputePolicy(input: { reviewerControl?: 'independent-panel'|'single-operator'; creator?: string; reviewers: {name: string; address: string}[]; bondAtoms: string; assertionPeriod: number; challengePeriod: number; votingPeriod: number }) {
+export function disputePolicy(input: { challengePolicy?:{version:'account-holders-v1';authority:string}; reviewerControl?: 'independent-panel'|'single-operator'; creator?: string; reviewers: {name: string; address: string}[]; bondAtoms: string; assertionPeriod: number; challengePeriod: number; votingPeriod: number }) {
   if(input.reviewerControl==='single-operator' && !input.creator) throw new Error('Operator identity is required');
   const control=input.reviewerControl==='single-operator'
     ? `Operator-run testnet alpha. All reviewer wallets are controlled by the creator (${input.creator!.toLowerCase()}). These wallets are not independent reviewers. The operator can determine disputed outcomes through the voting quorum. ` : '';
-  return control+`Named testnet reviewer panel: ${input.reviewers.map(r => `${r.name} (${r.address.toLowerCase()})`).join(', ')}. Quorum ${Math.floor(input.reviewers.length / 2) + 1} of ${input.reviewers.length} matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: ${input.bondAtoms} atoms each. Assertion window: ${input.assertionPeriod} seconds after observation end. Challenge window: ${input.challengePeriod} seconds after assertion. Vote window: ${input.votingPeriod} seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted.`;
+  const eligibility=input.challengePolicy?`Holder-only challenges: the signing wallet and a qualifying holder must belong to the same verified Flurbo account. A dedicated server signer (${input.challengePolicy.authority.toLowerCase()}) attests membership; the resolver checks live shares in the disputed event. Authorizations expire within 120 seconds and are single use. Any positive quantity counts, including dependent combinations and canonical wrapped shares. No qualifying shares means no challenge. Signer compromise can falsify membership; signer unavailability prevents challenges. Existing reviewer and asserter exclusions still apply. `:'';
+  return eligibility+control+`Named testnet reviewer panel: ${input.reviewers.map(r => `${r.name} (${r.address.toLowerCase()})`).join(', ')}. Quorum ${Math.floor(input.reviewers.length / 2) + 1} of ${input.reviewers.length} matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: ${input.bondAtoms} atoms each. Assertion window: ${input.assertionPeriod} seconds after observation end. Challenge window: ${input.challengePeriod} seconds after assertion. Vote window: ${input.votingPeriod} seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted.`;
 }
 
 export const resolverConfigAbi = parseAbiParameters('(address collateral, bytes32 draftHash, uint64 closesAt, bytes32[] eventHashes, uint64[] observationEnds, address[] reviewers, uint128 bond, uint32 assertionPeriod, uint32 challengePeriod, uint32 votingPeriod) config');
@@ -45,6 +47,7 @@ export function preparePilot(input: unknown, now: number) {
   if (value.draft.closesAt <= now + 3600 || value.draft.closesAt > now + 30 * 86400) throw new Error('Close must be between one hour and thirty days from preparation');
   if (value.draft.events.some(e => e.observationEndsAt > now + 90 * 86400)) throw new Error('Observation window exceeds pilot limit');
   if (value.draft.disputeModel !== 'reviewer-panel' || value.draft.exceptionPolicy !== VOID_POLICY || value.draft.disputePolicy !== disputePolicy(value)) throw new Error('Draft must contain the exact reviewed pilot policies');
+  if(value.challengePolicy && [value.creator,...value.reviewers.map(r=>r.address)].includes(value.challengePolicy.authority))throw Error('Use a dedicated eligibility signer');
   const records = new Set<string>();
   if(value.mode==='rehearsal')validateRehearsalDraft(value.draft);
   if(value.mode==='ethereum-activity')validateActivityDraft(value.draft);
@@ -70,7 +73,8 @@ export function preparePilot(input: unknown, now: number) {
     notice: 'Preparation does not publish a market, verify reviewer independence or establish evidence delivery. Deployment and public acceptance remain separate.' };
 }
 
-export function pilotRulesHash(config: Parameters<typeof encodeAbiParameters<typeof resolverConfigAbi>>[1][0], resolver: Address, creator: Address): Hex {
+export function pilotRulesHash(config: Parameters<typeof encodeAbiParameters<typeof resolverConfigAbi>>[1][0], resolver: Address, creator: Address, policy?:{version:'account-holders-v1';authority:string}): Hex {
+  if(policy)return keccak256(encodeAbiParameters([...parseAbiParameters('string domain, uint256 chainId, address resolver, address creator'),...resolverConfigAbi,...parseAbiParameters('address authority')],['flurbo.pilot.account-holders.v1',10143n,resolver,creator,config,policy.authority as Address]));
   return keccak256(encodeAbiParameters([
     ...parseAbiParameters('string domain, uint256 chainId, address resolver, address creator'), ...resolverConfigAbi,
   ], ['flurbo.pilot.uniform-void.v1', 10143n, resolver, creator, config]));

@@ -1,5 +1,6 @@
 import { decodeAbiParameters, decodeFunctionResult, encodeFunctionData, keccak256, parseAbi, type Abi, type Address, type Hex } from 'viem';
 import { preparePilot, resolverConfigAbi, pilotRulesHash, PILOT_CASH } from './pilot-config';
+import {holderResolverAbi} from '../../../apps/web/shared/holder-challenge.mjs';
 import { resolverAbi, pilotPoolAbi, pilotCashAbi } from '../../../apps/web/shared/pilot.mjs';
 
 type Artifact = { deployedBytecode: { object: Hex; immutableReferences?: Record<string,{start:number;length:number}[]> } };
@@ -44,7 +45,7 @@ export async function verifyPilot(prepared: ReturnType<typeof preparePilot>, dep
     const result=await read(to,abi,name,args);
     if(String(result).toLowerCase()!==String(expected).toLowerCase()) throw new Error(`Deployment mismatch: ${name}`);
   }
-  const rulesHash=pilotRulesHash(config,resolver,rebuilt.creator);
+  const rulesHash=pilotRulesHash(config,resolver,rebuilt.creator,rebuilt.publication.challengePolicy);
   for(const [name,value] of Object.entries({creator:rebuilt.creator,collateral:PILOT_CASH,pool,draftHash:config.draftHash,rulesHash,
     closesAt:config.closesAt,bond:config.bond,assertionPeriod:config.assertionPeriod,challengePeriod:config.challengePeriod,votingPeriod:config.votingPeriod,
     quorum:Math.floor(config.reviewers.length/2)+1,eventCount:config.eventHashes.length,delivered:false,lockedBonds:0,totalCredits:0})) await check(resolver,resolverAbi,name,value);
@@ -54,6 +55,7 @@ export async function verifyPilot(prepared: ReturnType<typeof preparePilot>, dep
     await check(resolver,resolverAbi,'observationEnds',config.observationEnds[i],[BigInt(i)]);
     if((await read(resolver,resolverAbi,'caseState',[i])).phase!==0) throw new Error('Pilot already has outcome activity');
   }
+  if(rebuilt.publication.challengePolicy)await check(resolver,holderResolverAbi,'eligibilitySigner',rebuilt.publication.challengePolicy.authority);
   const funding=BigInt(config.eventHashes.length) * 6_931_472n;
   for(const [name,value] of Object.entries({resolver,collateral:PILOT_CASH,settlementRulesHash:rulesHash,eventCount:config.eventHashes.length,
     liquidity:10_000_000,collateralDecimals:6,closesAt:config.closesAt,funded:true,resolved:false,requiredFunding:funding,requiredCollateral:0,resolvedState:0,voidMask:0})) await check(pool,pilotPoolAbi,name,value);
@@ -64,7 +66,7 @@ export async function verifyPilot(prepared: ReturnType<typeof preparePilot>, dep
   if(await read(PILOT_CASH,pilotCashAbi,'balanceOf',[pool]) < funding) throw new Error('Initial funding missing');
   const factory=String(await read(pool,pilotPoolAbi,'baseTokenFactory')).toLowerCase() as Address;
   const codeHashes:Record<string,Hex>={};
-  for(const [to,name] of [[pool,'PilotPool'],[resolver,'PilotResolver'],[factory,'FactoredBaseTokenFactory']] as const) {
+  for(const [to,name] of [[pool,'PilotPool'],[resolver,rebuilt.publication.challengePolicy?'AccountPilotResolver':'PilotResolver'],[factory,'FactoredBaseTokenFactory']] as const) {
     codeHashes[to]=matchPilotRuntime(await rpc('eth_getCode',[to,tag]),artifacts[name]);
   }
   const receiptAbi=parseAbi(['function pool() view returns (address)','function scope() view returns (uint32)','function mask() view returns (uint8)',
@@ -78,7 +80,7 @@ export async function verifyPilot(prepared: ReturnType<typeof preparePilot>, dep
   }
   if((await rpc('eth_getBlockByNumber',[tag,false]))?.hash!==head.hash) throw new Error('Verification snapshot changed');
   return {schema:'flurbo.pilot-manifest.v1',status:'verified_pilot_snapshot',chainId:10143,pool,resolver,rulesHash,draftHash:config.draftHash,
-    publication:rebuilt.publication,configHash:rebuilt.configHash,verifiedBlock:BigInt(tag).toString(),verifiedBlockHash:head.hash.toLowerCase(),
+    ...(rebuilt.publication.challengePolicy?{challengePolicy:rebuilt.publication.challengePolicy}:{}),publication:rebuilt.publication,configHash:rebuilt.configHash,verifiedBlock:BigInt(tag).toString(),verifiedBlockHash:head.hash.toLowerCase(),
     verifiedTimestamp:Number(BigInt(head.timestamp)),codeHashes,receipts,
     notice:'Compiled code and reviewed configuration verified at one snapshot. Named panel trust, test assets only. Kuru pairs and authenticated CRE delivery are not established by this manifest.'};
 }

@@ -9,7 +9,7 @@ test('ordinary account challenges from the market page with separate approval, r
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const f=challengeFixture(),namespace='practice-'+f.manifest.pool.slice(2),login='0x'+'99'.repeat(20),errors:string[]=[];
-  let confirmDispute=false;
+  let confirmDispute=false,eligible=false;
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
     page.on('pageerror',(e:Error)=>errors.push(e.message));
@@ -44,8 +44,10 @@ test('ordinary account challenges from the market page with separate approval, r
       if(path===api+'positions')return route.fulfill({json:{rows:[{mask:'1',quantity:'0',payoutAtoms:null},{mask:'2',quantity:'0',payoutAtoms:null}]}});
       if(path===api+'prepare'){
         const input=route.request().postDataJSON();assert.equal(input.action,'dispute');
-        return route.fulfill({json:await f.service.prepare(input)});
+        const {stake,...action}=input;assert.equal(stake.holder,owner);
+        return route.fulfill({json:await f.service.prepare(action)});
       }
+      if(path===api+'challenge-eligibility')return route.fulfill({json:{eligible,stake:eligible?{holder:owner,scope:1,mask:'2',wrapped:false}:null,nextCursor:null}});
       if(path===api+'evidence'){
         const input=route.request().postDataJSON();assert.equal(input.eventId,'event-0');assert.equal(input.outcome,1);
         return route.fulfill({json:{hash,uri:'https://flurbo.singu.online/api/pilot/evidence/'+hash}});
@@ -70,10 +72,17 @@ test('ordinary account challenges from the market page with separate approval, r
     await page.getByRole('button',{name:'Challenge proposed answer',exact:true}).click();
     const form=page.getByRole('region',{name:'Challenge an answer'});
     await form.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
+    await form.getByRole('button',{name:'Check account shares',exact:true}).click();
+    await form.getByText('Your account has no qualifying shares in this event. You cannot challenge this answer.').waitFor();
     await form.getByLabel('Correct answer').selectOption('1');
     await form.getByLabel('Why is the proposed answer wrong?').fill('The published evidence meets the NO rule for this test event.');
     await form.getByLabel('Supporting source URL').fill('https://ethereum.org/');
     await form.getByRole('button',{name:'Save public evidence',exact:true}).click();
+    assert.equal(await form.getByRole('button',{name:'Review challenge',exact:true}).isDisabled(),true);
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('sends')),null);
+    eligible=true;
+    await form.getByRole('button',{name:'Check account shares',exact:true}).click();
+    await form.getByText('Your account holds shares in this event.').waitFor();
     await form.getByRole('button',{name:'Review challenge',exact:true}).click();
     await form.getByRole('heading',{name:'Approve the challenge bond',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('sends')),null);

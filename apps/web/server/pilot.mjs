@@ -1,5 +1,6 @@
 import { decodeFunctionResult, encodeFunctionData, keccak256, stringToHex } from 'viem';
 import { pilotCash, pilotCashAbi, pilotPoolAbi, resolverAbi, pilotCall, evidenceURI, validClaim } from '../shared/pilot.mjs';
+import {holderResolverAbi,dependsOnEvent,challengeCandidates} from '../shared/holder-challenge.mjs';
 
 const address = value => {
   if(typeof value!=='string' || !/^0x[0-9a-f]{40}$/i.test(value) || /^0x0{40}$/i.test(value)) throw new Error('Invalid wallet');
@@ -36,6 +37,7 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
   if(manifest?.schema!=='flurbo.pilot-manifest.v1' || manifest.status!=='verified_pilot_snapshot' || manifest.chainId!==10143
     || ![2,3,4].includes(manifest.publication?.draft?.events?.length) || ![3,5].includes(manifest.publication?.reviewers?.length)) throw new Error('Verified pilot manifest required');
   address(manifest.pool); address(manifest.resolver);
+  if(manifest.challengePolicy&&(manifest.challengePolicy.version!=='account-holders-v1'||address(manifest.challengePolicy.authority)!==manifest.challengePolicy.authority))throw Error('Invalid holder challenge policy');
   for(const key of [manifest.pool,manifest.resolver]) if(!/^0x[0-9a-f]{64}$/.test(manifest.codeHashes?.[key]||'')) throw new Error('Compiled pilot evidence required');
   const tagFor = s=>'0x'+BigInt(s.blockNumber).toString(16);
   async function read(to,abi,functionName,args=[],tag='latest') {
@@ -54,6 +56,7 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     }
     if((await read(manifest.pool,pilotPoolAbi,'settlementRulesHash',[],head.number)).toLowerCase()!==manifest.rulesHash
       || (await read(manifest.resolver,resolverAbi,'pool',[],head.number)).toLowerCase()!==manifest.pool) throw new Error('Pilot binding changed');
+    if(manifest.challengePolicy&&(await read(manifest.resolver,holderResolverAbi,'eligibilitySigner',[],head.number)).toLowerCase()!==manifest.challengePolicy.authority)throw Error('Challenge authority changed');
     return {blockNumber:BigInt(head.number).toString(),blockHash:head.hash.toLowerCase(),timestamp:Number(BigInt(head.timestamp))};
   }
   async function stable(s) { if((await rpc('eth_getBlockByNumber',[tagFor(s),false]))?.hash?.toLowerCase()!==s.blockHash) throw new Error('Snapshot changed'); }
@@ -98,7 +101,8 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     await stable(s);return json({manifest,snapshot:s,open,prices});
   }
   async function prepare(input) {
-    if(!input || typeof input!=='object' || Array.isArray(input) || Object.keys(input).some(k=>!['owner','action','event','outcome','evidenceHash','evidenceURI','scope','mask','quantity','slippageBps'].includes(k))) throw new Error('Invalid action');
+    if(!input || typeof input!=='object' || Array.isArray(input) || Object.keys(input).some(k=>!['owner','action','event','outcome','evidenceHash','evidenceURI','scope','mask','quantity','slippageBps','authorization','signature'].includes(k))) throw new Error('Invalid action');
+    if((input.authorization||input.signature)&&(!manifest.challengePolicy||input.action!=='dispute'))throw Error('Unexpected challenge authorization');
     const owner=address(input.owner), s=await snapshot(), tag=tagFor(s);
     let to=manifest.resolver, abi=resolverAbi, name=input.action, args=[], amount=0n, minimumReceived=0n, title=name;
     if(['assertOutcome','dispute','vote'].includes(name)) {
@@ -112,6 +116,10 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
         if(reviewer || c.phase!==0 || s.timestamp<end || s.timestamp>=end+manifest.publication.assertionPeriod)throw new Error('Assertion window is not open for this wallet');
       }else if(name==='dispute') {
         if(reviewer || c.phase!==1 || c.asserter.toLowerCase()===owner || c.proposal===input.outcome || BigInt(s.timestamp)>=c.challengeUntil)throw new Error('Challenge is not available for this wallet and outcome');
+        if(manifest.challengePolicy){
+          if(!input.authorization||!input.signature||input.authorization.challenger!==owner)throw Error('Account eligibility authorization required');
+          abi=holderResolverAbi;args.push(input.authorization,input.signature);
+        }
       }else if(!reviewer || c.phase!==2 || BigInt(s.timestamp)>=c.voteUntil || await read(manifest.resolver,resolverAbi,'voted',[input.event,owner],tag))throw new Error('Vote is not available for this reviewer');
       if(name!=='vote') amount=BigInt(manifest.publication.bondAtoms);
     } else if(name==='finalize') {
@@ -174,7 +182,36 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     }
     await stable(s);return json({snapshot:s,owner,rows});
   }
-  return {manifest,status,account,markets,prepare,snapshot,position,positions};
+  async function stakeAt(event,stake,s){
+    if(!stake||Object.keys(stake).sort().join(',')!=='holder,mask,scope,wrapped'||typeof stake.wrapped!=='boolean')throw Error('Invalid holding witness');
+    const holder=address(stake.holder),mask=uint(stake.mask),tag=tagFor(s);
+    if(!dependsOnEvent(stake.scope,mask,event,manifest.publication.draft.events.length))return false;
+    if(manifest.challengePolicy)return read(manifest.resolver,holderResolverAbi,'hasQualifyingShares',[holder,event,stake.scope,mask,stake.wrapped],tag);
+    if(stake.wrapped){
+      if(stake.scope!==2**event||![1n,2n].includes(mask))return false;
+      const token=await read(manifest.pool,pilotPoolAbi,'baseTokens',[stake.scope,Number(mask)],tag);
+      return !/^0x0{40}$/.test(token)&&await read(token,pilotCashAbi,'balanceOf',[holder],tag)>0n;
+    }
+    return await read(manifest.pool,pilotPoolAbi,'holdings',[holder,stake.scope,mask],tag)>0n;
+  }
+  async function challengeStake(event,stake){
+    const s=await snapshot();
+    if(!Number.isInteger(event)||event<0||event>=manifest.publication.draft.events.length)throw Error('Invalid event');
+    const c=await read(manifest.resolver,resolverAbi,'caseState',[event],tagFor(s));
+    const eligible=c.phase===1&&BigInt(s.timestamp)<c.challengeUntil&&await stakeAt(event,stake,s);
+    await stable(s);return json({eligible,snapshot:s,challengeUntil:c.challengeUntil});
+  }
+  async function challengeEligibility(wallets,event,cursor=0){
+    if(!Array.isArray(wallets)||wallets.length>20||!Number.isSafeInteger(cursor)||cursor<0||!Number.isInteger(event)||event<0||event>=manifest.publication.draft.events.length)throw Error('Invalid eligibility request');
+    wallets=wallets.map(address);
+    const s=await snapshot(),tag=tagFor(s),factors=await read(manifest.pool,pilotPoolAbi,'factors',[],tag);
+    const candidates=challengeCandidates(wallets,event,manifest.publication.draft.events.length,[...new Set(factors.map(f=>f.scope))]);
+    // Bounded continuation prevents a wallet with no positions from causing an unbounded RPC scan.
+    const page=candidates.slice(cursor,cursor+24);let witness=null;
+    for(let i=0;i<page.length&&!witness;i+=4){const batch=page.slice(i,i+4),checks=await Promise.all(batch.map(stake=>stakeAt(event,stake,s)));witness=batch.find((_,j)=>checks[j])||null;}
+    await stable(s);return json({eligible:!!witness,stake:witness,nextCursor:witness||cursor+24>=candidates.length?null:cursor+24,snapshot:s});
+  }
+  return {manifest,status,account,markets,prepare,snapshot,position,positions,challengeStake,challengeEligibility};
 }
 
 export function pilotEvidence(command, origin, now=()=>Date.now()) {

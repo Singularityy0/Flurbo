@@ -1,4 +1,5 @@
 import { parseAbi, decodeFunctionData, encodeFunctionData } from 'viem';
+import {holderResolverAbi,dependsOnEvent} from './holder-challenge.mjs';
 
 export const pilotCash = '0xa9012a055bd4e0edff8ce09f960291c09d5322dc';
 export const resolverAbi = parseAbi([
@@ -64,15 +65,17 @@ export function validClaim(scope, mask, count) {
 export function pilotCall({to, data, manifest}) {
   try {
     const target = to.toLowerCase();
-    const abi = target === manifest.resolver ? resolverAbi : target === manifest.pool ? pilotPoolAbi : target === pilotCash ? pilotCashAbi : null;
+    const disputeAbi=manifest.challengePolicy?[...resolverAbi.filter(item=>!(item.type==='function'&&item.name==='dispute')),...holderResolverAbi]:resolverAbi;
+    const abi = target === manifest.resolver ? disputeAbi : target === manifest.pool ? pilotPoolAbi : target === pilotCash ? pilotCashAbi : null;
     if (!abi) return null;
     const decoded = decodeFunctionData({abi, data});
     if (encodeFunctionData({abi, ...decoded}).toLowerCase() !== data.toLowerCase()) return null;
     const {functionName: name, args=[]} = decoded;
     const count=manifest.publication.draft.events.length;
-    if (abi === resolverAbi) {
+    if (abi === disputeAbi) {
       if (['assertOutcome','dispute','vote'].includes(name)) {
         if (args[0] >= count || args[1] < 1 || args[1] > 3 || /^0x0{64}$/.test(args[2]) || !evidenceURI(args[3])) return null;
+        if(name==='dispute'&&manifest.challengePolicy){const e=args[4];if(!e||!dependsOnEvent(e.scope,e.mask,args[0],count)||!/^0x[0-9a-f]{130}$/i.test(args[5])||e.deadline<=0n||/^0x0{40}$/i.test(e.holder)||/^0x0{40}$/i.test(e.challenger))return null;}
       } else if (name === 'finalize') { if (args[0] >= count) return null; }
       else if (!['deliver','withdrawBond'].includes(name)) return null;
     } else if (abi === pilotCashAbi) {

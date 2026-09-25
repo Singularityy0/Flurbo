@@ -17,6 +17,20 @@ function fixture() {
 }
 
 describe('pilot publication commitments', () => {
+  test('holder-only publications bind the dedicated signer and cannot silently reuse legacy policies',()=>{
+    const original=fixture(),authority='0x0000000000000000000000000000000000000009';
+    const value={...original,challengePolicy:{version:'account-holders-v1' as const,authority},draft:{...original.draft}};
+    expect(()=>preparePilot(value,now)).toThrow();
+    value.draft.disputePolicy=disputePolicy(value);
+    const prepared=preparePilot(value,now),legacy=preparePilot(original,now);
+    expect(prepared.draftHash).not.toBe(legacy.draftHash);
+    const [c]=decodeAbiParameters(resolverConfigAbi,prepared.resolverConfig),resolver='0x0000000000000000000000000000000000000005';
+    expect(pilotRulesHash(c,resolver,prepared.creator,value.challengePolicy)).not.toBe(pilotRulesHash(c,resolver,prepared.creator));
+    for(const address of [original.creator,...original.reviewers.map(r=>r.address),'0x0000000000000000000000000000000000000000']){
+      const bad={...value,challengePolicy:{...value.challengePolicy,authority:address},draft:{...value.draft}};
+      bad.draft.disputePolicy=disputePolicy(bad);expect(()=>preparePilot(bad,now)).toThrow();
+    }
+  });
   test('operator-controlled reviewers require honest disclosure bound into the rules commitment',()=>{
     const independent=fixture();
     const operator={...fixture(),reviewerControl:'single-operator' as const,independentReviewersConfirmed:false};

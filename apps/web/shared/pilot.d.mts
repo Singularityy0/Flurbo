@@ -6,6 +6,7 @@ export const pilotCashAbi: Abi;
 export function evidenceURI(value: unknown): boolean;
 export function validClaim(scope: number, mask: bigint, count: number): boolean;
 export type PilotManifest = { status: string; pool: `0x${string}`; resolver: `0x${string}`; rulesHash: string; draftHash: string;
+  challengePolicy?:{version:'account-holders-v1';authority:string};
   verifiedBlock: string; verifiedBlockHash: string; codeHashes: Record<string,string>;
   publication: {creator: string; mode?: 'official-releases'|'rehearsal'|'ethereum-activity'; reviewerControl?: 'independent-panel'|'single-operator'; bondAtoms: string; assertionPeriod: number; challengePeriod: number; votingPeriod: number;
     reviewers: {name:string;address:string}[];

@@ -37,7 +37,8 @@ test('operator-only pages, assets and actions use the server session, while cons
         assert.equal((await request(`/api/${ns}/prepare`,'visitor',{action,owner:DEFAULT_TESTING_OPERATOR})).status,403);
         assert.equal((await request(`/api/${ns}/prepare`,'owner',{action})).status,200);
       }
-      for(const action of ['buy','sell','redeem','dispute','withdrawBond'])assert.equal((await request(`/api/${ns}/prepare`,'visitor',{action})).status,200);
+      for(const action of ['buy','sell','redeem','withdrawBond'])assert.equal((await request(`/api/${ns}/prepare`,'visitor',{action})).status,200);
+      assert.equal((await request(`/api/${ns}/prepare`,'visitor',{action:'dispute'})).status,503); // no durable account links in this fixture
       assert.equal((await request(`/api/${ns}/prepare`,'',{action:'dispute'})).status,401);
       assert.equal((await request(`/api/${ns}/evidence`,'',{eventId:'event-0',outcome:1})).status,401);
       assert.equal((await request(`/api/${ns}/evidence`,'visitor',{eventId:'event-0',outcome:1})).status,200);
@@ -46,7 +47,7 @@ test('operator-only pages, assets and actions use the server session, while cons
       phase=3;assert.equal((await request(`/api/${ns}/evidence`,'visitor',{eventId:'event-0',outcome:1})).status,409);phase=1;
       assert.equal((await request(`/api/${ns}/evidence/0x${'ab'.repeat(32)}`)).status,200);
     }
-    assert.equal(prepares,27);
+    assert.equal(prepares,24);
     for(const path of ['/api/evidence-beta','/api/learning/comparison','/api/learning/pool','/api/kuru','/api/kuru-scan'])assert.equal((await request(path,'visitor')).status,403);
     assert.equal((await request('/fund','visitor')).status,200);
     assert.equal((await request('/rehearsal-rules')).status,200);
