@@ -1,6 +1,6 @@
 {
   "name": "@flurbo/mobile",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "main": "index.ts",
   "scripts": {
@@ -8,20 +8,28 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/network.test.ts scripts/passkey-config.test.cjs",
+    "test": "node --experimental-strip-types --test src/*.test.ts scripts/passkey-config.test.cjs",
     "passkeys:association": "node scripts/generate-passkey-association.cjs",
     "export:native": "expo export --platform all",
     "prebuild": "expo prebuild --no-install"
   },
   "dependencies": {
+    "@category-labs/mera": "0.2.0",
+    "@scure/bip32": "2.4.0",
+    "@scure/bip39": "2.4.0",
     "expo": "57.0.24",
+    "expo-clipboard": "57.0.2",
+    "expo-constants": "57.0.19",
     "expo-crypto": "57.0.3",
     "expo-dev-client": "57.0.19",
+    "expo-secure-store": "57.0.4",
     "expo-status-bar": "57.0.1",
     "expo-system-ui": "57.0.4",
     "react": "19.2.3",
     "react-native": "0.86.3",
-    "react-native-safe-area-context": "5.7.0"
+    "react-native-passkey": "3.6.1",
+    "react-native-safe-area-context": "5.7.0",
+    "viem": "2.56.8"
   },
   "devDependencies": {
     "@types/react": "19.2.4",

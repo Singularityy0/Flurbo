@@ -2,7 +2,7 @@
   "expo": {
     "name": "Flurbo",
     "slug": "flurbo-mobile",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "scheme": "flurbo",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -16,6 +16,7 @@
       "bundleIdentifier": "dev.flurbo.preview"
     },
     "android": {
+      "versionCode": 2,
       "package": "dev.flurbo.preview"
     },
     "extra": {

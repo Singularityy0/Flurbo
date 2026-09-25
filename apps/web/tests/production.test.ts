@@ -53,7 +53,7 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
   await writeFile(join(directory,'index.html'),'<html>Flurbo</html>');
   const store = new SessionStore();
   const learningReport = {schema:'flurbo.learning-comparison.v1',input:'synthetic',changesExecutablePrices:false};
-  const config = {origin,rpcUrl:TESTNET.rpc,learningReport: learningReport as typeof learningReport | null, learningStatus: 'starting'};
+  const config = {origin,rpcUrl:TESTNET.rpc,learningReport: learningReport as typeof learningReport | null, learningStatus: 'starting', androidAssetLinks: null as object[] | null};
   const server = productionServer(config,store,directory);
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const port = (server.address() as {port:number}).port;
@@ -72,6 +72,13 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
     throw Error('Unexpected upstream');
   };
   try {
+    assert.equal((await request('/.well-known/assetlinks.json')).status,404);
+    config.androidAssetLinks = [{relation:['delegate_permission/common.get_login_creds'],target:{namespace:'android_app',package_name:'dev.flurbo.preview',sha256_cert_fingerprints:[Array(32).fill('AB').join(':')]}}];
+    const association = await request('/.well-known/assetlinks.json',undefined,'','flurbo.singu.online','');
+    assert.equal(association.status,200); assert.deepEqual(association.json(),config.androidAssetLinks);
+    assert.equal(association.headers['content-type'],'application/json'); assert.equal(association.headers.location,undefined);
+    assert.equal((await request('/.well-known/assetlinks.json',undefined,'','evil.example')).status,421);
+    assert.equal((await request('/.well-known/assetlinks.json',{})).status,405);
     assert.equal((await request('/account')).status,200); // Client route waits for verified auth.
     assert.equal((await request('/portfolio')).status,200);
     assert.equal((await request('/history')).status,200);

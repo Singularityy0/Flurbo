@@ -10,6 +10,7 @@ import { runComparison } from './learning-comparison.mjs';
 import { learningService, learningRpc, loadLearningModel } from './learning-pool.mjs';
 import { pilotEvidence } from './pilot.mjs';
 import { configurePilot, configureRehearsal } from './pilot-config.mjs';
+import { androidAssetLinks } from './native-association.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -28,6 +29,11 @@ export function productionServer(config, store, staticRoot = dist) {
     // Liveness only. This deliberately does not claim contracts or RPC are ready.
     if (req.url === '/healthz' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ service: 'flurbo', chain_state: 'not_checked', learning_comparison: config.learningReport ? 'ready' : config.learningStatus || 'unavailable', learning_pool: config.learningPool ? 'configured' : 'unavailable', learning_model: config.learningModelStatus || 'unavailable', pilot_pool: config.pilot ? 'configured' : 'disabled', pilot_address: config.pilot?.manifest.pool || null, pilot_rules_hash: config.pilot?.manifest.rulesHash || null, rehearsal_pool: config.rehearsal ? 'configured' : 'disabled', rehearsal_address: config.rehearsal?.manifest.pool || null, rehearsal_rules_hash: config.rehearsal?.manifest.rulesHash || null })); return; }
     if (req.headers.host !== new URL(config.origin).host) { res.writeHead(421); res.end('Use https://flurbo.singu.online'); return; }
+    if (req.url === '/.well-known/assetlinks.json' && ['GET', 'HEAD'].includes(req.method)) {
+      const body = config.androidAssetLinks;
+      res.writeHead(body ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(req.method === 'HEAD' ? undefined : JSON.stringify(body || { error: 'Android association is not configured' })); return;
+    }
     if(req.url==='/rehearsal-rules'&&req.method==='GET'){
       res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
       res.end(JSON.stringify({schema:'flurbo-rehearsal.v1',notice:'Scripted testnet fixtures only. These records do not describe real-world events and must never settle the official release market.',
@@ -52,6 +58,7 @@ export function productionServer(config, store, staticRoot = dist) {
 
 async function main() {
   const config = hostedConfig();
+  config.androidAssetLinks = androidAssetLinks();
   const store = new RedisSessionStore(redisCommand());
   await store.command('PING');
   config.pilotEvidence = pilotEvidence(store.command, config.origin);

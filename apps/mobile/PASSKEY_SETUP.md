@@ -1,21 +1,37 @@
 # Native passkey domain setup
 
-This prepares Mera's native domain association. It does not install Mera, enable
-sign-in, generate keys, verify domain ownership, or establish PRF compatibility.
-Keep the preview usable without a domain; its sign-in action remains disabled.
+Mera and native passkey support are now installed. Android runtime validation is
+still required. No generated file or successful build establishes PRF support.
+
+## Current Android certificate
+
+The public certificate below was extracted from the signing block of the existing
+EAS preview APK, build `1e365827-9c5e-4092-a8a2-4569b158a534`:
+
+```text
+AA:B4:D2:57:75:0A:67:99:36:DA:F1:77:EE:A4:95:03:26:A1:A6:81:3E:3F:BC:38:16:79:A7:BC:E9:95:FD:B4
+```
+
+`config/mobile-passkeys.json` records this public fingerprint, package and source
+APK digest. The production server serves it at
+`https://flurbo.singu.online/.well-known/assetlinks.json`, without authentication
+or a redirect, after this update is deployed. This does not upload a keystore.
+Keep using the same EAS-managed signing key and verify the next APK's signer.
+`FLURBO_ANDROID_CERT_SHA256` optionally overrides the certificate list (empty
+disables the endpoint). Multiple certificates are comma-separated.
+
+No extra Render environment variable is necessary for the recorded preview
+certificate. Check the endpoint after deploying, then rebuild the native APK.
 
 ## Choose the identity before creating passkeys
 
 The selected host is **`flurbo.singu.online`**, under the user's `singu.online`
 domain. The root domain remains available for other projects. Both EAS build
-profiles set this relying party ID. This records the identity only: DNS, HTTPS
-hosting, Android certificate association and Mera sign-in are not yet verified.
+profiles set this relying party ID. DNS, HTTPS hosting and web Mera sign-in are
+already working. The new Android association still needs to be deployed and tested.
 Changing the relying party ID does not migrate existing passkeys.
 
-After selecting a hosting provider, attach `flurbo.singu.online` as its custom
-domain and add the exact DNS record that provider supplies (`flurbo` is the DNS
-record name). Do not guess the CNAME target or IP address. Keep the association
-file on this same HTTPS host, even if the site's deployment URL changes.
+Keep the association on this same HTTPS host, even if the hosting provider changes.
 
 For local Metro and association generation in Git Bash:
 
@@ -80,8 +96,8 @@ builds would need an SDK/JDK. iOS local builds require a Mac with Xcode; EAS
 internal iPhone distribution requires Apple provisioning and device registration.
 See [Expo internal distribution](https://docs.expo.dev/build/internal-distribution/).
 
-After hosting and native signing are ready, integrate the
+The app now integrates the
 [Mera native client](https://github.com/category-labs/mera/blob/a3102f4fa7b89ce4e58e843a2d6da2201035ff25/docs/src/content/docs/recipes/use-mera-with-react-native.md),
-then test creation, returning sign-in, PRF support, cancellation, recovery and
+and needs testing for creation, returning sign-in, PRF support, cancellation, recovery and
 session expiry on the actual phone. A generated association file or successful
 JavaScript export alone does not validate any of those flows.

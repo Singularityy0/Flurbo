@@ -4,6 +4,7 @@ module.exports = ({ config }) => {
   const rpId = readRpId(process.env);
   return {
     ...config,
+    plugins: [...(config.plugins ?? []), 'expo-secure-store'],
     // A configured host is not evidence that passkeys or PRF work on a device.
     extra: { ...config.extra, ...(rpId ? { passkeyRpId: rpId } : {}) },
     ios: {
