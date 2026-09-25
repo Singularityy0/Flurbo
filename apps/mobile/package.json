@@ -17,7 +17,7 @@
     "@category-labs/mera": "0.2.0",
     "@scure/bip32": "2.4.0",
     "@scure/bip39": "2.4.0",
-    "expo": "57.0.24",
+    "expo": "57.0.25",
     "expo-clipboard": "57.0.2",
     "expo-constants": "57.0.19",
     "expo-crypto": "57.0.3",
