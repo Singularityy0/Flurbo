@@ -36,6 +36,9 @@ export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirme
   const provider=useRef<Provider|null>(null), generation=useRef(0), live=useRef(true), working=useRef(false), cleanup=useRef(()=>{}), reviewRef=useRef(review);
   reviewRef.current=review;
   const scope=legs.reduce((v,i)=>v|2**i,0);
+  const tradeLimit=state?.maxTradeQuantityAtoms&&/^[1-9][0-9]*$/.test(state.maxTradeQuantityAtoms)?BigInt(state.maxTradeQuantityAtoms):null;
+  const overTradeLimit=['buy','sell'].includes(side)&&tradeLimit!==null&&/^(0|[1-9][0-9]*)(\.[0-9]{1,6})?$/.test(quantity)&&parseUnits(quantity,6)>tradeLimit;
+  const quantityError=overTradeLimit?`This market allows up to ${formatUnits(tradeLimit!,6)} shares per trade. Enter ${formatUnits(tradeLimit!,6)} or fewer to get a price.`:'';
   const mask=Array.from({length:2**legs.length},(_,state)=>state).reduce((mask,state)=>{
     const matches=legs.map((event,i)=>Boolean(state&(1<<i))===(answers[event]??true));
     const wins=rule==='AND'?matches.every(Boolean):matches.some(Boolean);
@@ -68,6 +71,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirme
     if(!consumer)return;
     const version=++quoteVersion.current,controller=new AbortController();
     setReview(null);reviewRef.current=null;setQuoting(false);
+    if(overTradeLimit)return;
     if(!owner||!provider.current||pending||completed||storageError)return;
     if(!/^(0|[1-9][0-9]*)(\.[0-9]{1,6})?$/.test(quantity)||parseUnits(quantity,6)<=0n)return;
     const walletGeneration=generation.current;
@@ -82,7 +86,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirme
         .finally(()=>{if(live.current&&version===quoteVersion.current)setQuoting(false);});
     },350);
     return()=>{clearTimeout(timer);controller.abort();};
-  },[!!consumer,owner,scope,mask,quantity,side,pending,completed,storageError,quoteTick]);
+  },[!!consumer,owner,scope,mask,quantity,side,pending,completed,storageError,quoteTick,overTradeLimit]);
   useEffect(()=>{
     if(!consumer||!review||busy||pending)return;
     const timer=setTimeout(()=>{
@@ -167,14 +171,15 @@ export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirme
     return <div className="consumer-ticket">
       <h2>{legs.length>1?'Your combined prediction':'Your prediction'}</h2>
       <p className="market-caption">Win: 1 test AUSD per share. Void payouts follow the market rules.</p>
-      <p className="ticket-status" role="status">{busy?'Working...':consumerNotice(notice)}</p>
+      <p className="ticket-status" role="status">{busy?'Working...':quantityError||consumerNotice(notice)}</p>
       <div className="ticket-wallet">
         <div><strong>{owner ? `${owner.slice(0,6)}…${owner.slice(-4)}` : 'MetaMask'}</strong>{owner&&state?.wallet&&<small>{cash(state.wallet.cash)} test AUSD</small>}</div>
         <button className={owner?"button button-outline":"button button-dark"} disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':'Connect MetaMask'}</button>
       </div>
       {!pending&&!completed&&<><div className="pilot-fields"><label>Your answer<select aria-label="Your answer" disabled={disabled} value={(answers[consumer.event]??true)?'yes':'no'} onChange={e=>setAnswers(old=>({...old,[consumer.event]:e.target.value==='yes'}))}><option value="yes">Yes</option><option value="no">No</option></select></label><label>Shares<input value={quantity} inputMode="decimal" disabled={disabled} onChange={e=>setQuantity(e.target.value)}/></label></div><label>Action<select value={side} disabled={disabled} onChange={e=>setSide(e.target.value)}><option value="buy">Buy</option><option value="sell">Sell</option><option value="redeem">Collect payout</option></select></label><details><summary>Combine with another prediction</summary><p>Choose up to three events. All your chosen answers must be right to win.</p>{state?.manifest.publication.draft.events.map((e,i)=>i===consumer.event?null:<div className="ticket-combine" key={e.id}><label><input type="checkbox" checked={legs.includes(i)} disabled={disabled||!legs.includes(i)&&legs.length>=3} onChange={()=>setLegs(old=>old.includes(i)?old.filter(v=>v!==i):[...old,i].sort())}/>{e.question}</label>{legs.includes(i)&&<select aria-label={e.question+" answer"} disabled={disabled} value={(answers[i]??true)?"yes":"no"} onChange={e=>setAnswers(old=>({...old,[i]:e.target.value==="yes"}))}><option value="yes">Yes</option><option value="no">No</option></select>}</div>)}</details>{legs.length>1&&<p>{answerSummary}</p>}</>}
-      {!pending&&!completed&&owner&&<p role="status">{quoting?'Getting your price...':!review?'Enter your shares to get a price, or refresh the price below.':''}</p>}
-      {!pending&&!completed&&owner&&<button className="text-link" disabled={busy||quoting} onClick={()=>setQuoteTick(n=>n+1)}>Refresh price</button>}
+      {!pending&&!completed&&tradeLimit!==null&&['buy','sell'].includes(side)&&<p className="market-caption">Up to {formatUnits(tradeLimit,6)} shares per trade, including combinations.</p>}
+      {!pending&&!completed&&owner&&!overTradeLimit&&<p role="status">{quoting?'Getting your price...':!review?'Enter your shares to get a price, or refresh the price below.':''}</p>}
+      {!pending&&!completed&&owner&&<button className="text-link" disabled={busy||quoting||overTradeLimit} onClick={()=>setQuoteTick(n=>n+1)}>Refresh price</button>}
       {completed&&<section className="ticket-review"><h3>{side==='buy'?'Purchase complete':side==='sell'?'Sale complete':'Payout collected'}</h3><p>Your transaction is confirmed. There is no need to submit it again.</p><a href="/portfolio" className="button button-dark">View portfolio</a><button className="button button-outline" onClick={()=>setCompleted(false)}>Make another trade</button></section>}
 
       {review&&!pending&&!completed&&<section className="ticket-review" aria-label="Transaction review"><h3>{review.action==='approve'?'Step 1 of 2: allow this payment':review.action==='buy'?'Your purchase':review.action==='sell'?'Confirm your sale':'Confirm your payout'}</h3><p>{cash(review.requested.quantity||'0')} shares · {consumerClaim(review.requested,state)}</p>{review.action!=='redeem'&&<p>{review.action==='sell'?'Receive at least':'Spend up to'} <strong>{cash(review.action==='sell'?review.minimumReceivedAtoms!:review.amountAtoms)} test AUSD</strong></p>}<p>{review.action==='approve'?'First allow this payment in your wallet. We will check it automatically, then show the Buy button. Approval alone does not purchase shares.':'Review the amount, then confirm in your selected wallet.'}</p><details><summary>Payment details</summary><p>Maximum network fee: {formatUnits(BigInt(review.maximumFeeWei),18)} MON. Price tolerance: 0.5%.</p><p>Wallet {review.transaction.from}. Review valid until {date(review.expiresAt)}.</p><p>Contract {review.transaction.to}</p></details><div className="pilot-actions"><button className="button button-dark" disabled={busy||!!pending} onClick={()=>void run(confirm)}>{review.action==='approve'?'Allow payment':review.action==='buy'?`Buy ${cash(review.requested.quantity||'0')} shares`:review.action==='sell'?'Sell shares':'Collect payout'}</button></div></section>}

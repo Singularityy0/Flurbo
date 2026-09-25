@@ -12,7 +12,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
   f.manifest.publication.draft.events.forEach((e:any,i:number)=>e.question=['Will the night market open?','Will the concert sell out?','Will it rain on Saturday?','Will the new cafe open?'][i]);
   f.manifest.publication.reviewerControl='single-operator';
   {f.manifest.publication.mode='rehearsal';f.manifest.publication.draft.title='Public rehearsal: scripted settlement checks';}
-  let login=true,reads=0,historyReads=0,linked=false;const errors:string[]=[];
+  let login=true,reads=0,historyReads=0,linked=false;const preparedQuantities:string[]=[];const errors:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
     await page.clock.install();
@@ -61,7 +61,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
         return route.fulfill({json:{pool:f.manifest.pool,sampling:'current',points:[0,300,600].map((offset,i)=>({timestamp:end-600+offset,blockNumber:String(100+i),prices:[0,1,2,3].map(event=>({event,yes:String(400000+i*50000),no:String(620000-i*50000)}))}))}});
       }
       if(path==='/api/'+namespace+'/status'){reads++;return route.fulfill({json:await f.service.status(url.searchParams.get('wallet')||undefined)});}
-      if(path==='/api/'+namespace+'/prepare')return route.fulfill({json:await f.service.prepare(route.request().postDataJSON())});
+      if(path==='/api/'+namespace+'/prepare'){preparedQuantities.push(route.request().postDataJSON().quantity);return route.fulfill({json:await f.service.prepare(route.request().postDataJSON())});}
       if(path==='/api/'+namespace+'/positions')return route.fulfill({json:{rows:[{mask:'2',quantity:'0',payoutAtoms:null},{mask:'1',quantity:'5000000',payoutAtoms:null}]}});
       if(path==='/api/'+namespace+'/position')return route.fulfill({json:{quantity:'5000000',payoutAtoms:null}});
       if(path==='/api/'+namespace+'/rpc'){
@@ -170,6 +170,25 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.match(await reviewPanel.textContent(),/night market open/);
     assert.match(await reviewPanel.textContent(),/concert sell out/);
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
+
+    // Oversized combinations must explain the on-chain bound, without requesting
+    // an impossible quote or retaining the previous actionable review.
+    await page.getByLabel('Shares',{exact:true}).fill('12');
+    await page.getByText('This market allows up to 10 shares per trade. Enter 10 or fewer to get a price.',{exact:true}).waitFor();
+    assert.equal(await reviewPanel.count(),0);
+    assert.equal(await page.getByRole('button',{name:'Refresh price',exact:true}).isDisabled(),true);
+    await page.clock.fastForward(1000);
+    assert.equal(preparedQuantities.includes('12000000'),false);
+    await page.getByLabel('Shares',{exact:true}).fill('10');
+    await page.getByRole('button',{name:'Buy 10 shares',exact:true}).waitFor();
+    assert.ok(preparedQuantities.includes('10000000'));
+    await page.getByLabel('Shares',{exact:true}).fill('10.000001');
+    await page.getByText('This market allows up to 10 shares per trade. Enter 10 or fewer to get a price.',{exact:true}).waitFor();
+    await page.clock.fastForward(1000);
+    assert.equal(preparedQuantities.includes('10000001'),false);
+    await page.getByLabel('Shares',{exact:true}).fill('5');
+    await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
 
     // Expiry removes an actionable price without sending or silently renewing it.

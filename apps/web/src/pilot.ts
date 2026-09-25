@@ -6,7 +6,7 @@ import type { AuthController } from './auth/controller';
 export type Provider={request(input:{method:string;params?:unknown[]}):Promise<unknown>;on?(event:string,fn:()=>void):void;removeListener?(event:string,fn:()=>void):void};
 export type PilotState={manifest:PilotManifest;snapshot:{blockNumber:string;blockHash:string;timestamp:number};
   cases:{phase:number;proposal:number;counter:number;result:number;asserter:string;disputer:string;evidenceHash:string;counterEvidenceHash:string;challengeUntil:string;voteUntil:string;assertionDeadline:string;votes:number[];voted:boolean}[];
-  delivered:boolean;resolved:boolean;voidMask:number;requiredCollateral:string;poolCash:string;
+  delivered:boolean;resolved:boolean;voidMask:number;requiredCollateral:string;poolCash:string;maxTradeQuantityAtoms?:string;
   wallet:null|{address:string;cash:string;credits:string;reviewer:boolean}};
 export type PilotInput={owner:string;action:string;event?:number;outcome?:number;evidenceHash?:string;evidenceURI?:string;scope?:number;mask?:string;quantity?:string;slippageBps?:number};
 export type PilotReview={schema:string;manifest:PilotManifest;snapshot:PilotState['snapshot'];expiresAt:number;action:string;requested:PilotInput;title:string;amountAtoms:string;minimumReceivedAtoms?:string;

@@ -78,7 +78,8 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
       cases.push({...state,assertionDeadline:await read(manifest.resolver,resolverAbi,'assertionDeadline',[i],tag),
         voted:owner?await read(manifest.resolver,resolverAbi,'voted',[i,owner],tag):false});
     }
-    const result={manifest,snapshot:s,cases,delivered:await read(manifest.resolver,resolverAbi,'delivered',[],tag),
+    const liquidity=await read(manifest.pool,pilotPoolAbi,'liquidity',[],tag);
+    const result={manifest,snapshot:s,cases,maxTradeQuantityAtoms:liquidity<100_000_000n?liquidity:100_000_000n,delivered:await read(manifest.resolver,resolverAbi,'delivered',[],tag),
       requiredCollateral:await read(manifest.pool,pilotPoolAbi,'requiredCollateral',[],tag),
       poolCash:await read(pilotCash,pilotCashAbi,'balanceOf',[manifest.pool],tag),
       resolved:await read(manifest.pool,pilotPoolAbi,'resolved',[],tag),voidMask:await read(manifest.pool,pilotPoolAbi,'voidMask',[],tag),

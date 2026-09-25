@@ -7,6 +7,15 @@ import { submitPilot, validatePilotReview, rpcInteger } from '../src/pilot.ts';
 
 import { owner, pool, resolver, hash, rules, pilotFixture } from './pilot-fixture.ts';
 
+test('ticket quantity limit uses the deployed pool liquidity and the existing API cap',async()=>{
+  const f=pilotFixture();
+  assert.equal((await f.service.status()).maxTradeQuantityAtoms,'10000000');
+  f.options.liquidity=5_000_000n;
+  assert.equal((await f.service.status()).maxTradeQuantityAtoms,'5000000');
+  f.options.liquidity=200_000_000n;
+  assert.equal((await f.service.status()).maxTradeQuantityAtoms,'100000000');
+});
+
 test('pilot action policy rejects foreign targets, extra calldata, oversized approval and invalid evidence',()=>{
   const {manifest}=pilotFixture();
   const data=encodeFunctionData({abi:resolverAbi,functionName:'assertOutcome',args:[0,2,hash,'https://flurbo.singu.online/evidence']});
