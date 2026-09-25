@@ -1,3 +1,4 @@
+import {marketQuestion} from '../showcase-copy';
 import {useEffect,useState} from 'react';
 import {Link} from 'wouter';
 import {pilotRequest,isPracticeNamespace,type PilotNamespace,type PilotState} from '../pilot';
@@ -28,7 +29,7 @@ export default function AccountHoldings({account,wallets,namespace}:{account:str
       const data=await request<Account>('account?wallet='+owner);
       if(!current())return;
       const events=data.manifest.publication.draft.events;
-      setQuestions(events.map(event=>event.question));
+      setQuestions(events.map(event=>marketQuestion(event)));
       const seen=new Set<string>(),rows:AccountHolding[]=[];
       async function positions(indexed:{scope:number;mask:string}[]){
         const claims=portfolioClaims(events.length,data.claimScopes||[],rememberedClaims(namespace as PilotNamespace,data.manifest.pool,owner,events.length),indexed)

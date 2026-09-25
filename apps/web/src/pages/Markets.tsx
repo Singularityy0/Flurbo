@@ -1,3 +1,4 @@
+import {marketQuestion,showcaseCopy} from '../showcase-copy';
 import AccountPortfolio from './AccountPortfolio';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'wouter';
@@ -65,15 +66,15 @@ function CollectionMarkets({collections,namespace,onCollectionChange}:{collectio
       {catalog&&<section className="market-round-status" aria-label="Round availability"><p role="status"><strong>{open?'Trading open':clock/1000>=catalog.manifest.publication.draft.closesAt?'Trading closed':'Trading currently unavailable'}</strong> · Individual and combined predictions priced from one shared pool.</p><p>{open?'Browse questions, inspect combinations and choose a prediction.':'You can still browse market pages, read combination payout rules, view recorded prices where available, and open Portfolio and History. Check each market for settlement progress.'} Switch collections above to explore another round.</p><p>No opening date for a new practice round is announced here.</p></section>}
       {error&&<p role="alert" className="market-error">{error}</p>}
       {loading&&!catalog&&<p role="status">Loading markets and prices...</p>}
-      <div className="market-grid">{catalog?.manifest.publication.draft.events.map((event,index)=>({event,index})).filter(({event})=>event.question.toLowerCase().includes(query.toLowerCase())).map(({event,index})=>{
+      <div className="market-grid">{catalog?.manifest.publication.draft.events.map((event,index)=>({event,index})).filter(({event})=>marketQuestion(event).toLowerCase().includes(query.toLowerCase())).map(({event,index})=>{
         const quotes=catalog.prices.find(p=>p.event===index);return <article className="market-card" key={event.id}>
           <div className="market-card-top"><span className="market-symbol" aria-hidden="true">{String.fromCharCode(65+index)}</span><span className="market-badge">{open?(catalog.manifest.publication.mode==='rehearsal'?'Practice':'Real event'):'Trading closed'}</span></div>
-          <h3>{event.question}</h3><p>Trading closes {new Date(catalog.manifest.publication.draft.closesAt*1000).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}.</p>
-          <div className="market-choices">{[true,false].map(yes=><button key={String(yes)} disabled={!open||!fresh} aria-label={`${yes?'Yes':'No'}: ${event.question}`} onClick={()=>choose(index,yes)}><span>{yes?'Yes':'No'}</span><strong>{fresh?price((yes?quotes?.yes:quotes?.no)??null):'Refresh price'}{fresh&&quotes?' AUSD':''}</strong></button>)}</div>
+          <h3>{marketQuestion(event)}</h3>{showcaseCopy(event)&&<p>{showcaseCopy(event)!.description}</p>}<p>Trading closes {new Date(catalog.manifest.publication.draft.closesAt*1000).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}.</p>
+          <div className="market-choices">{[true,false].map(yes=><button key={String(yes)} disabled={!open||!fresh} aria-label={`${yes?'Yes':'No'}: ${marketQuestion(event)}`} onClick={()=>choose(index,yes)}><span>{yes?'Yes':'No'}</span><strong>{fresh?price((yes?quotes?.yes:quotes?.no)??null):'Refresh price'}{fresh&&quotes?' AUSD':''}</strong></button>)}</div>
           <button className="market-detail-link" onClick={()=>choose(index,true)}>View market <ArrowUpRight size={15}/></button>
         </article>;
       })}</div>
-      {catalog&&!catalog.manifest.publication.draft.events.some(e=>e.question.toLowerCase().includes(query.toLowerCase()))&&<p>No markets match your search.</p>}
+      {catalog&&!catalog.manifest.publication.draft.events.some(e=>marketQuestion(e).toLowerCase().includes(query.toLowerCase()))&&<p>No markets match your search.</p>}
       {catalog&&!fresh&&<p role="status" className="market-caption">Refresh prices for a current view. Your final trade is always checked again.</p>}
       {catalog&&<WhatIf key={catalog.manifest.pool} namespace={namespace} manifest={catalog.manifest}/>}
       {selected&&<p className="market-resume"><Link href={marketHref(namespace,selected.event,selected.yes)}>Continue your saved prediction →</Link></p>}

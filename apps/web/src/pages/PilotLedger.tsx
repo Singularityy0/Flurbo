@@ -1,3 +1,4 @@
+import {marketQuestion} from '../showcase-copy';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'wouter';
 import { pilotRequest as request, type PilotState, type PilotNamespace } from '../pilot';
@@ -92,7 +93,7 @@ export default function PilotLedger({account,history,namespace='pilot',initialWa
   const rows=holdings?.rows.filter(r=>r.quantity!=='0')||[];
   function claimLabel(scope:number,mask:string){
     const events=state?.manifest.publication.draft.events;
-    const names=events?.filter((_event,index)=>scope&(1<<index)).map(event=>event.question).join(' + ');
+    const names=events?.filter((_event,index)=>scope&(1<<index)).map(event=>marketQuestion(event)).join(' + ');
     return <><strong>{names||'Prediction'}</strong><small>{describeClaimAnswers(scope,Number(mask))}</small></>;
   }
   const holdingsTable=<>

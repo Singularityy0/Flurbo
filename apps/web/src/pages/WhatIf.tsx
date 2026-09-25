@@ -1,3 +1,4 @@
+import {marketQuestion} from '../showcase-copy';
 import { useEffect, useRef, useState } from 'react';
 import { pilotRequest, type PilotState, type PilotNamespace } from '../pilot';
 import './what-if.css';
@@ -52,19 +53,19 @@ export default function WhatIf({manifest,namespace='rehearsal'}:{manifest:PilotS
     <header className="what-if-heading"><div><span className="eyebrow">See the connection</span><h2 id="what-if-heading">What <em>if?</em></h2></div><span className="market-badge">Read-only exploration</span></header>
     <p>What chance does the market imply for one answer, assuming another is known? Choose two questions to explore them together.</p>
     <div className="what-if-controls">
-      <label><span id="what-if-a-label">Question to explore</span><select aria-labelledby="what-if-a-label" value={a} onChange={e=>select('a',Number(e.target.value))}>{events.map((event,i)=><option key={event.id} value={i}>{event.question}</option>)}</select></label>
-      <label><span id="what-if-b-label">Suppose this question resolves</span><select aria-labelledby="what-if-b-label" value={b} onChange={e=>select('b',Number(e.target.value))}>{events.map((event,i)=><option key={event.id} value={i}>{event.question}</option>)}</select></label>
+      <label><span id="what-if-a-label">Question to explore</span><select aria-labelledby="what-if-a-label" value={a} onChange={e=>select('a',Number(e.target.value))}>{events.map((event,i)=><option key={event.id} value={i}>{marketQuestion(event)}</option>)}</select></label>
+      <label><span id="what-if-b-label">Suppose this question resolves</span><select aria-labelledby="what-if-b-label" value={b} onChange={e=>select('b',Number(e.target.value))}>{events.map((event,i)=><option key={event.id} value={i}>{marketQuestion(event)}</option>)}</select></label>
     </div>
     <div className="what-if-actions"><button className="button button-dark" disabled={busy} onClick={()=>void compare()}>{busy?'Reading the shared pool...':result?'Refresh comparison':'Compare these questions'}</button>{busy&&<button className="button button-outline" onClick={cancel}>Cancel</button>}</div>
     {busy&&<p role="status">Reading one market snapshot. You can change either question while this loads.</p>}
     {error&&<p role="alert" className="market-error">{error}</p>}
     {result&&!fresh&&<p role="status">This snapshot is over a minute old or its time could not be verified. Refresh the comparison to see current values.</p>}
     {fresh&&<div className="what-if-results">
-      <h3>Chance of Yes: {events[a].question}</h3>
+      <h3>Chance of Yes: {marketQuestion(events[a])}</h3>
       <div className="what-if-probabilities">
         {(['a','givenYes','givenNo'] as Metric[]).map((key,i)=><div key={key}><span>{['Without an assumption','If the second answer is Yes','If the second answer is No'][i]}</span><strong>{value(key)}</strong>{missing(key)}</div>)}
       </div>
-      <p className="market-caption">Second question: {events[b].question} Its market-implied Yes chance is {value('b')}. {missing('b')}</p>
+      <p className="market-caption">Second question: {marketQuestion(events[b])} Its market-implied Yes chance is {value('b')}. {missing('b')}</p>
       <div className="what-if-comparison"><h3>Both Yes, together</h3><p>Compare the shared market with a baseline that assumes these answers are independent.</p>
         {(['joint','independent'] as Metric[]).map((key,i)=><div className="what-if-bar-row" key={key}><span>{i?'If independent':'Shared market'}</span><strong>{value(key)}</strong><div className={'what-if-bar '+(i?'baseline':'')} aria-hidden="true"><span style={{width:`${(result.values[key]??0)/10}%`}}/></div>{missing(key)}</div>)}
         <p className="what-if-gap">Difference: <strong>{result.values.difference!==null&&result.values.difference>0?'+':''}{value('difference')}</strong> <span>(percentage points)</span>{missing('difference')}</p>
@@ -72,7 +73,7 @@ export default function WhatIf({manifest,namespace='rehearsal'}:{manifest:PilotS
       {result.sensitivity&&<details className="what-if-sensitivity"><summary>Price sensitivity: what could one trade change?</summary>
         <p>Compare two separate hypothetical purchases of one combined share. Each starts from the snapshot above. No trade is placed.</p>
         <div className="what-if-scenarios">{result.sensitivity.scenarios.map(s=><article key={s.answer}>
-          <h4>Buy one combined share</h4><p className="what-if-legs">{events[a].question}<strong>{s.answer==='yes'?'Yes':'No'}</strong>{events[b].question}<strong>Yes</strong></p>
+          <h4>Buy one combined share</h4><p className="what-if-legs">{marketQuestion(events[a])}<strong>{s.answer==='yes'?'Yes':'No'}</strong>{marketQuestion(events[b])}<strong>Yes</strong></p>
           {s.status==='unavailable'?<p role="status">{s.reason==='market_closed'?'Trading is closed. A purchase cannot be quoted.':s.reason==='unsupported_simulation'?'This example exceeds the supported calculation or trade limits.':'A contract quote is unavailable for this example. Refresh to try again.'}</p>:<>
             <p>Snapshot purchase cost: <strong>{(Number(s.costAtoms)/1e6).toFixed(6)} test AUSD</strong></p>
             <dl>{(['a','givenYes','givenNo'] as Metric[]).map((key,i)=><div key={key}><dt>{['Chance of Yes for the first question','If the second answer is Yes','If the second answer is No'][i]}</dt><dd><span>Before {value(key)}</span><strong>After {s.values?.[key]===null?'Unavailable':`${(s.values![key]!/10).toFixed(1)}%`}</strong></dd></div>)}</dl>

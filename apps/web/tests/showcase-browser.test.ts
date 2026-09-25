@@ -49,7 +49,9 @@ test('landing example and collection switch work on desktop and mobile without l
     await page.getByLabel('Collection',{exact:true}).selectOption(old);await page.getByRole('heading',{name:'October practice',exact:true}).waitFor();
     await page.getByRole('heading',{name:'Test event 1',exact:true}).waitFor();assert.ok(requests.includes(`/api/${old}/markets`));
     await page.reload();await page.getByRole('heading',{name:'October practice',exact:true}).waitFor();
-    await page.getByLabel('Collection',{exact:true}).selectOption(ns);await page.getByRole('heading',{name:'Will Ethereum fill at least 75% of a block?',exact:true}).waitFor();
+    await page.getByLabel('Collection',{exact:true}).selectOption(ns);await page.getByRole('heading',{name:'Will the selected Ethereum block be at least 75% full?',exact:true}).waitFor();
+    for(const title of ['Will the selected Ethereum block contain at least 150 transactions?','Will the selected Ethereum block have a higher base fee than the previous block?','Will the selected Ethereum block include at least 3 data blobs?'])await page.getByRole('heading',{name:title,exact:true}).waitFor();
+    await page.getByText('Yes if the block uses at least 75% of its gas limit. Fullness measures gas used, not the number of transactions.',{exact:true}).waitFor();
     assert.equal(await page.getByLabel('Collection',{exact:true}).inputValue(),ns);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     await page.screenshot({path:new URL('../../../target/showcase-ui/markets-mobile.png',import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),fullPage:true});
