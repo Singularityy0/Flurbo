@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'wouter';
 import { pilotRequest as request, type PilotState, type PilotNamespace } from '../pilot';
-import { amount, describeClaim, rememberedWallet, walletKey } from '../portfolio';
+import { amount, describeClaimAnswers, rememberedWallet, walletKey } from '../portfolio';
 import { evidenceURI } from '../../shared/pilot.mjs';
 import { rememberedClaims, portfolioClaims } from '../pilot-claims';
 import './portfolio.css';
@@ -92,8 +92,8 @@ export default function PilotLedger({account,history,namespace='pilot'}:{account
   const rows=holdings?.rows.filter(r=>r.quantity!=='0')||[];
   function claimLabel(scope:number,mask:string){
     const events=state?.manifest.publication.draft.events;
-    const single=Number.isInteger(Math.log2(scope))?events?.[Math.log2(scope)]:null;
-    return <><strong>{single?single.question:describeClaim(scope,Number(mask),events?.map(event=>event.question))}</strong>{single&&<small>{mask==='2'?'Yes':'No'}</small>}</>;
+    const names=events?.filter((_event,index)=>scope&(1<<index)).map(event=>event.question).join(' + ');
+    return <><strong>{names||'Prediction'}</strong><small>{describeClaimAnswers(scope,Number(mask))}</small></>;
   }
   const holdingsTable=<>
     <div className="portfolio-section-heading"><h2>Your shares</h2><Link href="/markets">Explore markets</Link></div>

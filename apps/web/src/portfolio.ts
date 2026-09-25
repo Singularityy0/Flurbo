@@ -20,11 +20,17 @@ export function amount(value: string | undefined | null) {
   return whole + (fraction ? '.' + fraction : '');
 }
 export function describeClaim(scope: number, mask: number, questions?: string[]) {
+  return formatClaim(scope, mask, (event, yes) => questions?.[event]
+    ? `${questions[event]} (${yes ? 'Yes' : 'No'})`
+    : `${String.fromCharCode(65 + event)} ${yes ? 'YES' : 'NO'}`);
+}
+export function describeClaimAnswers(scope: number, mask: number) {
+  return formatClaim(scope, mask, (_event, yes) => yes ? 'Yes' : 'No');
+}
+function formatClaim(scope: number, mask: number, label: (event: number, yes: boolean) => string) {
   const events = Array.from({ length: 8 }, (_, i) => i).filter(i => scope & (1 << i));
   const count = 1 << events.length;
-  const leg = (state: number, i: number) => questions?.[events[i]]
-    ? `${questions[events[i]]} (${state & (1 << i) ? 'Yes' : 'No'})`
-    : `${String.fromCharCode(65 + events[i])} ${state & (1 << i) ? 'YES' : 'NO'}`;
+  const leg = (state: number, i: number) => label(events[i], Boolean(state & (1 << i)));
   const winners = Array.from({ length: count }, (_, i) => i).filter(i => mask & (1 << i));
   if (winners.length === 1) return events.map((_, i) => leg(winners[0], i)).join(' AND ');
   if (winners.length === count - 1) {
