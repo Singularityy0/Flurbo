@@ -11,5 +11,5 @@ test('Android credential association only accepts explicit public certificate fi
   const app = JSON.parse(readFileSync(new URL('../../mobile/app.json', import.meta.url), 'utf8'));
   assert.equal(result[0].target.package_name, app.expo.android.package);
   assert.deepEqual(result[0].target.sha256_cert_fingerprints, [fingerprint]);
-  assert.deepEqual(result[0].relation, ['delegate_permission/common.get_login_creds']);
+  assert.deepEqual(result[0].relation, ['delegate_permission/common.handle_all_urls', 'delegate_permission/common.get_login_creds']);
 });

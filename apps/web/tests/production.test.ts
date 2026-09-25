@@ -9,6 +9,7 @@ import { SessionStore } from '../server/session.mjs';
 import { RedisSessionStore, redisCommand } from '../server/redis-session.mjs';
 import { hostedConfig, TESTNET } from '../server/network.mjs';
 import { productionServer } from '../server/production.mjs';
+import { androidAssetLinks } from '../server/native-association.mjs';
 
 const signer = privateKeyToAccount(('0x' + '11'.repeat(32)) as `0x${string}`);
 const origin = 'https://flurbo.singu.online';
@@ -73,9 +74,11 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
   };
   try {
     assert.equal((await request('/.well-known/assetlinks.json')).status,404);
-    config.androidAssetLinks = [{relation:['delegate_permission/common.get_login_creds'],target:{namespace:'android_app',package_name:'dev.flurbo.preview',sha256_cert_fingerprints:[Array(32).fill('AB').join(':')]}}];
+    config.androidAssetLinks = androidAssetLinks({FLURBO_ANDROID_CERT_SHA256:Array(32).fill('AB').join(':')});
     const association = await request('/.well-known/assetlinks.json',undefined,'','flurbo.singu.online','');
     assert.equal(association.status,200); assert.deepEqual(association.json(),config.androidAssetLinks);
+    assert.ok(association.json()[0].relation.includes('delegate_permission/common.handle_all_urls'));
+    assert.ok(association.json()[0].relation.includes('delegate_permission/common.get_login_creds'));
     assert.equal(association.headers['content-type'],'application/json'); assert.equal(association.headers.location,undefined);
     assert.equal((await request('/.well-known/assetlinks.json',undefined,'','evil.example')).status,421);
     assert.equal((await request('/.well-known/assetlinks.json',{})).status,405);

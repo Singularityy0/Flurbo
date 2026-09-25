@@ -8,7 +8,9 @@ export function androidAssetLinks(env = process.env) {
   if (fingerprints.length > 8 || fingerprints.some(value => !/^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(value))) {
     throw new Error('Invalid Android SHA-256 certificate fingerprint');
   }
-  return [{ relation: ['delegate_permission/common.get_login_creds'], target: {
+  // Android passkey RP validation requires handle_all_urls as well as the
+  // credential-sharing relation. Checking get_login_creds alone is insufficient.
+  return [{ relation: ['delegate_permission/common.handle_all_urls', 'delegate_permission/common.get_login_creds'], target: {
     namespace: 'android_app', package_name: association.androidPackage, sha256_cert_fingerprints: fingerprints,
   } }];
 }
