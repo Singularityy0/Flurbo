@@ -1,5 +1,7 @@
 # Settlement checks
 
+Additional hosted practice collections can be monitored through `FLURBO_PRACTICE_COLLECTIONS_JSON` in the GitHub Actions secrets. Keep the same public collection entries as the web service. The original `FLURBO_REHEARSAL_MANIFEST_JSON` remains September practice; featuring a new web collection does not change monitor coverage. See [October rollout](OCTOBER_DEMO_ROLLOUT.md) for the registration and delivery checks.
+
 The checker reads the deployed pilot or practice resolver on Monad testnet. It does not sign, submit transactions, evaluate source truth or send email. No scheduler is installed by this command. Contract pricing, collateral and settlement behaviour are unchanged.
 
 Run from the repository root in Git Bash with Node 24 and the web dependencies installed:

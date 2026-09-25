@@ -4,15 +4,14 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { pilotFixture, owner, hash, code } from './pilot-fixture.ts';
 
-const namespace='rehearsal';
-test('consumer markets show four separate events and preserve the full wallet confirmation flow',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer markets preserve wallet confirmation flow for '+namespace,{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const loginAddress='0x'+'99'.repeat(20);
   const f=pilotFixture(Math.floor(Date.now()/1000),4);
   f.manifest.publication.draft.events.forEach((e:any,i:number)=>e.question=['Will the night market open?','Will the concert sell out?','Will it rain on Saturday?','Will the new cafe open?'][i]);
   f.manifest.publication.reviewerControl='single-operator';
-  if(namespace==='rehearsal'){f.manifest.publication.mode='rehearsal';f.manifest.publication.draft.title='Public rehearsal: scripted settlement checks';}
+  {f.manifest.publication.mode='rehearsal';f.manifest.publication.draft.title='Public rehearsal: scripted settlement checks';}
   let login=true,reads=0;const errors:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
@@ -38,6 +37,7 @@ test('consumer markets show four separate events and preserve the full wallet co
     },{owner,hash,code,namespace});
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
+      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:namespace,collections:[{namespace,label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:login?{address:loginAddress,method:'passkey',expiresAt:Date.now()+3600_000}:null}});
       if(path==='/api/'+namespace+'/markets')return route.fulfill({json:await f.service.markets()});
       if(path==='/api/'+namespace+'/status'){reads++;return route.fulfill({json:await f.service.status(url.searchParams.get('wallet')||undefined)});}
@@ -79,7 +79,7 @@ test('consumer markets show four separate events and preserve the full wallet co
     assert.equal(await page.getByLabel('Your answer',{exact:true}).inputValue(),'no');
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
     // Approval is already confirmed and tracking cleared. The draft must still reopen.
-    assert.equal(await page.evaluate(()=>localStorage.getItem('flurbo.rehearsal.pending.v1')),null);
+    assert.equal(await page.evaluate((ns:string)=>localStorage.getItem('flurbo.'+ns+'.pending.v1'),namespace),null);
     await page.reload();await page.getByLabel('Shares',{exact:true}).waitFor();
     assert.equal(await page.getByLabel('Shares',{exact:true}).inputValue(),'5');
     assert.equal(await page.getByLabel('Your answer',{exact:true}).inputValue(),'no');
@@ -91,7 +91,7 @@ test('consumer markets show four separate events and preserve the full wallet co
     assert.deepEqual(await page.evaluate(({namespace,pool,owner}:any)=>JSON.parse(localStorage.getItem(`flurbo.claims.v1:10143:${namespace}:${pool}:${owner}`)||'null'),{namespace,pool:f.manifest.pool,owner}),[{scope:2,mask:'1'}]);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
     await page.getByText('5 shares',{exact:true}).waitFor();
-    assert.equal(await page.evaluate((login:string)=>localStorage.getItem('flurbo.checkout.v1:rehearsal:'+login),loginAddress),null);
+    assert.equal(await page.evaluate(({ns,login}:any)=>localStorage.getItem('flurbo.checkout.v1:'+ns+':'+login),{ns:namespace,login:loginAddress}),null);
     assert.equal(await page.getByRole('heading',{name:'Will the concert sell out?',exact:true}).count(),2);
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);

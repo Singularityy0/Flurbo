@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       test_email:
-        description: Send a labelled delivery test for both monitored pools
+        description: Send a labelled delivery test for every monitored pool
         type: boolean
         default: false
 
@@ -20,7 +20,7 @@ jobs:
     # Opt-in only. Committing this workflow does not activate delivery.
     if: vars.FLURBO_MONITOR_ENABLED == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,6 +36,7 @@ jobs:
         env:
           FLURBO_ALCHEMY_TESTNET_RPC_URL: ${{ secrets.FLURBO_ALCHEMY_TESTNET_RPC_URL }}
           FLURBO_REHEARSAL_MANIFEST_JSON: ${{ secrets.FLURBO_REHEARSAL_MANIFEST_JSON }}
+          FLURBO_PRACTICE_COLLECTIONS_JSON: ${{ secrets.FLURBO_PRACTICE_COLLECTIONS_JSON }}
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           FLURBO_MONITOR_RESEND_KEY: ${{ secrets.FLURBO_MONITOR_RESEND_KEY }}

@@ -14,14 +14,20 @@ export type PilotReview={schema:string;manifest:PilotManifest;snapshot:PilotStat
   transaction:{from:Hex;to:Hex;data:Hex;value:Hex;chainId:Hex};notice:string};
 export type PilotPending={review:PilotReview;nonce:Hex;hash:Hex|null;started:number;login:string};
 export const pilotPendingKey='flurbo.pilot.pending.v1';
-export type PilotNamespace='pilot'|'rehearsal';
-export const pendingKeyFor=(namespace:PilotNamespace)=>namespace==='pilot'?pilotPendingKey:'flurbo.rehearsal.pending.v1';
+export type PilotNamespace='pilot'|'rehearsal'|`practice-${string}`;
+export const isPracticeNamespace=(value:string):value is Exclude<PilotNamespace,'pilot'>=>value==='rehearsal'||/^practice-[0-9a-f]{40}$/.test(value);
+export const pendingKeyFor=(namespace:PilotNamespace)=>{
+  if(namespace!=='pilot'&&!isPracticeNamespace(namespace))throw Error('Invalid collection');
+  return namespace==='pilot'?pilotPendingKey:`flurbo.${namespace}.pending.v1`;
+};
 
 export async function pilotRequest<T>(path:string,input?:unknown,namespace:PilotNamespace='pilot',signal?:AbortSignal):Promise<T> {
+  if(namespace!=='pilot'&&!isPracticeNamespace(namespace))throw Error('Invalid collection');
   const response=await fetch('/api/'+namespace+'/'+path,{method:input===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',
     headers:input===undefined?{}:{'Content-Type':'application/json'},body:input===undefined?undefined:JSON.stringify(input),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60_000)]):AbortSignal.timeout(60_000)});
   const result=await response.json();
   if(!response.ok) throw new Error(result.error || 'Pilot request failed. Refresh before retrying.');
+  if(result.manifest&&namespace.startsWith('practice-')&&(result.manifest.pool!=='0x'+namespace.slice(9)||result.manifest.publication?.mode!=='rehearsal'))throw Error('Response belongs to a different collection.');
   return result;
 }
 async function namespaceRpc(namespace:PilotNamespace,method:string,params:unknown[]=[]){ return (await pilotRequest<{result:unknown}>('rpc',{method,params},namespace)).result; }
@@ -83,7 +89,8 @@ export function readPilotPending(namespace:PilotNamespace='pilot'):PilotPending|
   if(!raw) return null;
   if(raw.length>100_000) throw new Error('Saved transaction is invalid. Do not resubmit.');
   const value=JSON.parse(raw) as PilotPending;
-  if((value.review.manifest.publication.mode==='rehearsal')!==(namespace==='rehearsal'))throw new Error('Saved transaction belongs to a different market');
+  if((value.review.manifest.publication.mode==='rehearsal')!==isPracticeNamespace(namespace)
+    ||namespace.startsWith('practice-')&&value.review.manifest.pool!=='0x'+namespace.slice(9))throw new Error('Saved transaction belongs to a different market');
   validatePilotReview(value.review,Date.now(),true); rpcInteger(value.nonce);
   if(value.hash!==null && !/^0x[0-9a-f]{64}$/i.test(value.hash) || !Number.isFinite(value.started)) throw new Error('Invalid transaction tracking');
   return value;
@@ -126,8 +133,8 @@ export async function submitPilot(p:Provider,r:PilotReview,login:string,save:(va
   }
 }
 
-export async function checkPilotPending(saved:PilotPending) {
-  const namespace=saved.review.manifest.publication.mode==='rehearsal'?'rehearsal':'pilot';
+export async function checkPilotPending(saved:PilotPending,namespace:PilotNamespace=saved.review.manifest.publication.mode==='rehearsal'?'rehearsal':'pilot') {
+  if(namespace.startsWith('practice-')&&saved.review.manifest.pool!=='0x'+namespace.slice(9))throw Error('Pending transaction belongs to a different collection');
   const rpc=(method:string,params:unknown[]=[])=>namespaceRpc(namespace,method,params);
   validatePilotReview(saved.review,Date.now(),true);
   if(!saved.hash) throw new Error('Attach the transaction hash from wallet activity. Do not repeat the action.');

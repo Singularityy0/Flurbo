@@ -167,7 +167,13 @@ test('runner handles both pools, signals failed reads to watchdog, and redacts c
     inspect: async ({ manifest }: any) => observed(manifest, 1000) };
   assert.equal(await runNotifications(options), 0);
   assert.equal(output.length, 2);
+  const extra=structuredClone(rehearsal);extra.pool='0x'+'aa'.repeat(20);extra.resolver='0x'+'bb'.repeat(20);
+  extra.codeHashes[extra.pool]=rehearsal.codeHashes[rehearsal.pool];extra.codeHashes[extra.resolver]=rehearsal.codeHashes[rehearsal.resolver];
+  const extraEnv={...env,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'October practice',manifest:extra}])};
+  const before=output.length;assert.equal(await runNotifications({...options,env:extraEnv}),0);
+  assert.equal(output.length-before,3);assert.ok(output.some(line=>JSON.parse(line).pool===extra.pool));
   assert.ok(!pings.at(-1)!.endsWith('/fail'));
+  assert.equal(await runNotifications({...options,env:{...env,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'Duplicate',manifest:rehearsal}])}}),2);
   assert.equal(await runNotifications({ ...options, inspect: async () => { throw new Error('storage-secret'); } }), 2);
   assert.ok(pings.at(-1)!.endsWith('/fail'));
   assert.ok(!output.join('').includes('storage-secret'));

@@ -49,7 +49,10 @@ test('rehearsal API is authenticated and cannot sign for the official pool',asyn
   const manifest={...f.manifest,pool:rehearsalPool,publication:{...f.manifest.publication,mode:'rehearsal'}};
   const rehearsal={manifest,snapshot:async()=>({}),status:async()=>({pool:rehearsalPool})};
   const store={read:async(id:string)=>id==='fixture'?{address:signer.address.toLowerCase(),method:'passkey'}:null};
-  const server=productionServer({origin,rpcUrl:TESTNET.rpc,pilot:f.service,rehearsal},store);
+  const namespace='practice-'+'bb'.repeat(20), archivedPool=('0x'+'bb'.repeat(20)) as `0x${string}`;
+  const archived={...rehearsal,manifest:{...manifest,pool:archivedPool},status:async()=>({pool:archivedPool})};
+  const practiceCollections={services:new Map([[namespace,archived]]),catalog:{active:namespace}};
+  const server=productionServer({origin,rpcUrl:TESTNET.rpc,pilot:f.service,rehearsal,practiceCollections},store);
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const port=(server.address() as {port:number}).port,original=globalThis.fetch;let writes=0;
   globalThis.fetch=async()=>{writes++;return Response.json({result:hash});};
@@ -63,7 +66,15 @@ test('rehearsal API is authenticated and cannot sign for the official pool',asyn
     assert.equal(await request('/api/rehearsal/rpc',{method:'eth_sendRawTransaction',params:[await raw(pool)]}),403);
     assert.equal(await request('/api/pilot/rpc',{method:'eth_sendRawTransaction',params:[await raw(rehearsalPool)]}),403);
     assert.equal(await request('/api/rehearsal/rpc',{method:'eth_sendRawTransaction',params:[await raw(rehearsalPool)]}),200);
-    assert.equal(writes,1);
+    assert.equal(await request('/api/practice-collections',undefined,false),401);
+    assert.equal(await request('/api/practice-collections'),200);
+    assert.equal(await request('/api/'+namespace+'/status',undefined,false),401);
+    assert.equal(await request('/api/'+namespace+'/status'),200);
+    assert.equal(await request('/api/practice-'+'cc'.repeat(20)+'/status'),503);
+    assert.equal(await request('/api/'+namespace+'/rpc',{method:'eth_sendRawTransaction',params:[await raw(rehearsalPool)]}),403);
+    assert.equal(await request('/api/rehearsal/rpc',{method:'eth_sendRawTransaction',params:[await raw(archivedPool)]}),403);
+    assert.equal(await request('/api/'+namespace+'/rpc',{method:'eth_sendRawTransaction',params:[await raw(archivedPool)]}),200);
+    assert.equal(writes,2);
   }finally{globalThis.fetch=original;await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 

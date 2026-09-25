@@ -1,0 +1,35 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { configurePracticeCollections,practiceNamespace } from '../server/practice-collections.mjs';
+import { pilotFixture,owner,hash } from './pilot-fixture.ts';
+import { pendingKeyFor,readPilotPending,checkPilotPending,pilotRequest } from '../src/pilot.ts';
+const original=JSON.parse(await readFile(new URL('../../../config/practice-rehearsal.json',import.meta.url),'utf8'));
+const options={rpcUrl:'https://testnet-rpc.monad.xyz',command:async()=>null};
+test('featured collections preserve the original alias and reject duplicates or rebinding',async()=>{
+  const other=structuredClone(original);other.pool='0x'+'ab'.repeat(20);other.resolver='0x'+'cd'.repeat(20);
+  other.codeHashes[other.pool]=original.codeHashes[original.pool];other.codeHashes[other.resolver]=original.codeHashes[original.resolver];
+  const env={FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'October practice',manifest:other}]),FLURBO_PRACTICE_ACTIVE_POOL:other.pool};
+  const registry=await configurePracticeCollections({...options,env});
+  assert.equal(registry.catalog.active,practiceNamespace(other.pool));assert.equal(registry.services.get('rehearsal').manifest.pool,original.pool);
+  assert.equal(registry.services.get(registry.catalog.active).manifest.pool,other.pool);
+  await assert.rejects(configurePracticeCollections({...options,env:{...env,FLURBO_PRACTICE_ACTIVE_POOL:'0x'+'ef'.repeat(20)}}));
+  await assert.rejects(configurePracticeCollections({...options,env:{FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'Duplicate',manifest:original}])}}));
+  await assert.rejects(configurePracticeCollections({...options,env:{},rehearsal:{manifest:other}}),/permanent/);
+  await assert.rejects(configurePracticeCollections({...options,env:{FLURBO_PRACTICE_COLLECTIONS_JSON:'{}'}}));
+});
+test('pending confirmations and response manifests are bound to the collection pool',async()=>{
+  const f=pilotFixture();f.manifest.publication.mode='rehearsal';f.options.allowance=1000000n;
+  const review=await f.service.prepare({owner,action:'buy',scope:3,mask:'8',quantity:'1000000',slippageBps:50});
+  const saved={review,nonce:'0x79' as const,hash,started:Date.now(),login:owner},namespace=practiceNamespace(f.manifest.pool);
+  const db=new Map<string,string>(),descriptor=Object.getOwnPropertyDescriptor(globalThis,'localStorage'),fetch=globalThis.fetch;
+  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:(key:string)=>db.get(key)??null}});
+  try{
+    db.set(pendingKeyFor('rehearsal'),JSON.stringify(saved));assert.equal(readPilotPending(namespace),null);
+    db.set(pendingKeyFor(namespace),JSON.stringify(saved));assert.equal(readPilotPending(namespace)?.hash,hash);
+    const wrong=practiceNamespace('0x'+'ab'.repeat(20));db.set(pendingKeyFor(wrong),JSON.stringify(saved));
+    assert.throws(()=>readPilotPending(wrong),/different market/);await assert.rejects(checkPilotPending(saved,wrong));
+    globalThis.fetch=async()=>Response.json({manifest:f.manifest});await assert.rejects(pilotRequest('status',undefined,wrong),/different collection/);
+    assert.equal(readPilotPending('rehearsal')?.hash,hash);
+  }finally{globalThis.fetch=fetch;if(descriptor)Object.defineProperty(globalThis,'localStorage',descriptor);else delete (globalThis as any).localStorage;}
+});

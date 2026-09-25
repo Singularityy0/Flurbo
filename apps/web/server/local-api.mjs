@@ -8,7 +8,7 @@ import { pilotCall } from '../shared/pilot.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
-  learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, evidence = null } = {}) {
+  learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null } = {}) {
   const hosted = publicOrigin !== null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
   // A bounded global limit avoids trusting spoofable forwarded IP headers.
@@ -35,10 +35,18 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (++requests > 600) { res.setHeader('Retry-After', '60'); return send(res, 429, { error: 'Service busy. Retry shortly.' }); }
       }
       if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? TESTNET : { environment: 'local_fork', chain_id: 10143 });
-      if(url.pathname.startsWith('/api/pilot/')||url.pathname.startsWith('/api/rehearsal/')) {
-        const isRehearsal=url.pathname.startsWith('/api/rehearsal/');
-        const pilot=isRehearsal?rehearsal:publishedPilot;
-        if(isRehearsal)url.pathname=url.pathname.replace('/api/rehearsal/','/api/pilot/');
+      if(url.pathname==='/api/practice-collections'){
+        const login=await store.read(sid,origin);
+        if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey'});
+        if(req.method!=='GET'||url.search)return send(res,400,{error:'Collection listing accepts a GET without parameters'});
+        if(!practiceCollections)return send(res,503,{error:'Practice collections are unavailable'});
+        return send(res,200,practiceCollections.catalog);
+      }
+      const archiveNamespace=url.pathname.match(/^\/api\/(practice-[0-9a-f]{40})\//)?.[1];
+      if(url.pathname.startsWith('/api/pilot/')||url.pathname.startsWith('/api/rehearsal/')||archiveNamespace) {
+        const isRehearsal=url.pathname.startsWith('/api/rehearsal/')||!!archiveNamespace;
+        const pilot=archiveNamespace?practiceCollections?.services.get(archiveNamespace):isRehearsal?rehearsal:publishedPilot;
+        if(isRehearsal)url.pathname=url.pathname.replace('/api/'+(archiveNamespace||'rehearsal')+'/','/api/pilot/');
         // Content-addressed evidence is public so counterparties can inspect a cited URI.
         const evidenceHash=url.pathname.match(/^\/api\/pilot\/evidence\/(0x[0-9a-f]{64})$/)?.[1];
         if(evidenceHash && req.method==='GET' && !url.search && evidence) {

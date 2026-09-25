@@ -1,8 +1,8 @@
 import { verifyPilot } from '../src/pilot-verification';
 
 const root=new URL('../../../',import.meta.url);
-if(process.argv.length>3 || process.argv.length===3&&process.argv[2]!=='--rehearsal')throw new Error('Only --rehearsal is supported');
-const rehearsal=process.argv[2]==='--rehearsal',prefix=rehearsal?'rehearsal':'pilot';
+if(process.argv.length>3 || process.argv.length===3&&!['--rehearsal','--october-demo'].includes(process.argv[2]))throw new Error('Only --rehearsal or --october-demo is supported');
+const rehearsal=['--rehearsal','--october-demo'].includes(process.argv[2]),prefix=process.argv[2]==='--october-demo'?'october-demo':rehearsal?'rehearsal':'pilot';
 const prepared=await Bun.file(new URL(`target/deployments/${prefix}-prepared.json`,root)).json();
 const deployment=await Bun.file(new URL(`target/deployments/${prefix}-unverified.json`,root)).json();
 if((prepared.publication.mode==='rehearsal')!==rehearsal)throw new Error('Deployment mode mismatch');

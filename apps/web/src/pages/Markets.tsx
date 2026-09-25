@@ -3,7 +3,8 @@ import { Link, useLocation } from 'wouter';
 import { ArrowUpRight, Search, RefreshCw, X } from 'lucide-react';
 import { formatUnits } from 'viem';
 import { useAuth } from '../auth/context';
-import { pilotRequest, readPilotPending, type PilotState } from '../pilot';
+import { pilotRequest, readPilotPending, isPracticeNamespace, type PilotState, type PilotNamespace } from '../pilot';
+import { loadPracticeCollections, type PracticeCatalog } from '../practice-collections';
 import Pilot from './Pilot';
 import PilotLedger from './PilotLedger';
 import Portfolio from './Portfolio';
@@ -15,23 +16,30 @@ import './markets.css';
 
 type Catalog={manifest:PilotState['manifest'];snapshot:PilotState['snapshot'];open:boolean;prices:{event:number;yes:string|null;no:string|null}[]};
 export default function Markets(){
+  const [location]=useLocation();
+  const [collections,setCollections]=useState<PracticeCatalog|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
+  useEffect(()=>{const abort=new AbortController();setError('');void loadPracticeCollections(abort.signal).then(setCollections).catch(e=>{if(!abort.signal.aborted)setError(e.message);});return()=>abort.abort();},[attempt]);
+  if(!collections)return <main id="main" className="markets-page"><p role={error?'alert':'status'}>{error||'Loading market collections...'}</p>{error&&<button className="button button-dark" onClick={()=>setAttempt(value=>value+1)}>Retry</button>}</main>;
+  return <CollectionMarkets key={location+collections.active} collections={collections} namespace={collections.active}/>;
+}
+function CollectionMarkets({collections,namespace}:{collections:PracticeCatalog;namespace:PilotNamespace}){
   const {controller,state:auth}=useAuth();
   const [location]=useLocation(),browse=location==='/markets';
   const [catalog,setCatalog]=useState<Catalog|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false);
   const [query,setQuery]=useState(''),[selected,setSelected]=useState<{event:number;yes:boolean}|null>(null),[ticketBusy,setTicketBusy]=useState(false);
-  const [clock,setClock]=useState(Date.now()),[archive,setArchive]=useState(()=>{try{return sessionStorage.getItem('flurbo.trading.market')||'rehearsal';}catch{return 'rehearsal';}});
+  const [clock,setClock]=useState(Date.now()),[archive,setArchive]=useState(()=>{try{const saved=sessionStorage.getItem('flurbo.trading.market');return saved&&(collections.collections.some(row=>row.namespace===saved)||['pilot','original','learning'].includes(saved))?saved:namespace;}catch{return namespace;}});
   const ticket=useRef<HTMLElement>(null),active=useRef(true),reading=useRef(false);
   async function refresh(){
     if(reading.current)return;reading.current=true;setLoading(true);setError('');
-    try{const value=await pilotRequest<Catalog>('markets',undefined,'rehearsal');if(active.current)setCatalog(value);}
+    try{const value=await pilotRequest<Catalog>('markets',undefined,namespace);if(active.current)setCatalog(value);}
     catch{if(active.current){setCatalog(null);setError('Practice markets are not available yet. Please try again shortly.');}}
     finally{reading.current=false;if(active.current)setLoading(false);}
   }
   useEffect(()=>{active.current=true;if(browse)void refresh();
-    try{const draft=auth.address?readCheckout('rehearsal',auth.address):null,pending=readPilotPending('rehearsal');if(draft)setSelected({event:draft.event,yes:draft.yes});else if(pending){const scope=pending.review.requested.scope||1;setSelected({event:Number.isInteger(Math.log2(scope))?Math.log2(scope):0,yes:pending.review.requested.mask!=='1'});}}catch{setSelected({event:0,yes:true});}
+    try{const draft=auth.address?readCheckout(namespace,auth.address):null,pending=readPilotPending(namespace);if(draft)setSelected({event:draft.event,yes:draft.yes});else if(pending){const scope=pending.review.requested.scope||1;setSelected({event:Number.isInteger(Math.log2(scope))?Math.log2(scope):0,yes:pending.review.requested.mask!=='1'});}}catch{setSelected({event:0,yes:true});}
     const timer=setInterval(()=>setClock(Date.now()),1000);
     return()=>{active.current=false;clearInterval(timer);};},[]);
-  useEffect(()=>{if(browse)try{sessionStorage.setItem('flurbo.trading.market','rehearsal');}catch{}},[browse]);
+  useEffect(()=>{if(browse)try{sessionStorage.setItem('flurbo.trading.market',namespace);}catch{}},[browse,namespace]);
   useEffect(()=>{if(selected){ticket.current?.focus({preventScroll:true});ticket.current?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});}},[selected]);
   const fresh=!!catalog&&clock/1000-catalog.snapshot.timestamp<60;
   const open=!!catalog&&catalog.open&&clock/1000<catalog.manifest.publication.draft.closesAt;
@@ -60,12 +68,13 @@ export default function Markets(){
       })}</div>
       {catalog&&!catalog.manifest.publication.draft.events.some(e=>e.question.toLowerCase().includes(query.toLowerCase()))&&<p>No markets match your search.</p>}
       {catalog&&!fresh&&<p role="status" className="market-caption">Refresh prices for a current view. Your final trade is always checked again.</p>}
-      {catalog&&<WhatIf key={catalog.manifest.pool} manifest={catalog.manifest}/>}
-      {selected&&<section ref={ticket} tabIndex={-1} className="market-ticket" aria-label="Your prediction"><div className="market-ticket-bar"><span className="eyebrow">Your prediction</span><button aria-label="Close prediction" disabled={ticketBusy} onClick={()=>{if(auth.address)clearCheckout('rehearsal',auth.address);setSelected(null);}}><X size={21}/></button></div><Pilot key={selected.event+':'+selected.yes} namespace="rehearsal" onBusy={setTicketBusy} consumer={{event:selected.event,yes:selected.yes}}/></section>}
+      {catalog&&<WhatIf key={catalog.manifest.pool} namespace={namespace} manifest={catalog.manifest}/>}
+      {selected&&<section ref={ticket} tabIndex={-1} className="market-ticket" aria-label="Your prediction"><div className="market-ticket-bar"><span className="eyebrow">Your prediction</span><button aria-label="Close prediction" disabled={ticketBusy} onClick={()=>{if(auth.address)clearCheckout(namespace,auth.address);setSelected(null);}}><X size={21}/></button></div><Pilot key={namespace+':'+selected.event+':'+selected.yes} namespace={namespace} onBusy={setTicketBusy} consumer={{event:selected.event,yes:selected.yes}}/></section>}
     </>:<>
-      <details className="market-archive"><summary>Choose a market collection</summary><label htmlFor="market-collection">Collection</label><select id="market-collection" value={archive} onChange={e=>{setArchive(e.target.value);try{sessionStorage.setItem("flurbo.trading.market",e.target.value);}catch{}}}><option value="rehearsal">Practice markets</option><option value="pilot">Earlier real-event markets</option><option value="original">Earlier demo markets</option><option value="learning">Learning experiment</option></select></details>
-      {auth.address&&(archive==='rehearsal'||archive==='pilot'?<PilotLedger key={archive+location} namespace={archive} account={auth.address} history={location==='/history'}/>:<Portfolio key={archive+location} market={archive==='learning'?'learning':'original'} account={auth.address} history={location==='/history'}/>)}
+      <details className="market-archive"><summary>Choose a market collection</summary><label htmlFor="market-collection">Collection</label><select id="market-collection" value={archive} onChange={e=>{setArchive(e.target.value);try{sessionStorage.setItem("flurbo.trading.market",e.target.value);}catch{}}}>{collections.collections.map(row=><option key={row.namespace} value={row.namespace}>{row.label}</option>)}<option value="pilot">Earlier real-event markets</option><option value="original">Earlier demo markets</option><option value="learning">Learning experiment</option></select></details>
+      {isPracticeNamespace(archive)&&<p><Link href={'/rehearsal?collection='+archive}>Settlement and redemption for this collection</Link></p>}
+      {auth.address&&(isPracticeNamespace(archive)||archive==='pilot'?<PilotLedger key={archive+location} namespace={archive} account={auth.address} history={location==='/history'}/>:<Portfolio key={archive+location} market={archive==='learning'?'learning':'original'} account={auth.address} history={location==='/history'}/>)}
     </>}
-    <footer className="market-footer"><span>One pool. More possibilities.</span><details><summary>Testing tools</summary><Link href="/rehearsal">Settlement and combined predictions</Link><Link href="/events">Earlier real-event pool</Link><Link href="/kuru">Kuru trading</Link><Link href="/account">Research workspace</Link></details></footer>
+    <footer className="market-footer"><span>One pool. More possibilities.</span><details><summary>Testing tools</summary><Link href={'/rehearsal?collection='+namespace}>Settlement and combined predictions</Link><Link href="/events">Earlier real-event pool</Link><Link href="/kuru">Kuru trading</Link><Link href="/account">Research workspace</Link></details></footer>
   </main>;
 }

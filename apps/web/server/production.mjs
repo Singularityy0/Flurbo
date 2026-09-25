@@ -11,6 +11,7 @@ import { learningService, learningRpc, loadLearningModel } from './learning-pool
 import { pilotEvidence } from './pilot.mjs';
 import { configurePilot, configureRehearsal } from './pilot-config.mjs';
 import { androidAssetLinks } from './native-association.mjs';
+import { configurePracticeCollections } from './practice-collections.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -23,7 +24,7 @@ const security = {
 export function productionServer(config, store, staticRoot = dist) {
   const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
     learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
-    learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, rehearsal: config.rehearsal, evidence: config.pilotEvidence });
+    learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, rehearsal: config.rehearsal, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence });
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
     // Liveness only. This deliberately does not claim contracts or RPC are ready.
@@ -64,6 +65,9 @@ async function main() {
   config.pilotEvidence = pilotEvidence(store.command, config.origin);
   config.pilot = await configurePilot({rpcUrl:config.rpcUrl,command:store.command});
   config.rehearsal = await configureRehearsal({rpcUrl:config.rpcUrl,command:store.command});
+  config.practiceCollections=await configurePracticeCollections({rpcUrl:config.rpcUrl,command:store.command,rehearsal:config.rehearsal});
+  config.rehearsal=config.practiceCollections.legacy;
+  for(const service of config.practiceCollections.services.values())if(config.pilot&&(service.manifest.pool===config.pilot.manifest.pool||service.manifest.resolver===config.pilot.manifest.resolver))throw Error('Practice collections must be separate from the real pilot');
   if(config.rehearsal&&config.pilot&&(config.rehearsal.manifest.pool===config.pilot.manifest.pool||config.rehearsal.manifest.resolver===config.pilot.manifest.resolver))throw new Error('Rehearsal and real pilot must be separate');
   const comparison = new AbortController();
   config.learningStatus = 'starting';

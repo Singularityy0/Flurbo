@@ -15,6 +15,7 @@ test('combined shares appear in a fresh browser before history responds, with no
     await page.addInitScript(({login,owner}:any)=>{sessionStorage.setItem('flurbo.trading.market','rehearsal');sessionStorage.setItem('flurbo.view-wallet:'+login,owner);},{login,owner});
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
+      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/account')return route.fulfill({json:{...await f.service.account(url.searchParams.get('wallet')),claimScopes:[1,2,3]}});
       if(path==='/api/rehearsal/history'){await gate;return route.fulfill({status:503,json:{error:'History unavailable'}}).catch(()=>{});}
@@ -54,6 +55,7 @@ test('pilot portfolio loads remembered wallet and catches up without repeat clic
     await page.addInitScript(({login,owner}:any)=>{sessionStorage.setItem('flurbo.trading.market','pilot');sessionStorage.setItem('flurbo.view-wallet:'+login,owner);},{login,owner});
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
+      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/pilot/account')return route.fulfill({json:await fixture.service.account(owner)});
       if(path==='/api/pilot/history'){
@@ -94,6 +96,7 @@ test('practice history outage still shows owned shares; recovery shows the bet a
     await page.addInitScript(({login,owner}:any)=>{sessionStorage.setItem('flurbo.trading.market','rehearsal');sessionStorage.setItem('flurbo.view-wallet:'+login,owner);},{login,owner});
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;requests.push(path);
+      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/account')return failAccount?route.fulfill({status:503,json:{error:'Account unavailable'}}):route.fulfill({json:await fixture.service.account(url.searchParams.get('wallet'))});
       if(path==='/api/rehearsal/history'){
@@ -156,6 +159,7 @@ test('switch wallets during pending reads; late replies cannot overwrite the new
     },{login,owner});
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
+      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/account'){
         const address=url.searchParams.get('wallet')!;if(holdAccount&&address===login)await accountGate;
@@ -201,6 +205,7 @@ test('automatic catch-up stops after five batches; Stop loading cancels an activ
     const page=await browser.newPage();await page.addInitScript(()=>sessionStorage.setItem('flurbo.trading.market','rehearsal'));
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
+      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/account')return route.fulfill({json:await fixture.service.account(owner)});
       if(path==='/api/rehearsal/positions')return route.fulfill({json:{snapshot:{blockNumber:'200'},rows:[]}});

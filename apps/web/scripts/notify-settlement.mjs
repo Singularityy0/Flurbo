@@ -65,6 +65,15 @@ export async function runNotifications({ env = process.env, args = process.argv.
       JSON.parse(env.FLURBO_REHEARSAL_MANIFEST_JSON || '')];
     if (manifests[0].publication?.mode === 'rehearsal' || manifests[1].publication?.mode !== 'rehearsal'
       || monitorIdentity(manifests[0]) === monitorIdentity(manifests[1])) throw new Error('Configure both distinct pools');
+    const extras=env.FLURBO_PRACTICE_COLLECTIONS_JSON?JSON.parse(env.FLURBO_PRACTICE_COLLECTIONS_JSON):[];
+    if(!Array.isArray(extras)||extras.length>8)throw Error('Invalid practice collections');
+    for(const row of extras){
+      if(!row?.manifest||row.manifest.publication?.mode!=='rehearsal'
+        ||manifests.some(manifest=>manifest.pool===row.manifest.pool||manifest.resolver===row.manifest.resolver))throw Error('Duplicate or invalid practice collection');
+      // Validate every additional manifest before delivering any observations.
+      pilotService({manifest:row.manifest,rpc:async()=>{throw Error('No read during configuration');},now});
+      manifests.push(row.manifest);
+    }
     let failed = false;
     for (const manifest of manifests) {
       try {
