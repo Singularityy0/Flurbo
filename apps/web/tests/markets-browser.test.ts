@@ -12,7 +12,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
   f.manifest.publication.draft.events.forEach((e:any,i:number)=>e.question=['Will the night market open?','Will the concert sell out?','Will it rain on Saturday?','Will the new cafe open?'][i]);
   f.manifest.publication.reviewerControl='single-operator';
   {f.manifest.publication.mode='rehearsal';f.manifest.publication.draft.title='Public rehearsal: scripted settlement checks';}
-  let login=true,reads=0;const errors:string[]=[];
+  let login=true,reads=0,historyReads=0;const errors:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
     await page.clock.install();
@@ -47,11 +47,17 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     },{owner,hash,code,namespace});
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
+      if(path.endsWith('/history'))historyReads++;
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:namespace,collections:[{namespace,label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:login?{address:loginAddress,method:'passkey',expiresAt:Date.now()+3600_000}:null}});
       if(path==='/api/'+namespace+'/markets')return route.fulfill({json:await f.service.markets()});
+      if(path==='/api/'+namespace+'/price-history'){
+        const end=Math.floor(Date.now()/1000);
+        return route.fulfill({json:{pool:f.manifest.pool,sampling:'current',points:[0,300,600].map((offset,i)=>({timestamp:end-600+offset,blockNumber:String(100+i),prices:[0,1,2,3].map(event=>({event,yes:String(400000+i*50000),no:String(620000-i*50000)}))}))}});
+      }
       if(path==='/api/'+namespace+'/status'){reads++;return route.fulfill({json:await f.service.status(url.searchParams.get('wallet')||undefined)});}
       if(path==='/api/'+namespace+'/prepare')return route.fulfill({json:await f.service.prepare(route.request().postDataJSON())});
+      if(path==='/api/'+namespace+'/positions')return route.fulfill({json:{rows:[{mask:'2',quantity:'0',payoutAtoms:null},{mask:'1',quantity:'5000000',payoutAtoms:null}]}});
       if(path==='/api/'+namespace+'/position')return route.fulfill({json:{quantity:'5000000',payoutAtoms:null}});
       if(path==='/api/'+namespace+'/rpc'){
         const request=route.request().postDataJSON();
@@ -70,6 +76,20 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     assert.equal(await page.locator('.market-card').count(),4);
     if(process.env.FLURBO_TEST_SCREENSHOT)await page.screenshot({path:process.env.FLURBO_TEST_SCREENSHOT,fullPage:true});
     await page.getByRole('button',{name:'No: Will the concert sell out?',exact:true}).click();
+    assert.equal(new URL(page.url()).pathname,'/markets/'+namespace+'/1');
+    assert.equal(await page.locator('.market-card').count(),0);
+    await page.getByRole('region',{name:'Settlement timeline'}).waitFor();
+    const chart=page.getByRole('region',{name:'Price history',exact:true});
+    await chart.getByRole('img').waitFor();
+    assert.equal(await chart.locator('circle').count(),6);
+    await chart.getByText('View exact observations (3)',{exact:true}).click();
+    assert.equal(await chart.getByRole('row').count(),4);
+    await chart.getByRole('button',{name:'24 hours',exact:true}).click();
+    assert.equal(await chart.getByRole('button',{name:'24 hours',exact:true}).getAttribute('aria-pressed'),'true');
+    await chart.getByText('View exact observations (3)',{exact:true}).click();
+    await chart.getByRole('button',{name:'All samples',exact:true}).click();
+    assert.equal(await page.getByRole('heading',{name:'Trade history',exact:true}).count(),0);
+    assert.equal(historyReads,0);
     await page.getByLabel('Pay with',{exact:true}).selectOption('0');
     await page.getByRole('button',{name:'Use this wallet',exact:true}).click();
     await page.getByText('Your wallet is ready. Choose your answer and number of shares.').waitFor();
@@ -119,7 +139,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     await page.getByRole('heading',{name:'Purchase complete',exact:true}).waitFor();
     assert.deepEqual(await page.evaluate(({namespace,pool,owner}:any)=>JSON.parse(localStorage.getItem(`flurbo.claims.v1:10143:${namespace}:${pool}:${owner}`)||'null'),{namespace,pool:f.manifest.pool,owner}),[{scope:2,mask:'1'}]);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
-    await page.getByText('5 shares',{exact:true}).waitFor();
+    await page.getByRole('region',{name:'Trade this market'}).getByText('5 shares',{exact:true}).waitFor();
     assert.equal(await page.evaluate(({ns,login}:any)=>localStorage.getItem('flurbo.checkout.v1:'+ns+':'+login),{ns:namespace,login:loginAddress}),null);
     assert.equal(await page.getByRole('heading',{name:'Will the concert sell out?',exact:true}).count(),2);
     await page.setViewportSize({width:390,height:844});

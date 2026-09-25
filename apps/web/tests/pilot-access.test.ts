@@ -27,6 +27,9 @@ test('pilot endpoints require Mera login; public evidence remains readable; raw 
   try{
     assert.equal(await request('/api/pilot/status',undefined,false),401);
     assert.equal(await request('/api/pilot/markets',undefined,false),401);
+    assert.equal(await request('/api/pilot/price-history',undefined,false),401);
+    assert.equal(await request('/api/pilot/price-history'),503); // no durable archive configured
+    assert.equal(await request('/api/pilot/price-history?wallet='+owner),400);
     assert.equal(await request('/api/pilot/markets'),200);
     assert.equal(await request('/api/pilot/account?wallet='+owner,undefined,false),401);
     assert.equal(await request('/api/pilot/account?wallet='+owner),200);

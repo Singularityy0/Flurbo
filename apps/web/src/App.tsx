@@ -114,7 +114,7 @@ function AccountRoute() {
   // server-backed login has been restored. Remembered addresses are not login.
   return <AppShell>{state.restoring
     ? <main id="main" tabIndex={-1} className="auth-page"><p role="status">Checking your session...</p></main>
-    : authenticated ? (location==='/evidence'?<EvidenceReview/>:['/markets','/portfolio','/history'].includes(location) ? <Markets /> : <Workspace />) : null}</AppShell>;
+    : authenticated ? (location==='/evidence'?<EvidenceReview/>:(location.startsWith('/markets/')||['/markets','/portfolio','/history'].includes(location)) ? <Markets /> : <Workspace />) : null}</AppShell>;
 }
 
 export default function App() {
@@ -123,7 +123,7 @@ export default function App() {
   useEffect(() => {
     document.title = location === "/login" ? "Sign in | flurbo"
       : location === "/signup" ? "Create an account | flurbo"
-      : location === "/markets" ? "Markets | flurbo"
+      : location.startsWith("/markets") ? "Markets | flurbo"
       : location === "/account" ? "Your account | flurbo"
       : location === "/portfolio" ? "Your portfolio | flurbo"
       : location === "/history" ? "Your history | flurbo"
@@ -148,6 +148,7 @@ export default function App() {
       <Route path="/login" component={() => <AuthShell mode="login" />} />
       <Route path="/signup" component={() => <AuthShell mode="signup" />} />
       <Route path="/markets" component={AccountRoute} />
+      <Route path="/markets/:collection/:event" component={AccountRoute} />
       <Route path="/account" component={AccountRoute} />
       <Route path="/portfolio" component={AccountRoute} />
       <Route path="/history" component={AccountRoute} />

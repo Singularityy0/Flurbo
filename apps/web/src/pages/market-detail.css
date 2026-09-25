@@ -1,0 +1,34 @@
+.market-detail { overflow-wrap:anywhere; }
+.detail-heading { display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin:40px 0; }
+.detail-heading h1 { font-size:clamp(2rem,4vw,3.7rem);line-height:1.12;max-width:850px;margin:20px 0 16px;letter-spacing:-.045em; }
+.detail-status { border-radius:100px;background:#e5edce;padding:10px 18px;flex-shrink:0;font-size:.85rem; }
+.detail-columns { display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,1fr);gap:24px;align-items:start; }
+.detail-primary,.detail-sidebar { display:grid;gap:24px;min-width:0; }
+.detail-panel { border:1px solid #d5d9ce;background:#fbfaf6;border-radius:20px;padding:28px;min-width:0; }
+.detail-panel h2 { font-size:1.5rem;margin:0 0 16px; }
+.detail-panel p { line-height:1.65;margin:16px 0; }
+.detail-panel dl { display:grid;gap:7px;margin:20px 0; }
+.detail-panel dt { color:#667268;font-size:.85rem; }
+.detail-panel dd { margin:0 0 16px;font-weight:500; }
+.detail-panel details { margin-top:20px; }
+.detail-panel summary { cursor:pointer;font-weight:500; }
+.detail-section-heading { display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap; }
+.detail-panel input,.detail-panel select { display:block;width:100%;margin:8px 0 12px;padding:12px;border:1px solid #d5d9ce;border-radius:10px;background:transparent;font:inherit;color:inherit; }
+.detail-holdings { display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0; }
+.detail-holdings>div { display:grid;gap:10px;padding:18px;background:#eff1e7;border-radius:12px; }
+.detail-holdings small { color:#667268; }
+.detail-trade .consumer-ticket>h2 { font-size:1.15rem;margin-top:14px; }
+.detail-trade .consumer-ticket { padding:0; }
+.price-history svg { display:block;width:100%;height:auto;margin:18px 0;overflow:visible; }
+.price-history svg text { fill:#667268;font-size:12px; }
+.price-legend,.price-ranges { display:flex;gap:16px;flex-wrap:wrap; }
+.price-yes { color:#173d2a; }
+.price-no { color:#916025; }
+.price-ranges button { border:1px solid #d5d9ce;border-radius:24px;padding:10px 14px;background:transparent;color:inherit;font:inherit;cursor:pointer; }
+.price-ranges button[aria-pressed=true] { background:#e5edce;border-color:#173d2a; }
+.price-table { overflow:auto;max-height:300px;margin-top:16px; }
+.price-table table { width:100%;border-collapse:collapse;font-size:.85rem; }
+.price-table caption { text-align:left;margin-bottom:10px; }
+.price-table th,.price-table td { text-align:left;padding:10px;border-bottom:1px solid #d5d9ce;white-space:nowrap; }
+@media(max-width:600px){.price-history svg text{font-size:24px}}
+@media(max-width:800px){.detail-columns{grid-template-columns:1fr}.detail-heading{display:block;margin:28px 0}.detail-status{display:inline-block;margin-top:12px}.detail-panel{padding:20px}.detail-sidebar{grid-row:2}.detail-heading h1{font-size:2.4rem}}

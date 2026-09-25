@@ -45,7 +45,7 @@ export function productionServer(config, store, staticRoot = dist) {
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405); res.end(); return; }
       try {
         const pathname = new URL(req.url, config.origin).pathname;
-        const page = ['/', '/markets', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal', '/evidence'].includes(pathname);
+        const page = /^\/markets\/(?:rehearsal|pilot|practice-[0-9a-f]{40})\/[0-3]$/.test(pathname) || ['/', '/markets', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal', '/evidence'].includes(pathname);
         const labPage=['/privacy-lab','/privacy-lab/'].includes(pathname);
         const labAsset=/^\/privacy-lab\/(?:assets\/[a-zA-Z0-9_.-]+|semaphore-8\.(?:wasm|zkey))$/.test(pathname);
         if(labPage||labAsset)res.setHeader('Content-Security-Policy',security['Content-Security-Policy'].replace("script-src 'self'","script-src 'self' 'wasm-unsafe-eval'")+"; worker-src 'self' blob:");

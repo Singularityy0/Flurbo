@@ -6,11 +6,13 @@ import { TESTNET } from './network.mjs';
 import { learningDeployment } from '../shared/learning-contracts.mjs';
 import { evidenceAssistant } from './evidence-assistant.mjs';
 import { pilotCall } from '../shared/pilot.mjs';
+import { priceHistory } from './price-history.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
   learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {} } = {}) {
   const hosted = publicOrigin !== null;
+  const priceArchives=new WeakMap();
   const assistant=publishedPilot&&store.command?evidenceAssistant({manifest:publishedPilot.manifest,command:store.command,...evidenceOptions}):null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
   // A bounded global limit avoids trusting spoofable forwarded IP headers.
@@ -79,6 +81,13 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           return send(res,200,await pilot.status(url.searchParams.get('wallet')||undefined));
         }
         if(url.search) return send(res,400,{error:'Unexpected pilot query'});
+        if(req.method==='GET' && url.pathname==='/api/pilot/price-history') {
+          if(!store.command)return send(res,503,{error:'Price history storage is unavailable.'});
+          try{
+            if(!priceArchives.has(pilot))priceArchives.set(pilot,priceHistory({service:pilot,command:store.command}));
+            return send(res,200,await priceArchives.get(pilot).read());
+          }catch{return send(res,503,{error:'Price history is temporarily unavailable. Trading is separate.'});}
+        }
         if(req.method==='GET' && url.pathname==='/api/pilot/markets') return send(res,200,await pilot.markets());
         if(req.method==='POST' && url.pathname==='/api/pilot/analytics') {
           const input=await body(req);

@@ -15,7 +15,7 @@ const labels=['Not proposed','NO','YES','VOID'];
 const phases=['Awaiting evidence','Challenge window','Under review','Final result'];
 const date=(seconds:string|number)=>new Date(Number(seconds)*1000).toLocaleString();
 const cash=(atoms:string)=>formatUnits(BigInt(atoms),6);
-export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:boolean):void;namespace?:PilotNamespace;consumer?:{event:number;yes:boolean}}) {
+export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirmed,onTradingWalletChange}:{onTradingWalletChange?:(address:string)=>void;onTradeConfirmed?:()=>void;onBusy(value:boolean):void;namespace?:PilotNamespace;consumer?:{event:number;yes:boolean}}) {
   const pilotRequest=<T,>(path:string,input?:unknown)=>request<T>(path,input,namespace);
   const readPilotPending=()=>readPending(namespace),pilotPendingKey=pendingKeyFor(namespace);
   const {controller,state:auth}=useAuth();
@@ -101,14 +101,14 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
     provider.current=null;reviewRef.current=null;setOwner('');setReview(null);setPosition(null);
     const p:Provider|undefined=choice==='mera'?pilotMera(controller,namespace):wallets[Number(choice)]?.provider;
     if(!p)throw new Error('Select a wallet');
-    const changed=()=>{generation.current++;reviewRef.current=null;setOwner('');setReview(null);provider.current=null;setNotice('Wallet changed. Reconnect. Submitted actions remain in tracking.');};
+    const changed=()=>{generation.current++;reviewRef.current=null;setOwner('');setReview(null);provider.current=null;onTradingWalletChange?.('');setNotice('Wallet changed. Reconnect. Submitted actions remain in tracking.');};
     for(const name of ['accountsChanged','chainChanged','disconnect'])p.on?.(name,changed);
     cleanup.current=()=>{for(const name of ['accountsChanged','chainChanged','disconnect'])p.removeListener?.(name,changed);};
     const accounts=await p.request({method:'eth_requestAccounts'}) as string[];
     if(!Array.isArray(accounts)||!/^0x[0-9a-f]{40}$/i.test(accounts[0]||''))throw new Error('No wallet account returned');
     await refresh(accounts[0]); if(!live.current||version!==generation.current)return;
     if(auth.address)try{sessionStorage.setItem(walletKey(auth.address),accounts[0].toLowerCase());}catch{ /* Optional read-only preference. */ }
-    provider.current=p;setOwner(accounts[0].toLowerCase());setNotice('Wallet connected. Review and confirm each action separately.');
+    provider.current=p;setOwner(accounts[0].toLowerCase());onTradingWalletChange?.(accounts[0].toLowerCase());setNotice('Wallet connected. Review and confirm each action separately.');
   }
   async function prepare(input:Omit<PilotInput,'owner'>){
     if(!owner||!provider.current)throw new Error('Connect your signing wallet first');
@@ -141,7 +141,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
       if(result==='confirmed')rememberConfirmedClaim(namespace,saved);
       save(null);setPosition(null);setConfirmedHash(saved.hash||'');
       setApproved(!consumer&&result==='confirmed'&&saved.review.action==='approve'?saved.review.requested:null);
-      if(consumer&&result==='confirmed'&&['buy','sell','redeem'].includes(saved.review.action))setCompleted(true);
+      if(consumer&&result==='confirmed'&&['buy','sell','redeem'].includes(saved.review.action)){setCompleted(true);onTradeConfirmed?.();}
       const confirmed=result==='confirmed'?(saved.review.action==='approve'?'Token approval confirmed. The approved action has not been sent. Review it below.':'Exact transaction confirmed. Balances refreshed.'):'Transaction reverted. No successful action was confirmed.';
       try{
         await refresh();
@@ -161,7 +161,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
     const answerSummary=legs.map(i=>`${state?.manifest.publication.draft.events[i]?.question||'Event '+(i+1)} ${(answers[i]??true)?'Yes':'No'}`).join(' + ');
     return <div className="consumer-ticket">
       <h2>{legs.length>1?'Your combined prediction':question?.question||'Your selected market'}</h2>
-      <p>Practice event. A winning share pays 1 test AUSD; a losing share pays 0. An unresolved outcome (VOID) can produce a partial payout under the rules below.</p>
+      <p>{isPracticeNamespace(namespace)?'Practice event. ':''}A winning share pays 1 test AUSD; a losing share pays 0. An unresolved outcome (VOID) can produce a partial payout under the rules below.</p>
       <p className="ticket-status" role="status">{busy?'Working...':consumerNotice(notice)}</p>
       <div className="ticket-wallet"><label htmlFor="consumer-wallet">Pay with</label><select id="consumer-wallet" value={choice} disabled={disabled} onChange={e=>{cleanup.current();generation.current++;setChoice(e.target.value);setOwner('');provider.current=null;}}><option value="mera">My Flurbo wallet</option>{wallets.map((w,i)=><option key={i} value={i}>{w.name}</option>)}</select>
         {choice==='mera'&&!auth.signingExpiresAt&&<button className="button button-outline" disabled={busy||auth.busy} onClick={()=>void controller.authenticate('login')}>Unlock Flurbo wallet</button>}
@@ -177,7 +177,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
       {pending&&<section className="ticket-review"><h3>Waiting for confirmation</h3><p>{pending.hash?'Your transaction was sent. We are checking confirmation automatically. You can reload this page without losing it.':'Check your wallet activity. A transaction may have been sent; do not repeat it.'}</p>{!pending.hash&&<><label>Transaction hash<input value={hash} onChange={e=>setHash(e.target.value)}/></label><button onClick={()=>void run(async()=>{if(!/^0x[0-9a-f]{64}$/i.test(hash))throw new Error('Paste a valid transaction hash');save({...pending,hash:hash.toLowerCase() as Hex});})}>Find transaction</button></>}<p>{pollPaused?'Automatic checks paused. Check again when ready.':'You do not need to click again.'}</p>{pollPaused&&<button className="button button-dark" disabled={busy||!pending.hash} onClick={()=>{polls.current=0;setPollPaused(false);void run(check);}}>Check confirmation</button>}</section>}
       {position&&<p><strong>{cash(position.quantity)} shares</strong> in your wallet. {position.payoutAtoms===null?'Payout follows settlement.':`${cash(position.payoutAtoms)} test AUSD to collect.`}</p>}
       {confirmedHash&&<p><a href={`https://testnet.monadscan.com/tx/${confirmedHash}`} target="_blank" rel="noreferrer">View transaction</a></p>}
-      {question&&<details><summary>How this market works</summary><p>{question.yesRule}</p><p>{question.noRule}</p><p>{state!.manifest.publication.draft.exceptionPolicy}</p><p>These practice outcomes are scripted. All reviewers are controlled by Flurbo's operator.</p><a href={question.source.referenceUrl} target="_blank" rel="noreferrer">Read practice rules</a></details>}
+      {question&&<details><summary>How this market works</summary><p>{question.yesRule}</p><p>{question.noRule}</p><p>{state!.manifest.publication.draft.exceptionPolicy}</p><p>{isPracticeNamespace(namespace)?'These practice outcomes are scripted. ':''}The testnet dispute panel is controlled by Flurbo's operator.</p><a href={question.source.referenceUrl} target="_blank" rel="noreferrer">Read resolution source</a></details>}
     </div>;
   }
   return <div className="portfolio-view kuru-view pilot-view">
