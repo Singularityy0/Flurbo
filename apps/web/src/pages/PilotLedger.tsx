@@ -93,7 +93,7 @@ export default function PilotLedger({account,history,namespace='pilot'}:{account
   function claimLabel(scope:number,mask:string){
     const events=state?.manifest.publication.draft.events;
     const single=Number.isInteger(Math.log2(scope))?events?.[Math.log2(scope)]:null;
-    return <><strong>{single?single.question:describeClaim(scope,Number(mask))}</strong>{single&&<small>{mask==='2'?'Yes':'No'}</small>}</>;
+    return <><strong>{single?single.question:describeClaim(scope,Number(mask),events?.map(event=>event.question))}</strong>{single&&<small>{mask==='2'?'Yes':'No'}</small>}</>;
   }
   const holdingsTable=<>
     <div className="portfolio-section-heading"><h2>Your shares</h2><Link href="/markets">Explore markets</Link></div>

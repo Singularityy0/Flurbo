@@ -19,10 +19,12 @@ export function amount(value: string | undefined | null) {
   const fraction = (n % 1000000n).toString().padStart(6, '0').replace(/0+$/, '');
   return whole + (fraction ? '.' + fraction : '');
 }
-export function describeClaim(scope: number, mask: number) {
+export function describeClaim(scope: number, mask: number, questions?: string[]) {
   const events = Array.from({ length: 8 }, (_, i) => i).filter(i => scope & (1 << i));
   const count = 1 << events.length;
-  const leg = (state: number, i: number) => `${String.fromCharCode(65 + events[i])} ${state & (1 << i) ? 'YES' : 'NO'}`;
+  const leg = (state: number, i: number) => questions?.[events[i]]
+    ? `${questions[events[i]]} (${state & (1 << i) ? 'Yes' : 'No'})`
+    : `${String.fromCharCode(65 + events[i])} ${state & (1 << i) ? 'YES' : 'NO'}`;
   const winners = Array.from({ length: count }, (_, i) => i).filter(i => mask & (1 << i));
   if (winners.length === 1) return events.map((_, i) => leg(winners[0], i)).join(' AND ');
   if (winners.length === count - 1) {

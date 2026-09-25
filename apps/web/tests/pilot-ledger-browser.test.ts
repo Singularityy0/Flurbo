@@ -27,7 +27,7 @@ test('combined shares appear in a fresh browser before history responds, with no
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
     await page.goto('https://flurbo.singu.online/portfolio');
-    await page.getByRole('cell',{name:'A YES AND B YES',exact:true}).waitFor();
+    await page.getByRole('cell',{name:'Test event 1 (Yes) AND Test event 2 (Yes)',exact:true}).waitFor();
     await page.getByRole('cell',{name:'10',exact:true}).waitFor();
     assert.equal(batches.length,1);assert.equal(batches[0].claims.length,16);
     assert.equal(await page.getByRole('button',{name:'Stop loading',exact:true}).count(),1);
@@ -65,13 +65,13 @@ test('pilot portfolio loads remembered wallet and catches up without repeat clic
     });
     await page.goto('https://flurbo.singu.online/portfolio');
     await page.getByRole('button',{name:'Pause loading'}).waitFor();
-    await page.getByText('A YES AND B YES',{exact:true}).waitFor();
+    await page.getByText('Test event 1 (Yes) AND Test event 2 (Yes)',{exact:true}).waitFor();
     assert.equal(scans,2);
     assert.equal(await page.getByRole('textbox',{name:'Wallet to view'}).inputValue(),owner);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     fail=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
     await page.getByText('Trade history is temporarily unavailable. Your holdings are loaded separately. Retry shortly.',{exact:true}).waitFor();
-    await page.getByText('A YES AND B YES',{exact:true}).waitFor();
+    await page.getByText('Test event 1 (Yes) AND Test event 2 (Yes)',{exact:true}).waitFor();
     const stopped=scans;await page.waitForTimeout(1800);assert.equal(scans,stopped);
     fail=false;await page.getByRole('button',{name:'Refresh',exact:true}).click();
     await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();
