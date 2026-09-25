@@ -8,17 +8,46 @@ import {redisCommand} from '../server/redis-session.mjs';
 import {evidenceAssistant} from '../server/evidence-assistant.mjs';
 import {resolutionTick} from '../server/resolution-worker.mjs';
 
+const diagnosticMessages={
+  CONFIGURATION_INVALID:'Check the manifest, pool, rules hash, execution mode and public signer settings.',
+  BOT_KEY_MISSING:'Add FLURBO_RESOLUTION_PRIVATE_KEY as a repository Actions secret for the dedicated bot.',
+  BOT_KEY_INVALID:'The bot secret must contain one 64-digit hexadecimal private key, optionally prefixed with 0x. Do not use a seed phrase or keystore JSON.',
+  BOT_KEY_MISMATCH:'The key does not belong to FLURBO_RESOLUTION_SIGNER_ADDRESS. Use the dedicated bot wallet key.',
+  RPC_READ_FAILED:'The testnet RPC read failed or was rejected. Check provider availability and quota.',
+  DURABLE_STATE_FAILED:'The Redis operation failed. Check its availability and the worker repository secrets.',
+  WORKER_CHECK_FAILED:'A worker policy, deployment, monitoring or pending transaction check failed. Preserve the journal and inspect the latest monitor run.',
+};
+class ResolutionDiagnostic extends Error{
+  constructor(code){super(diagnosticMessages[code]);this.code=code;}
+}
+export function resolutionFailure(error){
+  const code=error instanceof ResolutionDiagnostic?error.code:'WORKER_CHECK_FAILED';
+  return {status:'resolution_stopped',code,message:diagnosticMessages[code]+' Sensitive values withheld. No automatic replacement transaction.'};
+}
+export function resolutionSigner(value,owner){
+  if(typeof value!=='string'||!value.trim())throw new ResolutionDiagnostic('BOT_KEY_MISSING');
+  const hex=value.trim().replace(/^0x/i,'');
+  if(!/^[0-9a-fA-F]{64}$/.test(hex))throw new ResolutionDiagnostic('BOT_KEY_INVALID');
+  let account;
+  try{account=privateKeyToAccount(`0x${hex}`);}catch{throw new ResolutionDiagnostic('BOT_KEY_INVALID');}
+  if(account.address.toLowerCase()!==owner.toLowerCase())throw new ResolutionDiagnostic('BOT_KEY_MISMATCH');
+  return account;
+}
+const guarded=(code,fn)=>async(...args)=>{try{return await fn(...args);}catch{throw new ResolutionDiagnostic(code);}};
+
 export async function runResolution(env=process.env){
+  let configured=false;
+  try{
   const manifest=JSON.parse(env.FLURBO_RESOLUTION_MANIFEST_JSON||'null');
   if(!manifest||manifest.pool!==env.FLURBO_RESOLUTION_POOL||manifest.rulesHash!==env.FLURBO_RESOLUTION_RULES_HASH)throw Error('Explicit pool and immutable rules allowlist required');
   const endpoint=env.FLURBO_ALCHEMY_TESTNET_RPC_URL||'https://testnet-rpc.monad.xyz';
-  const rpc=pilotRpc(endpoint),service=pilotService({manifest,rpc}),command=redisCommand(env);
+  const rpc=guarded('RPC_READ_FAILED',pilotRpc(endpoint)),service=pilotService({manifest,rpc}),command=guarded('DURABLE_STATE_FAILED',redisCommand(env));
   const enabled=env.FLURBO_RESOLUTION_EXECUTE==='true';
   if(!['true','false'].includes(env.FLURBO_RESOLUTION_EXECUTE||'false'))throw Error('Invalid execution mode');
   const owner=env.FLURBO_RESOLUTION_SIGNER_ADDRESS?.toLowerCase();
   if(!/^0x[0-9a-f]{40}$/.test(owner||''))throw Error('Dedicated public signer address required');
   let account=null;
-  if(enabled){account=privateKeyToAccount(env.FLURBO_RESOLUTION_PRIVATE_KEY);if(account.address.toLowerCase()!==owner)throw Error('Signer mismatch');}
+  if(enabled)account=resolutionSigner(env.FLURBO_RESOLUTION_PRIVATE_KEY,owner);
   const client=createPublicClient({chain:monadTestnet,transport:http(endpoint,{retryCount:0,timeout:15000})});
   const transport={
     async receipt(hash){
@@ -59,8 +88,13 @@ export async function runResolution(env=process.env){
       attachment:JSON.stringify({reportHash:report.reportHash,assessment:report.assessment,ai:report.ai,sourceHash:report.evidence[0].payloadHash})},owner,manifest.draftHash);
     return {...saved,outcome:2};
   };
-  return resolutionTick({manifest,owner,service,command,evidence,transport,enabled});
+  configured=true;
+  return await resolutionTick({manifest,owner,service,command,evidence,transport,enabled});
+  }catch(error){
+    if(error instanceof ResolutionDiagnostic)throw error;
+    throw new ResolutionDiagnostic(configured?'WORKER_CHECK_FAILED':'CONFIGURATION_INVALID');
+  }
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
-  runResolution().then(r=>console.log(JSON.stringify(r))).catch(()=>{console.error(JSON.stringify({status:'resolution_stopped',message:'Inspect the explicit pool settings, signer funds, monitoring, evidence and pending journal. Sensitive upstream details withheld. No automatic replacement transaction.'}));process.exitCode=1;});
+  runResolution().then(r=>console.log(JSON.stringify(r))).catch(error=>{console.error(JSON.stringify(resolutionFailure(error)));process.exitCode=1;});
 }
