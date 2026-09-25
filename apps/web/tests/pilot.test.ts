@@ -89,11 +89,11 @@ test('account read avoids resolver case scans but still verifies deployment and 
   const service=pilotService({manifest:f.manifest,rpc:async(method:string,params:any[])=>{
     reads++;if(method==='eth_call'){
       const {functionName}=decodeFunctionData({abi:[...resolverAbi,...pilotPoolAbi,...pilotCashAbi],data:params[0].data});
-      assert.ok(['pool','settlementRulesHash','balanceOf'].includes(functionName));
+      assert.ok(['pool','settlementRulesHash','balanceOf','factors'].includes(functionName));
     }
     return f.rpc(method,params);
   }});
-  const result=await service.account(owner);assert.equal(result.wallet.cash,'100000000');assert.equal(result.wallet.address,owner);assert.equal(reads,9);
+  const result=await service.account(owner);assert.equal(result.wallet.cash,'100000000');assert.equal(result.wallet.address,owner);assert.equal(reads,10);
   await assert.rejects(service.account('invalid'));
   f.options.changed=true;await assert.rejects(service.account(owner));
 });

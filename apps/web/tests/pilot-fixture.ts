@@ -22,7 +22,7 @@ export function pilotFixture(now=Math.floor(Date.now()/1000),count=2) {
       const {functionName:name}=decodeFunctionData({abi,data:tx.data});
       if(tx.from){if(options.failSimulation)throw new Error('Simulation rejected');return name==='approve'?encodeFunctionResult({abi,functionName:name,result:true}):'0x';}
       const values:Record<string,any>={settlementRulesHash:rules,pool,caseState:{phase:0,proposal:0,counter:0,result:0,asserter:owner,disputer:owner,evidenceHash:'0x'+'00'.repeat(32),counterEvidenceHash:'0x'+'00'.repeat(32),challengeUntil:0n,voteUntil:0n,votes:[0,0,0]},assertionDeadline:BigInt(now+93600),
-        voted:false,delivered:false,requiredCollateral:0n,balanceOf:100_000_000n,resolved:false,voidMask:0,credits:0n,isReviewer:false,allowance:options.allowance,quoteBuy:250_000n,quoteSell:249_000n,holdings:1_000_000n};
+        voted:false,delivered:false,requiredCollateral:0n,balanceOf:100_000_000n,resolved:false,voidMask:0,credits:0n,isReviewer:false,allowance:options.allowance,quoteBuy:250_000n,quoteSell:249_000n,holdings:1_000_000n,factors:[]};
       if(!(name in values))throw new Error('Unexpected read '+name);
       return encodeFunctionResult({abi,functionName:name,result:values[name]});
     }

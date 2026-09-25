@@ -4,6 +4,7 @@ import { useAuth } from '../auth/context';
 import { describeClaim, walletKey } from '../portfolio';
 import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
 import { readCheckout, saveCheckout, clearCheckout, type CheckoutDraft } from '../checkout';
+import { rememberConfirmedClaim } from '../pilot-claims';
 import { pilotRequest as request, pilotMera, submitPilot, checkPilotPending, readPilotPending as readPending, pendingKeyFor, validatePilotReview,
   type Provider, type PilotState, type PilotInput, type PilotReview, type PilotPending, type PilotNamespace } from '../pilot';
 import './portfolio.css';
@@ -128,6 +129,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer}:{onBusy(value:
     const result=await checkPilotPending(saved);
     if(JSON.stringify(readPilotPending())!==JSON.stringify(saved))throw new Error('Tracking changed in another tab');
     if(result==='confirmed'||result==='reverted'){
+      if(result==='confirmed')rememberConfirmedClaim(namespace,saved);
       save(null);setPosition(null);setConfirmedHash(saved.hash||'');
       setApproved(!consumer&&result==='confirmed'&&saved.review.action==='approve'?saved.review.requested:null);
       if(consumer&&result==='confirmed'&&['buy','sell','redeem'].includes(saved.review.action))setCompleted(true);

@@ -88,6 +88,7 @@ test('consumer markets show four separate events and preserve the full wallet co
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).click();
     await page.getByRole('heading',{name:'Purchase complete',exact:true}).waitFor();
+    assert.deepEqual(await page.evaluate(({namespace,pool,owner}:any)=>JSON.parse(localStorage.getItem(`flurbo.claims.v1:10143:${namespace}:${pool}:${owner}`)||'null'),{namespace,pool:f.manifest.pool,owner}),[{scope:2,mask:'1'}]);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
     await page.getByText('5 shares',{exact:true}).waitFor();
     assert.equal(await page.evaluate((login:string)=>localStorage.getItem('flurbo.checkout.v1:rehearsal:'+login),loginAddress),null);

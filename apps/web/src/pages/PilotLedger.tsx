@@ -3,20 +3,21 @@ import { Link } from 'wouter';
 import { pilotRequest as request, type PilotState, type PilotNamespace } from '../pilot';
 import { amount, describeClaim, rememberedWallet, walletKey } from '../portfolio';
 import { evidenceURI } from '../../shared/pilot.mjs';
+import { rememberedClaims, portfolioClaims } from '../pilot-claims';
 import './portfolio.css';
 
 type Entry={hash:string;block:number;index:number;name:string;args:Record<string,string|number|boolean>};
 type Index={complete:boolean;through:number;target:number;logs:Entry[]};
 type Claim={scope:number;mask:string};
 type Position=Claim & {quantity:string;payoutAtoms:string|null};
-type Account=Pick<PilotState,'manifest'|'snapshot'> & {wallet:{address:string;cash:string}};
+type Account=Pick<PilotState,'manifest'|'snapshot'> & {wallet:{address:string;cash:string};claimScopes?:number[]};
 type Holdings={snapshot:PilotState['snapshot'];rows:Position[]};
 
-function claimsFor(state:Account,index:Index|null,owner:string) {
-  const claims=new Map<string,Claim>();
-  for(let event=0;event<state.manifest.publication.draft.events.length;event++)for(const mask of ['1','2'])claims.set(`${2**event}:${mask}`,{scope:2**event,mask});
-  for(const entry of index?.logs||[])if(String(entry.args.trader||entry.args.owner||'').toLowerCase()===owner.toLowerCase()&&entry.args.scope!==undefined&&entry.args.mask!==undefined)claims.set(`${entry.args.scope}:${entry.args.mask}`,{scope:Number(entry.args.scope),mask:String(entry.args.mask)});
-  return [...claims.values()];
+function claimsFor(state:Account,index:Index|null,owner:string,namespace:PilotNamespace) {
+  const indexed:Claim[]=[];
+  for(const entry of index?.logs||[])if(String(entry.args.trader||entry.args.owner||'').toLowerCase()===owner.toLowerCase()&&entry.args.scope!==undefined&&entry.args.mask!==undefined)indexed.push({scope:Number(entry.args.scope),mask:String(entry.args.mask)});
+  const events=state.manifest.publication.draft.events.length;
+  return portfolioClaims(events,state.claimScopes||[],rememberedClaims(namespace,state.manifest.pool,owner,events),indexed);
 }
 
 export default function PilotLedger({account,history,namespace='pilot'}:{account:string;history:boolean;namespace?:PilotNamespace}) {
@@ -54,7 +55,7 @@ export default function PilotLedger({account,history,namespace='pilot'}:{account
     try{sessionStorage.setItem(walletKey(account),next);}catch{}
     let loaded:Account|null=null,requested='';
     async function loadHoldings(s:Account,i:Index|null){
-      const claims=claimsFor(s,i,next),slice=claims.slice(history?0:p*30,history?30:p*30+30);
+      const claims=claimsFor(s,i,next,namespace),slice=claims.slice(history?0:p*30,history?30:p*30+30);
       const key=JSON.stringify(slice);
       if(key===requested)return;
       requested=key;
@@ -82,7 +83,7 @@ export default function PilotLedger({account,history,namespace='pilot'}:{account
     })();
     try{
       const [i]=await Promise.all([historyRead,accountRead]);
-      // Add combinations discovered by this scan without blocking the base positions.
+      // Add any other Boolean claims discovered by history without gating current holdings.
       if(current()&&loaded&&i)await loadHoldings(loaded,i);
     }finally{if(current()){active.current=null;setBusy(false);}}
   }
@@ -100,7 +101,7 @@ export default function PilotLedger({account,history,namespace='pilot'}:{account
     {holdings?<><p className="portfolio-freshness">Read from the pool at block {holdings.snapshot?.blockNumber}. {busy?'Refreshing...':''}</p>
       <div className="portfolio-table"><table><thead><tr><th>Prediction</th><th>Shares</th><th>Redeemable test AUSD</th></tr></thead><tbody>{rows.map(r=><tr key={`${r.scope}:${r.mask}`}><td>{claimLabel(r.scope,r.mask)}</td><td>{amount(r.quantity)}</td><td>{r.payoutAtoms===null?'Awaiting settlement':amount(r.payoutAtoms)}</td></tr>)}</tbody></table></div>
       {!rows.length&&<p>{index?.complete&&!historyError?'No shares in the claims checked on this page.':'No shares in the claims checked so far. Combinations may still be loading.'}</p>}
-      {(!index?.complete||historyError)&&<p className="portfolio-footnote">Individual Yes and No holdings are checked directly. Combined predictions are added as trade history loads.</p>}
+      <p className="portfolio-footnote">Shares on this page are checked directly with the pool, including combined predictions. {claimCount>30?'Use Next to check more predictions. ':''}{(!index?.complete||historyError)?'History is still incomplete and may reveal other claim types.':''}</p>
     </>:<p>{busy?'Loading your shares...':'Holdings are unavailable. This does not mean you have no shares.'}</p>}
   </>;
   return <div className="portfolio-view">

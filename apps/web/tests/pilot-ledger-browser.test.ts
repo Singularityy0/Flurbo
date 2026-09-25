@@ -4,6 +4,43 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { pilotFixture, owner, hash } from './pilot-fixture.ts';
 
+test('combined shares appear in a fresh browser before history responds, with no saved trade hints',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+  const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
+  const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
+  const f=pilotFixture(Math.floor(Date.now()/1000),4),login='0x'+'99'.repeat(20),errors:string[]=[],batches:any[]=[];
+  let release!:()=>void;const gate=new Promise<void>(r=>{release=r;});
+  try{
+    const page=await browser.newPage({viewport:{width:390,height:844}});
+    page.on('pageerror',(e:Error)=>errors.push(e.message));
+    await page.addInitScript(({login,owner}:any)=>{sessionStorage.setItem('flurbo.trading.market','rehearsal');sessionStorage.setItem('flurbo.view-wallet:'+login,owner);},{login,owner});
+    await page.route('**/*',async(route:any)=>{
+      const url=new URL(route.request().url()),path=url.pathname;
+      if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
+      if(path==='/api/rehearsal/account')return route.fulfill({json:{...await f.service.account(url.searchParams.get('wallet')),claimScopes:[1,2,3]}});
+      if(path==='/api/rehearsal/history'){await gate;return route.fulfill({status:503,json:{error:'History unavailable'}}).catch(()=>{});}
+      if(path==='/api/rehearsal/positions'){
+        const input=route.request().postDataJSON();batches.push(input);
+        return route.fulfill({json:{snapshot:{blockNumber:'200'},rows:input.claims.map((c:any)=>({...c,quantity:input.owner===owner&&c.scope===3&&c.mask==='8'?'10000000':'0',payoutAtoms:null}))}});
+      }
+      if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unexpected API'}});
+      const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
+      return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
+    });
+    await page.goto('https://flurbo.singu.online/portfolio');
+    await page.getByRole('cell',{name:'A YES AND B YES',exact:true}).waitFor();
+    await page.getByRole('cell',{name:'10',exact:true}).waitFor();
+    assert.equal(batches.length,1);assert.equal(batches[0].claims.length,16);
+    assert.equal(await page.getByRole('button',{name:'Stop loading',exact:true}).count(),1);
+    assert.equal(await page.evaluate(()=>localStorage.length),0);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    // Other traders' active scopes must not be displayed as this wallet's holdings.
+    await page.getByRole('button',{name:'Use Mera wallet',exact:true}).click();
+    await page.getByText('No shares in the claims checked so far. Combinations may still be loading.',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('cell',{name:'10',exact:true}).count(),0);
+    release();assert.deepEqual(errors,[]);
+  }finally{release();await browser.close();}
+});
+
 test('pilot portfolio loads remembered wallet and catches up without repeat clicks; errors pause scans',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});

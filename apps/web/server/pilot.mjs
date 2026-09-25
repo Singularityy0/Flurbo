@@ -61,8 +61,13 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     owner=address(owner);
     const s=await snapshot();
     const cash=await read(pilotCash,pilotCashAbi,'balanceOf',[owner],tagFor(s));
+    // A traded scope is retained in the pool's factor tables. Use it to discover
+    // candidate combinations without waiting for the historical event index.
+    // A scope says nothing about this wallet's ownership; positions() checks that.
+    const factors=await read(manifest.pool,pilotPoolAbi,'factors',[],tagFor(s));
+    const claimScopes=[...new Set(factors.map(f=>f.scope))];
     await stable(s);
-    return json({manifest,snapshot:s,wallet:{address:owner,cash}});
+    return json({manifest,snapshot:s,wallet:{address:owner,cash},claimScopes});
   }
   async function status(owner) {
     if(owner) address(owner);
