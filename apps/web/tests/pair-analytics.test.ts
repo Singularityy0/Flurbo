@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { decodeFunctionData, encodeFunctionResult } from 'viem';
 import { pairAnalytics, runPairModel } from '../server/pair-analytics.mjs';
 import { certifiedPair, pairInput } from '../server/pair-math.mjs';
+import { simulatePairPurchase } from '../server/pair-sensitivity.mjs';
 import { pilotPoolAbi, pilotCash } from '../shared/pilot.mjs';
 import { pilotFixture, hash } from './pilot-fixture.ts';
 import { localApi } from '../server/local-api.mjs';
@@ -41,6 +42,10 @@ function setup(){
     calls.push([method,params]);
     if(method==='eth_call'){
       const {functionName}=decodeFunctionData({abi:pilotPoolAbi,data:params[0].data});
+      if(functionName==='quoteBuy'){
+        if(values.failQuote)throw Error('RPC unavailable');
+        return encodeFunctionResult({abi:pilotPoolAbi,functionName,result:250_001n});
+      }
       return encodeFunctionResult({abi:pilotPoolAbi,functionName,result:values[functionName]});
     }
     return {hash:reorg?'0x'+'99'.repeat(32):hash};
@@ -70,8 +75,56 @@ test('adapter deduplicates concurrent identical reads and rejects other work whi
   const analytics=f.create(async input=>{runs++;started();await gate;return model(input);});
   const first=analytics({a:0,b:1}),second=analytics({a:0,b:1});await ready;
   await assert.rejects(analytics({a:0,b:2}),/busy/);release();
-  assert.deepEqual(await first,await second);assert.equal(runs,1);
+  assert.deepEqual(await first,await second);assert.equal(runs,3); // Base plus two independent hypothetical states.
   await assert.rejects(analytics({a:0,b:1,trade:true}));
+});
+
+test('one-share sensitivity uses exact scope ordering, merges factors and leaves its input unchanged',()=>{
+  const state={events:4,a:3,b:1,liquidity:'10000000',order:[0,1,2,3],
+    factors:[{scope:10,values:['1','2','3','4']},{scope:10,values:['10','20','30','40']}]};
+  const original=JSON.stringify(state),yes=simulatePairPurchase(state,'yes'),no=simulatePairPurchase(state,'no');
+  assert.equal(yes.scope,10);assert.equal(yes.mask,8);assert.equal(no.mask,2);
+  assert.deepEqual(yes.after.factors,[{scope:10,values:['11','22','33','1000044']}]);
+  assert.deepEqual(no.after.factors,[{scope:10,values:['11','1000022','33','44']}]);
+  assert.equal(JSON.stringify(state),original);
+  assert.equal(simulatePairPurchase({...state,a:1,b:3},'no').mask,4);
+  assert.throws(()=>simulatePairPurchase({...state,liquidity:'999999'},'yes'));
+  const chain={...state,a:0,b:3,factors:[3,6,12].map(scope=>({scope,values:['0','0','0','1']}))};
+  // A K4 graph is outside width two even though the requested claim has only two legs.
+  assert.throws(()=>simulatePairPurchase({...chain,factors:[3,5,6,10,12].map(scope=>({scope,values:['0','0','0','1']}))},'yes'));
+});
+
+test('sensitivity agrees with independent closed-form tilting of a uniform distribution',()=>{
+  const state={events:4,a:0,b:2,liquidity:'10000000',order:[0,1,2,3],factors:[]};
+  for(const answer of ['yes','no']){
+    const after=certifiedPair(simulatePairPurchase(state,answer).after).values;
+    const t=Math.exp(0.1),z=3+t;
+    const pA=answer==='yes'?(1+t)/z:2/z,pB=(1+t)/z;
+    assert.equal(after.a,Math.round(1000*pA));assert.equal(after.b,Math.round(1000*pB));
+    assert.equal(after.givenYes,Math.round(1000*(answer==='yes'?t:1)/(1+t)));
+    assert.equal(after.givenNo,500);
+    assert.equal(after.difference,Math.round(1000*((answer==='yes'?t:1)/z-pA*pB)));
+  }
+});
+
+test('sensitivity quotes both independent scenarios at the original block and respects failure/close',async()=>{
+  const f=setup(),result=await f.create()({a:0,b:1});
+  assert.deepEqual(result.sensitivity.scenarios.map((s:any)=>[s.answer,s.status,s.costAtoms,s.quantityAtoms]),
+    [['yes','available','250001','1000000'],['no','available','250001','1000000']]);
+  for(const s of result.sensitivity.scenarios){
+    const source={...fixtures.find((x:any)=>x.name==='positive-relationship').state};
+    assert.deepEqual(s.values,certifiedPair(simulatePairPurchase(source,s.answer).after).values);
+  }
+  const quotes=f.calls.filter(([m,p]:any)=>m==='eth_call'&&decodeFunctionData({abi:pilotPoolAbi,data:p[0].data}).functionName==='quoteBuy');
+  assert.equal(quotes.length,2);assert.ok(quotes.every(([,p]:any)=>p[1]==='0x64'));
+  const unavailable=setup();unavailable.values.failQuote=true;
+  const partial=await unavailable.create()({a:0,b:1});
+  assert.equal(partial.values.a,result.values.a);
+  assert.ok(partial.sensitivity.scenarios.every((s:any)=>s.reason==='quote_unavailable'&&s.values===undefined));
+  const closed=setup();closed.values.closesAt=BigInt(closed.now);
+  closed.f.manifest.publication.draft.closesAt=closed.now;
+  const historical=await closed.create()({a:0,b:1});
+  assert.ok(historical.sensitivity.scenarios.every((s:any)=>s.reason==='market_closed'));
 });
 test('analytics API requires passkey auth, same origin, exact pair input and sanitizes errors',async()=>{
   let logged=false,calls=0,fail=false;

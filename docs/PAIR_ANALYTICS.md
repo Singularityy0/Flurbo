@@ -9,8 +9,37 @@ transaction authorization have changed.
 The What-if panel on `/markets` compares two distinct practice events. The
 authenticated `/api/pilot/analytics` and `/api/rehearsal/analytics` endpoints also
 support verified 2–4-event PilotPool deployments. Only `{a,b}` event indices are
-accepted. Learning-pool biases, larger pools, simulated trade sensitivity, true
+accepted. Learning-pool biases, larger pools, true
 conditional positions and intervention/causal models are outside this slice.
+
+## Read-only price sensitivity
+
+The response now includes `flurbo.pair-sensitivity.v1`: two independently
+simulated purchases, each for one share (1,000,000 collateral atoms). They are
+A YES AND B YES and A NO AND B YES, with A/B referring to the selected questions.
+Both begin from the original snapshot; they are not a sequence of trades.
+
+For payoff f and quantity s, the hypothetical liability is q'(x)=q(x)+s*f(x).
+Existing exact-scope factors are merged, then winning entries are incremented,
+matching `FactoredQuote.updatedFactors`. Event indices determine local bit order,
+including when the displayed first event has the higher index. Validate the
+resulting graph, factor count, uint128 values, quantity <= b and numerical domain.
+No contract state is changed, and no conditional security is created.
+
+Each cost comes from `quoteBuy(scope,mask,1000000)` at the original block. The
+post-purchase probabilities undergo the same independent interval and Rust
+checks as the base distribution. A disagreement rejects the response. If the
+model cannot support a scenario or its contract quote fails, only that scenario
+is unavailable; it never gets an invented cost or an unchecked probability.
+Closed markets have no purchase simulation. Expiry and canonical hash checks
+cover the base, quotes and both scenarios together.
+
+The UI shows each full question, its answer, snapshot purchase cost, and before/
+after marginal and conditional probabilities. Assumptions are fixed liquidity,
+unchanged parameters, no other trades, sufficient funds and approval, with gas
+excluded. This is sensitivity, not an accuracy or manipulation-resistance claim.
+It offers no trade button. Prior clients can ignore the optional response field;
+the native app does not yet display this new section.
 
 For the stored nonnegative factors, in token atoms:
 
@@ -94,7 +123,9 @@ Docker compiles the dependency-free Rust example `pair_analytics` and copies it
 to `/app/bin/flurbo-pair-analytics`. No new hosting secret or on-chain deployment
 is needed. The fixed executable receives only public bounded snapshot data on
 stdin, inherits no service secrets, and has a five-second timeout and 8 KB output
-cap. The full request has a 30-second response deadline; the single per-pool
+cap. Up to three bounded model invocations cover the base and hypothetical
+states, with two extra read-only contract quotes. The full request has a
+30-second response deadline; the single per-pool
 concurrency slot stays occupied until pending upstream reads finish. Identical
 in-flight requests share work; other pairs receive a retryable unavailable
 response. There is no cross-request snapshot cache. Existing RPC timeouts and
@@ -127,3 +158,12 @@ were P(A)=73.1%, P(B)=37.8%, joint=27.6%, independence=27.6%, difference=0.0 pp.
 This is an observation of that snapshot, not an enduring estimate. Individual
 trades alone can leave those events independent; a flat What-if comparison is
 valid and must not be replaced with an invented relationship for the demo.
+
+The price-sensitivity extension passed ten analytics tests, one desktop/mobile
+browser test and the production build/typecheck. A read-only practice check at
+block 65529228 (`0x7ca61eacad0fc0c85fda5113d639fb110dfe2ef3d563ab9bd58ceee70aea1acc`)
+returned P(A|B)=88.1%. A hypothetical one-share A YES AND B YES cost 0.472162
+test AUSD and moved it to 89.1%; A NO AND B YES cost 0.065220 and moved it to
+87.0%. These are dated snapshot observations, not current execution quotes.
+No transaction was submitted. The extension still requires a hosted web deploy;
+the installed native app continues to show the original comparison only.
