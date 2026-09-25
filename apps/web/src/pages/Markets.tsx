@@ -17,15 +17,17 @@ import './markets.css';
 type Catalog={manifest:PilotState['manifest'];snapshot:PilotState['snapshot'];open:boolean;prices:{event:number;yes:string|null;no:string|null}[]};
 export default function Markets(){
   const [location]=useLocation();
+  const [chosen,setChosen]=useState(()=>{try{return sessionStorage.getItem('flurbo.browse.collection')||'';}catch{return '';}});
   const [collections,setCollections]=useState<PracticeCatalog|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
   useEffect(()=>{const abort=new AbortController();setError('');void loadPracticeCollections(abort.signal).then(setCollections).catch(e=>{if(!abort.signal.aborted)setError(e.message);});return()=>abort.abort();},[attempt]);
   if(!collections)return <main id="main" className="markets-page"><p role={error?'alert':'status'}>{error||'Loading market collections...'}</p>{error&&<button className="button button-dark" onClick={()=>setAttempt(value=>value+1)}>Retry</button>}</main>;
   const detail=location.match(/^\/markets\/(rehearsal|pilot|practice-[0-9a-f]{40})\/([0-3])$/);
   if(location.startsWith('/markets/')&&!detail)return <main id="main" className="markets-page"><h1>Market not found</h1><Link href="/markets">All markets</Link></main>;
   if(detail){const ns=detail[1] as PilotNamespace;if(ns!=='pilot'&&!collections.collections.some(c=>c.namespace===ns))return <main id="main" className="markets-page"><h1>Collection not found</h1><Link href="/markets">All markets</Link></main>;return <MarketDetail key={location} namespace={ns} event={Number(detail[2])}/>;}
-  return <CollectionMarkets key={location+collections.active} collections={collections} namespace={collections.active}/>;
+  const namespace=collections.collections.some(row=>row.namespace===chosen)?chosen as PilotNamespace:collections.active;
+  return <CollectionMarkets key={location+namespace} collections={collections} namespace={namespace} onCollectionChange={value=>{setChosen(value);try{sessionStorage.setItem('flurbo.browse.collection',value);}catch{}}}/>;
 }
-function CollectionMarkets({collections,namespace}:{collections:PracticeCatalog;namespace:PilotNamespace}){
+function CollectionMarkets({collections,namespace,onCollectionChange}:{collections:PracticeCatalog;namespace:PilotNamespace;onCollectionChange(value:string):void}){
   const {controller,state:auth}=useAuth();
   const testingAccess=useTestingAccess();
   const [location,navigate]=useLocation(),browse=location==='/markets';
@@ -36,7 +38,7 @@ function CollectionMarkets({collections,namespace}:{collections:PracticeCatalog;
   async function refresh(){
     if(reading.current)return;reading.current=true;setLoading(true);setError('');
     try{const value=await pilotRequest<Catalog>('markets',undefined,namespace);if(active.current)setCatalog(value);}
-    catch{if(active.current){setCatalog(null);setError('Practice markets are not available yet. Please try again shortly.');}}
+    catch{if(active.current){setCatalog(null);setError('Markets are not available yet. Please try again shortly.');}}
     finally{reading.current=false;if(active.current)setLoading(false);}
   }
   useEffect(()=>{active.current=true;if(browse)void refresh();
@@ -49,21 +51,22 @@ function CollectionMarkets({collections,namespace}:{collections:PracticeCatalog;
   const price=(atoms:string|null)=>atoms!==null?Number(formatUnits(BigInt(atoms),6)).toFixed(3):'Unavailable';
   function choose(event:number,yes:boolean){navigate(marketHref(namespace,event,yes));}
   return <main id="main" tabIndex={-1} className="markets-page">
-    <div className="market-topline"><span className="market-badge">Practice on Monad testnet</span><details className="market-account"><summary>Your account</summary><div>
+    <div className="market-topline"><span className="market-badge">Monad testnet / Test assets</span><details className="market-account"><summary>Your account</summary><div>
       <p>Signed in with Mera. Use MetaMask to fund your wallet and trade.</p><p className="market-address">{auth.address}</p>
 
       <p><Link href="/fund">Get test funds</Link></p><button className="text-link" onClick={()=>void controller.signOut()}>Sign out</button>
     </div></details></div>
     <header className="market-heading"><span className="eyebrow">{browse?'A little curiosity goes a long way':'Your Flurbo'}</span><h1>{browse?<>What happens <em>next?</em></>:location==='/portfolio'?<>Your <em>portfolio.</em></>:<>Your <em>history.</em></>}</h1><p>{browse?'Pick a question. Choose Yes or No. Put your view to the test.':'Your trades and holdings, all in one place.'}</p></header>
     {browse?<>
+      <div className="market-collection-switch"><label htmlFor="browse-collection">Collection</label><select id="browse-collection" value={namespace} onChange={e=>onCollectionChange(e.target.value)}>{collections.collections.map(row=><option key={row.namespace} value={row.namespace}>{row.label}</option>)}</select><Link href="/fund" className="text-link">Get test funds <ArrowUpRight size={15}/></Link></div>
       <div className="market-toolbar"><label className="market-search"><Search size={18}/><span className="sr-only">Search markets</span><input placeholder="Find a market" value={query} onChange={e=>setQuery(e.target.value)}/></label><button className="button button-outline" disabled={loading} onClick={()=>void refresh()}><RefreshCw size={15}/>{loading?'Updating...':'Refresh prices'}</button></div>
-      <div className="market-section-title"><h2>Explore markets</h2><span>{catalog?`${catalog.manifest.publication.draft.events.length} separate events`:'Four practice events coming online'}</span></div>
-      <p className="market-caption">Practice events use scripted outcomes and test funds. No real money. Prices below are the cost of one share.</p>
+      <div className="market-section-title"><h2>{collections.collections.find(row=>row.namespace===namespace)?.label||'Explore markets'}</h2><span>{catalog?`${catalog.manifest.publication.draft.events.length} separate events`:'Loading this collection'}</span></div>
+      <p className="market-caption">{catalog?.manifest.publication.mode==='rehearsal'?'Scripted practice events.':catalog?.manifest.publication.mode==='ethereum-activity'?'Four questions. One finalized Ethereum block.':'Published sources and clear outcome rules.'} Test assets only. Prices below are the cost of one share.</p>
       {error&&<p role="alert" className="market-error">{error}</p>}
       {loading&&!catalog&&<p role="status">Loading markets and prices...</p>}
       <div className="market-grid">{catalog?.manifest.publication.draft.events.map((event,index)=>({event,index})).filter(({event})=>event.question.toLowerCase().includes(query.toLowerCase())).map(({event,index})=>{
         const quotes=catalog.prices.find(p=>p.event===index);return <article className="market-card" key={event.id}>
-          <div className="market-card-top"><span className="market-symbol" aria-hidden="true">{String.fromCharCode(65+index)}</span><span className="market-badge">{open?'Practice':'Trading closed'}</span></div>
+          <div className="market-card-top"><span className="market-symbol" aria-hidden="true">{String.fromCharCode(65+index)}</span><span className="market-badge">{open?(catalog.manifest.publication.mode==='rehearsal'?'Practice':'Real event'):'Trading closed'}</span></div>
           <h3>{event.question}</h3><p>Trading closes {new Date(catalog.manifest.publication.draft.closesAt*1000).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}.</p>
           <div className="market-choices">{[true,false].map(yes=><button key={String(yes)} disabled={!open||!fresh} aria-label={`${yes?'Yes':'No'}: ${event.question}`} onClick={()=>choose(index,yes)}><span>{yes?'Yes':'No'}</span><strong>{fresh?price((yes?quotes?.yes:quotes?.no)??null):'Refresh price'}{fresh&&quotes?' AUSD':''}</strong></button>)}</div>
           <button className="market-detail-link" onClick={()=>choose(index,true)}>View market <ArrowUpRight size={15}/></button>

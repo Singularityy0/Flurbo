@@ -3,6 +3,7 @@ import {keccak256,parseTransaction,recoverTransactionAddress} from 'viem';
 import {pilotCash,pilotCall} from '../shared/pilot.mjs';
 import {settlementLease} from './settlement-store.mjs';
 import {monitorIdentity} from './settlement-monitor.mjs';
+import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
 
 export function nextResolutionAction(state,owner,owned={},deferred={}){
   if(state.delivered)return {kind:'complete'};
@@ -25,6 +26,8 @@ export function nextResolutionAction(state,owner,owned={},deferred={}){
 }
 
 export function validateWorkerReview(review,manifest,owner,now){
+  const activity=manifest.publication.mode==='ethereum-activity';
+  if(activity)validateActivityDraft(manifest.publication.draft);
   if(review.schema!=='flurbo.pilot-review.v1'||review.manifest.pool!==manifest.pool||review.manifest.rulesHash!==manifest.rulesHash
     ||review.transaction.from.toLowerCase()!==owner.toLowerCase()||BigInt(review.transaction.chainId)!==10143n
     ||BigInt(review.transaction.value)!==0n||review.expiresAt<=now||now-review.snapshot.timestamp>60||review.snapshot.timestamp>now+15
@@ -32,7 +35,7 @@ export function validateWorkerReview(review,manifest,owner,now){
   const call=pilotCall({...review.transaction,manifest});
   if(!call||call.name!==review.action||!['approve','assertOutcome','finalize','deliver'].includes(call.name))throw Error('Worker action rejected');
   if(call.name==='finalize'&&Number(call.args[0])!==review.requested.event)throw Error('Finalization event mismatch');
-  if(call.name==='assertOutcome'&&(Number(call.args[0])!==review.requested.event||Number(call.args[1])!==2
+  if(call.name==='assertOutcome'&&(Number(call.args[0])!==review.requested.event||!(activity?[1,2]:[2]).includes(Number(call.args[1]))||Number(call.args[1])!==review.requested.outcome
     ||call.args[2]!==review.requested.evidenceHash||call.args[3]!==review.requested.evidenceURI))throw Error('Assertion evidence mismatch');
   if(call.name==='approve'&&(review.requested.action!=='assertOutcome'||review.transaction.to.toLowerCase()!==pilotCash
     ||String(call.args[0]).toLowerCase()!==manifest.resolver||BigInt(call.args[1])!==BigInt(manifest.publication.bondAtoms)))throw Error('Only exact assertion bond approval is allowed');
@@ -55,7 +58,13 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
     ||manifest.publication.reviewers.some(r=>r.address.toLowerCase()===owner.toLowerCase()))throw Error('Use a dedicated non-reviewer testnet signer');
   const lease=await settlementLease(command,'resolution-worker-v1:'+owner.toLowerCase());
   try{
-    let saved=await lease.load()||{schema:'flurbo.resolution-worker.v1',pool:manifest.pool,rulesHash:manifest.rulesHash,pending:null,owned:{},deferred:{}};
+    const previous=await lease.load();
+    // One signer lease, separate permanent journals. Legacy ownership is retained.
+    const book=previous?.schema==='flurbo.resolution-journals.v2'?previous:{schema:'flurbo.resolution-journals.v2',pools:previous?{[previous.pool]:previous}:{}};
+    if(!book.pools||Object.values(book.pools).some(entry=>entry?.schema!=='flurbo.resolution-worker.v1'))throw Error('Invalid signer journal');
+    if(Object.values(book.pools).some(entry=>entry.pool!==manifest.pool&&entry.pending))throw Error('Reconcile the other pool pending transaction before switching pools');
+    let saved=book.pools[manifest.pool]||{schema:'flurbo.resolution-worker.v1',pool:manifest.pool,rulesHash:manifest.rulesHash,pending:null,owned:{},deferred:{}};
+    const save=async()=>{book.pools[manifest.pool]=saved;await lease.save(book);};
     if(saved.schema!=='flurbo.resolution-worker.v1'||saved.pool!==manifest.pool||saved.rulesHash!==manifest.rulesHash)throw Error('Reconcile existing signer journal before changing pools');
     if(saved.pending){
       const pending=saved.pending;
@@ -64,7 +73,7 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
       if(!receipt)return {status:'pending',hash:pending.hash};
       if(!receipt.confirmed)return {status:'pending',hash:pending.hash};
       if(receipt.success&&pending.action==='assertOutcome')saved.owned[pending.event]={outcome:pending.outcome,evidenceHash:pending.evidenceHash};
-      saved.last={hash:pending.hash,success:receipt.success,at:now()};saved.pending=null;await lease.save(saved);
+      saved.last={hash:pending.hash,success:receipt.success,at:now()};saved.pending=null;await save();
       return {status:receipt.success?'confirmed':'reverted',hash:pending.hash};
     }
     const state=await service.status(),plan=nextResolutionAction(state,owner,saved.owned,saved.deferred);
@@ -78,8 +87,8 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
     let input={owner,action:plan.action,...(plan.event===undefined?{}:{event:plan.event})};
     if(plan.kind==='evidence'){
       const proposal=await evidence(plan.event);
-      if(!proposal){saved.deferred={...saved.deferred,[plan.event]:now()+600};await lease.save(saved);return {status:'awaiting-evidence',event:plan.event};}
-      if(proposal.outcome!==2)throw Error('This worker supports source-checked YES only');
+      if(!proposal){saved.deferred={...saved.deferred,[plan.event]:now()+600};await save();return {status:'awaiting-evidence',event:plan.event};}
+      if(!(manifest.publication.mode==='ethereum-activity'?[1,2]:[2]).includes(proposal.outcome))throw Error('Unsupported source-checked outcome');
       input={owner,action:'assertOutcome',event:plan.event,outcome:proposal.outcome,evidenceHash:proposal.hash,evidenceURI:proposal.uri};
     }
     const review=await service.prepare(input);validateWorkerReview(review,manifest,owner,now());
@@ -93,7 +102,7 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
       ||(tx.value||0n)!==0n||tx.gas!==BigInt(review.gasLimit)||tx.gasPrice!==BigInt(review.gasPrice))throw Error('Signed transaction differs from prepared action');
     const hash=keccak256(signed);
     saved.pending={hash,raw:signed,action:review.action,event:input.event,outcome:input.outcome,evidenceHash:input.evidenceHash};
-    await lease.save(saved); // Persist BEFORE broadcast, including uncertain outcomes.
+    await save(); // Persist BEFORE broadcast, including uncertain outcomes.
     await transport.broadcast(signed);
     return {status:'submitted',hash,action:review.action};
   }finally{await lease.release();}

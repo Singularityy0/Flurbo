@@ -27,7 +27,7 @@ export async function pilotRequest<T>(path:string,input?:unknown,namespace:Pilot
     headers:input===undefined?{}:{'Content-Type':'application/json'},body:input===undefined?undefined:JSON.stringify(input),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60_000)]):AbortSignal.timeout(60_000)});
   const result=await response.json();
   if(!response.ok) throw new Error(result.error || 'Pilot request failed. Refresh before retrying.');
-  if(result.manifest&&namespace.startsWith('practice-')&&(result.manifest.pool!=='0x'+namespace.slice(9)||result.manifest.publication?.mode!=='rehearsal'))throw Error('Response belongs to a different collection.');
+  if(result.manifest&&namespace.startsWith('practice-')&&(result.manifest.pool!=='0x'+namespace.slice(9)||!['rehearsal','ethereum-activity'].includes(result.manifest.publication?.mode)))throw Error('Response belongs to a different collection.');
   return result;
 }
 async function namespaceRpc(namespace:PilotNamespace,method:string,params:unknown[]=[]){ return (await pilotRequest<{result:unknown}>('rpc',{method,params},namespace)).result; }
@@ -78,7 +78,8 @@ export function readPilotPending(namespace:PilotNamespace='pilot'):PilotPending|
   if(!raw) return null;
   if(raw.length>100_000) throw new Error('Saved transaction is invalid. Do not resubmit.');
   const value=JSON.parse(raw) as PilotPending;
-  if((value.review.manifest.publication.mode==='rehearsal')!==isPracticeNamespace(namespace)
+  if((['rehearsal','ethereum-activity'].includes(value.review.manifest.publication.mode||''))!==isPracticeNamespace(namespace)
+    ||namespace==='rehearsal'&&value.review.manifest.publication.mode!=='rehearsal'
     ||namespace.startsWith('practice-')&&value.review.manifest.pool!=='0x'+namespace.slice(9))throw new Error('Saved transaction belongs to a different market');
   validatePilotReview(value.review,Date.now(),true); rpcInteger(value.nonce);
   if(value.hash!==null && !/^0x[0-9a-f]{64}$/i.test(value.hash) || !Number.isFinite(value.started)) throw new Error('Invalid transaction tracking');
@@ -122,7 +123,7 @@ export async function submitPilot(p:Provider,r:PilotReview,login:string,save:(va
   }
 }
 
-export async function checkPilotPending(saved:PilotPending,namespace:PilotNamespace=saved.review.manifest.publication.mode==='rehearsal'?'rehearsal':'pilot') {
+export async function checkPilotPending(saved:PilotPending,namespace:PilotNamespace=saved.review.manifest.publication.mode==='ethereum-activity'?`practice-${saved.review.manifest.pool.slice(2)}`:saved.review.manifest.publication.mode==='rehearsal'?'rehearsal':'pilot') {
   if(namespace.startsWith('practice-')&&saved.review.manifest.pool!=='0x'+namespace.slice(9))throw Error('Pending transaction belongs to a different collection');
   const rpc=(method:string,params:unknown[]=[])=>namespaceRpc(namespace,method,params);
   validatePilotReview(saved.review,Date.now(),true);

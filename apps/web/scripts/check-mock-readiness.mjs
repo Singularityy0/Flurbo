@@ -7,14 +7,14 @@ import { checkMockReadiness } from '../server/mock-readiness.mjs';
 
 const root=new URL('../../../',import.meta.url);
 export async function runMockReadiness({args=process.argv.slice(2),env=process.env,request=fetch,output=console.log}={}){
-  if(args.length>1||args.length===1&&!['--rehearsal','--october-demo'].includes(args[0]))throw Error('Use --rehearsal or --october-demo, or no flag for the real pilot');
-  const name=args[0]==='--october-demo'?'october-demo':args[0]==='--rehearsal'?'rehearsal':'pilot';
+  if(args.length>1||args.length===1&&!['--rehearsal','--october-demo','--showcase'].includes(args[0]))throw Error('Use --rehearsal, --october-demo, --showcase, or no flag for the real pilot');
+  const name=args[0]==='--showcase'?'showcase-v0':args[0]==='--october-demo'?'october-demo':args[0]==='--rehearsal'?'rehearsal':'pilot';
   const manifest=JSON.parse(await readFile(new URL(name==='pilot'?'config/pilot-testnet.json':`target/deployments/${name}-testnet.json`,root),'utf8'));
-  const namespace=name==='october-demo'?`practice-${manifest.pool.slice(2)}`:name;
+  const namespace=['october-demo','showcase-v0'].includes(name)?`practice-${manifest.pool.slice(2)}`:name;
   const rpc=pilotRpc(env.FLURBO_ALCHEMY_TESTNET_RPC_URL||'https://testnet-rpc.monad.xyz',request);
   // Same example binary used by analytics tests; hosted builds have their own binary.
   const file=fileURLToPath(new URL('target/debug/examples/pair_analytics'+(process.platform==='win32'?'.exe':''),root));
-  const report=await checkMockReadiness({manifest,namespace,featured:name==='october-demo',request,rpc,model:input=>runPairModel(input,{file})});
+  const report=await checkMockReadiness({manifest,namespace,featured:['october-demo','showcase-v0'].includes(name),request,rpc,model:input=>runPairModel(input,{file})});
   await mkdir(new URL('target/mock-testing/',root),{recursive:true});
   await writeFile(new URL(`target/mock-testing/${name}-readiness.json`,root),JSON.stringify(report,null,2)+'\n');
   output(JSON.stringify(report,null,2));return report.status==='ready_for_manual_trading_checks'?0:1;

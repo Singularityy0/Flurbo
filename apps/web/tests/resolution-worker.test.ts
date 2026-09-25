@@ -5,7 +5,9 @@ import {createHash} from 'node:crypto';
 import {pilotFixture} from './pilot-fixture.ts';
 import {nextResolutionAction,resolutionTick,validateWorkerReview} from '../server/resolution-worker.mjs';
 import {monitorIdentity} from '../server/settlement-monitor.mjs';
+import {ACTIVITY_METRICS,activityEvent} from '../shared/ethereum-activity.mjs';
 const account=privateKeyToAccount(('0x'+'12'.repeat(32)) as `0x${string}`),owner=account.address.toLowerCase(),now=1800000000;
+const journalKey='flurbo:monitor:v1:'+createHash('sha256').update('resolution-worker-v1:'+owner).digest('hex')+':state';
 function storage(manifest:any){
   const data=new Map<string,string>();
   const command=async(op:string,...a:any[])=>{
@@ -80,5 +82,28 @@ test('worker approves only the exact bond, then asserts; unavailable evidence de
   const fresh=storage(f.manifest);
   assert.equal((await resolutionTick({...options,command:fresh.command,evidence:async()=>null})).status,'awaiting-evidence');
   assert.equal((await resolutionTick({...options,command:fresh.command,enabled:false})).plan.event,1);
+});
+
+test('legacy pool ownership survives a pool switch; any other pending transaction blocks signing',async()=>{
+  const f=pilotFixture(now),db=storage(f.manifest),oldPool='0x'+'ab'.repeat(20);
+  const old={schema:'flurbo.resolution-worker.v1',pool:oldPool,rulesHash:'old-rules',pending:null,owned:{0:{outcome:2,evidenceHash:'retained'}},deferred:{}};
+  db.data.set(journalKey,JSON.stringify(old));
+  const state=await f.service.status();state.cases.forEach(c=>c.assertionDeadline=String(now-1));
+  const options={manifest:f.manifest,owner,service:{status:async()=>state,prepare:f.service.prepare},command:db.command,enabled:true,now:()=>now,
+    transport:{sign:async(review:any)=>account.signTransaction({chainId:10143,type:'legacy',nonce:0,to:review.transaction.to,data:review.transaction.data,value:0n,gas:BigInt(review.gasLimit),gasPrice:BigInt(review.gasPrice)}),broadcast:async()=>{}}};
+  assert.equal((await resolutionTick(options)).status,'submitted');
+  const saved=JSON.parse(db.data.get(journalKey)!);assert.deepEqual(saved.pools[oldPool],old);assert.ok(saved.pools[f.manifest.pool].pending);
+  db.data.set(journalKey,JSON.stringify({...old,pending:{hash:'unreconciled'}}));
+  await assert.rejects(resolutionTick(options),/other pool pending/);
+});
+
+test('NO assertions are allowed only for canonical activity rules, with calldata matching the evidence',async()=>{
+  const f=pilotFixture(now,4);f.options.allowance=1000000n;
+  const close=now-3000;f.manifest.publication.mode='ethereum-activity';
+  Object.assign(f.manifest.publication.draft,{title:'Showcase v0',clusterId:`showcase-v0-${close}`,closesAt:close,events:ACTIVITY_METRICS.map(m=>activityEvent(m,close+120))});
+  const review=await f.service.prepare({owner,action:'assertOutcome',event:0,outcome:1,evidenceHash:'0x'+'ab'.repeat(32),evidenceURI:'https://flurbo.singu.online/api/pilot/evidence/test'});
+  validateWorkerReview(review,f.manifest,owner,now);
+  assert.throws(()=>validateWorkerReview({...review,requested:{...review.requested,outcome:2}},f.manifest,owner,now),/mismatch/);
+  f.manifest.publication.mode='official-releases';assert.throws(()=>validateWorkerReview(review,f.manifest,owner,now),/mismatch/);
 });
 

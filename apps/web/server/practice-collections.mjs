@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { configureRehearsal } from './pilot-config.mjs';
+import { configureRehearsal,configureCollection } from './pilot-config.mjs';
 
 export const practiceNamespace = pool => {
   if (typeof pool !== 'string' || !/^0x[0-9a-f]{40}$/.test(pool)) throw Error('Invalid practice pool');
@@ -21,7 +21,7 @@ export async function configurePracticeCollections({env=process.env,rpcUrl,comma
   const pools=new Set([original.pool]),resolvers=new Set([original.resolver]);
   for(const row of extras){
     if(!row||Object.keys(row).sort().join(',')!=='label,manifest'||typeof row.label!=='string'||! /^[A-Za-z0-9][A-Za-z0-9 ()-]{2,59}$/.test(row.label))throw Error('Invalid practice collection entry');
-    const service=await configureRehearsal({env:{FLURBO_REHEARSAL_MANIFEST_JSON:JSON.stringify(row.manifest)},rpcUrl,command});
+    const service=await configureCollection({manifest:row.manifest,rpcUrl,command});
     const {manifest}=service,namespace=practiceNamespace(manifest.pool);
     if(pools.has(manifest.pool)||resolvers.has(manifest.resolver)||entries.some(e=>e.label===row.label))throw Error('Duplicate practice collection');
     pools.add(manifest.pool);resolvers.add(manifest.resolver);services.set(namespace,service);

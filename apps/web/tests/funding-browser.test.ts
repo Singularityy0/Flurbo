@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {readFile} from 'node:fs/promises';
-import {pathToFileURL} from 'node:url';
+import {readFile,mkdir} from 'node:fs/promises';
+import {pathToFileURL,fileURLToPath} from 'node:url';
 import {pilotFixture,owner,hash} from './pilot-fixture.ts';
 import {TESTNET} from '../server/network.mjs';
 
@@ -91,12 +91,13 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
     await page.getByRole('button',{name:'Check status',exact:true}).click();
     await page.getByText('Test AUSD request confirmed. You can return to the markets.').waitFor();
     assert.equal(await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('flurbo.faucet.pending')).length),0);
-    await page.screenshot({path:'../../tmp/funding-desktop.png',fullPage:true});
+    await mkdir(new URL('../../../target/showcase-ui/',import.meta.url),{recursive:true});
+    await page.screenshot({path:fileURLToPath(new URL('../../../target/showcase-ui/funding-desktop.png',import.meta.url)),fullPage:true});
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-    await page.screenshot({path:'../../tmp/funding-mobile.png',fullPage:true});
+    await page.screenshot({path:fileURLToPath(new URL('../../../target/showcase-ui/funding-mobile.png',import.meta.url)),fullPage:true});
     await page.goto('https://flurbo.singu.online/markets');
-    await page.getByRole('heading',{name:'Explore markets'}).waitFor();
+    await page.getByRole('heading',{name:'Practice',exact:true}).waitFor();
     assert.equal(await page.getByText('Testing tools',{exact:true}).count(),0);
     await page.goto('https://flurbo.singu.online/rehearsal');
     await page.getByRole('heading',{name:'Operator access only'}).waitFor();

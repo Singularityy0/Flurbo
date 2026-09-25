@@ -7,6 +7,8 @@ import {pilotService,pilotRpc,pilotEvidence} from '../server/pilot.mjs';
 import {redisCommand} from '../server/redis-session.mjs';
 import {evidenceAssistant} from '../server/evidence-assistant.mjs';
 import {resolutionTick} from '../server/resolution-worker.mjs';
+import {activityEvidence} from '../server/ethereum-activity.mjs';
+import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
 
 const diagnosticMessages={
   CONFIGURATION_INVALID:'Check the manifest, pool, rules hash, execution mode and public signer settings.',
@@ -40,6 +42,7 @@ export async function runResolution(env=process.env){
   try{
   const manifest=JSON.parse(env.FLURBO_RESOLUTION_MANIFEST_JSON||'null');
   if(!manifest||manifest.pool!==env.FLURBO_RESOLUTION_POOL||manifest.rulesHash!==env.FLURBO_RESOLUTION_RULES_HASH)throw Error('Explicit pool and immutable rules allowlist required');
+  if(manifest.publication?.mode==='ethereum-activity')validateActivityDraft(manifest.publication.draft);
   const endpoint=env.FLURBO_ALCHEMY_TESTNET_RPC_URL||'https://testnet-rpc.monad.xyz';
   const rpc=guarded('RPC_READ_FAILED',pilotRpc(endpoint)),service=pilotService({manifest,rpc}),command=guarded('DURABLE_STATE_FAILED',redisCommand(env));
   const enabled=env.FLURBO_RESOLUTION_EXECUTE==='true';
@@ -72,9 +75,11 @@ export async function runResolution(env=process.env){
     async broadcast(raw){if(!enabled)throw Error('Execution disabled');return client.sendRawTransaction({serializedTransaction:raw});}
   };
   const archive=pilotEvidence(command,'https://flurbo.singu.online');
-  const assistant=evidenceAssistant({manifest,command,env});
   const evidence=async event=>{
     const q=manifest.publication.draft.events[event];
+    if(manifest.publication.mode==='ethereum-activity'){
+      try{return await (await activityEvidence(manifest,command,archive,owner))(event);}catch{return null;}
+    }
     if(manifest.publication.mode==='rehearsal'){
       const letter=event===0?'A':event===3?'D':null;
       if(!letter||q.source.recordId!==`flurbo-rehearsal.v1:${event}`||q.source.referenceUrl!=='https://flurbo.singu.online/rehearsal-rules'
@@ -82,7 +87,7 @@ export async function runResolution(env=process.env){
       const saved=await archive.put({eventId:q.id,outcome:2,statement:'Automatic practice assertion follows the immutable scripted YES fixture. This is not an AI prediction of a real-world event.',sourceURL:q.source.referenceUrl,attachment:JSON.stringify({rulesHash:manifest.rulesHash,fixture:q.source})},owner,manifest.draftHash);
       return {...saved,outcome:2};
     }
-    const report=await assistant.review(q.id,true);
+    const report=await evidenceAssistant({manifest,command,env}).review(q.id,true);
     if(report.assessment.recommendation!=='YES'||report.ai.status!=='generated')return null;
     const saved=await archive.put({eventId:q.id,outcome:2,statement:report.ai.explanation.summary.length>=20?report.ai.explanation.summary:'Source-checked automatic YES assertion; see the archived report and evidence.',sourceURL:report.evidence[0].endpoint,
       attachment:JSON.stringify({reportHash:report.reportHash,assessment:report.assessment,ai:report.ai,sourceHash:report.evidence[0].payloadHash})},owner,manifest.draftHash);
@@ -96,5 +101,13 @@ export async function runResolution(env=process.env){
   }
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
-  runResolution().then(r=>console.log(JSON.stringify(r))).catch(error=>{console.error(JSON.stringify(resolutionFailure(error)));process.exitCode=1;});
+  (async()=>{
+    if(process.argv.slice(2).some(a=>a!=='--drain')||process.argv.length>3)throw Error('Use --drain or no arguments');
+    const deadline=Date.now()+150000,limit=process.argv.includes('--drain')?12:1;
+    for(let i=0;i<limit;i++){
+      const result=await runResolution();console.log(JSON.stringify(result));
+      if(!['submitted','confirmed'].includes(result.status)||Date.now()>deadline)break;
+      await new Promise(resolve=>setTimeout(resolve,4000));
+    }
+  })().catch(error=>{console.error(JSON.stringify(resolutionFailure(error)));process.exitCode=1;});
 }

@@ -6,6 +6,7 @@ import { checkSettlement, monitorIdentity, validateMonitorCheckpoint } from '../
 import { redisCommand } from '../server/redis-session.mjs';
 import { settlementLease } from '../server/settlement-store.mjs';
 import { emailConfig, resendDelivery, validateEmailState, queueReport, drainEmails } from '../server/settlement-email.mjs';
+import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
 
 export function watchdog(env, request = fetch) {
   const url = env.FLURBO_MONITOR_HEALTHCHECK_URL || '';
@@ -68,10 +69,11 @@ export async function runNotifications({ env = process.env, args = process.argv.
     const extras=env.FLURBO_PRACTICE_COLLECTIONS_JSON?JSON.parse(env.FLURBO_PRACTICE_COLLECTIONS_JSON):[];
     if(!Array.isArray(extras)||extras.length>8)throw Error('Invalid practice collections');
     for(const row of extras){
-      if(!row?.manifest||row.manifest.publication?.mode!=='rehearsal'
+      if(!row?.manifest||!['rehearsal','ethereum-activity'].includes(row.manifest.publication?.mode)
         ||manifests.some(manifest=>manifest.pool===row.manifest.pool||manifest.resolver===row.manifest.resolver))throw Error('Duplicate or invalid practice collection');
       // Validate every additional manifest before delivering any observations.
       pilotService({manifest:row.manifest,rpc:async()=>{throw Error('No read during configuration');},now});
+      if(row.manifest.publication.mode==='ethereum-activity')validateActivityDraft(row.manifest.publication.draft);
       manifests.push(row.manifest);
     }
     let failed = false;

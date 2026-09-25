@@ -6,7 +6,7 @@ import { pairAnalytics } from './pair-analytics.mjs';
 // Public reads only. Configuration, chain state and manual acceptance are separate claims.
 export async function checkMockReadiness({manifest,namespace,featured=false,request=fetch,rpc,model,now=()=>Math.floor(Date.now()/1000)}){
   if(namespace!=='pilot'&&namespace!=='rehearsal'&&namespace!==`practice-${manifest.pool.slice(2)}`)throw Error('Invalid collection binding');
-  if((manifest.publication.mode==='rehearsal')!==(namespace!=='pilot'))throw Error('Invalid collection mode');
+  if((['rehearsal','ethereum-activity'].includes(manifest.publication.mode))!==(namespace!=='pilot')||namespace==='rehearsal'&&manifest.publication.mode!=='rehearsal')throw Error('Invalid collection mode');
   const service=pilotService({manifest,rpc,now}),checks=[];
   async function check(name,fn){
     try{checks.push({name,status:'pass',details:await fn()});}
