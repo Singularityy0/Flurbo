@@ -16,9 +16,10 @@ test('operator-only pages, assets and actions use the server session, while cons
   await writeFile(join(dir,'privacy-lab','assets','test.js'),'lab script');
   let revoked=false,prepares=0;
   const store={read:async(id:string)=>id==='owner'&&!revoked?{address:DEFAULT_TESTING_OPERATOR,method:'passkey',expiresAt:Date.now()+60000}:id==='visitor'?{address:'0x'+'11'.repeat(20),method:'passkey'}:id==='wallet'?{address:DEFAULT_TESTING_OPERATOR,method:'wallet'}:null};
-  const service={manifest:{},prepare:async(input:any)=>{prepares++;return input;}};
+  let phase=1;
+  const service={manifest:{draftHash:'fixture',publication:{draft:{events:[{id:'event-0'}]}}},status:async()=>({snapshot:{timestamp:100},cases:[{phase,challengeUntil:'200',proposal:2}]}),prepare:async(input:any)=>{prepares++;return input;}};
   const namespace='practice-'+'12'.repeat(20);
-  const server=productionServer({origin:'https://flurbo.singu.online',rpcUrl:TESTNET.rpc,pilot:service,rehearsal:service,practiceCollections:{services:new Map([[namespace,service]])},pilotEvidence:{get:async()=>'{"public":true}'}},store,dir);
+  const server=productionServer({origin:'https://flurbo.singu.online',rpcUrl:TESTNET.rpc,pilot:service,rehearsal:service,practiceCollections:{services:new Map([[namespace,service]])},pilotEvidence:{get:async()=>'{"public":true}',put:async()=>({saved:true})}},store,dir);
   await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
   const port=(server.address() as any).port;
   const request=(path:string,id='',data?:any):Promise<any>=>new Promise((resolve,reject)=>{
@@ -32,12 +33,17 @@ test('operator-only pages, assets and actions use the server session, while cons
     const access=await request('/api/account/access','owner');assert.equal(JSON.parse(access.text).testingTools,true);assert.match(access.headers['set-cookie'][0],/HttpOnly; SameSite=Strict; Path=\/;/);
     assert.equal(JSON.parse((await request('/api/account/access','visitor')).text).testingTools,false);
     for(const ns of ['pilot','rehearsal',namespace]){
-      for(const action of ['assertOutcome','dispute','vote','finalize','deliver','withdrawBond']){
+      for(const action of ['assertOutcome','vote','finalize','deliver']){
         assert.equal((await request(`/api/${ns}/prepare`,'visitor',{action,owner:DEFAULT_TESTING_OPERATOR})).status,403);
         assert.equal((await request(`/api/${ns}/prepare`,'owner',{action})).status,200);
       }
-      for(const action of ['buy','sell','redeem'])assert.equal((await request(`/api/${ns}/prepare`,'visitor',{action})).status,200);
-      assert.equal((await request(`/api/${ns}/evidence`,'visitor',{})).status,403);
+      for(const action of ['buy','sell','redeem','dispute','withdrawBond'])assert.equal((await request(`/api/${ns}/prepare`,'visitor',{action})).status,200);
+      assert.equal((await request(`/api/${ns}/prepare`,'',{action:'dispute'})).status,401);
+      assert.equal((await request(`/api/${ns}/evidence`,'',{eventId:'event-0',outcome:1})).status,401);
+      assert.equal((await request(`/api/${ns}/evidence`,'visitor',{eventId:'event-0',outcome:1})).status,200);
+      assert.equal((await request(`/api/${ns}/evidence`,'visitor',{eventId:'event-0',outcome:2})).status,409);
+      assert.equal((await request(`/api/${ns}/evidence`,'visitor',{eventId:'foreign',outcome:1})).status,400);
+      phase=3;assert.equal((await request(`/api/${ns}/evidence`,'visitor',{eventId:'event-0',outcome:1})).status,409);phase=1;
       assert.equal((await request(`/api/${ns}/evidence/0x${'ab'.repeat(32)}`)).status,200);
     }
     assert.equal(prepares,27);

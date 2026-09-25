@@ -17,6 +17,14 @@
 .detail-holdings { display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0; }
 .detail-holdings>div { display:grid;gap:10px;padding:18px;background:#eff1e7;border-radius:12px; }
 .detail-holdings small { color:#667268; }
+.public-challenge fieldset { border:0;padding:0;margin:24px 0;min-width:0;display:grid;gap:16px; }
+.public-challenge legend { font-weight:600;margin-bottom:16px; }
+.public-challenge.pilot-form label { display:grid;gap:8px;align-items:start; }
+.public-challenge.pilot-form label input,.public-challenge.pilot-form label select,.public-challenge.pilot-form label textarea { width:100%;min-width:0;margin:0; }
+.public-challenge textarea { display:block;box-sizing:border-box;width:100%;min-height:100px;margin-top:8px;padding:12px;border:1px solid #d5d9ce;border-radius:10px;background:transparent;color:inherit;font:inherit;resize:vertical; }
+.public-challenge .ticket-wallet,.public-challenge .pilot-actions { display:flex;align-items:center;gap:12px;flex-wrap:wrap; }
+.public-challenge .button { margin:8px 0;max-width:100%;white-space:normal; }
+.detail-challenge { margin-top:20px;padding-top:8px;border-top:1px solid #d5d9ce; }
 .detail-trade .consumer-ticket>h2 { font-size:1.15rem;margin-top:14px; }
 .detail-trade .consumer-ticket { padding:0; }
 .detail-trade .ticket-wallet { display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap; }

@@ -1,4 +1,5 @@
 import {marketQuestion} from '../showcase-copy';
+import {challengeUnavailable} from '../challenge';
 import { linkTradingWallet } from '../wallet-links';
 import { useEffect, useRef, useState } from 'react';
 import { formatUnits, parseUnits, type Hex } from 'viem';
@@ -17,7 +18,7 @@ const labels=['Not proposed','NO','YES','VOID'];
 const phases=['Awaiting evidence','Challenge window','Under review','Final result'];
 const date=(seconds:string|number)=>new Date(Number(seconds)*1000).toLocaleString();
 const cash=(atoms:string)=>formatUnits(BigInt(atoms),6);
-export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirmed,onTradingWalletChange}:{onTradingWalletChange?:(address:string)=>void;onTradeConfirmed?:()=>void;onBusy(value:boolean):void;namespace?:PilotNamespace;consumer?:{event:number;yes:boolean}}) {
+export default function Pilot({onBusy,namespace='pilot',consumer,challenge,onTradeConfirmed,onTradingWalletChange}:{onTradingWalletChange?:(address:string)=>void;onTradeConfirmed?:()=>void;onBusy(value:boolean):void;namespace?:PilotNamespace;consumer?:{event:number;yes:boolean};challenge?:{event:number}}) {
   const pilotRequest=<T,>(path:string,input?:unknown)=>request<T>(path,input,namespace);
   const readPilotPending=()=>readPending(namespace),pilotPendingKey=pendingKeyFor(namespace);
   const {controller,state:auth}=useAuth();
@@ -27,7 +28,8 @@ export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirme
   const [busy,setBusy]=useState(false),[review,setReview]=useState<PilotReview|null>(null),[pending,setPending]=useState<PilotPending|null>(null);
   const [storageError,setStorageError]=useState(false),[hash,setHash]=useState('');
   const [confirmedHash,setConfirmedHash]=useState(''),[approved,setApproved]=useState<PilotInput|null>(null);
-  const [event,setEvent]=useState(0),[outcome,setOutcome]=useState(2),[statement,setStatement]=useState(''),[source,setSource]=useState(''),[attachment,setAttachment]=useState('');
+  const [event,setEvent]=useState(challenge?.event??0),[outcome,setOutcome]=useState(challenge?0:2),[statement,setStatement]=useState(''),[source,setSource]=useState(''),[attachment,setAttachment]=useState('');
+  const [now,setNow]=useState(()=>Date.now()/1000);
   const [evidence,setEvidence]=useState<{hash:string;uri:string}|null>(null);
   const [legs,setLegs]=useState<number[]>(restored?.legs||[consumer?.event??0]),[quantity,setQuantity]=useState(restored?.quantity||'1'),[side,setSide]=useState<string>(restored?.side||'buy');
   const [rule,setRule]=useState('AND'),[answers,setAnswers]=useState<Record<number,boolean>>(restored?.answers||(consumer?{[consumer.event]:consumer.yes}:{}));
@@ -59,6 +61,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirme
   },[]);
   useEffect(()=>{onBusy(busy||!consumer&&!!review||!!pending||storageError);return()=>onBusy(false);},[busy,review,pending,storageError,onBusy,!!consumer]);
   useEffect(()=>{setEvidence(null);},[event,outcome,statement,source,attachment]);
+  useEffect(()=>{if(!challenge)return;const timer=setInterval(()=>setNow(Date.now()/1000),1000);return()=>clearInterval(timer);},[!!challenge]);
   useEffect(()=>{setPosition(null);},[owner,scope,mask]);
   useEffect(()=>{setCompleted(false);},[scope,mask,quantity,side]);
   useEffect(()=>{
@@ -98,10 +101,10 @@ export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirme
   },[!!consumer,review,busy,pending]);
   useEffect(()=>{polls.current=0;setPollPaused(false);},[pending?.hash]);
   useEffect(()=>{
-    if(!consumer||!pending?.hash||pending.login!==auth.address||busy||pollPaused)return;
+    if((!consumer&&!challenge)||!pending?.hash||pending.login!==auth.address||busy||pollPaused)return;
     const timer=setTimeout(()=>{polls.current++;void run(async()=>{try{await check();}catch(e){setPollPaused(true);throw e;}finally{if(polls.current>=40)setPollPaused(true);}});},2000);
     return()=>clearTimeout(timer);
-  },[!!consumer,pending,busy,pollPaused,auth.address]);
+  },[!!consumer,!!challenge,pending,busy,pollPaused,auth.address]);
   async function connect(switchAccount=false){
     cleanup.current(); const version=++generation.current;
     provider.current=null;reviewRef.current=null;setOwner('');onTradingWalletChange?.('');setReview(null);setPosition(null);
@@ -122,6 +125,12 @@ export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirme
   }
   async function prepare(input:Omit<PilotInput,'owner'>){
     if(!owner||!provider.current)throw new Error('Connect MetaMask first');
+    if(challenge&&input.action==='dispute'){
+      const fresh=await pilotRequest<PilotState>('status?wallet='+owner);
+      setState(fresh);
+      const reason=challengeUnavailable(fresh,event,owner);
+      if(reason)throw new Error(reason);
+    }
     const version=generation.current; setReview(null);
     const result=await pilotRequest<PilotReview>('prepare',{...input,owner});
     validatePilotReview(result);
@@ -130,10 +139,17 @@ export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirme
   async function publishEvidence(){
     if(!state) return;
     const result=await pilotRequest<{hash:string;uri:string}>('evidence',{eventId:state.manifest.publication.draft.events[event].id,outcome,statement,sourceURL:source,attachment});
-    setEvidence(result);setNotice('Public evidence saved. Review an assertion, dispute or vote below. Saving evidence does not submit an outcome.');
+    setEvidence(result);setNotice(challenge?'Evidence saved. Review your challenge below. Nothing has been submitted on chain.':'Public evidence saved. Review an assertion, dispute or vote below. Saving evidence does not submit an outcome.');
   }
   async function confirm(){
     if(!review||!provider.current||!auth.address||pending||storageError)return;
+    if(challenge&&review.requested.action==='dispute'){
+      if(review.requested.event!==event||review.requested.outcome!==outcome||review.requested.evidenceHash!==evidence?.hash)throw Error('Your challenge changed. Review it again.');
+      const fresh=await pilotRequest<PilotState>('status?wallet='+owner);
+      setState(fresh);
+      const reason=challengeUnavailable(fresh,event,owner);
+      if(reason)throw Error(reason);
+    }
     if(consumer&&(review.requested.owner.toLowerCase()!==owner||review.requested.action!==side||review.requested.scope!==scope||review.requested.mask!==mask||review.requested.quantity!==parseUnits(quantity,6).toString()))throw new Error('Your prediction changed. Wait for its new price before buying.');
     if(!navigator.locks)throw new Error('Web Locks support is required for submission tracking.');
     const r=review,p=provider.current,version=generation.current,login=auth.address;
@@ -152,6 +168,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirme
       save(null);setPosition(null);setConfirmedHash(saved.hash||'');
       setApproved(!consumer&&result==='confirmed'&&saved.review.action==='approve'?saved.review.requested:null);
       if(consumer&&result==='confirmed'&&['buy','sell','redeem'].includes(saved.review.action)){setCompleted(true);onTradeConfirmed?.();}
+      if(challenge&&result==='confirmed'&&saved.review.action!=='approve'){setCompleted(true);onTradeConfirmed?.();}
       const confirmed=result==='confirmed'?(saved.review.action==='approve'?'Token approval confirmed. The approved action has not been sent. Review it below.':'Exact transaction confirmed. Balances refreshed.'):'Transaction reverted. No successful action was confirmed.';
       try{
         await refresh();
@@ -166,6 +183,44 @@ export default function Pilot({onBusy,namespace='pilot',consumer,onTradeConfirme
   const disabled=busy||!consumer&&!!review||!!pending||storageError;
   const current=state?.cases[event];
   const operatorRun=state?.manifest.publication.reviewerControl==='single-operator';
+  if(challenge){
+    const unavailable=state?challengeUnavailable(state,event,owner,now):'Loading the proposed answer...';
+    const intended=pending?.review.requested.action;
+    return <section className="public-challenge pilot-form" aria-label="Challenge an answer">
+      <h2>Challenge the proposed answer</h2>
+      <p role="status">{busy?'Working...':notice}</p>
+      {state&&current&&<><p><strong>{marketQuestion(state.manifest.publication.draft.events[event])}</strong></p>
+        <p>Proposed answer: <strong>{labels[current.proposal]}</strong>. Challenges close {date(current.challengeUntil)}.</p>
+        <p>Bond: <strong>{cash(state.manifest.publication.bondAtoms)} test AUSD</strong>, plus network fees. You can lose the bond under the published dispute rules. The testnet panel is controlled by the Flurbo operator.</p></>}
+      {unavailable&&<p role="status">{unavailable}</p>}
+      {!pending&&<div className="ticket-wallet"><span>{owner?`${owner.slice(0,6)}…${owner.slice(-4)}`:'MetaMask'}</span><button className="button button-outline" disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':'Connect MetaMask'}</button></div>}
+      {!unavailable&&!pending&&!completed&&<fieldset disabled={disabled}>
+        <legend>Your challenge</legend>
+        <label>Correct answer<select value={outcome} onChange={e=>setOutcome(Number(e.target.value))}><option value={0}>Choose a different answer</option>{[1,2,3].filter(v=>v!==current?.proposal).map(v=><option key={v} value={v}>{labels[v]}</option>)}</select></label>
+        <label>Why is the proposed answer wrong?<textarea maxLength={8000} value={statement} onChange={e=>setStatement(e.target.value)}/></label>
+        <label>Supporting source URL<input type="url" value={source} onChange={e=>setSource(e.target.value)}/></label>
+        <label>Evidence excerpt<textarea maxLength={12000} value={attachment} onChange={e=>setAttachment(e.target.value)}/></label>
+        <p className="market-caption">Your explanation, source and Flurbo account address will be published with the evidence. Include public information only.</p>
+        <button className="button button-outline" disabled={!owner||![1,2,3].includes(outcome)||outcome===current?.proposal||statement.trim().length<20||!source.trim()} onClick={()=>void run(publishEvidence)}>Save public evidence</button>
+        {evidence&&<><p><a href={evidence.uri} target="_blank" rel="noreferrer">Read your saved evidence</a></p><button className="button button-dark" disabled={!owner} onClick={()=>void run(()=>prepare({action:'dispute',event,outcome,evidenceHash:evidence.hash,evidenceURI:evidence.uri}))}>Review challenge</button></>}
+      </fieldset>}
+      {approved?.action==='dispute'&&!review&&!pending&&<p>Bond approval confirmed. Review your challenge again to submit it. Approval alone does not challenge the answer.</p>}
+      {review&&!pending&&<section className="ticket-review" aria-label="Challenge transaction review">
+        <h3>{review.action==='approve'?'Approve the challenge bond':review.action==='withdrawBond'?'Collect bond credit':'Confirm your challenge'}</h3>
+        {review.requested.action==='dispute'&&<><p>Your answer: <strong>{labels[review.requested.outcome!]}</strong>. Bond: {cash(review.amountAtoms)} test AUSD.</p><p>{review.action==='approve'?'This only allows the resolver to take your bond. You will confirm the challenge separately.':'This submits your alternative answer and locks the bond.'}</p></>}
+        <p className="market-caption">Maximum network fee: {formatUnits(BigInt(review.maximumFeeWei),18)} MON.</p>
+        <div className="pilot-actions"><button className="button button-dark" disabled={busy||review.requested.action==='dispute'&&!!unavailable} onClick={()=>void run(confirm)}>Confirm in MetaMask</button><button className="button button-outline" disabled={busy} onClick={()=>setReview(null)}>Cancel review</button></div>
+      </section>}
+      {pending&&<section className="ticket-review"><h3>Checking your transaction</h3><p>{pending.hash?'Confirmation is checked automatically. You can reload without submitting again.':'Check MetaMask activity before retrying. A transaction may have been sent.'}</p>{intended!=='dispute'&&<p>This is an earlier {intended} transaction for this collection.</p>}
+        {!pending.hash&&<><label>Transaction hash<input value={hash} onChange={e=>setHash(e.target.value)}/></label><button className="button button-outline" onClick={()=>void run(async()=>{if(!/^0x[0-9a-f]{64}$/i.test(hash))throw Error('Paste a valid transaction hash');save({...pending,hash:hash.toLowerCase() as Hex});})}>Find transaction</button></>}
+        <button className="button button-outline" disabled={busy||!pending.hash} onClick={()=>void run(check)}>Check confirmation</button>
+      </section>}
+      {completed&&<p role="status">Transaction confirmed. The latest result is shown above.</p>}
+      {confirmedHash&&<p><a href={`https://testnet.monadscan.com/tx/${confirmedHash}`} target="_blank" rel="noreferrer">View confirmed transaction</a></p>}
+      {owner&&state?.wallet&&BigInt(state.wallet.credits)>0n&&<button className="button button-outline" disabled={disabled} onClick={()=>void run(()=>prepare({action:'withdrawBond'}))}>Collect {cash(state.wallet.credits)} test AUSD bond credit</button>}
+      <button className="button button-outline" disabled={disabled} onClick={()=>void run(()=>refresh())}>Refresh challenge status</button>
+    </section>;
+  }
   if(consumer){
     const question=state?.manifest.publication.draft.events[consumer.event];
     const answerSummary=legs.map(i=>`${state?.manifest.publication.draft.events[i]?marketQuestion(state.manifest.publication.draft.events[i]):'Event '+(i+1)} ${(answers[i]??true)?'Yes':'No'}`).join(' + ');

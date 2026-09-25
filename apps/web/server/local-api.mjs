@@ -125,7 +125,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         }
         if(req.method==='POST' && url.pathname==='/api/pilot/prepare') {
           const input = await body(req);
-          if (!['buy','sell','redeem'].includes(input?.action) && !isTestingOperator(login, testingOperatorAccount)) return send(res,403,{error:'Testing tools are restricted to the operator.'});
+          if (!['buy','sell','redeem','dispute','withdrawBond'].includes(input?.action) && !isTestingOperator(login, testingOperatorAccount)) return send(res,403,{error:'Testing tools are restricted to the operator.'});
           return send(res,200,await pilot.prepare(input));
         }
         if(req.method==='POST' && url.pathname==='/api/pilot/position') {
@@ -145,10 +145,15 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           }
         }
         if(req.method==='POST' && url.pathname==='/api/pilot/evidence') {
-          if (!isTestingOperator(login, testingOperatorAccount)) return send(res,403,{error:'Testing tools are restricted to the operator.'});
           if(!evidence) return send(res,503,{error:'Evidence storage unavailable'});
           const input=await body(req);
-          if(!pilot.manifest.publication.draft.events.some(e=>e.id===input.eventId)) return send(res,400,{error:'Unknown pilot event'});
+          const event=pilot.manifest.publication.draft.events.findIndex(e=>e.id===input?.eventId);
+          if(event<0) return send(res,400,{error:'Unknown pilot event'});
+          if (!isTestingOperator(login, testingOperatorAccount)) {
+            const state=await pilot.status(), current=state.cases[event];
+            if(current.phase!==1 || Number(current.challengeUntil)<=state.snapshot.timestamp || ![1,2,3].includes(input.outcome) || current.proposal===input.outcome)
+              return send(res,409,{error:'Choose a different answer during the open challenge period.'});
+          }
           return send(res,200,await evidence.put(input,login.address,pilot.manifest.draftHash));
         }
         if(req.method==='POST' && url.pathname==='/api/pilot/rpc') {
