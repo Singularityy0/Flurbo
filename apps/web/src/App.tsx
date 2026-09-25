@@ -7,6 +7,7 @@ import NotFound from "./pages/NotFound";
 import { useAuth } from "./auth/context";
 import Workspace from './pages/Workspace';
 import Markets from './pages/Markets';
+import EvidenceReview from './pages/EvidenceReview';
 
 export const brand = "flurbo";
 
@@ -113,7 +114,7 @@ function AccountRoute() {
   // server-backed login has been restored. Remembered addresses are not login.
   return <AppShell>{state.restoring
     ? <main id="main" tabIndex={-1} className="auth-page"><p role="status">Checking your session...</p></main>
-    : authenticated ? (['/markets','/portfolio','/history'].includes(location) ? <Markets /> : <Workspace />) : null}</AppShell>;
+    : authenticated ? (location==='/evidence'?<EvidenceReview/>:['/markets','/portfolio','/history'].includes(location) ? <Markets /> : <Workspace />) : null}</AppShell>;
 }
 
 export default function App() {
@@ -128,6 +129,7 @@ export default function App() {
       : location === "/history" ? "Your history | flurbo"
       : location === "/kuru" ? "Kuru order book | flurbo"
       : location === "/events" ? "Real events | flurbo"
+      : location === "/evidence" ? "Evidence review | flurbo"
       : location === "/rehearsal" ? "Testnet rehearsal | flurbo"
       : location === "/" ? "flurbo | combine what you know" : "Page not found | flurbo";
     const changed = previousLocation.current !== location;
@@ -152,6 +154,7 @@ export default function App() {
       <Route path="/kuru" component={AccountRoute} />
       <Route path="/events" component={AccountRoute} />
       <Route path="/rehearsal" component={AccountRoute} />
+      <Route path="/evidence" component={AccountRoute} />
       <Route component={NotFound} />
     </Switch>
   );

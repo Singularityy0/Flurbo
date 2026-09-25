@@ -75,6 +75,6 @@ function CollectionMarkets({collections,namespace}:{collections:PracticeCatalog;
       {isPracticeNamespace(archive)&&<p><Link href={'/rehearsal?collection='+archive}>Settlement and redemption for this collection</Link></p>}
       {auth.address&&(isPracticeNamespace(archive)||archive==='pilot'?<PilotLedger key={archive+location} namespace={archive} account={auth.address} history={location==='/history'}/>:<Portfolio key={archive+location} market={archive==='learning'?'learning':'original'} account={auth.address} history={location==='/history'}/>)}
     </>}
-    <footer className="market-footer"><span>One pool. More possibilities.</span><details><summary>Testing tools</summary><Link href={'/rehearsal?collection='+namespace}>Settlement and combined predictions</Link><Link href="/events">Earlier real-event pool</Link><Link href="/kuru">Kuru trading</Link><Link href="/account">Research workspace</Link></details></footer>
+    <footer className="market-footer"><span>One pool. More possibilities.</span><details><summary>Testing tools</summary><Link href="/evidence">Evidence assistant beta</Link><a href="/privacy-lab/">Privacy proof lab</a><Link href={'/rehearsal?collection='+namespace}>Settlement and combined predictions</Link><Link href="/events">Earlier real-event pool</Link><Link href="/kuru">Kuru trading</Link><Link href="/account">Research workspace</Link></details></footer>
   </main>;
 }

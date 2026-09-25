@@ -4,12 +4,14 @@ import { validWithdrawal } from './withdrawal-policy.mjs';
 import { kuruCall } from '../shared/kuru.mjs';
 import { TESTNET } from './network.mjs';
 import { learningDeployment } from '../shared/learning-contracts.mjs';
+import { evidenceAssistant } from './evidence-assistant.mjs';
 import { pilotCall } from '../shared/pilot.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
-  learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null } = {}) {
+  learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {} } = {}) {
   const hosted = publicOrigin !== null;
+  const assistant=publishedPilot&&store.command?evidenceAssistant({manifest:publishedPilot.manifest,command:store.command,...evidenceOptions}):null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
   // A bounded global limit avoids trusting spoofable forwarded IP headers.
   let minute = 0, requests = 0;
@@ -35,6 +37,21 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (++requests > 600) { res.setHeader('Retry-After', '60'); return send(res, 429, { error: 'Service busy. Retry shortly.' }); }
       }
       if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? TESTNET : { environment: 'local_fork', chain_id: 10143 });
+      if(url.pathname==='/api/evidence-beta'){
+        const login=await store.read(sid,origin);
+        if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey'});
+        if(!assistant)return send(res,503,{error:'Evidence beta needs the configured real-event pilot and durable storage'});
+        const env=evidenceOptions.env||process.env;
+        const operator=!!env.FLURBO_EVIDENCE_OPERATOR&&login.address.toLowerCase()===env.FLURBO_EVIDENCE_OPERATOR.toLowerCase();
+        if(req.method==='GET')return send(res,200,{schema:'flurbo.evidence-beta.v1',operator,
+          model:env.FLURBO_EVIDENCE_MODEL||null,aiConfigured:env.FLURBO_EVIDENCE_FREE_TIER_CONFIRMED==='true'&&!!env.FLURBO_EVIDENCE_GEMINI_KEY,
+          events:publishedPilot.manifest.publication.draft.events.map(e=>({id:e.id,question:e.question}))});
+        if(req.method!=='POST')return send(res,405,{error:'Method not allowed'});
+        if(!operator)return send(res,403,{error:'Only the configured testnet operator may request source and model reads'});
+        const input=await body(req);
+        if(Object.keys(input).sort().join(',')!=='eventId,useAI'||typeof input.eventId!=='string'||typeof input.useAI!=='boolean')return send(res,400,{error:'Choose an event and whether to request AI assistance'});
+        return send(res,200,await assistant.review(input.eventId,input.useAI));
+      }
       if(url.pathname==='/api/practice-collections'){
         const login=await store.read(sid,origin);
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey'});

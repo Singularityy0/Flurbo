@@ -24,7 +24,7 @@ const security = {
 export function productionServer(config, store, staticRoot = dist) {
   const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
     learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
-    learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, rehearsal: config.rehearsal, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence });
+    learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, rehearsal: config.rehearsal, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions });
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
     // Liveness only. This deliberately does not claim contracts or RPC are ready.
@@ -45,12 +45,15 @@ export function productionServer(config, store, staticRoot = dist) {
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405); res.end(); return; }
       try {
         const pathname = new URL(req.url, config.origin).pathname;
-        const page = ['/', '/markets', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal'].includes(pathname);
-        if (!page && !/^\/(?:assets\/[a-zA-Z0-9_.-]+|favicon\.svg|robots\.txt)$/.test(pathname)) { res.writeHead(404); res.end('Not found'); return; }
-        const file = resolve(staticRoot, page ? 'index.html' : pathname.slice(1));
+        const page = ['/', '/markets', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal', '/evidence'].includes(pathname);
+        const labPage=['/privacy-lab','/privacy-lab/'].includes(pathname);
+        const labAsset=/^\/privacy-lab\/(?:assets\/[a-zA-Z0-9_.-]+|semaphore-8\.(?:wasm|zkey))$/.test(pathname);
+        if(labPage||labAsset)res.setHeader('Content-Security-Policy',security['Content-Security-Policy'].replace("script-src 'self'","script-src 'self' 'wasm-unsafe-eval'")+"; worker-src 'self' blob:");
+        if (!page && !labPage && !labAsset && !/^\/(?:assets\/[a-zA-Z0-9_.-]+|favicon\.svg|robots\.txt)$/.test(pathname)) { res.writeHead(404); res.end('Not found'); return; }
+        const file = resolve(staticRoot, page ? 'index.html' : labPage ? 'privacy-lab/index.html' : pathname.slice(1));
         if (!(await stat(file)).isFile()) throw new Error('Not a file');
-        const type = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff', '.txt': 'text/plain' }[extname(file)] || 'application/octet-stream';
-        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': page ? 'no-store' : 'public, max-age=31536000, immutable' });
+        const type = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff', '.txt': 'text/plain', '.wasm':'application/wasm', '.zkey':'application/octet-stream' }[extname(file)] || 'application/octet-stream';
+        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': page || labPage || labAsset && !pathname.includes('/assets/') ? 'no-store' : 'public, max-age=31536000, immutable' });
         res.end(req.method === 'HEAD' ? undefined : await readFile(file));
       } catch { if (!res.headersSent) res.writeHead(404); res.end('Not found'); }
     });
