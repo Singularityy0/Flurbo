@@ -16,6 +16,7 @@ test('featured markets and archive holdings route to different pools, including 
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
       if(path==='/api/account/wallets')return route.fulfill({json:{account:owner,wallets:[owner]}});
+      if(path==='/api/account/access')return route.fulfill({json:{testingTools:true}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:namespace,collections:[
         {namespace:'rehearsal',label:'September practice',pool:oldPool,closesAt:f.manifest.publication.draft.closesAt},

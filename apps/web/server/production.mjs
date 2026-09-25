@@ -4,6 +4,8 @@ import { resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { localApi } from './local-api.mjs';
+import { cookieValue } from './session.mjs';
+import { isTestingOperator, testingPages } from './testing-access.mjs';
 import { hostedConfig } from './network.mjs';
 import { RedisSessionStore, redisCommand } from './redis-session.mjs';
 import { runComparison } from './learning-comparison.mjs';
@@ -23,7 +25,7 @@ const security = {
 
 export function productionServer(config, store, staticRoot = dist) {
   const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
-    learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
+    testingOperatorAccount:config.testingOperatorAccount, testFaucet:config.testFaucet, learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
     learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, rehearsal: config.rehearsal, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions });
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
@@ -45,7 +47,13 @@ export function productionServer(config, store, staticRoot = dist) {
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405); res.end(); return; }
       try {
         const pathname = new URL(req.url, config.origin).pathname;
-        const page = /^\/markets\/(?:rehearsal|pilot|practice-[0-9a-f]{40})\/[0-3]$/.test(pathname) || ['/', '/markets', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal', '/evidence'].includes(pathname);
+        const operatorPage = testingPages.has(pathname) || pathname === '/privacy-lab' || pathname.startsWith('/privacy-lab/');
+        if (operatorPage) {
+          const session = await store.read(cookieValue(req.headers.cookie, 'flurbo_tools'), config.origin);
+          res.setHeader('Cache-Control','no-store');
+          if (!isTestingOperator(session, config.testingOperatorAccount)) { res.writeHead(404); res.end('Not found'); return; }
+        }
+        const page = /^\/markets\/(?:rehearsal|pilot|practice-[0-9a-f]{40})\/[0-3]$/.test(pathname) || ['/', '/markets', '/fund', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal', '/evidence'].includes(pathname);
         const labPage=['/privacy-lab','/privacy-lab/'].includes(pathname);
         const labAsset=/^\/privacy-lab\/(?:assets\/[a-zA-Z0-9_.-]+|semaphore-8\.(?:wasm|zkey))$/.test(pathname);
         if(labPage||labAsset)res.setHeader('Content-Security-Policy',security['Content-Security-Policy'].replace("script-src 'self'","script-src 'self' 'wasm-unsafe-eval'")+"; worker-src 'self' blob:");
@@ -53,7 +61,7 @@ export function productionServer(config, store, staticRoot = dist) {
         const file = resolve(staticRoot, page ? 'index.html' : labPage ? 'privacy-lab/index.html' : pathname.slice(1));
         if (!(await stat(file)).isFile()) throw new Error('Not a file');
         const type = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff', '.txt': 'text/plain', '.wasm':'application/wasm', '.zkey':'application/octet-stream' }[extname(file)] || 'application/octet-stream';
-        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': page || labPage || labAsset && !pathname.includes('/assets/') ? 'no-store' : 'public, max-age=31536000, immutable' });
+        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': operatorPage || page || labPage || labAsset && !pathname.includes('/assets/') ? 'no-store' : 'public, max-age=31536000, immutable' });
         res.end(req.method === 'HEAD' ? undefined : await readFile(file));
       } catch { if (!res.headersSent) res.writeHead(404); res.end('Not found'); }
     });

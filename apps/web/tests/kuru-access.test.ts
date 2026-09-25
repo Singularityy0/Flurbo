@@ -15,7 +15,7 @@ const action: Action = { kind: 'deposit', asset: 'cash', amount: '1', price: '0.
 test('hosted Kuru reads require login and Mera raw submission is disabled', async () => {
   const origin = 'https://flurbo.singu.online', signer = privateKeyToAccount(('0x' + '11'.repeat(32)) as `0x${string}`);
   const store = { read: async (id: string) => id === 'fixture' ? { address: signer.address.toLowerCase(), method: 'passkey' } : null };
-  const server = productionServer({ origin, rpcUrl: TESTNET.rpc, learningDashboardUrl: 'http://127.0.0.1:18768' }, store);
+  const server = productionServer({ testingOperatorAccount:signer.address.toLowerCase(), origin, rpcUrl: TESTNET.rpc, learningDashboardUrl: 'http://127.0.0.1:18768' }, store);
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = (server.address() as { port: number }).port;
   const original = globalThis.fetch; let writes = 0;

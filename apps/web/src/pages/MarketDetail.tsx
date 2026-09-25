@@ -35,7 +35,7 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
   },[namespace,event,owner,attempt,auth.address]);
   const question=state?.manifest.publication.draft.events[event],view=state&&question?settlementView(state,event):null;
   return <main id="main" tabIndex={-1} className="markets-page market-detail">
-    <Link href="/markets" className="text-link">← All markets</Link>
+    <div className="detail-section-heading"><Link href="/markets" className="text-link">← All markets</Link><Link href="/fund" className="button button-outline">Get test funds</Link></div>
     {error&&<p role="alert">{error}</p>}
     {!state&&!error&&<p role="status">Loading this market...</p>}
     {state&&!question&&<h1>Market not found</h1>}

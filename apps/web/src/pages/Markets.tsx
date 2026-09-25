@@ -8,7 +8,7 @@ import { pilotRequest, readPilotPending, isPracticeNamespace, type PilotState, t
 import { loadPracticeCollections, type PracticeCatalog } from '../practice-collections';
 import MarketDetail from './MarketDetail';
 import {marketHref} from '../market-detail';
-import Funding from './Funding';
+import {useTestingAccess} from '../auth/testing-access';
 import WhatIf from './WhatIf';
 import { readCheckout } from '../checkout';
 import './workspace.css';
@@ -27,6 +27,7 @@ export default function Markets(){
 }
 function CollectionMarkets({collections,namespace}:{collections:PracticeCatalog;namespace:PilotNamespace}){
   const {controller,state:auth}=useAuth();
+  const testingAccess=useTestingAccess();
   const [location,navigate]=useLocation(),browse=location==='/markets';
   const [catalog,setCatalog]=useState<Catalog|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false);
   const [query,setQuery]=useState(''),[selected,setSelected]=useState<{event:number;yes:boolean}|null>(null);
@@ -51,7 +52,7 @@ function CollectionMarkets({collections,namespace}:{collections:PracticeCatalog;
     <div className="market-topline"><span className="market-badge">Practice on Monad testnet</span><details className="market-account"><summary>Your account</summary><div>
       <p>Signed in with Mera. Use MetaMask to fund your wallet and trade.</p><p className="market-address">{auth.address}</p>
 
-      <Funding/><button className="text-link" onClick={()=>void controller.signOut()}>Sign out</button>
+      <p><Link href="/fund">Get test funds</Link></p><button className="text-link" onClick={()=>void controller.signOut()}>Sign out</button>
     </div></details></div>
     <header className="market-heading"><span className="eyebrow">{browse?'A little curiosity goes a long way':'Your Flurbo'}</span><h1>{browse?<>What happens <em>next?</em></>:location==='/portfolio'?<>Your <em>portfolio.</em></>:<>Your <em>history.</em></>}</h1><p>{browse?'Pick a question. Choose Yes or No. Put your view to the test.':'Your trades and holdings, all in one place.'}</p></header>
     {browse?<>
@@ -74,9 +75,9 @@ function CollectionMarkets({collections,namespace}:{collections:PracticeCatalog;
       {selected&&<p className="market-resume"><Link href={marketHref(namespace,selected.event,selected.yes)}>Continue your saved prediction →</Link></p>}
     </>:<>
       <details className="market-archive"><summary>Choose a market collection</summary><label htmlFor="market-collection">Collection</label><select id="market-collection" value={archive} onChange={e=>{setArchive(e.target.value);try{sessionStorage.setItem("flurbo.trading.market",e.target.value);}catch{}}}>{collections.collections.map(row=><option key={row.namespace} value={row.namespace}>{row.label}</option>)}<option value="pilot">Earlier real-event markets</option><option value="original">Earlier demo markets</option><option value="learning">Learning experiment</option></select></details>
-      {isPracticeNamespace(archive)&&<p><Link href={'/rehearsal?collection='+archive}>Settlement and redemption for this collection</Link></p>}
+      {testingAccess&&isPracticeNamespace(archive)&&<p><Link href={'/rehearsal?collection='+archive}>Settlement and redemption for this collection</Link></p>}
       {auth.address&&<AccountPortfolio key={auth.address+archive+location} account={auth.address} namespace={archive} history={location==='/history'}/>}
     </>}
-    <footer className="market-footer"><span>One pool. More possibilities.</span><details><summary>Testing tools</summary><a href="/privacy-lab/">Privacy proof lab</a><Link href={'/rehearsal?collection='+namespace}>Settlement and combined predictions</Link><Link href="/events">Earlier real-event pool</Link><Link href="/kuru">Kuru trading</Link><Link href="/account">Research workspace</Link></details></footer>
+    <footer className="market-footer"><span>One pool. More possibilities.</span>{testingAccess&&<details><summary>Testing tools</summary><a href="/privacy-lab/">Privacy proof lab</a><Link href={'/rehearsal?collection='+namespace}>Settlement and combined predictions</Link><Link href="/events">Earlier real-event pool</Link><Link href="/kuru">Kuru trading</Link><Link href="/account">Research workspace</Link></details>}</footer>
   </main>;
 }

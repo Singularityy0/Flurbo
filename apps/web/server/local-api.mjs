@@ -4,10 +4,11 @@ import { learningDeployment } from '../shared/learning-contracts.mjs';
 import { evidenceAssistant } from './evidence-assistant.mjs';
 import { priceHistory } from './price-history.mjs';
 import { walletLinks } from './wallet-links.mjs';
+import { isTestingOperator, DEFAULT_TESTING_OPERATOR } from './testing-access.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
-  learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {} } = {}) {
+  testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {} } = {}) {
   const hosted = publicOrigin !== null;
   const links = walletLinks({command:store.command});
   const priceArchives=new WeakMap();
@@ -17,6 +18,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
   let minute = 0, requests = 0;
   const send = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(body)); };
   const cookie = (name, value, age) => `${name}=${value}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=${age}${hosted ? '; Secure' : ''}`;
+  const toolsCookie = (session, sid) => cookie('flurbo_tools', isTestingOperator(session, testingOperatorAccount) ? sid : '', isTestingOperator(session, testingOperatorAccount) ? Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000)) : 0).replace('Path=/api;', 'Path=/;');
   async function body(req) {
     if (req.headers['content-type'] !== 'application/json') throw new Error('JSON required');
     let text = '';
@@ -36,7 +38,18 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (current !== minute) { minute = current; requests = 0; }
         if (++requests > 600) { res.setHeader('Retry-After', '60'); return send(res, 429, { error: 'Service busy. Retry shortly.' }); }
       }
-      if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? TESTNET : { environment: 'local_fork', chain_id: 10143 });
+      if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? {...TESTNET, faucet:testFaucet || TESTNET.faucet, flurboFaucet:!!testFaucet} : { environment: 'local_fork', chain_id: 10143 });
+      if (url.pathname === '/api/account/access' && req.method === 'GET') {
+        const login = await store.read(sid, origin);
+        if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
+        res.setHeader('Set-Cookie', toolsCookie(login, sid));
+        return send(res, 200, {testingTools:isTestingOperator(login, testingOperatorAccount)});
+      }
+      if (url.pathname === '/api/evidence-beta' || url.pathname.startsWith('/api/learning/') || ['/api/kuru','/api/kuru-scan'].includes(url.pathname)) {
+        const login = await store.read(sid, origin);
+        if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
+        if (!isTestingOperator(login, testingOperatorAccount)) return send(res, 403, {error:'Testing tools are restricted to the operator.'});
+      }
       if (url.pathname.startsWith('/api/account/wallets')) {
         const login=await store.read(sid,origin);
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
@@ -110,7 +123,11 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           try {if(!pilot.analytics)throw new Error('Unavailable');return send(res,200,await pilot.analytics(input));}
           catch {return send(res,503,{error:'This comparison is temporarily unavailable. Try again shortly. Trading is separate.'});}
         }
-        if(req.method==='POST' && url.pathname==='/api/pilot/prepare') return send(res,200,await pilot.prepare(await body(req)));
+        if(req.method==='POST' && url.pathname==='/api/pilot/prepare') {
+          const input = await body(req);
+          if (!['buy','sell','redeem'].includes(input?.action) && !isTestingOperator(login, testingOperatorAccount)) return send(res,403,{error:'Testing tools are restricted to the operator.'});
+          return send(res,200,await pilot.prepare(input));
+        }
         if(req.method==='POST' && url.pathname==='/api/pilot/position') {
           const input=await body(req); return send(res,200,await pilot.position(input.owner,input.scope,input.mask));
         }
@@ -128,6 +145,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           }
         }
         if(req.method==='POST' && url.pathname==='/api/pilot/evidence') {
+          if (!isTestingOperator(login, testingOperatorAccount)) return send(res,403,{error:'Testing tools are restricted to the operator.'});
           if(!evidence) return send(res,503,{error:'Evidence storage unavailable'});
           const input=await body(req);
           if(!pilot.manifest.publication.draft.events.some(e=>e.id===input.eventId)) return send(res,400,{error:'Unknown pilot event'});
@@ -170,7 +188,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
       }
       if (hosted && url.pathname === '/api/local-wallet-setup') return send(res, 404, { error: 'Local funding is not available on public Monad testnet' });
       if (url.pathname.startsWith('/api/auth/')) {
-        if (req.method === 'GET' && url.pathname === '/api/auth/session') return send(res, 200, { session: await store.read(sid, origin) });
+        if (req.method === 'GET' && url.pathname === '/api/auth/session') { const session = await store.read(sid, origin); res.setHeader('Set-Cookie', toolsCookie(session, sid)); return send(res, 200, {session}); }
         if (req.method !== 'POST') return send(res, 405, { error: 'Method unavailable' });
         if (url.pathname === '/api/auth/challenge') {
           const input = await body(req);
@@ -183,12 +201,12 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           const input = await body(req);
           const session = await store.verify(cookieValue(req.headers.cookie, 'flurbo_challenge'), input.signature, origin);
           await store.revoke(sid);
-          res.setHeader('Set-Cookie', [cookie('flurbo_session', session.sessionId, LOGIN_MS / 1000), cookie('flurbo_challenge', '', 0)]);
+          res.setHeader('Set-Cookie', [cookie('flurbo_session', session.sessionId, LOGIN_MS / 1000), cookie('flurbo_challenge', '', 0), toolsCookie(session, session.sessionId)]);
           return send(res, 200, { session: { address: session.address, expiresAt: session.expiresAt, method: session.method } });
         }
         if (url.pathname === '/api/auth/logout') {
           await store.revoke(sid);
-          res.setHeader('Set-Cookie', [cookie('flurbo_session', '', 0), cookie('flurbo_challenge', '', 0)]);
+          res.setHeader('Set-Cookie', [cookie('flurbo_session', '', 0), cookie('flurbo_challenge', '', 0), toolsCookie(null, '')]);
           return send(res, 200, { session: null });
         }
         return send(res, 404, { error: 'Unknown account endpoint' });

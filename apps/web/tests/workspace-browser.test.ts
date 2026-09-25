@@ -16,6 +16,7 @@ test('activity panels remain unique across repeated navigation and session resto
     page.on('pageerror', (error: Error) => errors.push(error.message));
     await page.route('**/*', async (route: any) => {
       const path = new URL(route.request().url()).pathname;
+      if(path==='/api/account/access')return route.fulfill({json:{testingTools:true}});
       if (path === '/api/auth/session') return route.fulfill({ json: { session: {
         address: '0x2ff9ca4cb64fa82915144e8d9cf6a6ceddaa35e3', method: 'passkey', expiresAt: Date.now() + 3600000,
       } } });
@@ -71,6 +72,7 @@ test('portfolio and history deep links restore auth, show full discovered claims
       const url = new URL(route.request().url()), path = url.pathname;
       if (path === '/api/practice-collections') return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'Practice markets',pool:'0x'+'22'.repeat(20),closesAt:1900000000}]}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:account,wallets:[account]}});
+      if(path==='/api/account/access')return route.fulfill({json:{testingTools:true}});
       if (path === '/api/auth/session') return route.fulfill({ json: { session: signedIn ? { address: account, method: 'passkey', expiresAt: Date.now() + 3600000 } : null } });
       if (path.startsWith('/api/') && path.endsWith('/portfolio')) {
         requests++;

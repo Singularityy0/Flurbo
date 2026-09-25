@@ -16,7 +16,8 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
       const callbacks=new Map<string,Set<()=>void>>();
       (window as any).ethereum={isMetaMask:true,isPhantom:true,request:()=>{throw Error('Phantom must never be used');}};
       const metamask={on:(n:string,fn:()=>void)=>{if(!callbacks.has(n))callbacks.set(n,new Set());callbacks.get(n)!.add(fn);},removeListener:(n:string,fn:()=>void)=>callbacks.get(n)?.delete(fn),request:async({method,params}:any)=>{
-        if(method==='eth_chainId')return '0x279f';
+        if(method==='eth_chainId')return sessionStorage.getItem('chain')||'0x1';
+        if(method==='wallet_switchEthereumChain'){sessionStorage.setItem('chain','0x279f');callbacks.get('chainChanged')?.forEach(fn=>fn());return null;}
         if(['eth_accounts','eth_requestAccounts'].includes(method))return [owner];
         if(method==='eth_getBlockByNumber')return {hash,number:'0x64'};
         if(method==='eth_call')return '0x';
@@ -25,30 +26,50 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
           if(sessionStorage.getItem('change'))callbacks.get('accountsChanged')?.forEach(fn=>fn());
           return '0x186a0';
         }
-        if(method==='eth_sendTransaction'){sessionStorage.setItem('funding.tx',JSON.stringify(params[0]));return hash;}
+        if(method==='eth_sendTransaction'){if(sessionStorage.getItem('reject'))throw {code:4001};sessionStorage.setItem('funding.tx',JSON.stringify(params[0]));return hash;}
         throw Error(method);
       }};
       window.addEventListener('eip6963:requestProvider',()=>window.dispatchEvent(new CustomEvent('eip6963:announceProvider',{detail:{info:{name:'MetaMask',rdns:'io.metamask'},provider:metamask}})));
     },{owner,hash});
+    let mon='0xde0b6b3a7640000',stock='0x3b9aca00',receipt:any=null;
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
+      if(path==='/api/network')return route.fulfill({json:{...TESTNET,flurboFaucet:true}});
+      if(path==='/api/account/access')return route.fulfill({json:{testingTools:false}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'Practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/rehearsal/markets')return route.fulfill({json:await f.service.markets()});
-      if(path==='/api/rpc')return route.fulfill({json:{result:{hash,number:'0x64'}}});
+      if(path==='/api/rpc'){
+        const {method,params}=route.request().postDataJSON();
+        let result:any=method==='eth_getBlockByNumber'?{hash,number:'0x64'}:method==='eth_getBalance'?mon:method==='eth_getTransactionReceipt'?receipt:'0x0';
+        if(method==='eth_call'&&params[0].data.startsWith('0x70a08231'))result=params[0].data.endsWith(TESTNET.faucet.slice(2))?stock:'0x2faf080';
+        return route.fulfill({json:{result}});
+      }
       if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unavailable'}});
       const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':'text/html'});
     });
     async function openFunding(){
-      await page.goto('https://flurbo.singu.online/markets');
-      await page.getByText('Your account',{exact:true}).click();
-      await page.getByText('Fund MetaMask on Monad testnet',{exact:true}).click();
+      await page.goto('https://flurbo.singu.online/fund');
       await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
       await page.getByRole('button',{name:'Reconnect MetaMask',exact:true}).waitFor();
     }
     await openFunding();
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('chain')),'0x279f');
+    mon='0x0';
+    await page.getByRole('button',{name:'Refresh balances'}).click();
+    await page.getByText('Get test MON first, then refresh balances.').waitFor();
+    assert.equal(await page.getByRole('button',{name:'Request test AUSD',exact:true}).isDisabled(),true);
+    mon='0xde0b6b3a7640000';stock='0x0';
+    await page.getByRole('button',{name:'Refresh balances'}).click();
+    await page.getByText('The test AUSD dispenser needs a refill. Please try again later.').waitFor();
+    assert.equal(await page.getByRole('button',{name:'Request test AUSD',exact:true}).isDisabled(),true);
+    stock='0x3b9aca00';await page.getByRole('button',{name:'Refresh balances'}).click();
+    await page.evaluate(()=>sessionStorage.setItem('reject','1'));
+    await page.getByRole('button',{name:'Request test AUSD',exact:true}).click();
+    await page.getByText('Request cancelled in MetaMask. No funding was confirmed.').waitFor();
+    await page.evaluate(()=>sessionStorage.removeItem('reject'));
     await page.evaluate(()=>sessionStorage.setItem('change','1'));
     await page.getByRole('button',{name:'Request test AUSD',exact:true}).click();
     await page.getByRole('button',{name:'Connect MetaMask',exact:true}).waitFor();
@@ -56,10 +77,28 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
     await page.evaluate(()=>sessionStorage.removeItem('change'));
     await openFunding();
     await page.getByRole('button',{name:'Request test AUSD',exact:true}).click();
-    await page.getByText('View faucet transaction',{exact:true}).waitFor();
+    await page.getByRole('link',{name:'View faucet transaction'}).waitFor();
     const tx=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('funding.tx')!));
     assert.equal(tx.from,owner);assert.notEqual(tx.from,login);
     assert.equal(tx.to,TESTNET.faucet);assert.equal(tx.data,TESTNET.faucetSelector+owner.slice(2).padStart(64,'0'));
     assert.equal(await page.getByRole('button',{name:'Request test AUSD',exact:true}).isDisabled(),true);
+    await page.reload();
+    await page.getByRole('link',{name:'View faucet transaction'}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Request test AUSD',exact:true}).isDisabled(),true);
+    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
+    await page.getByRole('button',{name:'Reconnect MetaMask',exact:true}).waitFor();
+    receipt={transactionHash:hash,to:TESTNET.faucet,from:owner,status:'0x1'};
+    await page.getByRole('button',{name:'Check status',exact:true}).click();
+    await page.getByText('Test AUSD request confirmed. You can return to the markets.').waitFor();
+    assert.equal(await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('flurbo.faucet.pending')).length),0);
+    await page.screenshot({path:'../../tmp/funding-desktop.png',fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    await page.screenshot({path:'../../tmp/funding-mobile.png',fullPage:true});
+    await page.goto('https://flurbo.singu.online/markets');
+    await page.getByRole('heading',{name:'Explore markets'}).waitFor();
+    assert.equal(await page.getByText('Testing tools',{exact:true}).count(),0);
+    await page.goto('https://flurbo.singu.online/rehearsal');
+    await page.getByRole('heading',{name:'Operator access only'}).waitFor();
   } finally {await browser.close();}
 });

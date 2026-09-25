@@ -29,6 +29,7 @@ test('What-if stays read-only, replaces pending pairs, expires snapshots and fit
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/account/access')return route.fulfill({json:{testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600_000}}});
       if(path==='/api/rehearsal/markets')return route.fulfill({json:await f.service.markets()});
       if(path==='/api/rehearsal/analytics'){

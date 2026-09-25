@@ -54,7 +54,7 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
   await writeFile(join(directory,'index.html'),'<html>Flurbo</html>');
   const store = new SessionStore();
   const learningReport = {schema:'flurbo.learning-comparison.v1',input:'synthetic',changesExecutablePrices:false};
-  const config = {origin,rpcUrl:TESTNET.rpc,learningReport: learningReport as typeof learningReport | null, learningStatus: 'starting', androidAssetLinks: null as object[] | null};
+  const config = {testingOperatorAccount:signer.address.toLowerCase(),origin,rpcUrl:TESTNET.rpc,learningReport: learningReport as typeof learningReport | null, learningStatus: 'starting', androidAssetLinks: null as object[] | null};
   const server = productionServer(config,store,directory);
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const port = (server.address() as {port:number}).port;
@@ -82,10 +82,10 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     assert.equal(association.headers['content-type'],'application/json'); assert.equal(association.headers.location,undefined);
     assert.equal((await request('/.well-known/assetlinks.json',undefined,'','evil.example')).status,421);
     assert.equal((await request('/.well-known/assetlinks.json',{})).status,405);
-    assert.equal((await request('/account')).status,200); // Client route waits for verified auth.
+    assert.equal((await request('/account')).status,404); // Client route waits for verified auth.
     assert.equal((await request('/portfolio')).status,200);
     assert.equal((await request('/history')).status,200);
-    assert.equal((await request('/rehearsal')).status,200);
+    assert.equal((await request('/rehearsal')).status,404);
     assert.equal((await request('/markets')).status,200);
     assert.equal((await request('/markets/rehearsal/1')).status,200);
     assert.equal((await request('/markets/practice-'+'12'.repeat(20)+'/0')).status,200);
@@ -118,7 +118,7 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     config.learningReport = null;
     assert.equal((await request('/api/learning/comparison',undefined,cookie)).status,503);
     assert.equal((await request('/healthz')).json().learning_comparison,'starting');
-    assert.equal((await request('/account')).status,200);
+    assert.equal((await request('/account')).status,404);
     config.learningReport = learningReport;
     assert.equal((await request('/api/learning/comparison?command=replay',undefined,cookie)).status,400);
     assert.equal((await request('/api/learning/comparison',{command:'replay'},cookie)).status,405);

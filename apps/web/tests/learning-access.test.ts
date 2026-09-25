@@ -18,7 +18,7 @@ test('learning status requires Mera login and proposal preparation requires the 
   const adminCookie = await login(admin), visitorCookie = await login(visitor);
   let reads = 0, preparations = 0;
   const server = productionServer({ origin, rpcUrl: 'https://testnet-rpc.monad.xyz',
-    learningOperatorAccount: admin.address.toLowerCase(), learningPool: {
+    testingOperatorAccount: admin.address.toLowerCase(), learningOperatorAccount: admin.address.toLowerCase(), learningPool: {
       async status() { reads++; return { schema: 'flurbo.learning-pool.v1' }; },
       async prepare() { preparations++; return { schema: 'flurbo.learning-review.v1' }; },
     } }, store);
@@ -36,7 +36,7 @@ test('learning status requires Mera login and proposal preparation requires the 
     assert.equal((await request('/api/learning/pool')).status, 401);
     assert.equal((await request('/api/learning/proposal', '', {})).status, 401);
     assert.equal(reads + preparations, 0);
-    assert.equal((await request('/api/learning/pool', visitorCookie)).body.operator, false);
+    assert.equal((await request('/api/learning/pool', visitorCookie)).status, 403);
     assert.equal((await request('/api/learning/proposal', visitorCookie, {})).status, 403);
     assert.equal((await request('/api/learning/proposal', visitorCookie, { address: admin.address })).status, 403);
     assert.equal((await request('/api/learning/pool', adminCookie)).body.operator, true);

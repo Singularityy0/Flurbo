@@ -8,6 +8,8 @@ import { useAuth } from "./auth/context";
 import Workspace from './pages/Workspace';
 import Markets from './pages/Markets';
 import EvidenceReview from './pages/EvidenceReview';
+import FundingPage from './pages/FundingPage';
+import {useTestingAccess} from './auth/testing-access';
 
 export const brand = "flurbo";
 
@@ -61,7 +63,7 @@ function Header() {
           }}>
           {isHome || !state.address ? <><a href="/#how-it-works">How it works</a>
           <a href="/#the-idea">The idea</a>
-          <a href="/#faq">FAQ</a></> : <><Link href="/markets">Markets</Link><Link href="/portfolio">Portfolio</Link><Link href="/history">History</Link></>}
+          <a href="/#faq">FAQ</a></> : <><Link href="/markets">Markets</Link><Link href="/portfolio">Portfolio</Link><Link href="/history">History</Link><Link href="/fund">Get test funds</Link></>}
           <span className="nav-rule" aria-hidden="true" />
           {state.address ? (isHome ? <Link href="/markets" className="nav-cta">Explore markets <ArrowUpRight size={15} strokeWidth={1.8} /></Link> : <Link href="/" className="nav-login">About Flurbo</Link>) : <>
             <Link href="/login" className="nav-login">Sign in</Link>
@@ -95,6 +97,7 @@ function AuthShell({ mode }: { mode: "login" | "signup" | "account" }) {
 }
 
 function AccountRoute() {
+  const testingAccess = useTestingAccess();
   const [location] = useLocation();
   const { controller, state } = useAuth();
   const [, navigate] = useLocation();
@@ -114,7 +117,7 @@ function AccountRoute() {
   // server-backed login has been restored. Remembered addresses are not login.
   return <AppShell>{state.restoring
     ? <main id="main" tabIndex={-1} className="auth-page"><p role="status">Checking your session...</p></main>
-    : authenticated ? (location==='/evidence'?<EvidenceReview/>:(location.startsWith('/markets/')||['/markets','/portfolio','/history'].includes(location)) ? <Markets /> : <Workspace />) : null}</AppShell>;
+    : authenticated ? (location==='/fund'?<FundingPage/>:['/account','/kuru','/events','/rehearsal','/evidence'].includes(location)&&!testingAccess?<main id="main" className="auth-page"><h1>Operator access only</h1><Link href="/markets">Back to markets</Link></main>:location==='/evidence'?<EvidenceReview/>:(location.startsWith('/markets/')||['/markets','/portfolio','/history'].includes(location)) ? <Markets /> : <Workspace />) : null}</AppShell>;
 }
 
 export default function App() {
@@ -124,6 +127,7 @@ export default function App() {
     document.title = location === "/login" ? "Sign in | flurbo"
       : location === "/signup" ? "Create an account | flurbo"
       : location.startsWith("/markets") ? "Markets | flurbo"
+      : location === "/fund" ? "Get test funds | flurbo"
       : location === "/account" ? "Your account | flurbo"
       : location === "/portfolio" ? "Your portfolio | flurbo"
       : location === "/history" ? "Your history | flurbo"
@@ -149,6 +153,7 @@ export default function App() {
       <Route path="/signup" component={() => <AuthShell mode="signup" />} />
       <Route path="/markets" component={AccountRoute} />
       <Route path="/markets/:collection/:event" component={AccountRoute} />
+      <Route path="/fund" component={AccountRoute} />
       <Route path="/account" component={AccountRoute} />
       <Route path="/portfolio" component={AccountRoute} />
       <Route path="/history" component={AccountRoute} />

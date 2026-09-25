@@ -71,7 +71,7 @@ test('live reports archive source, gate AI by durable quota and never expose sec
 test('evidence endpoint requires Mera login, configured operator and same origin before source/model requests',async()=>{
   const f=fixture(),operator='0x'+'33'.repeat(20);let calls=0;
   const store={command:f.command,read:async sid=>sid?{address:sid==='operator'?operator:'0x'+'44'.repeat(20),method:'passkey'}:null};
-  const server=productionServer({origin:'https://flurbo.singu.online',rpcUrl:'https://testnet-rpc.monad.xyz',pilot:{manifest:f.manifest},
+  const server=productionServer({testingOperatorAccount:operator,origin:'https://flurbo.singu.online',rpcUrl:'https://testnet-rpc.monad.xyz',pilot:{manifest:f.manifest},
     evidenceOptions:{env:{FLURBO_EVIDENCE_OPERATOR:operator},now:()=>time,fetcher:async()=>{calls++;return new Response(payload());}}},store);
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const port=server.address().port;
@@ -79,6 +79,6 @@ test('evidence endpoint requires Mera login, configured operator and same origin
     const req=httpRequest({host:'127.0.0.1',port,path:'/api/evidence-beta',method,headers:{Host:'flurbo.singu.online',Origin:origin,Cookie:sid?'flurbo_session='+sid:'','Content-Type':'application/json'}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode));});req.on('error',reject);req.end(method==='POST'?JSON.stringify({eventId:'geth',useAI:false}):undefined);
   });
   try{assert.equal(await request(''),401);assert.equal(await request('viewer'),403);assert.equal(await request('operator','POST','https://foreign.example'),403);assert.equal(calls,0);
-    assert.equal(await request('viewer','GET'),200);assert.equal(calls,0);assert.equal(await request('operator'),200);assert.equal(calls,1);
+    assert.equal(await request('viewer','GET'),403);assert.equal(calls,0);assert.equal(await request('operator'),200);assert.equal(calls,1);
   }finally{await new Promise(resolve=>server.close(resolve));}
 });

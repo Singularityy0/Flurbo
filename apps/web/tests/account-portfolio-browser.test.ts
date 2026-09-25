@@ -21,7 +21,7 @@ test('fresh devices see both linked wallets; market totals and sparse chart rema
         if(p==='/api/rehearsal/markets')return route.fulfill({json:await f.service.markets()});
         if(p==='/api/rehearsal/history')return route.fulfill({json:{complete:true,through:200,target:200,logs:[owner,second].map((trader,i)=>({hash,index:i,block:150+i,name:'Traded',args:{trader,scope:1,mask:'2',quantity:i?'3000000':'10000000',isBuy:true,collateralAmount:'1000000'}}))}});
         if(p==='/api/rehearsal/positions'){
-          const input=route.request().postDataJSON();return route.fulfill({json:{snapshot:{blockNumber:'200'},rows:input.claims.map((c:any)=>({...c,quantity:c.scope===1&&c.mask==='2'?(input.owner===owner?'10000000':'3000000'):'0',payoutAtoms:null}))}});
+          const input=route.request().postDataJSON();return route.fulfill({json:{snapshot:{blockNumber:'200'},rows:input.claims.map((c:any)=>({...c,quantity:c.scope===1&&c.mask==='2'?(input.owner===owner?'10000000':input.owner===second?'3000000':'0'):'0',payoutAtoms:null}))}});
         }
         if(p==='/api/rehearsal/price-history'){
           const end=Math.floor(Date.now()/1000);return route.fulfill({json:{pool:f.manifest.pool,sampling:'current',points:[end-3600,end-3300,end].map((timestamp,i)=>({timestamp,blockNumber:String(100+i),prices:[{event:0,yes:i===2?'740737':'512495',no:i===2?'278922':'512495'}]}))}});
@@ -30,10 +30,10 @@ test('fresh devices see both linked wallets; market totals and sparse chart rema
         const relative=p.startsWith('/assets/')?p.slice(1):'index.html';return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':'text/html'});
       });
       await page.goto('https://flurbo.singu.online/portfolio');
-      await page.getByRole('cell',{name:'10',exact:true}).waitFor();await page.getByRole('cell',{name:'3',exact:true}).waitFor();
+      await page.getByRole('cell',{name:'13',exact:true}).waitFor();
       assert.equal(await page.getByRole('textbox',{name:'Wallet to view'}).isVisible(),false);
       assert.equal(await page.evaluate((a:string)=>sessionStorage.getItem('flurbo.metamask-wallet:'+a),login),null); // No local wallet preference is required.
-      await page.reload();await page.getByRole('cell',{name:'10',exact:true}).waitFor();await page.getByRole('cell',{name:'3',exact:true}).waitFor();
+      await page.reload();await page.getByRole('cell',{name:'13',exact:true}).waitFor();
       await page.goto('https://flurbo.singu.online/history');await page.getByText('Bought',{exact:true}).first().waitFor();assert.equal(await page.getByText('Bought',{exact:true}).count(),2);
       await page.goto('https://flurbo.singu.online/markets/rehearsal/0');await page.getByText('13 shares',{exact:true}).waitFor();
       const chart=page.getByRole('region',{name:'Price history',exact:true});await chart.getByRole('img').waitFor();

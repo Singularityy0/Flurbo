@@ -15,5 +15,8 @@ export function hostedConfig(env = process.env) {
       !['testnet-rpc.monad.xyz', 'monad-testnet.g.alchemy.com'].includes(rpc.hostname)) throw new Error('Unsupported public testnet RPC');
   const port = Number(env.PORT || 3000);
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid server port');
-  return { origin: env.FLURBO_ORIGIN, rpcUrl: rpc.href, port };
+  const testFaucet = env.FLURBO_TEST_AUSD_FAUCET?.toLowerCase() || null;
+  const testingOperatorAccount = env.FLURBO_TESTING_OPERATOR_ACCOUNT?.toLowerCase();
+  for (const address of [testFaucet, testingOperatorAccount]) if (address && (!/^0x[0-9a-f]{40}$/.test(address) || /^0x0{40}$/.test(address))) throw Error('Invalid faucet or testing operator address');
+  return { origin: env.FLURBO_ORIGIN, rpcUrl: rpc.href, port, testFaucet, testingOperatorAccount };
 }

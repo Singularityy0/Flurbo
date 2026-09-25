@@ -1,0 +1,12 @@
+.funding-page {max-width:900px}
+.funding-card {border:1px solid #d4d8cc;border-radius:24px;background:#faf9f5;padding:32px;display:grid;gap:24px}
+.funding-card h2,.funding-card p {margin:0}
+.funding-card section {display:grid;gap:14px;border-top:1px solid #d4d8cc;padding-top:24px}
+.funding-card .funding-actions {display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.funding-card .funding-address {overflow-wrap:anywhere;font-size:14px}
+.funding-balances {display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.funding-balances div {background:#edf0e4;border-radius:12px;padding:18px;display:grid;gap:6px}
+.funding-balances strong {font-size:24px}
+.funding-card [role=status] {background:#edf0e4;border-radius:12px;padding:16px;overflow-wrap:anywhere}
+.funding-card .button {width:fit-content;max-width:100%;white-space:normal;text-align:center}
+@media(max-width:550px){.funding-card{padding:20px}.funding-balances{grid-template-columns:1fr}.funding-card .button{min-height:44px}}

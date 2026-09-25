@@ -36,6 +36,7 @@ test('Kuru deep link, wallet review, reload recovery and responsive layout work 
     await page.route('**/*', async (route: any) => {
       const path = new URL(route.request().url()).pathname;
       if(path==='/api/account/wallets')return route.fulfill({json:{account:account,wallets:[account]}});
+      if(path==='/api/account/access')return route.fulfill({json:{testingTools:true}});
       if (path === '/api/auth/session') return route.fulfill({ json: { session: loggedIn ? { address: account, method: 'passkey', expiresAt: Date.now() + 3600000 } : null } });
       if (path === '/api/kuru') { reads++; return route.fulfill({ json: { environment: 'public_testnet', chain_id: 10143, contracts, trading_available: true,
         snapshot: { block_number: 100, block_hash: block, timestamp: Math.floor(Date.now() / 1000), stale: false },
