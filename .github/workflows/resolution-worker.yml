@@ -1,0 +1,41 @@
+name: Testnet resolution worker
+on:
+  schedule:
+    - cron: '4-59/5 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: testnet-resolution-worker
+  cancel-in-progress: false
+jobs:
+  resolve:
+    if: vars.FLURBO_RESOLUTION_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci --omit=dev --ignore-scripts
+        working-directory: apps/web
+      - name: Reconcile or advance one resolver transaction
+        run: node apps/web/scripts/run-resolution.mjs
+        env:
+          FLURBO_RESOLUTION_EXECUTE: ${{ vars.FLURBO_RESOLUTION_EXECUTE }}
+          FLURBO_RESOLUTION_POOL: ${{ vars.FLURBO_RESOLUTION_POOL }}
+          FLURBO_RESOLUTION_RULES_HASH: ${{ vars.FLURBO_RESOLUTION_RULES_HASH }}
+          FLURBO_RESOLUTION_SIGNER_ADDRESS: ${{ vars.FLURBO_RESOLUTION_SIGNER_ADDRESS }}
+          FLURBO_RESOLUTION_MANIFEST_JSON: ${{ secrets.FLURBO_RESOLUTION_MANIFEST_JSON }}
+          FLURBO_RESOLUTION_PRIVATE_KEY: ${{ secrets.FLURBO_RESOLUTION_PRIVATE_KEY }}
+          FLURBO_ALCHEMY_TESTNET_RPC_URL: ${{ secrets.FLURBO_ALCHEMY_TESTNET_RPC_URL }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          FLURBO_EVIDENCE_GEMINI_KEY: ${{ secrets.FLURBO_EVIDENCE_GEMINI_KEY }}
+          FLURBO_EVIDENCE_MODEL: ${{ vars.FLURBO_EVIDENCE_MODEL }}
+          FLURBO_EVIDENCE_FREE_TIER_CONFIRMED: ${{ vars.FLURBO_EVIDENCE_FREE_TIER_CONFIRMED }}
