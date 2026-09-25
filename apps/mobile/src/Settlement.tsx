@@ -9,7 +9,7 @@ import { Button, Card, Choice, Copy, External, Field, Heading, Notice, Title } f
 
 export function Settlement({ namespace, kind }: { namespace: PilotNamespace; kind: WalletKind }) {
   const login = useSyncExternalStore(auth.subscribe, auth.getSnapshot), wallet = useSyncExternalStore(externalWallet.subscribe, externalWallet.getSnapshot), pending = useSyncExternalStore(transactions.subscribe, transactions.getSnapshot);
-  const owner = kind === 'mera' ? login.address : wallet.address;
+  const owner = wallet.address;
   const state = useRequest<PilotState>(), review = useRequest<PilotReview>(), evidence = useRequest<{ hash: string; uri: string }>();
   const [event, setEvent] = useState(0), [outcome, setOutcome] = useState('2'), [statement, setStatement] = useState(''), [source, setSource] = useState(''), [attachment, setAttachment] = useState(''), [error, setError] = useState('');
   const refresh = () => void state.run(signal => pilotRequest('status' + (owner ? '?wallet=' + owner : ''), undefined, namespace, signal), true);

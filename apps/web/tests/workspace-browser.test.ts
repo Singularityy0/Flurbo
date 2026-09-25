@@ -63,11 +63,13 @@ test('portfolio and history deep links restore auth, show full discovered claims
   const account = '0x2ff9ca4cb64fa82915144e8d9cf6a6ceddaa35e3', other = '0x' + '11'.repeat(20);
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    await page.addInitScript((account:string)=>sessionStorage.setItem('flurbo.view-wallet:'+account,account),account);
     let signedIn = true, indexing = true, requests = 0, interrupted = false, unavailable = false;
     const errors: string[] = [];
     page.on('pageerror', (e: Error) => errors.push(e.message));
     await page.route('**/*', async (route: any) => {
       const url = new URL(route.request().url()), path = url.pathname;
+      if (path === '/api/practice-collections') return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'Practice markets',pool:'0x'+'22'.repeat(20),closesAt:1900000000}]}});
       if (path === '/api/auth/session') return route.fulfill({ json: { session: signedIn ? { address: account, method: 'passkey', expiresAt: Date.now() + 3600000 } : null } });
       if (path.startsWith('/api/') && path.endsWith('/portfolio')) {
         requests++;
@@ -131,7 +133,7 @@ test('portfolio and history deep links restore auth, show full discovered claims
     await page.getByText('No pool activity yet.').waitFor();
     await page.getByRole('link', { name: 'Portfolio', exact: true }).click();
     await page.getByText('No open positions here.').waitFor();
-    await page.getByRole('button', { name: 'Use Mera wallet', exact: true }).click();
+    await page.getByLabel('Wallet to view').fill(account);await page.getByRole('button', { name: 'View wallet', exact: true }).click();
     await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

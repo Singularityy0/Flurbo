@@ -27,13 +27,13 @@ export const transactions = {
     const login = auth.getSnapshot().address;
     if (!login) throw new Error('Sign in before trading.');
     auth.checkExpiry();
-    if (kind === 'mera' && !auth.getSnapshot().signingExpiresAt) throw new Error('Unlock Mera signing in Wallet, then confirm this action.');
-    const owner = kind === 'mera' ? login : externalWallet.getSnapshot().address;
+    if (kind !== 'metamask') throw new Error('Use MetaMask for transactions.');
+    const owner = externalWallet.getSnapshot().address;
     if (owner?.toLowerCase() !== review.requested.owner.toLowerCase()) throw new Error('Trading wallet changed. Review again.');
     const release = lockOperation();
     update({ busy: true, namespace, notice: 'Checking this exact transaction before confirmation...' });
     try {
-      const current = () => reviewed() && auth.getSnapshot().address === login && (kind === 'mera' ? auth.getSnapshot().address : externalWallet.getSnapshot().address) === owner;
+      const current = () => reviewed() && auth.getSnapshot().address === login && externalWallet.getSnapshot().address === owner;
       await submitPilot(tradingProvider(kind, namespace), review, login, save, current);
       await storage.flush();
       update({ notice: 'Submitted. Check confirmation before placing another trade.' });

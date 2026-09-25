@@ -13,6 +13,7 @@ from learning_lab import CHAIN, LearningLab, LocalRpc
 from rehearse_learning_update import ROOT, run
 
 STATIC = {"/": ("learning.html", "text/html"), "/styles.css": ("styles.css", "text/css"),
+          "/metamask.mjs": ("metamask.mjs", "text/javascript"),
           "/learning.css": ("learning.css", "text/css"),
           "/learning-app.mjs": ("learning-app.mjs", "text/javascript"),
           "/learning-wallet.mjs": ("learning-wallet.mjs", "text/javascript")}

@@ -1,4 +1,5 @@
 declare module '*.mjs' {
+  export function isMetaMask(provider: unknown, info?: {rdns?: string}): boolean;
   export function supportedDeployment(state: unknown): boolean;
   export const TESTNET: { environment: string; chain_id: number; name: string; rpc: string; explorer: string; cash: string; faucet: string; monFaucet: string; faucetSelector: string };
   export function validWithdrawal(input: {to?: string; data?: string; account?: string; cash?: string; pool?: string}): boolean;

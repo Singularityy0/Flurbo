@@ -1,8 +1,8 @@
 # Mera web account access
 
 Hosted deployment now has a standalone server and external Redis sessions.
-Mera passkey signup and login are required. Browser wallets connect only after
-login for trading or as withdrawal destinations; they do not authenticate a
+Mera passkey signup and login are required. MetaMask connects only after
+login for transactions; it does not authenticate a
 Flurbo account. Previously issued wallet-login sessions are rejected.
 See [the public testnet deployment guide](PUBLIC_TESTNET_DEPLOYMENT.md) for the
 current hosting path; loopback setup below remains the development workflow.
@@ -48,12 +48,11 @@ The development server keeps sessions in memory, so restarting it revokes logins
 The hosted server uses Upstash Redis with expiring hashed tokens and atomic
 one-use challenges. Its cookies also require Secure transport.
 
-The signing key stays in tab memory for one hour and is cleared on page exit or
-sign-out. Reload preserves account access but requires **Unlock signing** before
-a Mera transaction. Expiring the signing key does not log the account out. Each
-approval, trade, conversion and redemption requires a separate reviewed action.
-Focus and visibility checks handle suspended tabs; late passkey results cannot
-reopen a cancelled operation.
+The derived key signs only the login challenge. Its SDK session ends immediately
+after successful authentication. The public signing method and legacy Mera
+transaction adapters reject transaction requests, and the server does not relay
+raw transactions. MetaMask confirms and submits all trading actions. Reload keeps
+account access without requiring another passkey prompt to trade.
 
 Local storage contains only a version, RP ID, credential ID and public address,
 under `flurbo.passkey.v1:<rpId>`. These are remembered account hints, not proof of
@@ -89,11 +88,8 @@ npm --prefix apps/web run dev
    account screen should show an EVM address only after successful derivation.
 3. Copy that public address, sign out, then sign in with the same passkey. Confirm
    that the full address matches. Do not share or export any private material.
-4. Reload. The account and workspace should remain available. **Unlock signing**
-   should reopen signing access with your passkey. Cancel that prompt and verify
-   that account access remains available while signing stays locked. After one
-   hour, only signing access should expire. Sign-out should stay effective after
-   refresh. Upgrading from the old flow requires one fresh sign-in.
+4. Reload. The account remains available; there is no Mera signing-unlock control.
+   Connect MetaMask to trade. Sign out and reload: authentication must stay cleared.
 5. Optionally clear this site's local storage and sign in by selecting the saved
    passkey. The same address should return. Do not delete the actual passkey.
 

@@ -23,19 +23,18 @@ import { useRequest } from './src/hooks';
 import { Button, Card, Choice, Copy, External, Field, Heading, Notice, Title, colors, s } from './src/ui';
 
 type Page = 'markets' | 'whatif' | 'portfolio' | 'history' | 'wallet' | 'tools' | 'settlement' | 'kuru' | 'learning' | 'legacy' | 'withdraw' | 'perpl' | 'transaction' | 'about';
-function Wallet({ kind, setKind, onWithdraw }: { kind: WalletKind; setKind: (kind: WalletKind) => void; onWithdraw: () => void }) {
+function Wallet({ kind, onWithdraw }: { kind: WalletKind; onWithdraw: () => void }) {
   const login = useSyncExternalStore(auth.subscribe, auth.getSnapshot), wallet = useSyncExternalStore(externalWallet.subscribe, externalWallet.getSnapshot);
   const operation = useSyncExternalStore(operations.subscribe, operations.getSnapshot);
-  const owner = kind === 'mera' ? login.address : wallet.address;
+  const owner = wallet.address;
   const balance = useRequest<WalletBalance>(), faucet = useRequest<FaucetReview>();
   const [notice, setNotice] = useState('');
   const refresh = () => owner && void balance.run(signal => readBalance(balanceTarget, owner, signal), true);
   useEffect(() => { balance.cancel(true); faucet.cancel(true); refresh(); return () => { balance.cancel(); faucet.cancel(); }; }, [owner]);
-  return <><Title>Your wallet.</Title><Copy>Mera is your Flurbo account. Choose which wallet to trade with below.</Copy>
+  return <><Title>Your wallet.</Title><Copy>Mera is your Flurbo account. MetaMask is your trading wallet.</Copy>
     <Card><Heading>Flurbo account</Heading><Copy>{login.address}</Copy><Button secondary title="Copy Mera address" onPress={() => void Clipboard.setStringAsync(login.address!).then(() => setNotice('Mera address copied.'))} />
-      <Button title={login.busy ? 'Opening passkey...' : login.signingExpiresAt ? 'Lock signing' : 'Unlock Mera signing'} disabled={login.busy} onPress={() => login.signingExpiresAt ? auth.lockSigning() : void auth.authenticate('login')} /><Copy small>Your login is remembered by the server. Signing is unlocked temporarily and locks when the app goes into the background.</Copy><Notice>{login.error || login.notice}</Notice>
+      <Copy small>Your Mera passkey is for account access only. Funds and trades use MetaMask.</Copy><Notice>{login.error || login.notice}</Notice>
     </Card>
-    <Choice value={kind} options={[{ value: 'mera', label: 'Mera wallet' }, { value: 'metamask', label: 'MetaMask' }]} onChange={setKind} />
     {kind === 'metamask' && <Card><Heading>MetaMask trading wallet</Heading><Copy>{wallet.address ?? 'Connect your Monad testnet account.'}</Copy><Button title={wallet.busy ? 'Waiting for MetaMask...' : 'Connect MetaMask'} disabled={wallet.busy} onPress={() => void externalWallet.connect()} />{wallet.address && <Button title="Disconnect MetaMask" secondary onPress={() => void externalWallet.disconnect().catch(() => setNotice('Disconnected locally. Check MetaMask connections if needed.'))} />}<Notice>{wallet.error}</Notice><Copy small>Connecting MetaMask does not create or replace your Flurbo account.</Copy></Card>}
     {owner && <Card><Copy small>SELECTED TRADING WALLET</Copy><Copy>{owner}</Copy><Button secondary title="Copy trading address" onPress={() => void Clipboard.setStringAsync(owner).then(() => setNotice('Trading address copied.'))} />
       <Heading>{balance.value ? formatAmount(balance.value.ausd, 6) : 'Unavailable'} test AUSD</Heading><Copy>{balance.value ? formatAmount(balance.value.mon, 18) : 'Unavailable'} test MON</Copy><Button secondary title={balance.busy ? 'Cancel balance check' : 'Refresh balance'} onPress={() => balance.busy ? balance.cancel() : refresh()} /><Notice>{balance.error}</Notice>
@@ -76,7 +75,7 @@ function TransactionLookup() {
 }
 function Main() {
   const login = useSyncExternalStore(auth.subscribe, auth.getSnapshot), wallet = useSyncExternalStore(externalWallet.subscribe, externalWallet.getSnapshot);
-  const [ready, setReady] = useState(false), [initError, setInitError] = useState(''), [page, setPage] = useState<Page>('markets'), [kind, setKind] = useState<WalletKind>('mera'), [namespace, setNamespace] = useState<PilotNamespace>('rehearsal');
+  const [ready, setReady] = useState(false), [initError, setInitError] = useState(''), [page, setPage] = useState<Page>('markets'), [namespace, setNamespace] = useState<PilotNamespace>('rehearsal');
   async function boot() {
     setInitError('');
     try { await initialize(); transactions.restore(); operations.restore(); setReady(true); }
@@ -92,18 +91,11 @@ function Main() {
   }, []);
   useEffect(() => { const subscription = BackHandler.addEventListener('hardwareBackPress', () => { if (page !== 'markets') { setPage('markets'); return true; } return false; }); return () => subscription.remove(); }, [page]);
   useEffect(() => {
-    if (!login.address) { setPage('markets'); setKind('mera'); return; }
-    const saved = storage.getItem(`flurbo.mobile.wallet-kind:${login.address}`);
-    setKind(saved === 'metamask' ? 'metamask' : 'mera');
-    if (saved === 'metamask') void externalWallet.initialize();
+    if (!login.address) { setPage('markets'); return; }
+    void externalWallet.initialize();
   }, [login.address]);
-  function chooseWallet(value: WalletKind) {
-    setKind(value);
-    try { if (login.address) storage.setItem(`flurbo.mobile.wallet-kind:${login.address}`, value); }
-    catch { setInitError('Wallet preference could not be saved. Restart before trading.'); }
-    if (value === 'metamask') void externalWallet.initialize();
-  }
-  const owner = kind === 'mera' ? login.address : wallet.address;
+  const kind: WalletKind = 'metamask';
+  const owner = wallet.address;
   const allowed = Platform.OS !== 'web' && Constants.expoConfig?.extra?.passkeyRpId === 'flurbo.singu.online';
   const signIn = async (signup = false, another = false) => { await auth.authenticate(signup ? 'signup' : 'login', 'Flurbo account', another); await storage.flush().catch(() => setInitError('Account metadata could not be saved. Restart before trading.')); if (AppState.currentState !== 'active') auth.lockSigning(); };
   return <SafeAreaView style={s.screen} edges={['top', 'bottom']}><StatusBar style="dark" /><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -117,8 +109,8 @@ function Main() {
         {['markets', 'whatif', 'portfolio', 'history', 'settlement'].includes(page) && <Choice value={namespace} options={[{ value: 'rehearsal', label: 'Practice markets' }, { value: 'pilot', label: 'Release events' }]} onChange={setNamespace} />}
         {page === 'markets' && <Markets namespace={namespace} kind={kind} onPortfolio={() => setPage('portfolio')} />}
         {page === 'whatif' && <WhatIf namespace={namespace} />}
-        {(page === 'portfolio' || page === 'history') && <Ledger key={`${namespace}:${page}`} namespace={namespace} address={owner ?? login.address} mera={login.address} history={page === 'history'} />}
-        {page === 'wallet' && <Wallet kind={kind} setKind={chooseWallet} onWithdraw={() => setPage('withdraw')} />}
+        {(page === 'portfolio' || page === 'history') && <Ledger key={`${namespace}:${page}`} namespace={namespace} address={owner ?? ''} history={page === 'history'} />}
+        {page === 'wallet' && <Wallet kind={kind} onWithdraw={() => setPage('withdraw')} />}
         {page === 'settlement' && <Settlement namespace={namespace} kind={kind} />}
         {page === 'kuru' && <Kuru kind={kind} />}{page === 'learning' && <Learning />}
         {(page === 'legacy' || page === 'withdraw') && <Legacy key={page} kind={kind} initialAction={page === 'withdraw' ? 'withdraw' : 'buy'} />}

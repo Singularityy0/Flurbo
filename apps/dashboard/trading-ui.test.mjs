@@ -13,6 +13,7 @@ async function harness(run, saved, options = {}) {
     addEventListener(type, fn) { this.handlers[type] = fn; }, append(child) { this.children.push(child); }, replaceChildren(...children) { this.children = children; } }; }
   const get = id => { if (!nodes.has(id)) nodes.set(id, node()); return nodes.get(id); };
   class Provider extends EventEmitter {
+    isMetaMask = true;
     calls = []; resolve; reject;
     async request({ method, params }) {
       this.calls.push({ method, params });

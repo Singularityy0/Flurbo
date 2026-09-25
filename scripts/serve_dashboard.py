@@ -12,6 +12,7 @@ from dashboard_data import Dashboard, DashboardRpc
 
 STATIC_ROOT = Path(__file__).resolve().parents[1] / "apps" / "dashboard"
 STATIC = {"/": ("index.html", "text/html"), "/styles.css": ("styles.css", "text/css"),
+          "/metamask.mjs": ("metamask.mjs", "text/javascript"),
           "/app.mjs": ("app.mjs", "text/javascript"), "/claims.mjs": ("claims.mjs", "text/javascript"),
           "/wallet.mjs": ("wallet.mjs", "text/javascript"), "/trading-ui.mjs": ("trading-ui.mjs", "text/javascript")}
 

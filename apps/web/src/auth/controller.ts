@@ -122,13 +122,11 @@ export class AuthController {
         }
         this.#update({ address: login.address, expiresAt: login.expiresAt, method: login.method || 'passkey' });
       }
-    } catch { if (generation === this.#generation) this.#update({ notice: 'Account service is unavailable. Reconnect before signing.' }); }
+    } catch { if (generation === this.#generation) this.#update({ notice: 'Account service is unavailable. Sign in again before continuing.' }); }
     finally { if (generation === this.#generation) this.#update({ restoring: false }); }
   };
-  async signDigest(digest: Hex) {
-    this.checkExpiry();
-    if (!this.#session || !this.#snapshot.address) throw new Error('Unlock signing with your passkey first.');
-    return this.#session.signDigest(hexToBytes(digest));
+  async signDigest(_digest: Hex): Promise<Awaited<ReturnType<Secp256k1SigningSession['signDigest']>>> {
+    throw new Error('Mera is for account access only. Use MetaMask for transactions.');
   }
   signOut = (notice: string | null = null) => {
     this.#signedOut = true;
@@ -195,13 +193,14 @@ export class AuthController {
         this.#storage.setItem(this.#key, JSON.stringify(record));
         remembered = true;
       } catch { notice = "This browser cannot remember the account. Next time, choose your passkey from the device prompt."; }
-      this.#session = derived.session;
+      // The passkey signs only the login challenge. No transaction signer survives login.
+      derived.session.end();
       const address = derived.address.toLowerCase();
       derived = undefined;
       this.#signedOut = false;
       const expiresAt = loginExpiry;
       this.#timer = setTimeout(this.checkExpiry, SESSION_MS);
-      this.#update({ method: 'passkey', address, expiresAt, signingExpiresAt: this.#now() + SESSION_MS, restoring: false, remembered, notice });
+      this.#update({ method: 'passkey', address, expiresAt, signingExpiresAt: null, restoring: false, remembered, notice });
       return true;
     } catch (error) {
       if (generation === this.#generation) this.#update({ error: this.#errorMessage(error, mode === "signup") });

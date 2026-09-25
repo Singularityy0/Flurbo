@@ -3,8 +3,7 @@ import { Linking } from 'react-native';
 import { api } from './api';
 import { auth, storage } from './runtime';
 import { CHAIN, REOWN_PROJECT_ID, sessionAddress, checkWalletTransaction } from './wallet-policy';
-import { pilotMera, type Provider, type PilotNamespace } from '../../web/src/pilot';
-import { meraProvider } from '../../web/src/auth/mera-provider';
+import { type Provider, type PilotNamespace } from '../../web/src/pilot';
 
 type Snapshot = { address: string | null; busy: boolean; error: string | null; revision: number };
 let snapshot: Snapshot = { address: null, busy: false, error: null, revision: 0 };
@@ -57,7 +56,7 @@ export const externalWallet = {
       const session = await approved;
       if (auth.getSnapshot().address !== login) { await client.disconnect({ topic: session.topic, reason: { code: 6000, message: 'Flurbo login changed' } }); return; }
       const address = sessionAddress(session); topic = session.topic; update({ address });
-    } catch { update({ error: 'MetaMask connection did not finish. Open MetaMask, select Monad testnet, then reconnect.' }); }
+    } catch { topic = undefined; update({ address: null, error: 'MetaMask connection did not finish. Open MetaMask, select Monad testnet, then reconnect.' }); }
     finally { update({ busy: false }); }
   },
   async disconnect() {
@@ -65,22 +64,16 @@ export const externalWallet = {
     if (client && old) await client.disconnect({ topic: old, reason: { code: 6000, message: 'Disconnected by user' } });
   },
 };
-export type WalletKind = 'mera' | 'metamask';
+export type WalletKind = 'metamask';
 export function legacyProvider(kind: WalletKind, market: 'original' | 'learning' = 'original'): Provider & { destroy(): void } {
-  if (kind === 'metamask') return { ...tradingProvider(kind, 'rehearsal'), destroy() {} };
-  const provider = meraProvider(auth, market);
-  return { ...provider, async request(input) { if (input.method === 'eth_sendTransaction') await storage.flush(); return provider.request(input); } };
+  return { ...tradingProvider(kind, 'rehearsal'), destroy() {} };
 }
 export function tradingProvider(kind: WalletKind, namespace: PilotNamespace): Provider {
   const login = auth.getSnapshot().address;
   const selected = snapshot.address, connection = topic;
-  const mera = pilotMera(auth, namespace);
+  if (kind !== 'metamask') throw new Error('Use MetaMask for transactions. Mera is account-only.');
   return { async request(input) {
     if (auth.getSnapshot().address !== login || !login) throw new Error('Flurbo account changed. Sign in and review again.');
-    if (kind === 'mera') {
-      if (input.method === 'eth_sendTransaction') await storage.flush();
-      return mera.request(input);
-    }
     if (!selected || connection !== topic || snapshot.address !== selected || !client || !topic) throw new Error('Reconnect MetaMask and review again.');
     const current = sessionAddress(client.session.get(topic));
     if (current !== selected) throw new Error('MetaMask account changed.');

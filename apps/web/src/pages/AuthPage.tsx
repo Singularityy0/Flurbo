@@ -51,10 +51,10 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
             {policy.local && <div className="honesty-note">Local test account only. This passkey will not work on flurbo.singu.online. Do not send real funds to this account.</div>}
             {active ? <>
               <p className="auth-panel-copy">Your account is ready. Opening your workspace.</p>
-              <div className="account-address"><span className="eyebrow">Your EVM address</span><code>{state.address}</code></div>
+              <div className="account-address"><span className="eyebrow">Mera account address</span><code>{state.address}</code></div>
               <button type="button" className="text-link auth-copy" onClick={() => void copyAddress()}><Copy size={15} /> Copy address</button>
               <p className="auth-feedback" role="status">{copyStatus}</p>
-              <p className="auth-panel-copy">Your login stays available for seven days. Signing access can be reopened with your passkey.</p>
+              <p className="auth-panel-copy">Your login stays available for seven days. Connect MetaMask to trade; this account address is only for sign-in.</p>
               <button type="button" className="button button-dark auth-explore" onClick={() => { controller.signOut("You are signed out. Your passkey stays in your password manager."); navigate("/login"); }}><LogOut size={16} /> Sign out</button>
               <Link href="/#the-idea" className="text-link auth-return">Explore Flurbo <ArrowUpRight size={15} /></Link>
             </> : <>
@@ -75,7 +75,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
                 {isLogin && state.remembered && <button type="button" className="text-link auth-alternative" disabled={state.busy} onClick={() => void authenticate(true)}>Choose another passkey</button>}
                 {state.busy && <button type="button" className="text-link auth-alternative" onClick={() => controller.signOut("Sign-in cancelled here. Dismiss any remaining device prompt before trying again.")}>Cancel</button>}
               </form>}
-              <p className="auth-help">Your Mera passkey is your Flurbo login. After signing in, you can trade with this wallet or connect MetaMask.</p>
+              <p className="auth-help">Your Mera passkey is your Flurbo login. After signing in, connect MetaMask to trade. Mera is for account access only.</p>
               {state.error && <p className="auth-error" role="alert">{state.error}</p>}
               <div className="auth-switch">{isLogin ? "New to Flurbo?" : "Already have a passkey?"} <Link href={isLogin ? "/signup" : "/login"}>{isLogin ? "Create an account" : "Sign in"} <ArrowUpRight size={14} /></Link></div>
             </>}

@@ -12,7 +12,7 @@ import { Button, Card, Choice, Copy, External, Field, Heading, Notice, Title } f
 
 export function Legacy({ kind, initialAction = 'buy' }: { kind: WalletKind; initialAction?: string }) {
   const login = useSyncExternalStore(auth.subscribe, auth.getSnapshot), wallet = useSyncExternalStore(externalWallet.subscribe, externalWallet.getSnapshot), operation = useSyncExternalStore(operations.subscribe, operations.getSnapshot);
-  const owner = kind === 'mera' ? login.address : wallet.address;
+  const owner = wallet.address;
   const [market, setMarket] = useState<'original' | 'learning'>('original'), [action, setAction] = useState(initialAction), [quantity, setQuantity] = useState('1'), [recipient, setRecipient] = useState('');
   const [answers, setAnswers] = useState<Record<number, boolean>>({ 7: true }), [mode, setMode] = useState<'all' | 'any'>('all'), [clock, setClock] = useState(Date.now());
   const reviewed = useRequest<{ plan: any; snapshot: any }>(), portfolio = useRequest<Portfolio>();

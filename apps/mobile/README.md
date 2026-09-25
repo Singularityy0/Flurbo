@@ -14,7 +14,7 @@ Flurbo prediction-pool trades do not substitute for that Perpl requirement.
   credential metadata and pending transaction records, never signing material.
   Old SecureStore bookmarks migrate without changing identity. Restoring a
   bookmark alone cannot authenticate a backend session. PRF and derived key
-  buffers are cleared best-effort; signing locks on backgrounding or after an hour.
+  buffers are cleared best-effort; the signing session ends immediately after login.
 - Native practice/release market screens, individual and combined AND/OR trades
   of up to three events, sells, redemption, market rules and exact review amounts.
   Quotes load after selection. AUSD approval remains a separate transaction.
@@ -24,7 +24,7 @@ Flurbo prediction-pool trades do not substitute for that Perpl requirement.
   Direct share reads do not wait for history scans; wallet switching cancels old
   reads. History advances on request rather than endlessly blocking the interface.
 - MetaMask trading through WalletConnect SignClient and the owner's public Reown
-  project ID. Mera is still the only signup/login path. Requests are pinned to
+  project ID. MetaMask is the only transaction wallet; Mera is account-only. Requests are pinned to
   Monad testnet and the selected session account. No arbitrary message signing.
 - Funding, reviewed AUSD withdrawal, original/learning pool trades and portfolio,
   H Yes receipt wrapping/unwrapping, Kuru deposits/withdrawals/orders/cancellation,
@@ -113,7 +113,7 @@ Generated `android/`, `ios/`, `.expo/`, `dist*` and `.env*` stay uncommitted.
 4. Transfer test AUSD and test MON to that address. Refresh and compare both
    balances to the explorer. Zero and unavailable must remain distinct.
 5. Background, reopen and restart the app. Restore the server login but keep
-   signing locked. Sign out and restart; authentication must remain cleared.
+   no Mera transaction signer. Sign out and restart; authentication must remain cleared.
 6. Connect MetaMask on chain 10143, switch accounts/network, then reconnect.
    Mera login must not change. A review for the old trading account must not send.
 7. Buy a small single claim and an AND claim. Complete allowance and buy separately.

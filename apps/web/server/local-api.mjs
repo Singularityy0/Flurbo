@@ -1,11 +1,7 @@
 import { SessionStore, cookieValue, LOGIN_MS } from './session.mjs';
-import { parseTransaction, recoverTransactionAddress } from 'viem';
-import { validWithdrawal } from './withdrawal-policy.mjs';
-import { kuruCall } from '../shared/kuru.mjs';
 import { TESTNET } from './network.mjs';
 import { learningDeployment } from '../shared/learning-contracts.mjs';
 import { evidenceAssistant } from './evidence-assistant.mjs';
-import { pilotCall } from '../shared/pilot.mjs';
 import { priceHistory } from './price-history.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
@@ -121,15 +117,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if(req.method==='POST' && url.pathname==='/api/pilot/rpc') {
           const input=await body(req);
           if(!input || !Array.isArray(input.params) || !['eth_chainId','eth_getBlockByNumber','eth_getCode','eth_call','eth_estimateGas','eth_gasPrice','eth_getTransactionCount','eth_getTransactionReceipt','eth_getTransactionByHash','eth_getBalance','eth_sendRawTransaction'].includes(input.method)) return send(res,400,{error:'Unsupported pilot RPC'});
-          if(input.method==='eth_sendRawTransaction') {
-            const raw=input.params[0];
-            if(typeof raw!=='string' || !/^0x[0-9a-f]+$/i.test(raw)) return send(res,400,{error:'Invalid transaction'});
-            const tx=parseTransaction(raw), sender=await recoverTransactionAddress({serializedTransaction:raw});
-            if(sender.toLowerCase()!==login.address || tx.chainId!==10143 || tx.type!=='legacy' || (tx.value??0n)!==0n
-              || !tx.gas || tx.gas>15_000_000n || !tx.gasPrice || tx.gasPrice>500_000_000_000n
-              || !pilotCall({to:tx.to,data:tx.data,manifest:pilot.manifest})) return send(res,403,{error:'Transaction differs from pilot signing policy'});
-            await pilot.snapshot();
-          }
+          if(input.method==='eth_sendRawTransaction') return send(res,403,{error:'Mera is account-only. Send transactions through MetaMask.'});
           const upstream=await fetch(rpcUrl,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:input.method,params:input.params}),signal:AbortSignal.timeout(20_000)});
           const result=await upstream.json();
           if(!upstream.ok || result.error) return send(res,400,{error:'Monad rejected the pilot request. Check tracking before retrying.'});
@@ -191,30 +179,10 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         const market = input.market ?? 'original';
         if (!['original', 'learning'].includes(market)) return send(res, 400, { error: 'Unknown trading market' });
         if (market === 'learning' && (!hosted || !learningDashboardUrl)) return send(res, 503, { error: 'Learning market unavailable' });
-        const selectedDashboard = market === 'learning' ? learningDashboardUrl : dashboardUrl;
         const allowed = ['eth_chainId', 'eth_getBlockByNumber', 'eth_call', 'eth_estimateGas', 'eth_gasPrice', 'eth_getTransactionCount', 'eth_getTransactionReceipt', 'eth_getTransactionByHash', 'eth_getBalance', 'eth_sendRawTransaction'];
         if (!allowed.includes(input.method) || !Array.isArray(input.params)) return send(res, 400, { error: 'Unsupported RPC method' });
-        if (hosted && !await store.read(sid, origin)) return send(res, 401, { error: 'Sign in before using the account RPC' });
-        if (input.method === 'eth_sendRawTransaction') {
-          const login = await store.read(sid, origin);
-          if (!login) return send(res, 401, { error: 'Sign in before submitting' });
-          const serializedTransaction = input.params[0];
-          if (typeof serializedTransaction !== 'string' || !/^0x[0-9a-f]+$/i.test(serializedTransaction)) return send(res, 400, { error: 'Invalid signed transaction' });
-          const tx = parseTransaction(serializedTransaction);
-          const sender = await recoverTransactionAddress({ serializedTransaction });
-          const faucet = hosted && tx.to?.toLowerCase() === TESTNET.faucet && tx.data?.toLowerCase() === TESTNET.faucetSelector + login.address.slice(2).padStart(64, '0');
-          const deployment = faucet ? Response.json({ environment: 'public_testnet', chain_id: 10143, contracts: { cash: TESTNET.cash } }) : await fetch(`${selectedDashboard}/api/state`, { redirect: 'error', signal: AbortSignal.timeout(20_000) });
-          const state = await deployment.json();
-          const cash = state.contracts?.cash?.toLowerCase(), pool = state.contracts?.pool?.toLowerCase();
-          const selector = tx.data?.slice(0, 10);
-          if (!deployment.ok || sender.toLowerCase() !== login.address || tx.chainId !== 10143 || (tx.value ?? 0n) !== 0n || tx.type !== 'legacy' ||
-              !tx.gas || tx.gas > 30_000_000n || state.environment !== (hosted ? 'public_testnet' : 'local_fork') ||
-              (hosted && (state.chain_id !== 10143 || cash !== TESTNET.cash)) ||
-              !faucet && market === 'learning' && (state.market_id !== 'learning' || pool !== learningDeployment.pool) ||
-              !faucet && !(market === 'original' && kuruCall({ to: tx.to, data: tx.data, account: login.address, contracts: state.contracts })) && !(tx.to?.toLowerCase() === cash ? validWithdrawal({ to: tx.to, data: tx.data, account: login.address, cash, pool }) || selector === '0x095ea7b3' && tx.data.length === 138 &&
-                tx.data.slice(10, 74).toLowerCase() === pool?.slice(2).padStart(64, '0')
-                : tx.to?.toLowerCase() === pool && (market === 'learning' ? ['0x3e6b6cde', '0xc39849c5', '0xdf992423'] : ['0x3e6b6cde', '0xc39849c5', '0xb0a52172', '0xf6c4eade', '0xdf992423']).includes(selector))) return send(res, 403, { error: 'Only this account and the configured Monad contracts are supported' });
-        }
+        if ((hosted || input.method === 'eth_sendRawTransaction') && !await store.read(sid, origin)) return send(res, 401, { error: 'Sign in before using the account RPC' });
+        if (input.method === 'eth_sendRawTransaction') return send(res,403,{error:'Mera is account-only. Send transactions through MetaMask.'});
         const upstream = await fetch(rpcUrl, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: input.method, params: input.params }), signal: AbortSignal.timeout(20_000) });
         const result = await upstream.json();
         if (!upstream.ok || result.error) return send(res, 400, { error: 'Monad rejected the request. Check transaction status before retrying.' });

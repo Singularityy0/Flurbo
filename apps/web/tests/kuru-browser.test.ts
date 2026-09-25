@@ -16,7 +16,7 @@ test('Kuru deep link, wallet review, reload recovery and responsive layout work 
     let loggedIn = true, reads = 0; const errors: string[] = [];
     page.on('pageerror', (error: Error) => errors.push(error.message));
     await page.addInitScript(({ account, hash, block, log }: any) => {
-      (window as any).ethereum = { request: async ({ method, params }: any) => {
+      (window as any).ethereum = { isMetaMask: true, request: async ({ method, params }: any) => {
         const p = JSON.parse(localStorage.getItem('flurbo.kuru.pending.v1') || 'null');
         const tx = p && { hash, from: account, to: p.review.to, input: p.review.data, value: '0x0', nonce: p.nonce, chainId: '0x279f', blockHash: block, blockNumber: '0x64' };
         if (method === 'eth_accounts' || method === 'eth_requestAccounts') return [account];
@@ -47,7 +47,7 @@ test('Kuru deep link, wallet review, reload recovery and responsive layout work 
     });
     await page.goto('https://flurbo.singu.online/kuru');
     await page.getByLabel('Trading wallet', { exact: true }).selectOption('0');
-    await page.getByRole('button', { name: 'Connect wallet', exact: true }).click();
+    await page.getByRole('button', { name: 'Connect MetaMask', exact: true }).click();
     await page.getByText('Wallet connected. Every action is reviewed and confirmed separately.').waitFor();
     assert.equal(await page.locator('#trading-market').count(), 0);
     assert.equal(await page.locator('.core-market').count(), 0);
@@ -62,7 +62,7 @@ test('Kuru deep link, wallet review, reload recovery and responsive layout work 
     await page.reload(); await page.getByText('Finish your pending action.').waitFor();
     assert.equal(await page.getByRole('button', { name: 'Review deposit', exact: true }).isDisabled(), true);
     await page.getByLabel('Trading wallet', { exact: true }).selectOption('0');
-    await page.getByRole('button', { name: 'Connect wallet', exact: true }).click();
+    await page.getByRole('button', { name: 'Connect MetaMask', exact: true }).click();
     await page.getByText('Wallet connected. Every action is reviewed and confirmed separately.').waitFor();
     await page.getByRole('button', { name: 'Check confirmation', exact: true }).click();
     await page.getByText(/Limit buy confirmed/).waitFor();

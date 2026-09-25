@@ -119,10 +119,10 @@ export default function LearningExecution({ review, onInvalidate, onConfirmed }:
   }
   return <section aria-label="Learning operator wallet" className="learning-execution">
     <h3>Confirm with your deployer wallet</h3>
-    <p className="auth-help">Use {learningDeployment.updater}. Mera grants access to these controls; your selected extension wallet signs the transactions.</p>
-    <label htmlFor="learning-wallet">Signing wallet</label>
+    <p className="auth-help">Use {learningDeployment.updater}. Mera grants access to these controls; MetaMask signs the transactions.</p>
+    <label htmlFor="learning-wallet">MetaMask wallet</label>
     <select id="learning-wallet" value={selected} disabled={busy} onChange={event => { setSelected(Number(event.target.value)); setConnected(false); ++generation.current; removeListeners.current(); invalidate.current(); }}>
-      {!wallets.length && <option>No browser wallet detected</option>}
+      {!wallets.length && <option>MetaMask not detected</option>}
       {wallets.map((wallet, index) => <option value={index} key={index}>{wallet.name}</option>)}
     </select>
     <button className="button button-dark" disabled={busy || !wallets.length || connected} onClick={() => void connect()}>{connected ? 'Deployer connected' : 'Connect deployer wallet'}</button>

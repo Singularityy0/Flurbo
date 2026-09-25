@@ -208,7 +208,7 @@ function Home() {
               ["What is Flurbo, in one sentence?", "A shared liquidity pool that prices related individual and multi-leg yes-or-no claims together, so their relationships stay coherent."],
               ["Is Flurbo live?", "Flurbo is available for practice on Monad testnet. Sign in to explore the markets, trade with test AUSD and view your holdings. Practice outcomes are scripted, and trading stops at the published closing time."],
               ["What does ‘cost and payout’ mean here?", "Cost is the test AUSD you pay for your shares. A winning share pays 1 test AUSD and a losing share pays 0. Unresolved outcomes follow the published VOID rules and can pay a fraction. Payout is the total returned, not profit: subtract your purchase cost and network fees. What-if probabilities are not purchase quotes."],
-              ["Can I create an account?", "Create your Flurbo account with a Mera passkey. After signing in, trade with your Mera wallet or connect MetaMask. You can send available AUSD from Mera to a MetaMask address on the same Monad network. Localhost passkeys belong to the development site."],
+              ["Can I create an account?", "Create your Flurbo account with a Mera passkey. After signing in, connect MetaMask to fund your trading wallet and place predictions. Mera is for account access only. Localhost passkeys belong to the development site."],
             ].map(([question, answer], index) => {
               const open = activeFaq === index;
               return <div className={`faq-item ${open ? "faq-item-open" : ""}`} key={question}>
@@ -226,7 +226,7 @@ function Home() {
 
       <section className="final-cta section-lime">
         <div className="final-cta-shape" aria-hidden="true" />
-        <div className="final-cta-inner"><p className="eyebrow">A calmer way to look ahead</p><h2>Make room for<br /><em>the connection.</em></h2><p>Start with a Mera passkey. Trade with Mera or connect your wallet.</p><div className="final-actions"><Link href="/signup" className="button button-dark">Create an account <ArrowUpRight size={17} /></Link><Link href="/login" className="text-link text-link-dark">Sign in <ArrowUpRight size={15} /></Link></div></div>
+        <div className="final-cta-inner"><p className="eyebrow">A calmer way to look ahead</p><h2>Make room for<br /><em>the connection.</em></h2><p>Start with a Mera passkey. Connect MetaMask to trade.</p><div className="final-actions"><Link href="/signup" className="button button-dark">Create an account <ArrowUpRight size={17} /></Link><Link href="/login" className="text-link text-link-dark">Sign in <ArrowUpRight size={15} /></Link></div></div>
       </section>
 
       <footer className="site-footer section-light"><div><span className="footer-brand">flurbo<span className="logo-dot" /></span><p>Prediction, with more context.</p></div><div className="footer-meta"><span>© 2026 Flurbo</span><span>Monad testnet · synthetic events</span></div></footer>

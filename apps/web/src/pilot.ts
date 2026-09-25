@@ -1,4 +1,4 @@
-import { bytesToHex, keccak256, serializeTransaction, type Hex } from 'viem';
+import { keccak256, type Hex } from 'viem';
 import { appFetch as fetch } from './platform-fetch.ts';
 import { pilotCall, type PilotManifest } from '../shared/pilot.mjs';
 import type { AuthController } from './auth/controller';
@@ -43,19 +43,8 @@ export function pilotMera(controller:AuthController,namespace:PilotNamespace='pi
   return {async request({method,params=[]}) {
     const owner=controller.getSnapshot().address;
     if(['eth_accounts','eth_requestAccounts'].includes(method)) return owner?[owner]:[];
-    if(method!=='eth_sendTransaction') return rpc(method,params);
-    controller.checkExpiry();
-    if(!owner || !controller.getSnapshot().signingExpiresAt) throw new Error('Unlock Mera signing before confirming.');
-    const tx=params[0] as Record<string,string>;
-    const state=await pilotRequest<PilotState>('status',undefined,namespace);
-    if(tx.from?.toLowerCase()!==owner.toLowerCase() || rpcInteger(tx.chainId)!==10143n || rpcInteger(tx.value)!==0n
-      || !pilotCall({to:tx.to,data:tx.data,manifest:state.manifest})) throw new Error('Unsupported pilot transaction');
-    const nonce=rpcInteger(await rpc('eth_getTransactionCount',[owner,'pending']));
-    if(nonce!==rpcInteger(tx.nonce) || nonce>BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Nonce changed. Review again.');
-    const raw={type:'legacy' as const,chainId:10143,nonce:Number(nonce),to:tx.to as Hex,data:tx.data as Hex,value:0n,gas:rpcInteger(tx.gas),gasPrice:rpcInteger(tx.gasPrice)};
-    if(raw.gas===0n || raw.gas>15_000_000n || raw.gasPrice===0n || raw.gasPrice>500_000_000_000n) throw new Error('Gas exceeds pilot policy');
-    const signature=await controller.signDigest(keccak256(serializeTransaction(raw)));
-    return rpc('eth_sendRawTransaction',[serializeTransaction(raw,{r:bytesToHex(signature.compact.slice(0,32)),s:bytesToHex(signature.compact.slice(32)),v:27n+BigInt(signature.recovery)})]);
+    if (!['eth_chainId','eth_getBlockByNumber','eth_getCode','eth_call','eth_estimateGas','eth_gasPrice','eth_getBalance','eth_getTransactionReceipt','eth_getTransactionByHash','eth_getTransactionCount'].includes(method)) throw new Error('Mera is for account access only. Use MetaMask for transactions.');
+    return rpc(method,params);
   }};
 }
 

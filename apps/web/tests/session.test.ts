@@ -62,19 +62,19 @@ test('HTTP login sets an HttpOnly cookie, restores, rejects cross-origin writes,
     try {
       const transaction = {type:'legacy' as const,chainId:10143,nonce:0,gas:100000n,gasPrice:1000000000n,to:cash as `0x${string}`,value:0n,data:('0x095ea7b3'+pool.slice(2).padStart(64,'0')+'1'.padStart(64,'0')) as `0x${string}`};
       const valid = await signer.signTransaction(transaction);
-      assert.equal((await request('rpc',{method:'eth_sendRawTransaction',params:[valid]},sessionCookie)).status,200);
+      assert.equal((await request('rpc',{method:'eth_sendRawTransaction',params:[valid]},sessionCookie)).status,403);
       const foreign = await signer.signTransaction({...transaction,chainId:1});
       assert.equal((await request('rpc',{method:'eth_sendRawTransaction',params:[foreign]},sessionCookie)).status,403);
       const transfer = await signer.signTransaction({...transaction,value:1n});
       assert.equal((await request('rpc',{method:'eth_sendRawTransaction',params:[transfer]},sessionCookie)).status,403);
-      assert.equal(broadcasts,1);
+      assert.equal(broadcasts,0);
     } finally { globalThis.fetch = originalFetch; }
     await request('auth/logout',{},sessionCookie);
     assert.equal((await (await request('auth/session',undefined,sessionCookie)).json()).session,null);
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });
 
-test('reload restores only a verified account, hour expiry locks signing without logging out', async () => {
+test('reload restores a verified account without a Mera transaction signer', async () => {
   let now = Date.now(), login: {address:string;expiresAt:number}|null = null;
   const store = new SessionStore(() => now); let challengeId = '';
   const transport = {
@@ -95,9 +95,9 @@ test('reload restores only a verified account, hour expiry locks signing without
     assert.equal(first.getSnapshot().address,account);
     assert.equal(first.getSnapshot().signingExpiresAt,null);
     await reloaded.restore(); assert.equal(reloaded.getSnapshot().address?.toLowerCase(),account?.toLowerCase());
-    await assert.rejects(reloaded.signDigest('0x'+'00'.repeat(32)), /Unlock/);
+    await assert.rejects(reloaded.signDigest('0x'+'00'.repeat(32)), /account access only/);
     assert.equal(await reloaded.authenticate('login'),true);
-    assert.ok(reloaded.getSnapshot().signingExpiresAt);
+    assert.equal(reloaded.getSnapshot().signingExpiresAt,null);
     await reloaded.signOut(); await first.restore(); assert.equal(first.getSnapshot().address,null);
   } finally { await first.signOut(); await reloaded.signOut(); }
 });

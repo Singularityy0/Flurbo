@@ -14,7 +14,7 @@ test('evidence review stays read-only, labels unavailable AI and safely renders 
   try{
     const page=await browser.newPage({viewport:{width:390,height:844}});page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.exposeFunction('walletTouched',()=>{walletCalls++;});
-    await page.addInitScript(()=>{(window as any).ethereum={request:()=>{(window as any).walletTouched();throw Error('No signing allowed');}};});
+    await page.addInitScript(()=>{(window as any).ethereum={isMetaMask:true,request:()=>{(window as any).walletTouched();throw Error('No signing allowed');}};});
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:'0x'+'11'.repeat(20),method:'passkey',expiresAt:Date.now()+3600000}}});

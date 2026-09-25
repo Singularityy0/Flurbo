@@ -11,6 +11,7 @@ test('featured markets and archive holdings route to different pools, including 
   f.manifest.publication.mode='rehearsal';
   try{
     const page=await browser.newPage({viewport:{width:390,height:844}});
+    await page.addInitScript((owner:string)=>sessionStorage.setItem('flurbo.view-wallet:'+owner,owner),owner);
     page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;

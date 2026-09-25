@@ -49,7 +49,7 @@ test('host configuration rejects local/mainnet RPC and session storage never fal
   const command = redisCommand({UPSTASH_REDIS_REST_URL:'https://fixture.upstash.io',UPSTASH_REDIS_REST_TOKEN:'fixture'}, async () => Response.json({error:'denied'}));
   await assert.rejects(command('GET','key'));
 });
-test('hosted HTTP serves guarded SPA routes, secure login and public-only transactions without local funding', async () => {
+test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only submission policy without local funding', async () => {
   const directory = await mkdtemp(join(tmpdir(),'flurbo-server-'));
   await writeFile(join(directory,'index.html'),'<html>Flurbo</html>');
   const store = new SessionStore();
@@ -126,9 +126,9 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
     assert.equal((await request('/api/auth/session',undefined,cookie)).json().session.method,'passkey');
     const tx={type:'legacy' as const,chainId:10143,nonce:0,gas:100000n,gasPrice:1000000000n,to:TESTNET.cash as `0x${string}`,value:0n,data:('0x095ea7b3'+pool.slice(2).padStart(64,'0')+'1'.padStart(64,'0')) as `0x${string}`};
     const send=async(value:typeof tx)=>request('/api/rpc',{method:'eth_sendRawTransaction',params:[await signer.signTransaction(value)]},cookie);
-    assert.equal((await send(tx)).status,200);
+    assert.equal((await send(tx)).status,403);
     const withdrawal={...tx,data:('0xa9059cbb'+'44'.repeat(20).padStart(64,'0')+'1'.padStart(64,'0')) as `0x${string}`};
-    assert.equal((await send(withdrawal)).status,200);
+    assert.equal((await send(withdrawal)).status,403);
     for(const recipient of ['00'.repeat(20),pool.slice(2),TESTNET.cash.slice(2),signer.address.slice(2).toLowerCase()]) {
       assert.equal((await send({...withdrawal,data:('0xa9059cbb'+recipient.padStart(64,'0')+'1'.padStart(64,'0')) as `0x${string}`})).status,403);
     }
@@ -139,10 +139,10 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
     assert.equal((await send({...tx,data:('0x095ea7b3'+'33'.repeat(20).padStart(64,'0')+'1'.padStart(64,'0')) as `0x${string}`})).status,403);
     environment='local_fork'; assert.equal((await send(tx)).status,403);
     const faucet={...tx,to:TESTNET.faucet as `0x${string}`,data:(TESTNET.faucetSelector+signer.address.slice(2).toLowerCase().padStart(64,'0')) as `0x${string}`};
-    assert.equal((await send(faucet)).status,200);
+    assert.equal((await send(faucet)).status,403);
     assert.equal((await send({...faucet,value:1n})).status,403);
     assert.equal((await send({...faucet,data:(TESTNET.faucetSelector+'33'.repeat(20).padStart(64,'0')) as `0x${string}`})).status,403);
-    assert.equal(broadcasts,3);
+    assert.equal(broadcasts,0);
     assert.equal((await request('/api/state')).status,503);
     await request('/api/auth/logout',{},cookie); assert.equal((await request('/api/auth/session',undefined,cookie)).json().session,null);
     assert.equal((await request('/api/learning/comparison',undefined,cookie)).status,401);

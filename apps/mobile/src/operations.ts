@@ -22,16 +22,16 @@ export const operations = {
   subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; },
   restore() { const raw = storage.getItem(key); if (raw) { const p = JSON.parse(raw) as Pending; if (!p || !['kuru', 'learning', 'transfer'].includes(p.category) || !p.value || (p.value.hash !== null && !/^0x[0-9a-f]{64}$/i.test(p.value.hash))) throw new Error('Saved transaction tracking is invalid. Check wallet activity before trading.'); update({ pending: p, notice: 'An earlier transaction needs checking.' }); } },
   async run(kind: WalletKind, action: (provider: ReturnType<typeof legacyProvider>, current: () => boolean) => Promise<void>, market: 'original' | 'learning' = 'original') {
+    if (kind !== 'metamask') { update({notice:'Use MetaMask for transactions.'}); return; }
     let release: () => void;
     try { release = lockOperation(); } catch (e) { update({ notice: (e as Error).message }); return; }
-    const login = auth.getSnapshot().address, owner = kind === 'mera' ? login : externalWallet.getSnapshot().address;
+    const login = auth.getSnapshot().address, owner = externalWallet.getSnapshot().address;
     const p = legacyProvider(kind, market);
     update({ busy: true, notice: 'Checking the reviewed transaction...' });
     try {
       if (!login || !owner) throw new Error('Sign in and connect the trading wallet first.');
       auth.checkExpiry();
-      if (kind === 'mera' && !auth.getSnapshot().signingExpiresAt) throw new Error('Unlock Mera signing in Wallet before confirming.');
-      await action(p, () => auth.getSnapshot().address === login && (kind === 'mera' ? auth.getSnapshot().address : externalWallet.getSnapshot().address) === owner);
+      await action(p, () => auth.getSnapshot().address === login && externalWallet.getSnapshot().address === owner);
       await storage.flush(); update({ notice: 'Submitted. Check confirmation before another action.' });
     } catch (e) { update({ notice: e instanceof Error ? e.message : 'Check wallet activity before retrying.' }); }
     finally { p.destroy(); release(); update({ busy: false }); }

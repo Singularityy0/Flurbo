@@ -48,11 +48,11 @@
         <section class="card trading" aria-labelledby="trade-title">
           <p class="eyebrow">WALLET & EXECUTION</p><h2 id="trade-title">Make your move.</h2>
           <p class="caption">Every approval, trade and redemption requires a separate confirmation in your wallet. Automatic setup only funds local test balances.</p>
-          <label for="wallet-provider">Browser wallet</label><select id="wallet-provider" disabled><option value="" disabled selected>No wallet detected</option></select>
+          <label for="wallet-provider">MetaMask wallet</label><select id="wallet-provider" disabled><option value="" disabled selected>MetaMask not detected</option></select>
           <button id="setup-wallet" class="button primary wide" disabled>Set up local wallet ↗</button>
           <p id="setup-status" class="caption" role="status">Choose a dedicated test account in MetaMask. Setup requests the local network and tops up to 10 test AUSD and 10 MON; it never creates or exports a private key.</p>
           <div class="wallet-actions"><button id="connect-wallet" class="button secondary" disabled>Connect wallet</button><button id="disconnect-wallet" class="button quiet" disabled>Disconnect</button></div>
-          <p id="signer-status" class="caption" role="status">Discovering browser wallets…</p>
+          <p id="signer-status" class="caption" role="status">Looking for MetaMask…</p>
           <details class="wallet-help"><summary>Local network setup</summary><p>Use a dedicated test account with local AUSD and MON. Set the wallet RPC to <code>http://127.0.0.1:18545</code>, chain ID <code>10143</code>, currency <code>MON</code>. Public Monad testnet uses the same ID; the block-hash check must match this fork.</p><p>Wallet signing here is a local development flow. Mera mobile and the MetaMask Agent Wallet integration remain separate milestones.</p></details>
           <label for="slippage">Slippage limit</label><select id="slippage"><option value="0">0%</option><option value="50" selected>0.5%</option><option value="100">1%</option><option value="300">3%</option><option value="500">5%</option></select>
           <p id="execution-help" class="caption">Connect your test wallet, then get a pool quote.</p>
@@ -69,7 +69,7 @@
           <h3>Withdraw available AUSD</h3>
           <p class="caption">Send AUSD from your selected trading wallet to MetaMask or another address on this Monad network. First sell or redeem any positions you want to turn into AUSD. This is a token transfer, not a bridge or bank withdrawal.</p>
           <p id="withdrawal-status" class="caption" role="status">Connect the wallet holding your AUSD.</p>
-          <label for="recipient-wallet">Receiving browser wallet (optional)</label><select id="recipient-wallet"><option value="">Choose a wallet or paste an address below</option></select>
+          <label for="recipient-wallet">Receiving MetaMask wallet (optional)</label><select id="recipient-wallet"><option value="">Choose a wallet or paste an address below</option></select>
           <button id="use-recipient-wallet" class="button secondary" disabled>Use receiving wallet address</button>
           <label for="withdrawal-address">Receiving address on the same Monad network</label><input id="withdrawal-address" placeholder="0x..." maxlength="42" autocomplete="off" spellcheck="false">
           <label for="withdrawal-quantity">AUSD to send</label><input id="withdrawal-quantity" inputmode="decimal" placeholder="0.00" autocomplete="off">

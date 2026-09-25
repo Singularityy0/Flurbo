@@ -1,6 +1,7 @@
+import { isMetaMask } from './metamask.mjs';
 import { context, receiptMatches, submit, validatePlan } from './learning-wallet.mjs';
 const $ = id => document.getElementById(id);
-const provider = window.ethereum;
+const provider = isMetaMask(window.ethereum) ? window.ethereum : undefined;
 let state, owner, plan, busy = false;
 const amount = value => {
   const n = BigInt(value); return `${n / 1000000n}.${(n % 1000000n).toString().padStart(6, '0')}`;

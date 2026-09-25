@@ -13,7 +13,7 @@ import { Button, Card, Choice, Copy, External, Field, Heading, Notice, Title } f
 const actionLabels = { deposit: 'Deposit', withdraw: 'Withdraw', 'limit-buy': 'Limit buy', 'limit-sell': 'Limit sell', 'market-buy': 'Market buy', 'market-sell': 'Market sell', cancel: 'Cancel order', approve: 'Approve deposit' };
 export function Kuru({ kind }: { kind: WalletKind }) {
   const login = useSyncExternalStore(auth.subscribe, auth.getSnapshot), wallet = useSyncExternalStore(externalWallet.subscribe, externalWallet.getSnapshot), operation = useSyncExternalStore(operations.subscribe, operations.getSnapshot);
-  const owner = kind === 'mera' ? login.address : wallet.address;
+  const owner = wallet.address;
   const data = useRequest<kuru.State>(), review = useRequest<kuru.Review>();
   const [action, setAction] = useState<kuru.Action>({ kind: 'deposit', asset: 'cash', amount: '1', price: '0.45', minOut: '0.4', order: '' });
   const [clock, setClock] = useState(Date.now());

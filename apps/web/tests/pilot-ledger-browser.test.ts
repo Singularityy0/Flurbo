@@ -37,7 +37,7 @@ test('combined shares appear in a fresh browser before history responds, with no
     assert.equal(await page.evaluate(()=>localStorage.length),0);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     // Other traders' active scopes must not be displayed as this wallet's holdings.
-    await page.getByRole('button',{name:'Use Mera wallet',exact:true}).click();
+    await page.getByRole('textbox',{name:'Wallet to view'}).fill(login);await page.getByRole('button',{name:'View wallet',exact:true}).click();
     await page.getByText('No shares in the claims checked so far. Combinations may still be loading.',{exact:true}).waitFor();
     assert.equal(await page.getByRole('cell',{name:'10',exact:true}).count(),0);
     release();assert.deepEqual(errors,[]);
@@ -123,11 +123,11 @@ test('practice history outage still shows owned shares; recovery shows the bet a
     await page.getByRole('cell',{name:'6.201146',exact:true}).waitFor();
     assert.equal(await page.getByRole('link',{name:'View transaction',exact:true}).getAttribute('href'),'https://testnet.monadscan.com/tx/'+hash);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-    await page.screenshot({path:'../../target/practice-history-fixed.png',fullPage:true});
+    if(process.env.FLURBO_TEST_SCREENSHOT) await page.screenshot({path:process.env.FLURBO_TEST_SCREENSHOT,fullPage:true});
     await page.goto('https://flurbo.singu.online/portfolio');
     await page.getByRole('cell',{name:'10',exact:true}).waitFor();
     await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();
-    failAccount=true;await page.getByRole('button',{name:'Use Mera wallet',exact:true}).click();
+    failAccount=true;await page.getByRole('textbox',{name:'Wallet to view'}).fill(login);await page.getByRole('button',{name:'View wallet',exact:true}).click();
     await page.getByText('Wallet details could not be refreshed. Retry shortly.',{exact:true}).waitFor();
     assert.equal(await page.getByRole('cell',{name:'10',exact:true}).count(),0);
     failAccount=false;await page.getByRole('button',{name:'Refresh',exact:true}).click();
@@ -181,7 +181,7 @@ test('switch wallets during pending reads; late replies cannot overwrite the new
     for(let n=0;!heldPosition&&n<200;n++)await page.waitForTimeout(10);assert.equal(heldPosition,true);
     assert.equal(await page.getByRole('textbox',{name:'Wallet to view'}).isEnabled(),true);
     assert.equal(await page.getByRole('button',{name:'View wallet',exact:true}).isEnabled(),true);
-    await page.getByRole('button',{name:'Use Mera wallet',exact:true}).click();
+    await page.getByRole('textbox',{name:'Wallet to view'}).fill(login);await page.getByRole('button',{name:'View wallet',exact:true}).click();
     await page.getByRole('cell',{name:'3',exact:true}).waitFor();releaseOld();await page.waitForTimeout(100);
     assert.equal(await page.getByRole('cell',{name:'10',exact:true}).count(),0);
     assert.ok(await page.evaluate(()=>(window as any).cancelledReads)>=2);
@@ -202,7 +202,7 @@ test('automatic catch-up stops after five batches; Stop loading cancels an activ
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const fixture=pilotFixture();let scans=0,release!:()=>void;const gate=new Promise<void>(r=>release=r);
   try{
-    const page=await browser.newPage();await page.addInitScript(()=>sessionStorage.setItem('flurbo.trading.market','rehearsal'));
+    const page=await browser.newPage();await page.addInitScript((owner:string)=>{sessionStorage.setItem('flurbo.trading.market','rehearsal');sessionStorage.setItem('flurbo.view-wallet:'+owner,owner);},owner);
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});

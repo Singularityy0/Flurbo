@@ -20,7 +20,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     await page.addInitScript(({owner,hash,code,namespace}:any)=>{
       const listeners=new Map<string,Set<()=>void>>();
       (window as any).walletEvent=(name:string)=>listeners.get(name)?.forEach(fn=>fn());
-      (window as any).ethereum={
+      (window as any).ethereum={isMetaMask:true,
         on:(name:string,fn:()=>void)=>{if(!listeners.has(name))listeners.set(name,new Set());listeners.get(name)!.add(fn);},
         removeListener:(name:string,fn:()=>void)=>listeners.get(name)?.delete(fn),
         request:async({method}:any)=>{
@@ -90,8 +90,12 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     await chart.getByRole('button',{name:'All samples',exact:true}).click();
     assert.equal(await page.getByRole('heading',{name:'Trade history',exact:true}).count(),0);
     assert.equal(historyReads,0);
-    await page.getByLabel('Pay with',{exact:true}).selectOption('0');
-    await page.getByRole('button',{name:'Use this wallet',exact:true}).click();
+    assert.equal(await page.getByRole('button',{name:/Unlock.*wallet|Unlock signing/i}).count(),0);
+    assert.equal(await page.getByText('MetaMask trading wallet',{exact:true}).count(),1);
+    assert.equal(await page.locator('#consumer-wallet').count(),0);
+    const connectStyle = await page.getByRole('button',{name:'Connect MetaMask',exact:true}).evaluate((el:any)=>({height:el.getBoundingClientRect().height,border:getComputedStyle(el).borderStyle}));
+    assert.ok(connectStyle.height>=44);assert.equal(connectStyle.border,'solid');
+    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
     await page.getByText('Your wallet is ready. Choose your answer and number of shares.').waitFor();
     assert.equal(await page.evaluate((key:string)=>sessionStorage.getItem(key),'flurbo.view-wallet:'+loginAddress),owner);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('flurbo.trading.market')),namespace);
@@ -107,16 +111,16 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),null);
     // A failed reconnect must not leave the earlier signer/review available.
     await page.evaluate(()=>sessionStorage.setItem('wallet.rejectConnect','1'));
-    await page.getByRole('button',{name:'Refresh wallet',exact:true}).click();
-    await page.getByRole('button',{name:'Use this wallet',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Reconnect MetaMask',exact:true}).click();
+    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).waitFor();
     assert.equal(await page.getByRole('button',{name:'Allow payment',exact:true}).count(),0);
     await page.evaluate(()=>sessionStorage.removeItem('wallet.rejectConnect'));
-    await page.getByRole('button',{name:'Use this wallet',exact:true}).click();
+    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
     await page.getByRole('button',{name:'Allow payment',exact:true}).waitFor();
     await page.evaluate(()=>(window as any).walletEvent('accountsChanged'));
     await page.getByText('Wallet changed. Reconnect. Submitted actions remain in tracking.').waitFor();
     assert.equal(await page.getByRole('button',{name:'Allow payment',exact:true}).count(),0);
-    await page.getByRole('button',{name:'Use this wallet',exact:true}).click();
+    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
     await page.getByRole('button',{name:'Allow payment',exact:true}).click();
     await page.getByText('Sent to the network. Confirmation is checked automatically.').waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
@@ -132,7 +136,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     await page.reload();await page.getByLabel('Shares',{exact:true}).waitFor();
     assert.equal(await page.getByLabel('Shares',{exact:true}).inputValue(),'5');
     assert.equal(await page.getByLabel('Your answer',{exact:true}).inputValue(),'no');
-    await page.getByRole('button',{name:'Use this wallet',exact:true}).click();
+    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).click();
@@ -141,7 +145,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
     await page.getByRole('region',{name:'Trade this market'}).getByText('5 shares',{exact:true}).waitFor();
     assert.equal(await page.evaluate(({ns,login}:any)=>localStorage.getItem('flurbo.checkout.v1:'+ns+':'+login),{ns:namespace,login:loginAddress}),null);
-    assert.equal(await page.getByRole('heading',{name:'Will the concert sell out?',exact:true}).count(),2);
+    assert.equal(await page.getByRole('heading',{name:'Will the concert sell out?',exact:true}).count(),1);
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     if(process.env.FLURBO_TEST_SCREENSHOT)await page.screenshot({path:process.env.FLURBO_TEST_SCREENSHOT.replace('.png','-mobile.png'),fullPage:true});

@@ -28,7 +28,7 @@ export default function PilotLedger({account,history,namespace='pilot'}:{account
   const [catchingUp,setCatchingUp]=useState(true),[visible,setVisible]=useState(document.visibilityState==='visible');
   const version=useRef(0),active=useRef<AbortController|null>(null),automaticReads=useRef(0);
   useEffect(()=>()=>{version.current++;active.current?.abort();},[]);
-  useEffect(()=>{const timer=setTimeout(()=>void refresh(),0);return()=>clearTimeout(timer);},[]);
+  useEffect(()=>{const timer=setTimeout(()=>{if(owner)void refresh();},0);return()=>clearTimeout(timer);},[]);
   useEffect(()=>{const change=()=>setVisible(document.visibilityState==='visible');document.addEventListener('visibilitychange',change);return()=>document.removeEventListener('visibilitychange',change);},[]);
   useEffect(()=>{
     if(!index || index.complete || busy || !catchingUp || !visible)return;
@@ -105,7 +105,7 @@ export default function PilotLedger({account,history,namespace='pilot'}:{account
     </>:<p>{busy?'Loading your shares...':'Holdings are unavailable. This does not mean you have no shares.'}</p>}
   </>;
   return <div className="portfolio-view">
-    <section className="portfolio-wallet"><div><label>Wallet to view<input value={wallet} onChange={e=>setWallet(e.target.value)}/></label></div><button className="button button-dark" onClick={()=>void refresh(wallet,0)}>View wallet</button><button className="button button-outline" onClick={()=>{setWallet(account);void refresh(account,0);}}>Use Mera wallet</button><p>Read-only view. Your Mera and MetaMask addresses hold separate positions.</p></section>
+    <section className="portfolio-wallet"><div><label>Wallet to view<input value={wallet} onChange={e=>setWallet(e.target.value)}/></label></div><button className="button button-dark" onClick={()=>void refresh(wallet,0)}>View wallet</button><p>Read-only view. Enter your MetaMask address, or any address holding earlier positions.</p></section>
     <div className="portfolio-toolbar"><p className="portfolio-address">Showing {owner}</p><button className="button button-outline" onClick={()=>busy?pause():void refresh()}>{busy?'Stop loading':'Refresh'}</button></div>
     {accountError&&<p role="status">{accountError}</p>}
     {state&&<p className="portfolio-freshness">{amount(state.wallet.cash)} test AUSD in this wallet. Checked at block {state.snapshot.blockNumber}.</p>}

@@ -9,7 +9,7 @@ type Account = Pick<PilotState, 'manifest' | 'snapshot'> & { wallet: { address: 
 type Entry = { hash: string; block: number; index: number; name: string; args: Record<string, string | number | boolean> };
 type Index = { complete: boolean; through: number; target: number; logs: Entry[] };
 type Holdings = { snapshot: PilotState['snapshot']; rows: (ClaimHint & { quantity: string; payoutAtoms: string | null })[] };
-export function Ledger({ namespace, address, mera, history }: { namespace: PilotNamespace; address: string; mera: string; history: boolean }) {
+export function Ledger({ namespace, address, history }: { namespace: PilotNamespace; address: string; history: boolean }) {
   const [wallet, setWallet] = useState(address), [owner, setOwner] = useState(address), [page, setPage] = useState(0), [claims, setClaims] = useState<ClaimHint[]>([]), [error, setError] = useState('');
   const account = useRequest<Account>(), index = useRequest<Index>(), holdings = useRequest<Holdings>();
   useEffect(() => { setOwner(address); setWallet(address); }, [address]);
@@ -27,6 +27,7 @@ export function Ledger({ namespace, address, mera, history }: { namespace: Pilot
     void holdings.run(signal => pilotRequest('positions', { owner, claims: all.slice(page * 30, page * 30 + 30) }, namespace, signal), true);
   }, [account.value, index.value, page]);
   function refresh() {
+    if (!/^0x[0-9a-f]{40}$/i.test(owner)) return;
     void account.run(signal => pilotRequest('account?wallet=' + owner, undefined, namespace, signal));
     // A log index failure never blocks direct reads of shares.
     void index.run(signal => pilotRequest('history', {}, namespace, signal));
@@ -42,7 +43,7 @@ export function Ledger({ namespace, address, mera, history }: { namespace: Pilot
   const [historyPage, setHistoryPage] = useState(0);
   useEffect(() => setHistoryPage(0), [owner, namespace]);
   return <><Title>Your {history ? 'history' : 'portfolio'}.</Title><Copy>Your predictions, with the full question and your chosen answers.</Copy>
-    <Card><Field label="Wallet to view" value={wallet} onChange={setWallet} /><Button title="View wallet" onPress={() => change(wallet)} /><Button secondary title="Use Mera wallet" onPress={() => change(mera)} /><Notice>{error}</Notice><Copy small>Mera and MetaMask hold separate shares. You can switch while data loads.</Copy></Card>
+    <Card><Field label="Wallet to view" value={wallet} onChange={setWallet} /><Button title="View wallet" onPress={() => change(wallet)} /><Notice>{error}</Notice><Copy small>Enter your MetaMask address, or an address holding earlier positions. You can switch while data loads.</Copy></Card>
     <Copy small>Showing {owner}</Copy>
     <Button secondary title={account.busy || index.busy || holdings.busy ? 'Stop loading' : 'Refresh'} onPress={() => { if (account.busy || index.busy || holdings.busy) { account.cancel(); index.cancel(); holdings.cancel(); } else refresh(); }} />
     <Notice>{account.error}</Notice>{account.value && <Copy>{amount(account.value.wallet.cash)} test AUSD · Block {account.value.snapshot.blockNumber}</Copy>}

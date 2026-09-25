@@ -11,7 +11,7 @@ import { pilotMera, checkPilotPending } from '../src/pilot.ts';
 import { AuthController } from '../src/auth/controller.ts';
 import { authPolicy } from '../src/auth/policy.ts';
 
-test('pilot endpoints require Mera login; public evidence remains readable; raw submission binds chain, signer and call',async()=>{
+test('pilot endpoints require Mera login; public evidence remains readable; raw submission is disabled',async()=>{
   const signer=privateKeyToAccount(('0x'+'11'.repeat(32)) as `0x${string}`),f=pilotFixture(),origin='https://flurbo.singu.online';
   const store={read:async(id:string)=>id==='fixture'?{address:signer.address.toLowerCase(),method:'passkey'}:null};
   const server=productionServer({origin,rpcUrl:TESTNET.rpc,pilot:f.service,pilotEvidence:{get:async()=>'{"public":true}'}},store);
@@ -38,11 +38,11 @@ test('pilot endpoints require Mera login; public evidence remains readable; raw 
     assert.equal(await request('/api/pilot/status'),200);
     assert.equal(await request('/api/pilot/evidence/'+hash,undefined,false),200);
     assert.equal(await request('/api/pilot/prepare',{owner,action:'deliver'},true,'https://evil.example'),403);
-    assert.equal(await submit(await signed()),200);
+    assert.equal(await submit(await signed()),403);
     assert.equal(await submit(await signed(143)),403);
     assert.equal(await submit(await signed(10143,pool)),403);
     assert.equal(await submit(await signed(10143,TESTNET.cash,privateKeyToAccount(('0x'+'22'.repeat(32)) as `0x${string}`))),403);
-    assert.equal(writes,1);
+    assert.equal(writes,0);
   }finally{globalThis.fetch=original;await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 
@@ -68,7 +68,7 @@ test('rehearsal API is authenticated and cannot sign for the official pool',asyn
     assert.equal(await request('/api/rehearsal/status'),200);
     assert.equal(await request('/api/rehearsal/rpc',{method:'eth_sendRawTransaction',params:[await raw(pool)]}),403);
     assert.equal(await request('/api/pilot/rpc',{method:'eth_sendRawTransaction',params:[await raw(rehearsalPool)]}),403);
-    assert.equal(await request('/api/rehearsal/rpc',{method:'eth_sendRawTransaction',params:[await raw(rehearsalPool)]}),200);
+    assert.equal(await request('/api/rehearsal/rpc',{method:'eth_sendRawTransaction',params:[await raw(rehearsalPool)]}),403);
     assert.equal(await request('/api/practice-collections',undefined,false),401);
     assert.equal(await request('/api/practice-collections'),200);
     assert.equal(await request('/api/'+namespace+'/status',undefined,false),401);
@@ -76,12 +76,12 @@ test('rehearsal API is authenticated and cannot sign for the official pool',asyn
     assert.equal(await request('/api/practice-'+'cc'.repeat(20)+'/status'),503);
     assert.equal(await request('/api/'+namespace+'/rpc',{method:'eth_sendRawTransaction',params:[await raw(rehearsalPool)]}),403);
     assert.equal(await request('/api/rehearsal/rpc',{method:'eth_sendRawTransaction',params:[await raw(archivedPool)]}),403);
-    assert.equal(await request('/api/'+namespace+'/rpc',{method:'eth_sendRawTransaction',params:[await raw(archivedPool)]}),200);
-    assert.equal(writes,2);
+    assert.equal(await request('/api/'+namespace+'/rpc',{method:'eth_sendRawTransaction',params:[await raw(archivedPool)]}),403);
+    assert.equal(writes,0);
   }finally{globalThis.fetch=original;await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 
-test('pilot Mera adapter signs only own bounded calls with a current nonce and unlocked passkey',async()=>{
+test('pilot Mera adapter refuses all transaction signing, including previously supported calls',async()=>{
   const controller=new AuthController({policy:authPolicy('http://localhost:18767',true,true,true),client:{async createCredential(){throw Error('unused');},async getCredential(){return{credentialId:new Uint8Array([1]),prfOutput:new Uint8Array(32).fill(9)};}}});
   const f=pilotFixture(),provider=pilotMera(controller),original=globalThis.fetch;let writes=0;
   globalThis.fetch=async(input,options)=>{
@@ -94,8 +94,8 @@ test('pilot Mera adapter signs only own bounded calls with a current nonce and u
     await controller.authenticate('login');const from=controller.getSnapshot().address!;
     const tx={from,to:TESTNET.cash,data:encodeFunctionData({abi:pilotCashAbi,functionName:'approve',args:[pool,1000000n]}),chainId:'0x279f',value:'0x0',nonce:'0x79',gas:'0x186a0',gasPrice:'0x3b9aca00'};
     const send=(changes={})=>provider.request({method:'eth_sendTransaction',params:[{...tx,...changes}]});
-    await send();await assert.rejects(send({from:owner}));await assert.rejects(send({nonce:'0x78'}));await assert.rejects(send({to:pool}));
-    controller.lockSigning();await assert.rejects(send(),/Unlock/);assert.equal(writes,1);
+    await assert.rejects(send(),/account access only/);await assert.rejects(send({from:owner}));await assert.rejects(send({nonce:'0x78'}));await assert.rejects(send({to:pool}));
+    controller.lockSigning();await assert.rejects(send(),/account access only/);assert.equal(writes,0);
   }finally{globalThis.fetch=original;await controller.signOut();}
 });
 

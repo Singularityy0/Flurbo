@@ -17,7 +17,7 @@ export default function Portfolio({ account, market, history = false }: { accoun
     let controller: AbortController, stopped = false, failures = 0, timer: ReturnType<typeof setTimeout>;
     setData(null); setError(''); setRetrying(false);
     async function load() {
-      if (stopped) return;
+      if (stopped || !wallet) return;
       controller = new AbortController();
       setBusy(true);
       let retryable = true;
@@ -66,14 +66,15 @@ export default function Portfolio({ account, market, history = false }: { accoun
     <form className="portfolio-wallet" onSubmit={event => { event.preventDefault(); chooseWallet(draft.trim()); }}>
       <div><label htmlFor="portfolio-wallet">Wallet to view</label><input id="portfolio-wallet" autoComplete="off" spellCheck={false} value={draft} onChange={event => setDraft(event.target.value)} /></div>
       <button className="button button-dark" type="submit">View wallet</button>
-      <button className="button button-outline" type="button" onClick={() => chooseWallet(account)}>Use Mera wallet</button>
-      <p>Read-only view. Your trading wallet is remembered for this browser session. Mera and MetaMask have separate holdings.</p>
+
+      <p>Read-only view. Your MetaMask address is remembered for this browser session. You can also look up an address holding earlier positions.</p>
     </form>
     <div className="portfolio-toolbar"><div><span className="eyebrow">{market === 'learning' ? 'Learning pool' : 'Original pool'}</span><p className="portfolio-address">{wallet}</p></div>
-      <button className="button button-outline" disabled={busy} onClick={() => setRefresh(n => n + 1)}><RefreshCw size={14} className={busy ? 'portfolio-spin' : ''}/>{busy ? 'Reading...' : 'Refresh'}</button></div>
+      <button className="button button-outline" disabled={busy || !wallet} onClick={() => setRefresh(n => n + 1)}><RefreshCw size={14} className={busy ? 'portfolio-spin' : ''}/>{busy ? 'Reading...' : 'Refresh'}</button></div>
+    {!wallet && <p>Connect MetaMask on a market page, or enter your public wallet address above to view your holdings.</p>}
     {error && <p className="auth-error" role="alert">{error}</p>}
     {retrying && <p role="status">The network read was interrupted. Retrying from the last verified block...</p>}
-    {!complete && (!error || data) && <div className="portfolio-empty" role="status"><Layers3 size={26}/><h2>{error ? 'Scan paused.' : `Finding your ${history ? 'activity' : 'positions'}.`}</h2><p>Reading pool activity from deployment. Your balances will appear when the scan is complete.</p>{data && <><progress aria-label="History scan progress" value={Math.max(0, data.index.through_block - data.index.from_block + 1)} max={Math.max(1, data.index.target_block - data.index.from_block + 1)}/><p>Scanned through block {data.index.through_block.toLocaleString()} of {data.index.target_block.toLocaleString()}. You can leave and resume later.</p></>}</div>}
+    {wallet && !complete && (!error || data) && <div className="portfolio-empty" role="status"><Layers3 size={26}/><h2>{error ? 'Scan paused.' : `Finding your ${history ? 'activity' : 'positions'}.`}</h2><p>Reading pool activity from deployment. Your balances will appear when the scan is complete.</p>{data && <><progress aria-label="History scan progress" value={Math.max(0, data.index.through_block - data.index.from_block + 1)} max={Math.max(1, data.index.target_block - data.index.from_block + 1)}/><p>Scanned through block {data.index.through_block.toLocaleString()} of {data.index.target_block.toLocaleString()}. You can leave and resume later.</p></>}</div>}
     {complete && <>
       <p className="portfolio-freshness" role="status">{data.snapshot.stale ? 'This snapshot is older. Refresh for current balances.' : 'Read from Monad testnet'} · Block {data.snapshot.block_number.toLocaleString()}</p>
       {!history && <div className="portfolio-metrics"><article><span className="eyebrow">Available AUSD</span><strong>{amount(data.ausd_atoms)}</strong><p>Wallet funds shared across both pools</p></article><article><span className="eyebrow">Open positions</span><strong>{data.position_count}</strong><p>All nonzero internal claims in this pool</p></article>{data.receipt_atoms != null && <article><span className="eyebrow">Wrapped H YES</span><strong>{amount(data.receipt_atoms)}</strong><p>Wallet receipts, separate from pool claims</p></article>}</div>}

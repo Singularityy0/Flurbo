@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useSearch } from 'wouter';
-import { ArrowUpRight, ArrowLeft, Layers3, Wallet, Activity, LogOut, Copy, LockKeyhole, Check } from 'lucide-react';
+import { ArrowUpRight, ArrowLeft, Layers3, Wallet, Activity, LogOut, Copy, Check } from 'lucide-react';
 import { useAuth } from '../auth/context';
-import { meraProvider } from '../auth/mera-provider';
 import { mountDashboard } from '../../../dashboard/app.mjs';
 import dashboardHtml from '../../../dashboard/index.html?raw';
 import dashboardCss from '../../../dashboard/styles.css?raw';
@@ -16,7 +15,7 @@ import Kuru from './Kuru';
 import Pilot from './Pilot';
 import PilotLedger from './PilotLedger';
 import { isPracticeNamespace } from '../pilot';
-import { walletKey } from '../portfolio';
+import { walletKey, tradingWalletKey, rememberedTradingWallet } from '../portfolio';
 const publicTestnet = import.meta.env.PROD;
 
 type Panel = 'trade' | 'positions' | 'activity';
@@ -43,8 +42,8 @@ function CoreMarket({ account, panel, market, onBusy }: { account: string | null
     main.querySelector('#book-title')!.textContent = 'A market for the basics.';
     main.querySelector('.account > .muted')!.textContent = 'Balances and positions belong to your selected trading wallet. Connecting MetaMask does not change your Mera login.';
     main.querySelector('.account .pill')!.textContent = 'On-chain balances';
-    main.querySelector('#setup-status')!.textContent = 'Fund your selected account with local test AUSD and MON. Mera and extension wallets have separate addresses.';
-    main.querySelector('.wallet-help p:last-child')!.textContent = 'For Mera, unlock signing at the top of this workspace before confirming. Extension wallets use their own confirmation window.';
+    main.querySelector('#setup-status')!.textContent = 'Fund your MetaMask account with test AUSD and MON. Mera is only for sign-in.';
+    main.querySelector('.wallet-help p:last-child')!.textContent = 'Connect MetaMask and confirm transactions in its wallet window.';
     main.querySelector('label[for="wallet-provider"]')!.textContent = 'Trading wallet';
     if (publicTestnet) {
       (main.querySelector('#setup-wallet') as HTMLElement).hidden = true;
@@ -52,10 +51,10 @@ function CoreMarket({ account, panel, market, onBusy }: { account: string | null
       main.querySelector('.quote-footer')!.textContent = 'Review your quote to approve AUSD or trade. Public Monad testnet assets only.';
       const bookHelp = main.querySelector('.book .caption');
       if (bookHelp) bookHelp.textContent = 'Indicative depth only. Execution requires a reviewed quote. Synthetic operator liquidity.';
-      main.querySelector('#setup-status')!.textContent = 'Use the balance of your selected trading wallet. Mera and MetaMask hold separate funds; the funding panel above is for Mera.';
+      main.querySelector('#setup-status')!.textContent = 'Use your connected MetaMask balance. The funding panel above funds MetaMask; Mera is for account access only.';
       main.querySelector('.wallet-help')!.innerHTML = '<summary>Monad testnet network</summary><p>Chain ID 10143. RPC https://testnet-rpc.monad.xyz. Use public test assets only.</p>';
     }
-    main.querySelector('.trading > .caption')!.textContent = 'Every approval, trade and redemption needs your confirmation. Mera signs here after review; extension wallets open their own prompt.';
+    main.querySelector('.trading > .caption')!.textContent = 'Confirm every approval, trade and redemption in MetaMask.';
     // Progressive disclosure keeps conversion and settlement available without
     // making the first trade compete with every advanced action.
     for (const heading of Array.from(main.querySelectorAll('.trading h3'))) {
@@ -82,12 +81,11 @@ function CoreMarket({ account, panel, market, onBusy }: { account: string | null
     const style = document.createElement('style'); style.textContent = dashboardCss.replace(':root', ':host') + '\n' + workspaceCss;
     shadow.replaceChildren(style, main);
     main.setAttribute('data-panel', host.current!.dataset.panel || 'trade');
-    const provider = meraProvider(controller, market);
-    const unmount = mountDashboard(shadow, { account: account || undefined, consumer: true, credentials: 'same-origin',
+    const unmount = mountDashboard(shadow, { account: account ? rememberedTradingWallet(account) || undefined : undefined, consumer: true, credentials: 'same-origin',
       marketId: market, onBusy,
-      onWallet: selected => { if (account && selected) { try { sessionStorage.setItem(walletKey(account), selected); } catch { /* Optional view preference. */ } } },
-      providers: account && state.method === 'passkey' ? [{ name: 'Flurbo passkey (Mera)', provider }] : [] });
-    return () => { unmount(); provider.destroy(); };
+      onWallet: selected => { if (account && selected) { try { sessionStorage.setItem(walletKey(account), selected); sessionStorage.setItem(tradingWalletKey(account), selected); } catch { /* Optional view preference. */ } } },
+      providers: [] });
+    return () => { unmount(); };
   }, [account, controller, state.method, market, onBusy]);
   useEffect(() => { host.current?.shadowRoot?.querySelector('main')?.setAttribute('data-panel', panel); }, [panel]);
   return <div ref={host} data-panel={panel} className="core-market" />;
@@ -129,8 +127,8 @@ export default function Workspace() {
       <header className="workspace-heading"><div><span className="eyebrow">Flurbo / {pilotPage ? (rehearsalPage?'Testnet rehearsal':'Real events') : kuruPage ? 'Kuru order book' : panel === 'trade' ? 'Make your move' : panel === 'positions' ? 'Keep the bigger picture' : 'Follow the details'}</span><h1>{pilotPage ? <>{rehearsalPage?'Practice every':'Questions with'} <em>{rehearsalPage?'step.':'real outcomes.'}</em></> : kuruPage ? <>Your view, <em>on the book.</em></> : panel === 'trade' ? <>A view worth <em>combining.</em></> : panel === 'positions' ? <>Your piece of <em>the picture.</em></> : <>Every move, <em>in view.</em></>}</h1><p>{pilotPage ? (rehearsalPage?'Scripted outcomes in a separate public testnet pool.':'Explore official-source questions and follow every step of resolution.') : kuruPage ? 'Trade the original pool’s H YES receipts through Kuru on Monad.' : panel === 'trade' ? 'Choose the outcomes you believe in. Get one price from one shared pool.' : panel === 'positions' ? 'Follow your holdings and what they pay when the outcome is known.' : 'Check transactions, pool contracts and settlement on Monad.'}</p></div><span className="workspace-network"><i/> {publicTestnet ? 'Monad testnet' : 'Local test market'}</span></header>
       <section className="workspace-identity" aria-label="Account access">
         <div className="identity-symbol"><Wallet size={20}/></div>
-        <div className="identity-copy"><span className="eyebrow">{address ? 'Your Flurbo account / Mera' : 'Make yourself at home'}</span>{state.restoring ? <p>Restoring your session...</p> : address ? <><button title="Copy full account address" onClick={async () => { try { await navigator.clipboard.writeText(address); setCopied(true); } catch { setCopied(false); } }} className="identity-address">{address.slice(0, 8)}...{address.slice(-6)} {copied ? <Check size={14}/> : <Copy size={14}/>}</button><span className="identity-caption">{state.signingExpiresAt ? 'Signing is open for this visit. Login stays active for seven days.' : 'Welcome back. Your login is saved; unlock signing when you want to trade.'}</span></> : <p>Sign in with Mera to open your Flurbo account.</p>}</div>
-        {address ? <button className="button button-dark" disabled={state.busy || !!state.signingExpiresAt} onClick={() => void controller.authenticate('login')}><LockKeyhole size={15}/>{state.busy ? 'Confirm your passkey...' : state.signingExpiresAt ? 'Signing unlocked' : 'Unlock signing'}</button> : <Link href="/login" className="button button-dark">Sign in <ArrowUpRight size={16}/></Link>}
+        <div className="identity-copy"><span className="eyebrow">{address ? 'Your Flurbo account / Mera' : 'Make yourself at home'}</span>{state.restoring ? <p>Restoring your session...</p> : address ? <><button title="Copy full account address" onClick={async () => { try { await navigator.clipboard.writeText(address); setCopied(true); } catch { setCopied(false); } }} className="identity-address">{address.slice(0, 8)}...{address.slice(-6)} {copied ? <Check size={14}/> : <Copy size={14}/>}</button><span className="identity-caption">Signed in with Mera. Connect MetaMask below to trade.</span></> : <p>Sign in with Mera to open your Flurbo account.</p>}</div>
+        {!address && <Link href="/login" className="button button-dark">Sign in <ArrowUpRight size={16}/></Link>}
       </section>
       {state.error && <p role="alert" className="auth-error">{state.error}</p>}
       {state.notice && <p role="status" className="auth-feedback">{state.notice}</p>}

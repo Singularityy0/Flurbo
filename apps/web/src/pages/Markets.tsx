@@ -49,9 +49,9 @@ function CollectionMarkets({collections,namespace}:{collections:PracticeCatalog;
   const price=(atoms:string|null)=>atoms!==null?Number(formatUnits(BigInt(atoms),6)).toFixed(3):'Unavailable';
   function choose(event:number,yes:boolean){navigate(marketHref(namespace,event,yes));}
   return <main id="main" tabIndex={-1} className="markets-page">
-    <div className="market-topline"><span className="market-badge">Practice on Monad testnet</span><details className="market-account"><summary>Your wallet</summary><div>
-      <p>Signed in with your Flurbo passkey.</p><p className="market-address">{auth.address}</p>
-      <button className="button button-dark" disabled={auth.busy||!!auth.signingExpiresAt} onClick={()=>void controller.authenticate('login')}>{auth.signingExpiresAt?'Wallet unlocked':'Unlock Flurbo wallet'}</button>
+    <div className="market-topline"><span className="market-badge">Practice on Monad testnet</span><details className="market-account"><summary>Your account</summary><div>
+      <p>Signed in with Mera. Use MetaMask to fund your wallet and trade.</p><p className="market-address">{auth.address}</p>
+
       <Funding/><button className="text-link" onClick={()=>void controller.signOut()}>Sign out</button>
     </div></details></div>
     <header className="market-heading"><span className="eyebrow">{browse?'A little curiosity goes a long way':'Your Flurbo'}</span><h1>{browse?<>What happens <em>next?</em></>:location==='/portfolio'?<>Your <em>portfolio.</em></>:<>Your <em>history.</em></>}</h1><p>{browse?'Pick a question. Choose Yes or No. Put your view to the test.':'Your trades and holdings, all in one place.'}</p></header>

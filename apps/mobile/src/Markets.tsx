@@ -15,7 +15,7 @@ export function Markets({ namespace, kind, onPortfolio }: { namespace: PilotName
   const data = useRequest<MarketList>(), quote = useRequest<PilotReview>();
   const login = useSyncExternalStore(auth.subscribe, auth.getSnapshot), wallet = useSyncExternalStore(externalWallet.subscribe, externalWallet.getSnapshot);
   const tx = useSyncExternalStore(transactions.subscribe, transactions.getSnapshot);
-  const owner = kind === 'mera' ? login.address : wallet.address;
+  const owner = wallet.address;
   const [search, setSearch] = useState(''), [answers, setAnswers] = useState<Record<number, boolean>>({}), [mode, setMode] = useState<'all' | 'any'>('all');
   const [quantity, setQuantity] = useState('1'), [side, setSide] = useState<'buy' | 'sell' | 'redeem'>('buy'), [error, setError] = useState('');
   const [clock, setClock] = useState(Date.now()), [rules, setRules] = useState(false);
@@ -72,8 +72,9 @@ export function Markets({ namespace, kind, onPortfolio }: { namespace: PilotName
       {Object.keys(answers).length > 1 && <Choice value={mode} options={[{ value: 'all', label: 'All happen (AND)' }, { value: 'any', label: 'At least one (OR)' }]} onChange={setMode} />}
       <Choice value={side} options={[{ value: 'buy', label: 'Buy' }, { value: 'sell', label: 'Sell' }, { value: 'redeem', label: 'Claim payout' }]} onChange={setSide} />
       <Field label="Shares" value={quantity} onChange={setQuantity} numeric />
-      <Copy small>Trading with {kind === 'mera' ? 'Mera' : 'MetaMask'}: {owner ?? 'connect your wallet in Wallet'}</Copy>
-      <Notice>{error || quote.error}</Notice>
+      <Copy small>Trading with MetaMask: {owner ?? 'connect your wallet in Wallet'}</Copy>
+      {!owner && <Button title={wallet.busy ? 'Opening MetaMask...' : 'Connect MetaMask'} disabled={wallet.busy} onPress={() => void externalWallet.connect()} />}
+      <Notice>{wallet.error || error || quote.error}</Notice>
       {quote.busy && <Copy>Reading a price for this prediction...</Copy>}
       {quote.value && <><Heading>{quote.value.title}</Heading><Copy>{quote.value.action === 'approve' ? 'Allowance required: ' : side === 'sell' ? 'Minimum received: ' : 'Maximum test AUSD: '}{amount(side === 'sell' ? quote.value.minimumReceivedAtoms : quote.value.amountAtoms)}</Copy>
         <Copy small>Maximum network fee: {formatUnits(BigInt(quote.value.maximumFeeWei), 18)} test MON. Slippage limit: 0.5%.</Copy>
@@ -81,7 +82,7 @@ export function Markets({ namespace, kind, onPortfolio }: { namespace: PilotName
         {clock / 1000 >= quote.value.expiresAt ? <Notice>Price expired. Change the quantity or refresh this selection before confirming.</Notice> : <Button title={tx.busy ? 'Checking transaction...' : quote.value.action === 'approve' ? 'Approve AUSD in wallet' : `Confirm ${side === 'redeem' ? 'payout' : side} in wallet`} disabled={quote.busy || tx.busy || !!tx.pending} onPress={() => void confirm()} />}
         {quote.value.action === 'approve' && <Copy small>Approval allows the pool to use this amount. It does not buy shares. A fresh purchase confirmation follows.</Copy>}
       </>}
-      {kind === 'mera' && !login.signingExpiresAt && <Button title="Unlock Mera signing" disabled={login.busy} onPress={() => void auth.authenticate('login')} />}
+
       <Button title="View portfolio" secondary onPress={onPortfolio} />
     </Card>}
     <Button secondary title={rules ? 'Hide market rules' : 'Read market rules'} onPress={() => setRules(!rules)} />

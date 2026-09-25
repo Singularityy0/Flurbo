@@ -1,3 +1,4 @@
+import { isMetaMask } from './metamask.mjs';
 import { address, assertContext, prepare, prepareRedemption, prepareConversion, prepareWithdrawal, sendReviewed, reconcile, setupLocalWallet, walletMessage, WalletError } from './wallet.mjs';
 import { formatUnits, parseUnits, snapshotFresh } from './claims.mjs';
 
@@ -110,10 +111,11 @@ export function mountTrading(hooks) {
     removeListeners(); account = null; provider = null;
     invalidate(); text('signer-status', message); hooks.accountChanged(null); update();
   }
-  function addProvider(candidate, name) {
+  function addProvider(candidate, name, info) {
+    if (!isMetaMask(candidate, info)) return;
     if (!candidate || typeof candidate.request !== 'function' || typeof candidate.on !== 'function' || typeof candidate.removeListener !== 'function' || providers.some(p => p.provider === candidate) || providers.length >= 10) return;
     const option = document.createElement('option'); option.value = String(providers.length);
-    option.textContent = typeof name === 'string' ? name.slice(0, 80) : 'Browser wallet';
+    option.textContent = 'MetaMask';
     if (providers.length === 0) $('wallet-provider').replaceChildren();
     const external = !(hooks.providers || []).some(item => item.provider === candidate);
     if (external) {
@@ -122,15 +124,15 @@ export function mountTrading(hooks) {
     }
     providers.push({ provider: candidate, external }); $('wallet-provider').append(option);
     if (providers.length === 1) $('wallet-provider').value = '0';
-    if (!account) text('signer-status', 'Select a browser wallet and connect your test account.');
+    if (!account) text('signer-status', 'Connect your MetaMask test account.');
     update();
   }
-  const announced = event => addProvider(event.detail?.provider, event.detail?.info?.name);
+  const announced = event => addProvider(event.detail?.provider, event.detail?.info?.name, event.detail?.info);
   window.addEventListener('eip6963:announceProvider', announced);
   for (const item of hooks.providers || []) addProvider(item.provider, item.name);
   window.dispatchEvent(new Event('eip6963:requestProvider'));
   addProvider(window.ethereum, 'Browser wallet (injected)');
-  if (!providers.length) text('signer-status', 'No browser wallet detected. Open this URL in a desktop browser with your wallet extension, then reload. The in-app browser may not provide a wallet.');
+  if (!providers.length) text('signer-status', 'MetaMask was not detected. Install the MetaMask extension or open this site in the MetaMask browser.');
 
   function connected(selected, candidate) {
     if (disposed) return;

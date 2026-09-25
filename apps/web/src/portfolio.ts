@@ -11,7 +11,15 @@ export type Portfolio = {
 export const walletKey = (account: string) => `flurbo.view-wallet:${account.toLowerCase()}`;
 export function rememberedWallet(account: string) {
   try { const value = sessionStorage.getItem(walletKey(account)); if (value && /^0x[\da-f]{40}$/i.test(value)) return value; } catch { /* Storage is optional. */ }
-  return account;
+  return "";
+}
+export const tradingWalletKey = (account: string) => `flurbo.metamask-wallet:${account.toLowerCase()}`;
+export function rememberedTradingWallet(account: string) {
+  try {
+    const value = sessionStorage.getItem(tradingWalletKey(account)) || rememberedWallet(account);
+    if (value && value.toLowerCase() !== account.toLowerCase() && /^0x[\da-f]{40}$/i.test(value)) return value;
+  } catch { /* Optional read-only display preference. */ }
+  return '';
 }
 export function amount(value: string | undefined | null) {
   if (value == null) return 'Unavailable';

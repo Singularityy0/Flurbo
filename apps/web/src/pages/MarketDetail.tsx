@@ -3,7 +3,7 @@ import {Link} from 'wouter';
 import {formatUnits} from 'viem';
 import {useAuth} from '../auth/context';
 import {pilotRequest,type PilotNamespace,type PilotState} from '../pilot';
-import {walletKey} from '../portfolio';
+import {rememberedTradingWallet} from '../portfolio';
 import {settlementView} from '../market-detail';
 import Pilot from './Pilot';
 import WhatIf from './WhatIf';
@@ -16,9 +16,8 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
   const [busy,setBusy]=useState(false),[positions,setPositions]=useState<{mask:string;quantity:string;payoutAtoms:string|null}[]|null>(null);
   const [positionError,setPositionError]=useState('');
   const [quotes,setQuotes]=useState<{yes:string|null;no:string|null}|null>(null);
-  const [owner,setOwner]=useState(()=>{try{return auth.address&&sessionStorage.getItem(walletKey(auth.address))||auth.address||'';}catch{return auth.address||'';}});
-  const [external,setExternal]=useState(owner!==auth.address?owner:'');
-  const walletChanged=useCallback((address:string)=>{setOwner(address);if(address&&address!==auth.address)setExternal(address);},[auth.address]);
+  const [owner,setOwner]=useState(()=>auth.address?rememberedTradingWallet(auth.address):'');
+  const walletChanged=useCallback((address:string)=>setOwner(address),[]);
   const [initialYes]=useState(()=>new URLSearchParams(window.location.search).get('answer')!=='no');
   const confirmed=useCallback(()=>setAttempt(n=>n+1),[]);
   useEffect(()=>{const c=new AbortController();setError('');void pilotRequest<PilotState>('status',undefined,namespace,c.signal).then(s=>{if(!c.signal.aborted)setState(s);}).catch(()=>{if(!c.signal.aborted)setError('Market status could not be refreshed. Retry for a current view.');});return()=>c.abort();},[namespace,attempt]);
@@ -36,8 +35,8 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
       <header className="detail-heading"><div><span className="market-badge">{namespace==='pilot'?'Monad testnet':'Practice · Monad testnet'}</span><h1>{question.question}</h1><p>One question. Part of a shared market.</p></div><span className="detail-status">{error?'Status unavailable':view.title}</span></header>
       <div className="detail-columns"><div className="detail-primary">
         <section className="detail-panel detail-trade" aria-label="Trade this market"><span className="eyebrow">Make your prediction</span>{quotes&&<><div className="detail-holdings"><div><span>Yes</span><strong>{quotes.yes===null?'Closed':cash(quotes.yes)+' AUSD'}</strong></div><div><span>No</span><strong>{quotes.no===null?'Closed':cash(quotes.no)+' AUSD'}</strong></div></div><p className="market-caption">Cost of one share at the last refresh. Your final price is checked before buying.</p></>}<Pilot key={namespace+event} namespace={namespace} consumer={{event,yes:initialYes}} onBusy={setBusy} onTradeConfirmed={confirmed} onTradingWalletChange={walletChanged}/></section>
-        <section className="detail-panel" aria-label="Your position"><div className="detail-section-heading"><h2>Your position</h2><Link href="/portfolio">Full portfolio ↗</Link></div><label>Your positions for<select value={owner} onChange={e=>setOwner(e.target.value)}><option value="">Choose your wallet</option><option value={auth.address||''}>My Flurbo wallet</option>{external&&<option value={external}>My selected trading wallet</option>}</select></label>{owner&&<p className="market-caption">{owner.slice(0,8)}…{owner.slice(-6)}</p>}
-          {positionError?<p role="alert">{positionError}</p>:positions?<div className="detail-holdings">{positions.map(p=><div key={p.mask}><span>{p.mask==='2'?'Yes':'No'}</span><strong>{cash(p.quantity)} shares</strong><small>{p.payoutAtoms===null?'Awaiting settlement':`${cash(p.payoutAtoms)} test AUSD to collect`}</small></div>)}</div>:<p role="status">{owner?'Loading your shares...':'Choose a wallet to see your shares.'}</p>}
+        <section className="detail-panel" aria-label="Your position"><div className="detail-section-heading"><h2>Your position</h2><Link href="/portfolio">Full portfolio ↗</Link></div><p>Your MetaMask positions</p>{owner&&<p className="market-caption">{owner.slice(0,8)}…{owner.slice(-6)}</p>}
+          {positionError?<p role="alert">{positionError}</p>:positions?<div className="detail-holdings">{positions.map(p=><div key={p.mask}><span>{p.mask==='2'?'Yes':'No'}</span><strong>{cash(p.quantity)} shares</strong><small>{p.payoutAtoms===null?'Awaiting settlement':`${cash(p.payoutAtoms)} test AUSD to collect`}</small></div>)}</div>:<p role="status">{owner?'Loading your shares...':'Connect MetaMask above to see your shares.'}</p>}
           <p className="market-caption">This shows individual shares. Combined predictions appear in your portfolio. Wallets hold separate balances.</p>
         </section>
         <PriceHistory namespace={namespace} event={event} pool={state.manifest.pool} refresh={attempt}/>

@@ -2,9 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'wouter';
 import { formatUnits } from 'viem';
 import { useAuth } from '../auth/context';
-import { meraProvider } from '../auth/mera-provider';
 import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
-import { amount } from '../portfolio';
+import { amount, walletKey, tradingWalletKey } from '../portfolio';
 import { check, events, loadState, pendingKey, prepare, readPending, submit, atoms, type Action, type Pending, type Provider, type Review, type State } from '../kuru';
 import './portfolio.css';
 import './kuru.css';
@@ -14,7 +13,7 @@ const labels: Record<Action['kind'], string> = { approve: 'Approve deposit', dep
 const message = (e: unknown) => e instanceof Error ? e.message : 'Request failed. Check your wallet before retrying.';
 export default function Kuru({ onBusy, onConvert }: { onBusy(busy: boolean): void; onConvert(): void }) {
   const { controller, state: auth } = useAuth();
-  const [wallets, setWallets] = useState<BrowserWallet[]>([]), [choice, setChoice] = useState('mera');
+  const [wallets, setWallets] = useState<BrowserWallet[]>([]), [choice, setChoice] = useState('0');
   const [owner, setOwner] = useState(''), [state, setState] = useState<State | null>(null);
   const [action, setAction] = useState<Action>(initial), [review, setReview] = useState<Review | null>(null);
   const [pending, setPending] = useState<Pending | null>(null), [busy, setBusy] = useState(false), [storageError, setStorageError] = useState(false);
@@ -39,17 +38,17 @@ export default function Kuru({ onBusy, onConvert }: { onBusy(busy: boolean): voi
   async function connect() {
     cleanup.current(); ++generation.current; setReview(null); setOwner(''); setState(null);
     const version = generation.current;
-    const mera = choice === 'mera' ? meraProvider(controller) : null;
-    const p: Provider | undefined = mera || wallets[Number(choice)]?.provider;
-    if (!p) throw new Error('Select a wallet.');
+    const p: Provider | undefined = wallets[Number(choice)]?.provider;
+    if (!p) throw new Error('Install or open MetaMask, then reconnect.');
     const changed = () => { ++generation.current; setReview(null); setOwner(''); setState(null); setNotice('Wallet changed. Reconnect. Any submitted transaction remains in tracking.'); };
     for (const name of ['accountsChanged', 'chainChanged', 'disconnect']) p.on?.(name, changed);
-    cleanup.current = () => { for (const name of ['accountsChanged', 'chainChanged', 'disconnect']) p.removeListener?.(name, changed); mera?.destroy(); };
+    cleanup.current = () => { for (const name of ['accountsChanged', 'chainChanged', 'disconnect']) p.removeListener?.(name, changed); };
     const accounts = await p.request({ method: 'eth_requestAccounts' }) as string[];
     if (!Array.isArray(accounts) || !/^0x[0-9a-f]{40}$/i.test(accounts[0])) throw new Error('No wallet account returned.');
     const next = await loadState(accounts[0]);
     if (!live.current || version !== generation.current) throw new Error('Wallet changed during connection. Reconnect.');
     provider.current = p; setOwner(accounts[0].toLowerCase());
+    if (auth.address) { try { sessionStorage.setItem(walletKey(auth.address), accounts[0].toLowerCase()); sessionStorage.setItem(tradingWalletKey(auth.address), accounts[0].toLowerCase()); } catch { /* Optional view preference. */ } }
     setState(next); setNotice('Wallet connected. Every action is reviewed and confirmed separately.');
   }
   async function reviewAction() {
@@ -86,7 +85,7 @@ export default function Kuru({ onBusy, onConvert }: { onBusy(busy: boolean): voi
   const activity = state && owner ? events(state.activity.logs, state.contracts.market, owner).reverse() : [];
   return <div className="portfolio-view kuru-view">
     <section className="kuru-intro"><span className="eyebrow">H YES / AUSD · Kuru</span><h2>A place for your <em>single view.</em></h2><p>Trade H YES receipts on the order book. Combined claims continue to trade with Flurbo’s shared pool.</p><p>Test assets and synthetic operator liquidity. <Link href="/account" onClick={e => { if (disabled || review) e.preventDefault(); else onConvert(); }}>Convert H YES holdings to receipts in Explore & trade.</Link></p></section>
-    <section className="portfolio-wallet"><div><label htmlFor="kuru-wallet">Trading wallet</label><select id="kuru-wallet" disabled={busy || !!review} value={choice} onChange={e => { setChoice(e.target.value); setOwner(''); setState(null); ++generation.current; cleanup.current(); provider.current = null; }}><option value="mera">Flurbo passkey (Mera)</option>{wallets.map((w, i) => <option value={i} key={i}>{w.name}</option>)}</select></div><button className="button button-dark" disabled={busy || !!review} onClick={() => void run(connect)}>Connect wallet</button>{owner && <p className="portfolio-address">Trading as {owner}. Your Mera login stays separate.</p>}</section>
+    <section className="portfolio-wallet"><div><label htmlFor="kuru-wallet">Trading wallet</label><select id="kuru-wallet" disabled={busy || !!review} value={choice} onChange={e => { setChoice(e.target.value); setOwner(''); setState(null); ++generation.current; cleanup.current(); provider.current = null; }}>{wallets.map((w, i) => <option value={i} key={i}>{w.name}</option>)}</select></div><button className="button button-dark" disabled={busy || !!review} onClick={() => void run(connect)}>Connect MetaMask</button>{owner && <p className="portfolio-address">Trading as {owner}. Your Mera login stays separate.</p>}</section>
     <p role="status" className="kuru-notice">{notice}</p>
     {confirmedHash && <p className="portfolio-footnote"><a href={`https://testnet.monadscan.com/tx/${confirmedHash}`} target="_blank" rel="noreferrer">View the last checked transaction receipt</a></p>}
     {storageError && <section className="kuru-card"><h3>Saved tracking needs attention.</h3><p>Signing is blocked because the saved transaction record could not be read. Check wallet activity before removing it. This does not cancel a transaction.</p><label className="kuru-checkbox"><input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)}/>I checked wallet activity and understand the risk of submitting twice.</label><button className="button button-outline" disabled={busy || !ack} onClick={() => void run(async () => { save(null); setStorageError(false); setAck(false); })}>Remove unreadable tracking</button></section>}

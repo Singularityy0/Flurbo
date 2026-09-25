@@ -53,8 +53,8 @@ http://localhost:18767. Local passkeys are separate test identities. The existin
 local trading and learning dashboards keep their separate ports and functionality.
 The user verified Mera signup and login. The [consumer workspace](docs/CONSUMER_WORKSPACE.md)
 retains a seven-day account login across refresh. The hosted testnet site is
-available at [flurbo.singu.online](https://flurbo.singu.online). Signing unlock
-is separate from login, and Mera and external wallets hold separate positions.
+available at [flurbo.singu.online](https://flurbo.singu.online). Mera is for signup and account access only. MetaMask is the only trading wallet
+offered by the web and native apps; earlier holdings remain available for read-only lookup.
 Hosted read-only checks do not replace real-wallet and settlement acceptance;
 see [mock test results](docs/MOCK_TEST_RESULTS.md).
 

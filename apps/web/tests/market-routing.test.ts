@@ -6,7 +6,7 @@ import { productionServer } from '../server/production.mjs';
 import { TESTNET } from '../server/network.mjs';
 import { learningDeployment } from '../shared/learning-contracts.mjs';
 
-test('learning reads and signed trades require login and cannot cross into the original pool or update authority', async () => {
+test('learning reads require login; Mera submissions remain disabled across pools', async () => {
   const origin = 'https://flurbo.singu.online';
   const signer = privateKeyToAccount(('0x' + '11'.repeat(32)) as `0x${string}`); // Test fixture only.
   const originalPool = '0x' + '22'.repeat(20);
@@ -45,11 +45,11 @@ test('learning reads and signed trades require login and cannot cross into the o
     }
     assert.equal((await request('/api/state')).value.contracts.pool, originalPool);
     assert.equal((await request('/api/markets/learning/local-wallet-setup', {})).status, 404);
-    assert.equal((await send('learning', TESTNET.cash, approve(learningDeployment.pool))).status, 200);
+    assert.equal((await send('learning', TESTNET.cash, approve(learningDeployment.pool))).status, 403);
     for (const selector of ['0x3e6b6cde', '0xc39849c5', '0xdf992423']) {
-      assert.equal((await send('learning', learningDeployment.pool, selector + '0'.repeat(320))).status, 200);
+      assert.equal((await send('learning', learningDeployment.pool, selector + '0'.repeat(320))).status, 403);
     }
-    const sent = broadcasts;
+    const sent = broadcasts; assert.equal(sent, 0);
     assert.equal((await send('learning', TESTNET.cash, approve(originalPool))).status, 403);
     assert.equal((await send('original', TESTNET.cash, approve(learningDeployment.pool))).status, 403);
     assert.equal((await send('learning', originalPool, '0x3e6b6cde')).status, 403);
