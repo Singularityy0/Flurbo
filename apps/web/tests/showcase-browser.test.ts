@@ -12,7 +12,7 @@ test('landing example and collection switch work on desktop and mobile without l
   october.publication.mode='rehearsal';october.pool='0x'+'aa'.repeat(20);
   showcase.publication.mode='ethereum-activity';showcase.publication.draft.title='Showcase v0';showcase.publication.draft.events=ACTIVITY_METRICS.map(m=>activityEvent(m,now+14520));
   const ns=`practice-${showcase.pool.slice(2)}`,old=`practice-${october.pool.slice(2)}`;
-  const requests:string[]=[];let signedIn=false,roundClose=now+14400,statusUnavailable=false;
+  const requests:string[]=[];let signedIn=false,roundClose=now+14400,statusUnavailable=false,evidencePublished=false;
   try{
     const page=await browser.newPage();
     await page.route('**/*',async(route:any)=>{
@@ -21,6 +21,7 @@ test('landing example and collection switch work on desktop and mobile without l
       if(path==='/api/auth/session')return route.fulfill({json:{session:signedIn?{address:owner,method:'passkey',expiresAt:Date.now()+3600000}:null}});
       if(path==='/api/account/access')return route.fulfill({json:{testingTools:false}});
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:ns,collections:[{namespace:ns,label:'Showcase v0',pool:showcase.pool,closesAt:now+14400},{namespace:old,label:'October practice',pool:october.pool,closesAt:now+86400}]}});
+      if(path===`/api/${ns}/status`){const state=await f.service.status();if(evidencePublished)state.cases[0].evidenceHash='0x'+'ab'.repeat(32);return route.fulfill({json:{...state,manifest:showcase}});}
       if(path.endsWith('/markets')&&path.startsWith('/api/')){requests.push(path);return route.fulfill({json:{manifest:path.includes(old)?october:showcase,snapshot:{timestamp:now,blockNumber:'100'},open:true,prices:[0,1,2,3].map(event=>({event,yes:'512495',no:'512495'}))}});}
       if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unavailable fixture'}});
       const file=path.startsWith('/assets/')?path.slice(1):'index.html';
@@ -55,5 +56,18 @@ test('landing example and collection switch work on desktop and mobile without l
     assert.equal(await page.getByLabel('Collection',{exact:true}).inputValue(),ns);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     await page.screenshot({path:new URL('../../../target/showcase-ui/markets-mobile.png',import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),fullPage:true});
+    await page.getByRole('button',{name:'View market',exact:true}).first().click();
+    const source=page.getByRole('region',{name:'Which Ethereum block',exact:true});
+    await source.waitFor();
+    assert.equal(await source.locator('time').getAttribute('datetime'),new Date((now+14520)*1000).toISOString());
+    assert.match(await source.innerText(),/No assertion evidence is published/);
+    assert.equal(await page.getByRole('link',{name:'View source ↗',exact:true}).count(),0);
+    await source.getByText('How the block is checked',{exact:true}).click();
+    assert.equal(await source.getByRole('link',{name:'Ethereum API documentation ↗',exact:true}).getAttribute('href'),'https://ethereum.org/developers/docs/apis/json-rpc/');
+    assert.match(await source.innerText(),/not evidence of this market’s result/);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    evidencePublished=true;await page.reload();
+    const evidence=page.getByRole('link',{name:'View published assertion evidence ↗',exact:true});
+    await evidence.waitFor();assert.equal(await evidence.getAttribute('href'),`/api/${ns}/evidence/0x${'ab'.repeat(32)}`);
   }finally{await browser.close();}
 });
