@@ -1,7 +1,8 @@
 import {marketQuestion} from '../showcase-copy';
-import {useEffect,useState} from 'react';
+import {useCallback,useEffect,useState} from 'react';
 import {Link} from 'wouter';
-import {pilotRequest,isPracticeNamespace,type PilotNamespace,type PilotState} from '../pilot';
+import {pilotRequest,isPracticeNamespace,readPilotPending,type PilotNamespace,type PilotState} from '../pilot';
+import Pilot from './Pilot';
 import {portfolioClaims,rememberedClaims} from '../pilot-claims';
 import {amount,describeClaim,describeClaimAnswers,type Portfolio} from '../portfolio';
 import {accountOwners,combineHoldings,type AccountHolding} from '../account-holdings';
@@ -14,6 +15,19 @@ type Read={rows:AccountHolding[];complete:boolean};
 export default function AccountHoldings({account,wallets,namespace}:{account:string;wallets:string[];namespace:string}){
   const [reads,setReads]=useState<Record<string,Read>>({}),[questions,setQuestions]=useState<string[]>([]);
   const [busy,setBusy]=useState(true),[error,setError]=useState(false),[older,setOlder]=useState(false),[revision,setRevision]=useState(0);
+  const isPilot=namespace==='pilot'||isPracticeNamespace(namespace);
+  const [results,setResults]=useState<PilotState|null>(null),[resultError,setResultError]=useState(false),[payoutBusy,setPayoutBusy]=useState(false);
+  const [selection,setSelection]=useState<{scope:number;mask:string}|null>(()=>{
+    if(!isPilot)return null;
+    try{const pending=readPilotPending(namespace as PilotNamespace);return pending?.login===account&&pending.review.requested.action==='redeem'?{scope:pending.review.requested.scope!,mask:pending.review.requested.mask!}:null;}catch{return {scope:1,mask:'2'};}
+  });
+  const collected=useCallback(()=>setRevision(n=>n+1),[]);
+  useEffect(()=>{
+    if(!isPilot)return;
+    const c=new AbortController();setResultError(false);
+    void pilotRequest<PilotState>('status',undefined,namespace as PilotNamespace,c.signal).then(value=>{if(!c.signal.aborted)setResults(value);}).catch(()=>{if(!c.signal.aborted)setResultError(true);});
+    return()=>c.abort();
+  },[namespace,revision,isPilot]);
   const identity=accountOwners(account,wallets).join(',');
   useEffect(()=>{
     const controller=new AbortController(),signal=controller.signal,owners=identity.split(',');
@@ -90,14 +104,20 @@ export default function AccountHoldings({account,wallets,namespace}:{account:str
     void run();return()=>controller.abort();
   },[account,identity,namespace,revision]);
   const rows=combineHoldings(Object.values(reads).map(read=>read.rows));
+  const ownersFor=(scope:number,mask:string)=>wallets.filter(owner=>reads[owner.toLowerCase()]?.rows.some(row=>row.scope===scope&&row.mask===mask&&row.payoutAtoms!==null&&BigInt(row.payoutAtoms)>0n));
+  const title=(scope:number)=>questions.length?questions.filter((_q,i)=>scope&(1<<i)).join(' + '):describeClaim(scope,Number(selection?.mask||'0'));
   const incomplete=error||Object.values(reads).some(read=>!read.complete)||Object.keys(reads).length<identity.split(',').length;
   return <div className="portfolio-view account-holdings" aria-busy={busy}>
-    <div className="portfolio-section-heading"><h2>Your shares</h2><button className="button button-outline" onClick={()=>setRevision(n=>n+1)}>{busy?'Refreshing…':'Refresh'}</button></div>
+    {isPilot&&<section className="portfolio-results" aria-label="Market results"><h2>Results</h2>{resultError?<p role="status">Results could not be refreshed. Try Refresh below.</p>:results?<><div className="portfolio-result-grid">{results.cases.map((c,i)=><article key={i}><Link href={`/markets/${namespace}/${i}`}>{marketQuestion(results.manifest.publication.draft.events[i])}</Link><strong>{c.phase===3?['Pending','No','Yes','Void'][c.result]:c.phase===2?'Disputed':c.phase===1?'Proposed '+['Pending','No','Yes','Void'][c.proposal]:'Pending'}</strong></article>)}</div>{!results.resolved&&<p className="portfolio-footnote">Payouts become available after the collection settles.</p>}</>:<p role="status">Loading results...</p>}</section>}
+    <div className="portfolio-section-heading"><h2>Your shares</h2><button className="button button-outline" disabled={payoutBusy} onClick={()=>setRevision(n=>n+1)}>{busy?'Refreshing…':'Refresh'}</button></div>
     {error&&<p role="alert">Some shares couldn’t be loaded. Refresh to complete your portfolio.</p>}
     <div className="portfolio-table"><table><thead><tr><th>Prediction</th><th>Shares</th><th>Redeemable test AUSD</th></tr></thead>
-      <tbody>{rows.map(row=><tr key={`${row.scope}:${row.mask}`}><td><strong>{questions.length?questions.filter((_q,i)=>row.scope&(1<<i)).join(' + '):describeClaim(row.scope,Number(row.mask))}</strong><small>{describeClaimAnswers(row.scope,Number(row.mask))}</small></td><td><span className="holding-mobile-label" aria-hidden="true">Shares</span>{amount(row.quantity)}</td><td><span className="holding-mobile-label" aria-hidden="true">Redeemable test AUSD</span>{row.payoutAtoms===null?'Awaiting settlement':amount(row.payoutAtoms)}</td></tr>)}</tbody></table></div>
+      <tbody>{rows.map(row=><tr key={`${row.scope}:${row.mask}`}><td><strong>{questions.length?questions.filter((_q,i)=>row.scope&(1<<i)).join(' + '):describeClaim(row.scope,Number(row.mask))}</strong><small>{describeClaimAnswers(row.scope,Number(row.mask))}</small></td><td><span className="holding-mobile-label" aria-hidden="true">Shares</span>{amount(row.quantity)}</td><td><span className="holding-mobile-label" aria-hidden="true">Redeemable test AUSD</span><span className="holding-payout-amount">{row.payoutAtoms===null?'Awaiting settlement':BigInt(row.payoutAtoms)===0n?'No payout':amount(row.payoutAtoms)}</span>
+        {isPilot&&row.payoutAtoms!==null&&BigInt(row.payoutAtoms)>0n&&ownersFor(row.scope,row.mask).length>0&&<button className="button button-dark holding-collect" disabled={payoutBusy||!!selection} onClick={()=>setSelection({scope:row.scope,mask:row.mask})}>Collect payout</button>}
+      </td></tr>)}</tbody></table></div>
+    {selection&&isPilot&&<><Pilot key={`${namespace}:${selection.scope}:${selection.mask}`} namespace={namespace as PilotNamespace} payout={{...selection,owners:ownersFor(selection.scope,selection.mask).map(w=>w.toLowerCase()),title:title(selection.scope)+' · '+describeClaimAnswers(selection.scope,Number(selection.mask))}} onBusy={setPayoutBusy} onTradeConfirmed={collected}/><button className="button button-outline" disabled={payoutBusy} onClick={()=>setSelection(null)}>Close payout</button></>}
     {!rows.length&&<p role="status">{busy?'Loading your shares…':incomplete||older?'Your shares could not all be checked yet. Refresh to try again.':'No shares in this collection yet.'}</p>}
     {rows.length>0&&(busy||incomplete)&&<p className="portfolio-freshness" role="status">{busy?'Loading remaining shares…':'Showing the shares checked so far.'}</p>}
-    {older&&!busy&&<p className="portfolio-footnote">Older custom predictions may still be missing. <Link href="/history">Check history</Link></p>}
+    {older&&!busy&&<p className="portfolio-footnote">Older activity is still being indexed. Refresh later if a custom prediction is missing.</p>}
   </div>;
 }

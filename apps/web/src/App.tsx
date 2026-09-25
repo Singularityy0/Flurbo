@@ -1,6 +1,6 @@
 import { ArrowUpRight, Menu, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, Route, Switch, useLocation } from "wouter";
+import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 import Home from "./pages/Home";
 import Docs from './pages/Docs';
 import AuthPage from "./pages/AuthPage";
@@ -64,7 +64,7 @@ function Header() {
           }}>
           {isHome || !state.address ? <><a href="/#how-it-works">How it works</a>
           <a href="/#the-idea">The idea</a>
-          <a href="/#faq">FAQ</a></> : <><Link href="/markets">Markets</Link><Link href="/portfolio">Portfolio</Link><Link href="/history">History</Link><Link href="/fund">Get test funds</Link></>}
+          <a href="/#faq">FAQ</a></> : <><Link href="/markets">Markets</Link><Link href="/portfolio">Portfolio</Link><Link href="/fund">Get test funds</Link></>}
           <Link href="/docs" aria-current={location === '/docs' ? 'page' : undefined}>Docs</Link>
           <span className="nav-rule" aria-hidden="true" />
           {state.address ? (isHome ? <Link href="/markets" className="nav-cta">Explore markets <ArrowUpRight size={15} strokeWidth={1.8} /></Link> : <Link href="/" className="nav-login">About Flurbo</Link>) : <>
@@ -119,7 +119,7 @@ function AccountRoute() {
   // server-backed login has been restored. Remembered addresses are not login.
   return <AppShell>{state.restoring
     ? <main id="main" tabIndex={-1} className="auth-page"><p role="status">Checking your session...</p></main>
-    : authenticated ? (location==='/fund'?<FundingPage/>:['/account','/kuru','/events','/rehearsal','/evidence'].includes(location)&&!testingAccess?<main id="main" className="auth-page"><h1>Operator access only</h1><Link href="/markets">Back to markets</Link></main>:location==='/evidence'?<EvidenceReview/>:(location.startsWith('/markets/')||['/markets','/portfolio','/history'].includes(location)) ? <Markets /> : <Workspace />) : null}</AppShell>;
+    : authenticated ? (location==='/fund'?<FundingPage/>:['/account','/kuru','/events','/rehearsal','/evidence'].includes(location)&&!testingAccess?<main id="main" className="auth-page"><h1>Operator access only</h1><Link href="/markets">Back to markets</Link></main>:location==='/evidence'?<EvidenceReview/>:(location.startsWith('/markets/')||['/markets','/portfolio'].includes(location)) ? <Markets /> : <Workspace />) : null}</AppShell>;
 }
 
 export default function App() {
@@ -133,7 +133,6 @@ export default function App() {
       : location === "/docs" ? "Documentation | flurbo"
       : location === "/account" ? "Your account | flurbo"
       : location === "/portfolio" ? "Your portfolio | flurbo"
-      : location === "/history" ? "Your history | flurbo"
       : location === "/kuru" ? "Kuru order book | flurbo"
       : location === "/events" ? "Real events | flurbo"
       : location === "/evidence" ? "Evidence review | flurbo"
@@ -160,7 +159,7 @@ export default function App() {
       <Route path="/fund" component={AccountRoute} />
       <Route path="/account" component={AccountRoute} />
       <Route path="/portfolio" component={AccountRoute} />
-      <Route path="/history" component={AccountRoute} />
+      <Route path="/history"><Redirect to="/portfolio" replace /></Route>
       <Route path="/kuru" component={AccountRoute} />
       <Route path="/events" component={AccountRoute} />
       <Route path="/rehearsal" component={AccountRoute} />

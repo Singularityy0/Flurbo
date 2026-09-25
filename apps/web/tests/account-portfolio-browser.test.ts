@@ -34,8 +34,10 @@ test('fresh devices see both linked wallets; market totals and sparse chart rema
       assert.equal(await page.getByRole('textbox',{name:'Wallet to view'}).isVisible(),false);
       assert.equal(await page.evaluate((a:string)=>sessionStorage.getItem('flurbo.metamask-wallet:'+a),login),null); // No local wallet preference is required.
       await page.reload();await page.getByRole('cell',{name:'13',exact:true}).waitFor();
-      await page.goto('https://flurbo.singu.online/history');await page.getByText('Bought',{exact:true}).first().waitFor();assert.equal(await page.getByText('Bought',{exact:true}).count(),2);
+      await page.goto('https://flurbo.singu.online/history');await page.waitForURL('**/portfolio');await page.getByRole('cell',{name:'13',exact:true}).waitFor();
+      assert.equal(await page.locator('a[href="/history"]').count(),0);
       await page.goto('https://flurbo.singu.online/markets/rehearsal/0');await page.getByText('13 shares',{exact:true}).waitFor();
+      assert.equal(await page.getByRole('option',{name:'Collect payout',exact:true}).count(),0);
       const chart=page.getByRole('region',{name:'Price history',exact:true});await chart.getByRole('img').waitFor();
       assert.equal(await chart.locator('rect').count(),1);assert.equal(await chart.locator('line[stroke-dasharray="2 6"]').count(),2);
       assert.equal(await page.getByText('MetaMask connection',{exact:true}).count(),0);

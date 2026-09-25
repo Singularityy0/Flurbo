@@ -114,7 +114,7 @@ export default function Workspace() {
     }
   }, [pilotPage,rehearsalPage,rehearsalNamespace]);
   const address = state.address;
-  const tabs = [{ key: 'markets', label: 'Markets', icon: Layers3, href: '/markets' }, { key: 'trade', label: 'Explore & trade', icon: Layers3, href: '/account' }, { key: 'positions', label: 'Portfolio', icon: Wallet, href: '/portfolio' }, { key: 'history', label: 'History', icon: Activity, href: '/history' }, { key: 'events', label: 'Real events', icon: Layers3, href: '/events' }, { key: 'rehearsal', label: 'Testnet rehearsal', icon: Layers3, href: '/rehearsal' }, { key: 'kuru', label: 'Kuru order book', icon: Layers3, href: '/kuru' }] as const;
+  const tabs = [{ key: 'markets', label: 'Markets', icon: Layers3, href: '/markets' }, { key: 'trade', label: 'Explore & trade', icon: Layers3, href: '/account' }, { key: 'positions', label: 'Portfolio', icon: Wallet, href: '/portfolio' }, { key: 'events', label: 'Real events', icon: Layers3, href: '/events' }, { key: 'rehearsal', label: 'Testnet rehearsal', icon: Layers3, href: '/rehearsal' }, { key: 'kuru', label: 'Kuru order book', icon: Layers3, href: '/kuru' }] as const;
   return <main id="main" tabIndex={-1} className="consumer-workspace">
     <aside className="workspace-sidebar">
       <Link className="workspace-back" href="/"><ArrowLeft size={16} /> Back to the idea</Link>

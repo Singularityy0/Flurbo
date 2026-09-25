@@ -18,7 +18,7 @@ const labels=['Not proposed','NO','YES','VOID'];
 const phases=['Awaiting evidence','Challenge window','Under review','Final result'];
 const date=(seconds:string|number)=>new Date(Number(seconds)*1000).toLocaleString();
 const cash=(atoms:string)=>formatUnits(BigInt(atoms),6);
-export default function Pilot({onBusy,namespace='pilot',consumer,challenge,onTradeConfirmed,onTradingWalletChange}:{onTradingWalletChange?:(address:string)=>void;onTradeConfirmed?:()=>void;onBusy(value:boolean):void;namespace?:PilotNamespace;consumer?:{event:number;yes:boolean};challenge?:{event:number}}) {
+export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payout,onTradeConfirmed,onTradingWalletChange}:{onTradingWalletChange?:(address:string)=>void;onTradeConfirmed?:()=>void;onBusy(value:boolean):void;namespace?:PilotNamespace;consumer?:{event:number;yes:boolean};challenge?:{event:number};payout?:{scope:number;mask:string;owners:string[];title:string}}) {
   const pilotRequest=<T,>(path:string,input?:unknown)=>request<T>(path,input,namespace);
   const readPilotPending=()=>readPending(namespace),pilotPendingKey=pendingKeyFor(namespace);
   const {controller,state:auth}=useAuth();
@@ -32,18 +32,19 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,onTra
   const [now,setNow]=useState(()=>Date.now()/1000);
   const [stake,setStake]=useState<HoldingWitness|null>(null),[eligibilityNotice,setEligibilityNotice]=useState(''),[eligibilityCursor,setEligibilityCursor]=useState<number|null>(0);
   const [evidence,setEvidence]=useState<{hash:string;uri:string}|null>(null);
-  const [legs,setLegs]=useState<number[]>(restored?.legs||[consumer?.event??0]),[quantity,setQuantity]=useState(restored?.quantity||'1'),[side,setSide]=useState<string>(restored?.side||'buy');
+  const [legs,setLegs]=useState<number[]>(restored?.legs||[consumer?.event??0]),[quantity,setQuantity]=useState(restored?.quantity||'1'),[side,setSide]=useState<string>(payout?'redeem':restored?.side==='sell'?'sell':'buy');
+  const [payoutAmount,setPayoutAmount]=useState('');
   const [rule,setRule]=useState('AND'),[answers,setAnswers]=useState<Record<number,boolean>>(restored?.answers||(consumer?{[consumer.event]:consumer.yes}:{}));
   const [quoting,setQuoting]=useState(false),[quoteTick,setQuoteTick]=useState(0),[completed,setCompleted]=useState(false),[pollPaused,setPollPaused]=useState(false);
   const quoteVersion=useRef(0),polls=useRef(0);
   const [position,setPosition]=useState<{quantity:string;payoutAtoms:string|null}|null>(null);
   const provider=useRef<Provider|null>(null), generation=useRef(0), live=useRef(true), working=useRef(false), cleanup=useRef(()=>{}), reviewRef=useRef(review);
   reviewRef.current=review;
-  const scope=legs.reduce((v,i)=>v|2**i,0);
+  const scope=payout?.scope??legs.reduce((v,i)=>v|2**i,0);
   const tradeLimit=state?.maxTradeQuantityAtoms&&/^[1-9][0-9]*$/.test(state.maxTradeQuantityAtoms)?BigInt(state.maxTradeQuantityAtoms):null;
   const overTradeLimit=['buy','sell'].includes(side)&&tradeLimit!==null&&/^(0|[1-9][0-9]*)(\.[0-9]{1,6})?$/.test(quantity)&&parseUnits(quantity,6)>tradeLimit;
   const quantityError=overTradeLimit?`This market allows up to ${formatUnits(tradeLimit!,6)} shares per trade. Enter ${formatUnits(tradeLimit!,6)} or fewer to get a price.`:'';
-  const mask=Array.from({length:2**legs.length},(_,state)=>state).reduce((mask,state)=>{
+  const mask=payout?.mask??Array.from({length:2**legs.length},(_,state)=>state).reduce((mask,state)=>{
     const matches=legs.map((event,i)=>Boolean(state&(1<<i))===(answers[event]??true));
     const wins=rule==='AND'?matches.every(Boolean):matches.some(Boolean);
     return wins?mask|(1n<<BigInt(state)):mask;
@@ -53,7 +54,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,onTra
     setPending(value);
   }
   async function run(fn:()=>Promise<void>){if(working.current)return;working.current=true;setBusy(true);try{await fn();}catch(e){if(live.current)setNotice(e instanceof Error?e.message:'Request failed. Check tracking before retrying.');}finally{working.current=false;if(live.current)setBusy(false);}}
-  async function refresh(wallet=owner){ const version=generation.current; const result=await pilotRequest<PilotState>('status'+(wallet?'?wallet='+wallet:'')); if(live.current&&version===generation.current){setState(result);setNotice('Pilot data loaded. Connect MetaMask to take part.');} }
+  async function refresh(wallet=owner){ const version=generation.current; const result=await pilotRequest<PilotState>('status'+(wallet?'?wallet='+wallet:'')); if(live.current&&version===generation.current){setState(result);setNotice(payout?'Connect MetaMask to collect your payout.':'Pilot data loaded. Connect MetaMask to take part.');} }
   useEffect(()=>{ live.current=true; const stop=discoverWallets(wallet=>setWallets(old=>old.some(w=>w.provider===wallet.provider)?old:[...old,wallet])); void run(()=>refresh());
     try{setPending(readPilotPending());}catch(e){setStorageError(true);setNotice(String(e));}
     const sync=()=>{try{setPending(readPilotPending());}catch{setStorageError(true);}};
@@ -63,7 +64,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,onTra
   useEffect(()=>{onBusy(busy||!consumer&&!!review||!!pending||storageError);return()=>onBusy(false);},[busy,review,pending,storageError,onBusy,!!consumer]);
   useEffect(()=>{setEvidence(null);},[event,outcome,statement,source,attachment]);
   useEffect(()=>{setStake(null);setEligibilityCursor(0);setEligibilityNotice('');},[owner,event]);
-  useEffect(()=>{if(!challenge)return;const timer=setInterval(()=>setNow(Date.now()/1000),1000);return()=>clearInterval(timer);},[!!challenge]);
+  useEffect(()=>{if(!challenge&&!payout)return;const timer=setInterval(()=>setNow(Date.now()/1000),1000);return()=>clearInterval(timer);},[!!challenge,!!payout]);
   useEffect(()=>{setPosition(null);},[owner,scope,mask]);
   useEffect(()=>{setCompleted(false);},[scope,mask,quantity,side]);
   useEffect(()=>{
@@ -103,10 +104,10 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,onTra
   },[!!consumer,review,busy,pending]);
   useEffect(()=>{polls.current=0;setPollPaused(false);},[pending?.hash]);
   useEffect(()=>{
-    if((!consumer&&!challenge)||!pending?.hash||pending.login!==auth.address||busy||pollPaused)return;
+    if((!consumer&&!challenge&&!payout)||!pending?.hash||pending.login!==auth.address||busy||pollPaused)return;
     const timer=setTimeout(()=>{polls.current++;void run(async()=>{try{await check();}catch(e){setPollPaused(true);throw e;}finally{if(polls.current>=40)setPollPaused(true);}});},2000);
     return()=>clearTimeout(timer);
-  },[!!consumer,!!challenge,pending,busy,pollPaused,auth.address]);
+  },[!!consumer,!!challenge,!!payout,pending,busy,pollPaused,auth.address]);
   async function connect(switchAccount=false){
     cleanup.current(); const version=++generation.current;
     provider.current=null;reviewRef.current=null;setOwner('');onTradingWalletChange?.('');setReview(null);setPosition(null);
@@ -138,7 +139,8 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,onTra
     const version=generation.current; setReview(null);
     const result=await pilotRequest<PilotReview>('prepare',{...input,owner});
     validatePilotReview(result);
-    if(live.current&&version===generation.current){setReview(result);setNotice(result.notice);}
+    if(payout&&(result.action!=='redeem'||result.requested.owner.toLowerCase()!==owner||result.requested.scope!==scope||result.requested.mask!==mask||result.requested.quantity!==input.quantity))throw Error('Payout review changed. Refresh before collecting.');
+    if(live.current&&version===generation.current){setReview(result);setNotice(payout?'Check the payout amount, then confirm in MetaMask.':result.notice);}
   }
   async function publishEvidence(){
     if(!state) return;
@@ -157,6 +159,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,onTra
   }
   async function confirm(){
     if(!review||!provider.current||!auth.address||pending||storageError)return;
+    if(payout&&(review.action!=='redeem'||review.requested.scope!==scope||review.requested.mask!==mask||!payout.owners.includes(owner)))throw Error('Select the MetaMask wallet that holds these shares.');
     if(challenge&&review.requested.action==='dispute'){
       if(review.requested.event!==event||review.requested.outcome!==outcome||review.requested.evidenceHash!==evidence?.hash)throw Error('Your challenge changed. Review it again.');
       const fresh=await pilotRequest<PilotState>('status?wallet='+owner);
@@ -183,6 +186,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,onTra
       save(null);setPosition(null);setConfirmedHash(saved.hash||'');
       setApproved(!consumer&&result==='confirmed'&&saved.review.action==='approve'?saved.review.requested:null);
       if(consumer&&result==='confirmed'&&['buy','sell','redeem'].includes(saved.review.action)){setCompleted(true);onTradeConfirmed?.();}
+      if(payout&&result==='confirmed'&&saved.review.action==='redeem'){setCompleted(true);onTradeConfirmed?.();}
       if(challenge&&result==='confirmed'&&saved.review.action!=='approve'){setCompleted(true);onTradeConfirmed?.();}
       const confirmed=result==='confirmed'?(saved.review.action==='approve'?'Token approval confirmed. The approved action has not been sent. Review it below.':'Exact transaction confirmed. Balances refreshed.'):'Transaction reverted. No successful action was confirmed.';
       try{
@@ -198,6 +202,32 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,onTra
   const disabled=busy||!consumer&&!!review||!!pending||storageError;
   const current=state?.cases[event];
   const operatorRun=state?.manifest.publication.reviewerControl==='single-operator';
+  if(payout){
+    const eligible=payout.owners.includes(owner);
+    return <section className="portfolio-wallet pilot-form portfolio-payout" aria-label="Collect portfolio payout">
+      <h3>Collect payout</h3><p>{payout.title}</p><p role="status">{busy?'Checking...':notice==='Loading the real-event pilot...'?'Loading payout details...':notice}</p>
+      {!pending&&!completed&&<><div className="ticket-wallet"><span>{owner?`${owner.slice(0,6)}…${owner.slice(-4)}`:'MetaMask'}</span><button className="button button-outline" disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':'Connect MetaMask'}</button></div>
+        {!owner&&<p>Connect the MetaMask wallet holding these shares. Each wallet receives its own payout.</p>}
+        {owner&&!eligible&&<p>This wallet has no eligible payout for this holding. Switch to its owning MetaMask wallet.</p>}
+        {!review&&<button className="button button-dark" disabled={busy||!eligible||storageError} onClick={()=>void run(async()=>{
+          const position=await pilotRequest<{quantity:string;payoutAtoms:string|null;fraction:[string,string]|null}>('position',{owner,scope,mask});
+          if(position.payoutAtoms===null||BigInt(position.payoutAtoms)<=0n||!position.fraction)throw Error('No payout is available for these shares in this wallet. Refresh your portfolio.');
+          const units=BigInt(position.quantity)>100_000_000n?100_000_000n:BigInt(position.quantity);
+          const value=units*BigInt(position.fraction[0])/BigInt(position.fraction[1]);
+          if(value<=0n)throw Error('This quantity has no payable amount.');
+          setPayoutAmount(value.toString());await prepare({action:'redeem',scope,mask,quantity:units.toString()});
+        })}>Review payout</button>}
+      </>}
+      {review&&!pending&&<section className="ticket-review" aria-label="Payout review"><p>Collect <strong>{cash(payoutAmount)} test AUSD</strong> for {cash(review.requested.quantity!)} shares.</p><p className="market-caption">Up to 100 shares per confirmation. Maximum network fee: {formatUnits(BigInt(review.maximumFeeWei),18)} MON.</p>
+        {now>=review.expiresAt&&<p>This review expired. Cancel and review again.</p>}
+        <div className="pilot-actions"><button className="button button-dark" disabled={busy||now>=review.expiresAt} onClick={()=>void run(confirm)}>Confirm payout in MetaMask</button><button className="button button-outline" disabled={busy} onClick={()=>setReview(null)}>Cancel review</button></div></section>}
+      {pending&&<section className="ticket-review"><h3>Checking your transaction</h3><p>{pending.hash?'You can reload safely. Do not submit another payout while this transaction is pending.':'Check MetaMask activity before retrying. A transaction may have been sent.'}</p>
+        {!pending.hash&&<><label>Transaction hash<input value={hash} onChange={e=>setHash(e.target.value)}/></label><button className="button button-outline" onClick={()=>void run(async()=>{if(!/^0x[0-9a-f]{64}$/i.test(hash))throw Error('Paste a valid transaction hash');save({...pending,hash:hash.toLowerCase() as Hex});})}>Find transaction</button></>}
+        <button className="button button-outline" disabled={busy||!pending.hash} onClick={()=>void run(check)}>Check confirmation</button></section>}
+      {completed&&<p role="status">Payout collected. Your portfolio has been refreshed.</p>}
+      {confirmedHash&&<a href={`https://testnet.monadscan.com/tx/${confirmedHash}`} target="_blank" rel="noreferrer">View transaction</a>}
+    </section>;
+  }
   if(challenge){
     const unavailable=state?challengeUnavailable(state,event,owner,now):'Loading the proposed answer...';
     const intended=pending?.review.requested.action;
@@ -251,7 +281,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,onTra
         <div><strong>{owner ? `${owner.slice(0,6)}…${owner.slice(-4)}` : 'MetaMask'}</strong>{owner&&state?.wallet&&<small>{cash(state.wallet.cash)} test AUSD</small>}</div>
         <button className={owner?"button button-outline":"button button-dark"} disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':'Connect MetaMask'}</button>
       </div>
-      {!pending&&!completed&&<><div className="pilot-fields"><label>Your answer<select aria-label="Your answer" disabled={disabled} value={(answers[consumer.event]??true)?'yes':'no'} onChange={e=>setAnswers(old=>({...old,[consumer.event]:e.target.value==='yes'}))}><option value="yes">Yes</option><option value="no">No</option></select></label><label>Shares<input value={quantity} inputMode="decimal" disabled={disabled} onChange={e=>setQuantity(e.target.value)}/></label></div><label>Action<select value={side} disabled={disabled} onChange={e=>setSide(e.target.value)}><option value="buy">Buy</option><option value="sell">Sell</option><option value="redeem">Collect payout</option></select></label><details><summary>Combine with another prediction</summary><p>Choose up to three events. All your chosen answers must be right to win.</p>{state?.manifest.publication.draft.events.map((e,i)=>i===consumer.event?null:<div className="ticket-combine" key={e.id}><label><input type="checkbox" checked={legs.includes(i)} disabled={disabled||!legs.includes(i)&&legs.length>=3} onChange={()=>setLegs(old=>old.includes(i)?old.filter(v=>v!==i):[...old,i].sort())}/>{marketQuestion(e)}</label>{legs.includes(i)&&<select aria-label={marketQuestion(e)+" answer"} disabled={disabled} value={(answers[i]??true)?"yes":"no"} onChange={e=>setAnswers(old=>({...old,[i]:e.target.value==="yes"}))}><option value="yes">Yes</option><option value="no">No</option></select>}</div>)}</details>{legs.length>1&&<p>{answerSummary}</p>}</>}
+      {!pending&&!completed&&<><div className="pilot-fields"><label>Your answer<select aria-label="Your answer" disabled={disabled} value={(answers[consumer.event]??true)?'yes':'no'} onChange={e=>setAnswers(old=>({...old,[consumer.event]:e.target.value==='yes'}))}><option value="yes">Yes</option><option value="no">No</option></select></label><label>Shares<input value={quantity} inputMode="decimal" disabled={disabled} onChange={e=>setQuantity(e.target.value)}/></label></div><label>Action<select value={side} disabled={disabled} onChange={e=>setSide(e.target.value)}><option value="buy">Buy</option><option value="sell">Sell</option></select></label><details><summary>Combine with another prediction</summary><p>Choose up to three events. All your chosen answers must be right to win.</p>{state?.manifest.publication.draft.events.map((e,i)=>i===consumer.event?null:<div className="ticket-combine" key={e.id}><label><input type="checkbox" checked={legs.includes(i)} disabled={disabled||!legs.includes(i)&&legs.length>=3} onChange={()=>setLegs(old=>old.includes(i)?old.filter(v=>v!==i):[...old,i].sort())}/>{marketQuestion(e)}</label>{legs.includes(i)&&<select aria-label={marketQuestion(e)+" answer"} disabled={disabled} value={(answers[i]??true)?"yes":"no"} onChange={e=>setAnswers(old=>({...old,[i]:e.target.value==="yes"}))}><option value="yes">Yes</option><option value="no">No</option></select>}</div>)}</details>{legs.length>1&&<p>{answerSummary}</p>}</>}
       {!pending&&!completed&&tradeLimit!==null&&['buy','sell'].includes(side)&&<p className="market-caption">Up to {formatUnits(tradeLimit,6)} shares per trade, including combinations.</p>}
       {!pending&&!completed&&owner&&!overTradeLimit&&<p role="status">{quoting?'Getting your price...':!review?'Enter your shares to get a price, or refresh the price below.':''}</p>}
       {!pending&&!completed&&owner&&<button className="text-link" disabled={busy||quoting||overTradeLimit} onClick={()=>setQuoteTick(n=>n+1)}>Refresh price</button>}
@@ -279,7 +309,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,onTra
       <details className="portfolio-wallet pilot-form"><summary>Propose, challenge or review an outcome</summary><h2>Make the result reviewable.</h2><label>Event<select value={event} disabled={disabled} onChange={e=>setEvent(Number(e.target.value))}>{state.manifest.publication.draft.events.map((e,i)=><option value={i} key={e.id}>{marketQuestion(e)}</option>)}</select></label>
         {current&&<p>{phases[current.phase]}. {current.phase===0?`Assertions close ${date(current.assertionDeadline)}.`:current.phase===1?`Challenges close ${date(current.challengeUntil)}.`:current.phase===2?`Voting closes ${date(current.voteUntil)}. NO ${current.votes[0]}, YES ${current.votes[1]}, VOID ${current.votes[2]}.`:`Result ${labels[current.result]}.`}</p>}
         {current&&[current.evidenceHash,current.counterEvidenceHash].filter(h=>!/^0x0{64}$/.test(h)).map(h=><p key={h}><a href={`/api/pilot/evidence/${h}`} target="_blank" rel="noreferrer">Read hosted evidence {h.slice(0,12)}</a></p>)}
-        <p>External evidence links and reviewer rationale are available in History. A hosted copy is available only if it was archived on Flurbo.</p><label>Outcome<select value={outcome} disabled={disabled} onChange={e=>setOutcome(Number(e.target.value))}><option value={2}>YES</option><option value={1}>NO</option><option value={3}>VOID</option></select></label><label>Your explanation<textarea value={statement} maxLength={8000} disabled={disabled} onChange={e=>setStatement(e.target.value)} placeholder="Explain how the published source meets the committed rule."/></label><label>Source URL<input value={source} disabled={disabled} onChange={e=>setSource(e.target.value)} placeholder="https://..."/></label><label>Evidence excerpt or source-adapter output<textarea value={attachment} maxLength={12000} disabled={disabled} onChange={e=>setAttachment(e.target.value)}/></label><p>Saving publishes this evidence at a public content-addressed URL. Include public material only. A missing source response is not proof of NO.</p><button className="button button-outline" disabled={disabled||!owner} onClick={()=>void run(publishEvidence)}>Save public evidence</button>
+        <p>Evidence links appear on the market page. A hosted copy is available only if it was archived on Flurbo.</p><label>Outcome<select value={outcome} disabled={disabled} onChange={e=>setOutcome(Number(e.target.value))}><option value={2}>YES</option><option value={1}>NO</option><option value={3}>VOID</option></select></label><label>Your explanation<textarea value={statement} maxLength={8000} disabled={disabled} onChange={e=>setStatement(e.target.value)} placeholder="Explain how the published source meets the committed rule."/></label><label>Source URL<input value={source} disabled={disabled} onChange={e=>setSource(e.target.value)} placeholder="https://..."/></label><label>Evidence excerpt or source-adapter output<textarea value={attachment} maxLength={12000} disabled={disabled} onChange={e=>setAttachment(e.target.value)}/></label><p>Saving publishes this evidence at a public content-addressed URL. Include public material only. A missing source response is not proof of NO.</p><button className="button button-outline" disabled={disabled||!owner} onClick={()=>void run(publishEvidence)}>Save public evidence</button>
         {evidence&&<p><a href={evidence.uri} target="_blank" rel="noreferrer">View saved evidence</a></p>}
         <div className="pilot-actions">{(['assertOutcome','vote'] as const).map(action=><button key={action} className="button button-dark" disabled={disabled||!owner||!evidence|| (action==='assertOutcome'?current?.phase!==0:current?.phase!==2||!state.wallet?.reviewer||current.voted)} onClick={()=>void run(()=>prepare({action,event,outcome,evidenceHash:evidence!.hash,evidenceURI:evidence!.uri}))}>{action==='assertOutcome'?'Review assertion':'Review vote'}</button>)}</div>
         {current?.phase===1&&<p><a href={`/markets/${namespace}/${event}?challenge=1`}>Challenge through your account</a>. Shares are checked across your linked wallets.</p>}

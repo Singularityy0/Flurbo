@@ -52,7 +52,7 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
         {challengeOpen?<section className="detail-panel" id="challenge-form"><Pilot key={'challenge'+namespace+event} namespace={namespace} challenge={{event}} onBusy={setBusy} onTradeConfirmed={confirmed}/><button className="button button-outline" disabled={busy} onClick={()=>toggleChallenge(false)}>Back to market</button></section>:<section className="detail-panel detail-trade" aria-label="Trade this market"><span className="eyebrow">Make your prediction</span>{quotes&&<><div className="detail-holdings"><div><span>Yes</span><strong>{quotes.yes===null?'Closed':cash(quotes.yes)+' AUSD'}</strong></div><div><span>No</span><strong>{quotes.no===null?'Closed':cash(quotes.no)+' AUSD'}</strong></div></div><p className="market-caption">Price per share · test AUSD</p></>}<Pilot key={namespace+event} namespace={namespace} consumer={{event,yes:initialYes}} onBusy={setBusy} onTradeConfirmed={confirmed} onTradingWalletChange={walletChanged}/></section>}
         <section className="detail-panel" aria-label="Your position"><div className="detail-section-heading"><h2>Your position</h2><Link href="/portfolio">Full portfolio ↗</Link></div><p className="market-caption">Across your linked wallets</p>
           {positionError?<p role="alert">{positionError}</p>:positions?<div className="detail-holdings">{positions.map(p=><div key={p.mask}><span>{p.mask==='2'?'Yes':'No'}</span><strong>{cash(p.quantity)} shares</strong><small>{p.payoutAtoms===null?'Awaiting settlement':`${cash(p.payoutAtoms)} test AUSD to collect`}</small></div>)}</div>:<p role="status">Loading your shares…</p>}
-          <p className="market-caption">Combined predictions appear in your portfolio.</p>
+          <p className="market-caption">View results and collect payouts in your portfolio.</p>
         </section>
         <PriceHistory namespace={namespace} event={event} pool={state.manifest.pool} refresh={attempt}/>
         <details className="detail-panel"><summary>Explore how these markets connect</summary><WhatIf namespace={namespace} manifest={state.manifest}/></details>
@@ -73,6 +73,6 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
       </aside></div>
     </>}
     {!state&&error&&<button className="button button-dark" onClick={()=>setAttempt(n=>n+1)}>Retry</button>}
-    <footer className="market-footer"><span>One pool. More possibilities.</span><Link href="/history">Your history ↗</Link></footer>
+    <footer className="market-footer"><span>One pool. More possibilities.</span><Link href="/portfolio">Your portfolio ↗</Link></footer>
   </main>;
 }

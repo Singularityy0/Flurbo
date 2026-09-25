@@ -5,7 +5,7 @@ const sections = [
   ['overview', 'Overview'], ['getting-started', 'Getting started'],
   ['accounts', 'Accounts and wallets'], ['trading', 'Trading and shares'],
   ['combinations', 'Combined predictions'], ['what-if', 'What-if and prices'],
-  ['settlement', 'Settlement and payouts'], ['portfolio', 'Portfolio and history'],
+  ['settlement', 'Settlement and payouts'], ['portfolio', 'Portfolio and payouts'],
   ['preview', 'Preview limitations'],
 ] as const;
 
@@ -43,7 +43,7 @@ export default function Docs() {
             <li><strong>Choose a market.</strong> Check the question, collection, close time and resolution rules. Select your answer and number of shares.</li>
             <li><strong>Review and confirm.</strong> Check the quoted cost and confirm the requested action in MetaMask. A token approval may be required before the purchase.</li>
           </ol>
-          <p>The markets, funding, portfolio and history pages require sign-in. These documentation pages are public.</p>
+          <p>The markets, funding and portfolio pages require sign-in. These documentation pages are public.</p>
         </section>
         <section id="accounts" aria-labelledby="accounts-title">
           <p className="docs-eyebrow">03 / IDENTITY AND OWNERSHIP</p>
@@ -103,10 +103,10 @@ export default function Docs() {
         </section>
         <section id="portfolio" aria-labelledby="portfolio-title">
           <p className="docs-eyebrow">08 / KEEPING TRACK</p>
-          <h2 id="portfolio-title">Portfolio and history</h2>
+          <h2 id="portfolio-title">Portfolio and payouts</h2>
           <p>Your <Link href="/portfolio">portfolio</Link> brings together the shares associated with your linked trading wallets under your Flurbo account. Choose the relevant collection to see its positions, including supported combined predictions.</p>
-          <p><Link href="/history">History</Link> records activity rather than just current holdings. An approval is not evidence of a completed purchase. If a purchase is pending or a view is still loading, check its transaction status before placing another order.</p>
-          <p>Holdings and history may refresh at different times. An incomplete history view does not establish that a trade failed. If an expected position is missing, check the collection, linked wallet and confirmed transaction.</p>
+          <p>Results and payout collection live in Portfolio. Select an eligible holding, connect its owning MetaMask wallet and confirm the collection. Holdings stay combined under your Mera account; each wallet receives its own payout.</p>
+          <p>Activity is indexed in the background. An approval is not a completed purchase. If a transaction is pending, check its confirmation before submitting again. If shares are missing, check the collection and linked wallet, then refresh.</p>
         </section>
         <section id="preview" aria-labelledby="preview-title">
           <p className="docs-eyebrow">09 / CURRENT SCOPE</p>

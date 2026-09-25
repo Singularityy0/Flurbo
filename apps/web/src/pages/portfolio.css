@@ -3,6 +3,16 @@
 .portfolio-account-identity p { margin: 10px 0 0; overflow-wrap: anywhere; font-size: 14px; line-height: 1.6; }
 .account-holdings .portfolio-section-heading { margin-top: 0; }
 .account-holdings .portfolio-table { border-radius: 16px; }
+.account-holdings .holding-payout-amount { display: block; }
+.account-holdings .holding-collect { display: block; margin-top: 12px; }
+.portfolio-results { margin-bottom: 32px; }
+.portfolio-result-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.portfolio-result-grid article { padding: 18px; border: 1px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; gap: 12px; }
+.portfolio-result-grid a { font-size: 14px; line-height: 1.5; }
+.portfolio-wallet.portfolio-payout { margin: 24px 0 12px; border-radius: 16px; display: block; }
+.portfolio-payout .ticket-wallet { margin: 20px 0; }
+.portfolio-payout .ticket-review { margin-top: 20px; }
+@media (max-width: 600px) { .portfolio-result-grid { grid-template-columns: 1fr; } }
 .holding-mobile-label { display: none; }
 @media (max-width: 600px) {
   .account-holdings .portfolio-table table,
