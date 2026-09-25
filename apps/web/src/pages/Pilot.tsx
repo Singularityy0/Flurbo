@@ -1,6 +1,6 @@
 import {marketQuestion} from '../showcase-copy';
 import {challengeUnavailable} from '../challenge';
-import { linkTradingWallet } from '../wallet-links';
+import { linkedWallets, linkTradingWallet } from '../wallet-links';
 import { useEffect, useRef, useState } from 'react';
 import { formatUnits, parseUnits, type Hex } from 'viem';
 import { useAuth } from '../auth/context';
@@ -31,6 +31,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
   const [event,setEvent]=useState(challenge?.event??0),[outcome,setOutcome]=useState(challenge?0:2),[statement,setStatement]=useState(''),[source,setSource]=useState(''),[attachment,setAttachment]=useState('');
   const [now,setNow]=useState(()=>Date.now()/1000);
   const [stake,setStake]=useState<HoldingWitness|null>(null),[eligibilityNotice,setEligibilityNotice]=useState(''),[eligibilityCursor,setEligibilityCursor]=useState<number|null>(0);
+  const [accountWallets,setAccountWallets]=useState<string[]|null>(null),[challengeAccountError,setChallengeAccountError]=useState(false);
   const [evidence,setEvidence]=useState<{hash:string;uri:string}|null>(null);
   const [legs,setLegs]=useState<number[]>(restored?.legs||[consumer?.event??0]),[quantity,setQuantity]=useState(restored?.quantity||'1'),[side,setSide]=useState<string>(payout?'redeem':restored?.side==='sell'?'sell':'buy');
   const [payoutAmount,setPayoutAmount]=useState('');
@@ -54,7 +55,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
     setPending(value);
   }
   async function run(fn:()=>Promise<void>){if(working.current)return;working.current=true;setBusy(true);try{await fn();}catch(e){if(live.current)setNotice(e instanceof Error?e.message:'Request failed. Check tracking before retrying.');}finally{working.current=false;if(live.current)setBusy(false);}}
-  async function refresh(wallet=owner){ const version=generation.current; const result=await pilotRequest<PilotState>('status'+(wallet?'?wallet='+wallet:'')); if(live.current&&version===generation.current){setState(result);setNotice(payout?'Connect MetaMask to collect your payout.':'Pilot data loaded. Connect MetaMask to take part.');} }
+  async function refresh(wallet=owner){ const version=generation.current; const result=await pilotRequest<PilotState>('status'+(wallet?'?wallet='+wallet:'')); if(live.current&&version===generation.current){setState(result);setNotice(challenge?'Challenge status updated.':payout?'Connect MetaMask to collect your payout.':'Pilot data loaded. Connect MetaMask to take part.');} }
   useEffect(()=>{ live.current=true; const stop=discoverWallets(wallet=>setWallets(old=>old.some(w=>w.provider===wallet.provider)?old:[...old,wallet])); void run(()=>refresh());
     try{setPending(readPilotPending());}catch(e){setStorageError(true);setNotice(String(e));}
     const sync=()=>{try{setPending(readPilotPending());}catch{setStorageError(true);}};
@@ -65,6 +66,19 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
   useEffect(()=>{setEvidence(null);},[event,outcome,statement,source,attachment]);
   useEffect(()=>{setStake(null);setEligibilityCursor(0);setEligibilityNotice('');},[owner,event]);
   useEffect(()=>{if(!challenge&&!payout)return;const timer=setInterval(()=>setNow(Date.now()/1000),1000);return()=>clearInterval(timer);},[!!challenge,!!payout]);
+  useEffect(()=>{
+    if(!challenge||!auth.address)return;
+    const c=new AbortController();setChallengeAccountError(false);
+    void linkedWallets(c.signal).then(value=>{if(!c.signal.aborted&&value.account.toLowerCase()===auth.address?.toLowerCase())setAccountWallets(value.wallets.map(w=>w.toLowerCase()));}).catch(()=>{if(!c.signal.aborted)setChallengeAccountError(true);});
+    return()=>c.abort();
+  },[!!challenge,auth.address,owner]);
+  useEffect(()=>{
+    if(!challenge)return;
+    const timer=setInterval(()=>{if(document.hidden||working.current)return;const version=generation.current;
+      void pilotRequest<PilotState>('status'+(owner?'?wallet='+owner:'')).then(value=>{if(live.current&&version===generation.current)setState(value);}).catch(()=>{});
+    },15000);
+    return()=>clearInterval(timer);
+  },[!!challenge,owner]);
   useEffect(()=>{setPosition(null);},[owner,scope,mask]);
   useEffect(()=>{setCompleted(false);},[scope,mask,quantity,side]);
   useEffect(()=>{
@@ -133,8 +147,8 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
       setState(fresh);
       const reason=challengeUnavailable(fresh,event,owner);
       if(reason)throw new Error(reason);
-      if(!stake)throw Error('Check your account shares before challenging.');
-      input={...input,stake};
+      if(!input.stake&&!stake)throw Error('Check your account shares before challenging.');
+      input={...input,stake:input.stake||stake!};
     }
     const version=generation.current; setReview(null);
     const result=await pilotRequest<PilotReview>('prepare',{...input,owner});
@@ -144,8 +158,11 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
   }
   async function publishEvidence(){
     if(!state) return;
+    const version=generation.current;
     const result=await pilotRequest<{hash:string;uri:string}>('evidence',{eventId:state.manifest.publication.draft.events[event].id,outcome,statement,sourceURL:source,attachment});
+    if(!live.current||version!==generation.current)throw Error('Wallet changed. Review your challenge again.');
     setEvidence(result);setNotice(challenge?'Evidence saved. Review your challenge below. Nothing has been submitted on chain.':'Public evidence saved. Review an assertion, dispute or vote below. Saving evidence does not submit an outcome.');
+    return result;
   }
   async function checkEligibility(){
     const version=generation.current;
@@ -154,8 +171,22 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
       const result=await pilotRequest<{eligible:boolean;stake:HoldingWitness|null;nextCursor:number|null}>('challenge-eligibility',{owner,event,cursor:eligibilityCursor??0});
       if(!live.current||version!==generation.current)return;
       setStake(result.stake);setEligibilityCursor(result.nextCursor);
-      setEligibilityNotice(result.eligible?'Your account holds shares in this event.':result.nextCursor!==null?'More combinations remain to check. Continue checking your account shares.':'Your account has no qualifying shares in this event. You cannot challenge this answer.');
+      setEligibilityNotice(result.eligible?'Your account holds shares in this event.':result.nextCursor!==null?'More combinations remain to check. Select Review challenge again to continue.':'Your account has no qualifying shares in this event. You cannot challenge this answer.');
+      return result.eligible?result.stake:null;
     }catch(e){setEligibilityNotice('Shares could not be verified. Retry the check before challenging.');throw e;}
+  }
+  async function reviewChallenge(){
+    const version=generation.current;
+    const fresh=await pilotRequest<PilotState>('status?wallet='+owner);
+    if(!live.current||version!==generation.current)throw Error('Wallet changed. Reconnect before reviewing.');
+    setState(fresh);
+    const reason=challengeUnavailable(fresh,event,owner);
+    if(reason)throw Error(reason);
+    const witness=await checkEligibility();
+    if(!witness)return;
+    const saved=evidence||await publishEvidence();
+    if(!saved||!live.current||version!==generation.current)return;
+    await prepare({action:'dispute',event,outcome,evidenceHash:saved.hash,evidenceURI:saved.uri,stake:witness});
   }
   async function confirm(){
     if(!review||!provider.current||!auth.address||pending||storageError)return;
@@ -195,7 +226,10 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
         if(result==='confirmed'&&['buy','sell','redeem'].includes(saved.review.action)&&request.scope===scope&&request.mask===mask&&owner===request.owner.toLowerCase())
           setPosition(await pilotRequest('position',{owner,scope,mask}));
         setNotice(confirmed);
-      }catch{setNotice(result==='confirmed'?'Transaction confirmed, but balances could not refresh. Check Portfolio for your holdings; do not repeat the transaction.':'Transaction reverted. Data refresh failed; check the receipt before retrying.');}
+        if(challenge&&result==='confirmed'&&saved.review.action==='approve'&&request.action==='dispute'&&request.event===event&&request.outcome===outcome&&evidence&&evidence.hash===request.evidenceHash){
+          await prepare({action:'dispute',event,outcome,evidenceHash:evidence.hash,evidenceURI:evidence.uri,stake:request.stake});
+        }
+      }catch{setNotice(result==='confirmed'&&saved.review.action==='approve'?'Bond approval confirmed. The challenge has not been submitted. Review it again if the challenge period is still open.':result==='confirmed'?'Transaction confirmed, but balances could not refresh. Check Portfolio for your holdings; do not repeat the transaction.':'Transaction reverted. Data refresh failed; check the receipt before retrying.');}
     }
     else setNotice(result==='pending'?'Still pending. Do not submit again.':'Waiting for a second canonical confirmation.');
   }
@@ -231,35 +265,50 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
   if(challenge){
     const unavailable=state?challengeUnavailable(state,event,owner,now):'Loading the proposed answer...';
     const intended=pending?.review.requested.action;
+    const mine=!!current&&!!accountWallets?.includes(current.disputer.toLowerCase());
+    const closed=!!current&&(current.phase>=2||current.phase===1&&Math.max(now,state!.snapshot.timestamp)>=Number(current.challengeUntil));
+    const canCompose=!unavailable&&!pending&&!completed&&!review;
+    const reviewExpired=!!review&&(now>=review.expiresAt||!!review.requested.authorization&&now>=Number(review.requested.authorization.deadline));
     return <section className="public-challenge pilot-form" aria-label="Challenge an answer">
-      <h2>Challenge the proposed answer</h2>
-      <p role="status">{busy?'Working...':notice}</p>
+      <h2>{mine?'Your challenge':unavailable?'Challenge status':'Challenge the proposed answer'}</h2>
+      <p role="status">{busy?'Working...':notice==='Loading the real-event pilot...'?'Loading challenge details...':notice}</p>
       {state&&current&&<><p><strong>{marketQuestion(state.manifest.publication.draft.events[event])}</strong></p>
         <p>Proposed answer: <strong>{labels[current.proposal]}</strong>. Challenges close {date(current.challengeUntil)}.</p>
-        <p>Bond: <strong>{cash(state.manifest.publication.bondAtoms)} test AUSD</strong>, plus network fees. You can lose the bond under the published dispute rules. The testnet panel is controlled by the Flurbo operator.</p></>}
+        {!closed&&<p>Bond: <strong>{cash(state.manifest.publication.bondAtoms)} test AUSD</strong>, plus network fees. You can lose the bond under the published dispute rules. The testnet panel is controlled by the Flurbo operator.</p>}</>}
       {unavailable&&<p role="status">{unavailable}</p>}
-      {!pending&&<div className="ticket-wallet"><span>{owner?`${owner.slice(0,6)}…${owner.slice(-4)}`:'MetaMask'}</span><button className="button button-outline" disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':'Connect MetaMask'}</button></div>}
-      <p className="market-caption">Your Flurbo account must hold shares in this event through a linked wallet. Yes, No and related combinations count.</p>
-      {state&&!state.manifest.challengePolicy&&<p className="market-caption">This older pool enforces account eligibility in Flurbo only. Its deployed contract still permits direct challenges without a holdings check.</p>}
-      {owner&&!unavailable&&!pending&&<><p role="status">{eligibilityNotice}</p><button className="button button-outline" disabled={disabled} onClick={()=>void run(checkEligibility)}>{eligibilityCursor&&eligibilityCursor>0?'Continue checking shares':'Check account shares'}</button></>}
-      {!unavailable&&!pending&&!completed&&<fieldset disabled={disabled}>
+      {!pending&&(!unavailable||mine)&&<div className="ticket-wallet"><span>{owner?`${owner.slice(0,6)}…${owner.slice(-4)}`:'MetaMask'}</span><button className="button button-outline" disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':'Connect MetaMask'}</button></div>}
+      {!unavailable&&<p className="market-caption">Shares in any linked wallet qualify. Review your challenge, then confirm it in MetaMask before the deadline.</p>}
+      {!unavailable&&state&&!state.manifest.challengePolicy&&<p className="market-caption">This older pool enforces account eligibility in Flurbo only. Its deployed contract still permits direct challenges without a holdings check.</p>}
+      {owner&&!unavailable&&!pending&&!review&&<p role="status">{eligibilityNotice}</p>}
+      {mine&&current&&<section className="ticket-review" aria-label="Your submitted challenge"><h3>{current.phase===3?'Challenge resolved':'Challenge submitted'}</h3>
+        <p>Your answer: <strong>{labels[current.counter]}</strong></p>
+        <p>{current.phase===3?'Final answer: '+labels[current.result]:'Awaiting the testnet panel. Voting closes '+date(current.voteUntil)+'.'}</p>
+        <a href={`/api/${namespace}/evidence/${current.counterEvidenceHash}`} target="_blank" rel="noreferrer">View your submitted evidence</a>
+      </section>}
+      {challengeAccountError&&<p role="status">Your account challenge record could not be checked. Reload to retry.</p>}
+      {closed&&accountWallets!==null&&!challengeAccountError&&!mine&&!pending&&<p>No submitted challenge from your linked wallets is shown for this market. Saved evidence alone does not challenge an answer.</p>}
+      {canCompose&&<fieldset disabled={disabled}>
         <legend>Your challenge</legend>
         <label>Correct answer<select value={outcome} onChange={e=>setOutcome(Number(e.target.value))}><option value={0}>Choose a different answer</option>{[1,2,3].filter(v=>v!==current?.proposal).map(v=><option key={v} value={v}>{labels[v]}</option>)}</select></label>
         <label>Why is the proposed answer wrong?<textarea maxLength={8000} value={statement} onChange={e=>setStatement(e.target.value)}/></label>
         <label>Supporting source URL<input type="url" value={source} onChange={e=>setSource(e.target.value)}/></label>
         <label>Evidence excerpt<textarea maxLength={12000} value={attachment} onChange={e=>setAttachment(e.target.value)}/></label>
         <p className="market-caption">Your explanation, source and Flurbo account address will be published with the evidence. Include public information only.</p>
-        <button className="button button-outline" disabled={!owner||![1,2,3].includes(outcome)||outcome===current?.proposal||statement.trim().length<20||!source.trim()} onClick={()=>void run(publishEvidence)}>Save public evidence</button>
-        {evidence&&<><p><a href={evidence.uri} target="_blank" rel="noreferrer">Read your saved evidence</a></p><button className="button button-dark" disabled={!owner||!stake} onClick={()=>void run(()=>prepare({action:'dispute',event,outcome,evidenceHash:evidence.hash,evidenceURI:evidence.uri}))}>Review challenge</button></>}
+        <p className="market-caption">At least 20 characters of explanation and a source URL are required. Your challenge is submitted only when its transaction confirms.</p>
+        <button className="button button-dark" disabled={!owner||![1,2,3].includes(outcome)||outcome===current?.proposal||statement.trim().length<20||!source.trim()} onClick={()=>void run(reviewChallenge)}>Review challenge</button>
+        {evidence&&<p><a href={evidence.uri} target="_blank" rel="noreferrer">Read your saved evidence</a> · Saving evidence does not submit a challenge.</p>}
       </fieldset>}
-      {approved?.action==='dispute'&&!review&&!pending&&<p>Bond approval confirmed. Review your challenge again to submit it. Approval alone does not challenge the answer.</p>}
-      {review&&!pending&&<section className="ticket-review" aria-label="Challenge transaction review">
+      {approved?.action==='dispute'&&!unavailable&&!review&&!pending&&<p>Bond approval confirmed. Review your challenge again to submit it. Approval alone does not challenge the answer.</p>}
+      {review&&!pending&&(!unavailable||review.requested.action!=='dispute')&&<section className="ticket-review" aria-label="Challenge transaction review">
         <h3>{review.action==='approve'?'Approve the challenge bond':review.action==='withdrawBond'?'Collect bond credit':'Confirm your challenge'}</h3>
-        {review.requested.action==='dispute'&&<><p>Your answer: <strong>{labels[review.requested.outcome!]}</strong>. Bond: {cash(review.amountAtoms)} test AUSD.</p><p>{review.action==='approve'?'This only allows the resolver to take your bond. You will confirm the challenge separately.':'This submits your alternative answer and locks the bond.'}</p></>}
+        {review.requested.action==='dispute'&&<><p>Your answer: <strong>{labels[review.requested.outcome!]}</strong>. Bond: {cash(review.manifest.publication.bondAtoms)} test AUSD.</p><p>{review.action==='approve'?'This only allows the resolver to take your bond. You will confirm the challenge separately.':'This submits your alternative answer and locks the bond.'}</p></>}
         <p className="market-caption">Maximum network fee: {formatUnits(BigInt(review.maximumFeeWei),18)} MON.</p>
         {review.requested.authorization&&<p className="market-caption">Eligibility expires {date(review.requested.authorization.deadline)}. If it expires, cancel this review and review again.</p>}
-        <div className="pilot-actions"><button className="button button-dark" disabled={busy||review.requested.action==='dispute'&&!!unavailable} onClick={()=>void run(confirm)}>Confirm in MetaMask</button><button className="button button-outline" disabled={busy} onClick={()=>setReview(null)}>Cancel review</button></div>
+        {review.requested.action==='dispute'&&<p><a href={`/api/${namespace}/evidence/${review.requested.evidenceHash}`} target="_blank" rel="noreferrer">Read your saved evidence</a></p>}
+        {reviewExpired&&<p>This review expired. Cancel and review again before the challenge deadline.</p>}
+        <div className="pilot-actions"><button className="button button-dark" disabled={busy||reviewExpired||review.requested.action==='dispute'&&!!unavailable} onClick={()=>void run(confirm)}>{review.action==='approve'?'Approve bond in MetaMask':review.action==='dispute'?'Submit challenge in MetaMask':'Confirm in MetaMask'}</button><button className="button button-outline" disabled={busy} onClick={()=>setReview(null)}>Cancel review</button></div>
       </section>}
+      {unavailable&&review?.requested.action==='dispute'&&!pending&&<button className="button button-outline" disabled={busy} onClick={()=>setReview(null)}>Close expired review</button>}
       {pending&&<section className="ticket-review"><h3>Checking your transaction</h3><p>{pending.hash?'Confirmation is checked automatically. You can reload without submitting again.':'Check MetaMask activity before retrying. A transaction may have been sent.'}</p>{intended!=='dispute'&&<p>This is an earlier {intended} transaction for this collection.</p>}
         {!pending.hash&&<><label>Transaction hash<input value={hash} onChange={e=>setHash(e.target.value)}/></label><button className="button button-outline" onClick={()=>void run(async()=>{if(!/^0x[0-9a-f]{64}$/i.test(hash))throw Error('Paste a valid transaction hash');save({...pending,hash:hash.toLowerCase() as Hex});})}>Find transaction</button></>}
         <button className="button button-outline" disabled={busy||!pending.hash} onClick={()=>void run(check)}>Check confirmation</button>
@@ -309,7 +358,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
       <details className="portfolio-wallet pilot-form"><summary>Propose, challenge or review an outcome</summary><h2>Make the result reviewable.</h2><label>Event<select value={event} disabled={disabled} onChange={e=>setEvent(Number(e.target.value))}>{state.manifest.publication.draft.events.map((e,i)=><option value={i} key={e.id}>{marketQuestion(e)}</option>)}</select></label>
         {current&&<p>{phases[current.phase]}. {current.phase===0?`Assertions close ${date(current.assertionDeadline)}.`:current.phase===1?`Challenges close ${date(current.challengeUntil)}.`:current.phase===2?`Voting closes ${date(current.voteUntil)}. NO ${current.votes[0]}, YES ${current.votes[1]}, VOID ${current.votes[2]}.`:`Result ${labels[current.result]}.`}</p>}
         {current&&[current.evidenceHash,current.counterEvidenceHash].filter(h=>!/^0x0{64}$/.test(h)).map(h=><p key={h}><a href={`/api/pilot/evidence/${h}`} target="_blank" rel="noreferrer">Read hosted evidence {h.slice(0,12)}</a></p>)}
-        <p>Evidence links appear on the market page. A hosted copy is available only if it was archived on Flurbo.</p><label>Outcome<select value={outcome} disabled={disabled} onChange={e=>setOutcome(Number(e.target.value))}><option value={2}>YES</option><option value={1}>NO</option><option value={3}>VOID</option></select></label><label>Your explanation<textarea value={statement} maxLength={8000} disabled={disabled} onChange={e=>setStatement(e.target.value)} placeholder="Explain how the published source meets the committed rule."/></label><label>Source URL<input value={source} disabled={disabled} onChange={e=>setSource(e.target.value)} placeholder="https://..."/></label><label>Evidence excerpt or source-adapter output<textarea value={attachment} maxLength={12000} disabled={disabled} onChange={e=>setAttachment(e.target.value)}/></label><p>Saving publishes this evidence at a public content-addressed URL. Include public material only. A missing source response is not proof of NO.</p><button className="button button-outline" disabled={disabled||!owner} onClick={()=>void run(publishEvidence)}>Save public evidence</button>
+        <p>Evidence links appear on the market page. A hosted copy is available only if it was archived on Flurbo.</p><label>Outcome<select value={outcome} disabled={disabled} onChange={e=>setOutcome(Number(e.target.value))}><option value={2}>YES</option><option value={1}>NO</option><option value={3}>VOID</option></select></label><label>Your explanation<textarea value={statement} maxLength={8000} disabled={disabled} onChange={e=>setStatement(e.target.value)} placeholder="Explain how the published source meets the committed rule."/></label><label>Source URL<input value={source} disabled={disabled} onChange={e=>setSource(e.target.value)} placeholder="https://..."/></label><label>Evidence excerpt or source-adapter output<textarea value={attachment} maxLength={12000} disabled={disabled} onChange={e=>setAttachment(e.target.value)}/></label><p>Saving publishes this evidence at a public content-addressed URL. Include public material only. A missing source response is not proof of NO.</p><button className="button button-outline" disabled={disabled||!owner} onClick={()=>void run(async()=>{await publishEvidence();})}>Save public evidence</button>
         {evidence&&<p><a href={evidence.uri} target="_blank" rel="noreferrer">View saved evidence</a></p>}
         <div className="pilot-actions">{(['assertOutcome','vote'] as const).map(action=><button key={action} className="button button-dark" disabled={disabled||!owner||!evidence|| (action==='assertOutcome'?current?.phase!==0:current?.phase!==2||!state.wallet?.reviewer||current.voted)} onClick={()=>void run(()=>prepare({action,event,outcome,evidenceHash:evidence!.hash,evidenceURI:evidence!.uri}))}>{action==='assertOutcome'?'Review assertion':'Review vote'}</button>)}</div>
         {current?.phase===1&&<p><a href={`/markets/${namespace}/${event}?challenge=1`}>Challenge through your account</a>. Shares are checked across your linked wallets.</p>}

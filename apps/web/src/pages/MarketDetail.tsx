@@ -18,6 +18,7 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
   const {state:auth}=useAuth(),[state,setState]=useState<PilotState|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
   const [busy,setBusy]=useState(false),[positions,setPositions]=useState<{mask:string;quantity:string;payoutAtoms:string|null}[]|null>(null);
   const [positionError,setPositionError]=useState('');
+  const [accountWallets,setAccountWallets]=useState<string[]>([]);
   const [challengeOpen,setChallengeOpen]=useState(()=>new URLSearchParams(window.location.search).get('challenge')==='1');
   const [now,setNow]=useState(()=>Date.now()/1000);
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()/1000),1000);return()=>clearInterval(timer);},[]);
@@ -34,6 +35,7 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
   useEffect(()=>{const c=new AbortController();setPositions(null);setPositionError('');
     void linkedWallets(c.signal).then(async links=>{
       if(links.account.toLowerCase()!==auth.address?.toLowerCase())throw Error('Account changed');
+      if(!c.signal.aborted)setAccountWallets(links.wallets.map(w=>w.toLowerCase()));
       const results=await Promise.all(links.wallets.map(wallet=>pilotRequest<{rows:{mask:string;quantity:string;payoutAtoms:string|null}[]}>('positions',{owner:wallet,claims:[{scope:2**event,mask:'2'},{scope:2**event,mask:'1'}]},namespace,c.signal)));
       const rows=['2','1'].map(mask=>{const items=results.map(r=>r.rows.find(row=>row.mask===mask));if(items.some(row=>!row))throw Error('Incomplete holdings');return {mask,quantity:items.reduce((n,r)=>n+BigInt(r!.quantity),0n).toString(),payoutAtoms:!items.length||items.some(r=>r!.payoutAtoms===null)?null:items.reduce((n,r)=>n+BigInt(r!.payoutAtoms!),0n).toString()};});
       if(!c.signal.aborted)setPositions(rows);
@@ -61,10 +63,10 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
           {state.cases[event].phase===1?<><dt>Challenge period ends</dt><dd>{date(view.deadline)}</dd></>:state.cases[event].phase===2?<><dt>Dispute deadline</dt><dd>{date(view.deadline)}</dd></>:state.cases[event].phase===3?<><dt>Final answer</dt><dd>{view.result}</dd></>:<><dt>Results expected from</dt><dd>{date(view.expectedFrom)}</dd></>}</dl>
           {state.cases[event].phase>0&&<div className="detail-challenge"><p>Proposed answer: <strong>{['Unset','No','Yes','Void'][state.cases[event].proposal]}</strong></p>
             {['evidenceHash','counterEvidenceHash'].map((key,i)=>{const hash=state.cases[event][key as 'evidenceHash'|'counterEvidenceHash'];return /^0x0{64}$/.test(hash)?null:<p key={key}><a href={`/api/${namespace}/evidence/${hash}`} target="_blank" rel="noreferrer">{i?'Read challenge evidence':'Read proposed answer evidence'}</a></p>;})}
-            {state.cases[event].phase===1&&<><p className="market-caption">Challenge bond: {cash(state.manifest.publication.bondAtoms)} test AUSD, plus network fees.</p>{now<Number(state.cases[event].challengeUntil)?<button className="button button-dark" disabled={busy||challengeOpen||!!error} onClick={()=>toggleChallenge(true)}>Challenge proposed answer</button>:<p>The challenge period has ended.</p>}</>}
+            {state.cases[event].phase===1&&<><p className="market-caption">Challenge bond: {cash(state.manifest.publication.bondAtoms)} test AUSD, plus network fees.</p>{Math.max(now,state.snapshot.timestamp)<Number(state.cases[event].challengeUntil)?<button className="button button-dark" disabled={busy||challengeOpen||!!error} onClick={()=>toggleChallenge(true)}>Challenge proposed answer</button>:<p>The challenge period has ended.</p>}</>}
             {state.cases[event].phase===2&&<p>The answer is disputed. The testnet reviewer panel decides the outcome.</p>}
             {state.cases[event].phase===3&&<p>The result is final. Challenges are closed.</p>}
-            {state.cases[event].phase>=2&&!challengeOpen&&<button className="button button-outline" disabled={busy} onClick={()=>toggleChallenge(true)}>View challenge and bond credit</button>}
+            {state.cases[event].phase>=2&&accountWallets.includes(state.cases[event].disputer.toLowerCase())&&!challengeOpen&&<button className="button button-outline" disabled={busy} onClick={()=>toggleChallenge(true)}>View your challenge</button>}
           </div>}
           <details><summary>Settlement details</summary><p>Observation ends {date(view.observes)}. Last checked {date(state.snapshot.timestamp)}.</p><p>Disputes or missing evidence can delay settlement. All events in the collection must resolve before payouts.</p></details><button className="button button-outline" onClick={()=>setAttempt(n=>n+1)}>Refresh status</button>
         </section>

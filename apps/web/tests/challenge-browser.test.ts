@@ -57,7 +57,7 @@ test('ordinary account challenges from the market page with separate approval, r
         if(input.method==='eth_getTransactionReceipt'){
           if(saved.review.action==='dispute'&&!confirmDispute)return route.fulfill({json:{result:null}});
           if(saved.review.action==='approve')f.options.allowance=1000000n;
-          else {f.c.phase=2;f.c.counter=1;f.c.voteUntil=BigInt(f.now+3600);}
+          else {f.c.phase=2;f.c.counter=1;f.c.disputer=owner;f.c.counterEvidenceHash=hash;f.c.voteUntil=BigInt(f.now+3600);}
           return route.fulfill({json:{result:{transactionHash:hash,blockNumber:'0x64',blockHash:hash,status:'0x1'}}});
         }
         if(input.method==='eth_getTransactionByHash')return route.fulfill({json:{result:{...saved.review.transaction,hash,chainId:'0x279f',blockNumber:'0x64',blockHash:hash,input:saved.review.transaction.data,nonce:saved.nonce}}});
@@ -72,35 +72,33 @@ test('ordinary account challenges from the market page with separate approval, r
     await page.getByRole('button',{name:'Challenge proposed answer',exact:true}).click();
     const form=page.getByRole('region',{name:'Challenge an answer'});
     await form.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
-    await form.getByRole('button',{name:'Check account shares',exact:true}).click();
-    await form.getByText('Your account has no qualifying shares in this event. You cannot challenge this answer.').waitFor();
     await form.getByLabel('Correct answer').selectOption('1');
     await form.getByLabel('Why is the proposed answer wrong?').fill('The published evidence meets the NO rule for this test event.');
     await form.getByLabel('Supporting source URL').fill('https://ethereum.org/');
-    await form.getByRole('button',{name:'Save public evidence',exact:true}).click();
-    assert.equal(await form.getByRole('button',{name:'Review challenge',exact:true}).isDisabled(),true);
+    assert.equal(await form.getByRole('button',{name:'Save public evidence',exact:true}).count(),0);
+    await form.getByRole('button',{name:'Review challenge',exact:true}).click();
+    await form.getByText('Your account has no qualifying shares in this event. You cannot challenge this answer.').waitFor();
+    assert.equal(await form.getByRole('link',{name:'Read your saved evidence',exact:true}).count(),0);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('sends')),null);
     eligible=true;
-    await form.getByRole('button',{name:'Check account shares',exact:true}).click();
-    await form.getByText('Your account holds shares in this event.').waitFor();
     await form.getByRole('button',{name:'Review challenge',exact:true}).click();
     await form.getByRole('heading',{name:'Approve the challenge bond',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('sends')),null);
     await page.evaluate(()=>sessionStorage.setItem('reject','1'));
-    await form.getByRole('button',{name:'Confirm in MetaMask'}).click();
+    await form.getByRole('button',{name:'Approve bond in MetaMask'}).click();
     await form.getByText('Wallet request rejected.',{exact:true}).waitFor();
     assert.equal(await page.evaluate((key:string)=>localStorage.getItem(key),'flurbo.'+namespace+'.pending.v1'),null);
     await form.getByRole('button',{name:'Review challenge',exact:true}).click();
-    await form.getByRole('button',{name:'Confirm in MetaMask'}).click();
-    await form.getByText('Bond approval confirmed. Review your challenge again to submit it. Approval alone does not challenge the answer.').waitFor();
-    assert.equal(await page.evaluate(()=>sessionStorage.getItem('sends')),'1');
-    await form.getByRole('button',{name:'Review challenge',exact:true}).click();
+    await form.getByRole('button',{name:'Approve bond in MetaMask'}).click();
     await form.getByRole('heading',{name:'Confirm your challenge',exact:true}).waitFor();
+    await form.getByText('Your answer: NO. Bond: 1 test AUSD.',{exact:true}).waitFor();
+    assert.equal(await form.getByLabel('Why is the proposed answer wrong?').count(),0);
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('sends')),'1');
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     await mkdir(new URL('../../../target/challenge-ui/',import.meta.url),{recursive:true});
     await page.screenshot({path:new URL('../../../target/challenge-ui/mobile.png',import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),fullPage:true});
-    await form.getByRole('button',{name:'Confirm in MetaMask'}).click();
+    await form.getByRole('button',{name:'Submit challenge in MetaMask'}).click();
     await form.getByRole('heading',{name:'Checking your transaction'}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('sends')),'2');
     await page.reload();
@@ -110,10 +108,38 @@ test('ordinary account challenges from the market page with separate approval, r
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('sends')),'2');
     await page.getByText('This answer has been challenged. The testnet reviewer panel decides the dispute.',{exact:true}).waitFor();
     assert.equal(await page.getByRole('button',{name:'Review challenge',exact:true}).count(),0);
-    f.c.phase=1;f.c.challengeUntil=BigInt(f.now-1);
+    // A submitted challenge belongs to the account on reload, without connecting a wallet again.
+    await page.goto('https://flurbo.singu.online/markets/'+namespace+'/0');
+    await page.getByRole('button',{name:'View your challenge',exact:true}).click();
+    await page.getByRole('region',{name:'Your submitted challenge'}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Review challenge',exact:true}).count(),0);
+    f.c.phase=3;f.c.result=1;
+    await page.reload();
+    await page.getByRole('heading',{name:'Challenge resolved',exact:true}).waitFor();
+    await page.getByText('Final answer: NO',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Submit challenge in MetaMask',exact:true}).count(),0);
+    // Expiry while a review is open removes the submit action immediately, without a server refresh.
+    f.c.phase=1;f.c.disputer='0x'+'00'.repeat(20);f.c.counterEvidenceHash='0x'+'00'.repeat(32);f.c.challengeUntil=BigInt(f.now+3600);
+    await page.goto('https://flurbo.singu.online/markets/'+namespace+'/0?challenge=1');
+    await form.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
+    await form.getByLabel('Correct answer').selectOption('1');
+    await form.getByLabel('Why is the proposed answer wrong?').fill('The published evidence meets the NO rule for this test event.');
+    await form.getByLabel('Supporting source URL').fill('https://ethereum.org/');
+    await form.getByRole('button',{name:'Review challenge',exact:true}).click();
+    await form.getByRole('button',{name:'Submit challenge in MetaMask',exact:true}).waitFor();
+    await page.evaluate((time:number)=>{Date.now=()=>time;},Number(f.c.challengeUntil)*1000);
+    await form.getByText('The challenge period has ended.',{exact:true}).waitFor();
+    assert.equal(await form.getByRole('button',{name:'Submit challenge in MetaMask',exact:true}).count(),0);
+    assert.equal(await form.getByRole('button',{name:'Review challenge',exact:true}).count(),0);
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('sends')),'2');
+    f.c.challengeUntil=BigInt(f.now-1);
     await page.goto('https://flurbo.singu.online/markets/'+namespace+'/0');
     await page.getByText('The challenge period has ended.',{exact:true}).waitFor();
     assert.equal(await page.getByRole('button',{name:'Challenge proposed answer',exact:true}).count(),0);
+    f.c.phase=3;
+    await page.reload();
+    await page.getByText('The result is final. Challenges are closed.',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'View your challenge',exact:true}).count(),0);
     assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });
