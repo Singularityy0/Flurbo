@@ -12,11 +12,12 @@ test('landing example and collection switch work on desktop and mobile without l
   october.publication.mode='rehearsal';october.pool='0x'+'aa'.repeat(20);
   showcase.publication.mode='ethereum-activity';showcase.publication.draft.title='Showcase v0';showcase.publication.draft.events=ACTIVITY_METRICS.map(m=>activityEvent(m,now+14520));
   const ns=`practice-${showcase.pool.slice(2)}`,old=`practice-${october.pool.slice(2)}`;
-  const requests:string[]=[];let signedIn=false;
+  const requests:string[]=[];let signedIn=false,roundClose=now+14400,statusUnavailable=false;
   try{
     const page=await browser.newPage();
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
+      if(path==='/healthz')return route.fulfill(statusUnavailable?{status:503,json:{error:'Unavailable'}}:{json:{service:'flurbo',practice_collections:{active:ns,configured:[{namespace:ns,closesAt:roundClose}]}}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:signedIn?{address:owner,method:'passkey',expiresAt:Date.now()+3600000}:null}});
       if(path==='/api/account/access')return route.fulfill({json:{testingTools:false}});
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:ns,collections:[{namespace:ns,label:'Showcase v0',pool:showcase.pool,closesAt:now+14400},{namespace:old,label:'October practice',pool:october.pool,closesAt:now+86400}]}});
@@ -29,11 +30,20 @@ test('landing example and collection switch work on desktop and mobile without l
     for(const width of [1440,390]){
       await page.setViewportSize({width,height:950});await page.goto('https://flurbo.singu.online/');
       await page.getByRole('button',{name:'Goes live',exact:true}).click();assert.match(await page.locator('.home-example-result').innerText(),/73.3/);
+      await page.getByText('Current round: trading window open',{exact:true}).waitFor();
+      assert.equal(await page.getByText('Public trading is not available here yet.',{exact:false}).count(),0);
       await page.getByRole('button',{name:'Doesn’t go live',exact:true}).click();assert.match(await page.locator('.home-example-result').innerText(),/25.7/);
       assert.equal(await page.getByRole('link',{name:'Start exploring',exact:true}).first().getAttribute('href'),'/signup');
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
       await page.screenshot({path:new URL(`../../../target/showcase-ui/home-${width}.png`,import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),fullPage:true});
     }
+    roundClose=now-60;await page.reload();await page.getByText('Current round: trading closed',{exact:true}).waitFor();
+    assert.match(await page.getByRole('region',{name:'Preview availability'}).innerText(),/Buying is closed for this round/);
+    await page.getByRole('region',{name:'Preview availability'}).getByRole('link',{name:'Browse markets'}).click();
+    await page.waitForURL('**/login');
+    statusUnavailable=true;await page.goto('https://flurbo.singu.online/');await page.getByText('Round status temporarily unavailable',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('region',{name:'Preview availability'}).getByRole('link',{name:'Portfolio'}).getAttribute('href'),'/portfolio');
+    statusUnavailable=false;roundClose=now+14400;await page.getByRole('button',{name:'Refresh status',exact:true}).click();await page.getByText('Current round: trading window open',{exact:true}).waitFor();
     signedIn=true;await page.goto('https://flurbo.singu.online/markets');await page.getByRole('heading',{name:'Showcase v0',exact:true}).waitFor();
     assert.equal(await page.getByText('Scripted practice events.',{exact:false}).count(),0);
     await page.getByLabel('Collection',{exact:true}).selectOption(old);await page.getByRole('heading',{name:'October practice',exact:true}).waitFor();

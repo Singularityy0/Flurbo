@@ -3,6 +3,7 @@ import {useState} from 'react';
 import {Link} from 'wouter';
 import {useAuth} from '../auth/context';
 import './home.css';
+import VisitorStatus from './VisitorStatus';
 
 function ConnectionExample(){
   const [answer,setAnswer]=useState<'all'|'yes'|'no'>('all');
@@ -26,9 +27,10 @@ export default function Home(){
     <section className="home-hero">
       <div className="home-hero-copy"><span className="home-pill"><i/>Built on Monad · Testnet</span>
         <h1>A view worth<br/><em>combining.</em></h1>
-        <p>Make a prediction. Connect it to another. See how the market prices the bigger picture.</p>
+        <p>Flurbo brings individual and combined predictions into one shared market.</p>
         <div className="home-actions"><Link href={destination} className="button button-dark">{state.address?'Explore markets':'Start exploring'}<ArrowUpRight size={18}/></Link><a className="text-link" href="#the-idea">See the connection <ArrowRight size={16}/></a></div>
-        <span className="home-hero-note">Test funds. Real curiosity. No real money.</span>
+        <span className="home-hero-note">Monad testnet preview · Test assets only</span>
+        <VisitorStatus/>
       </div><ConnectionExample/>
     </section>
     <section className="home-feature-strip" aria-label="Flurbo features"><span><Layers size={18}/> Individual & combined predictions</span><span><ScanLine size={18}/> Read-only What-if exploration</span><span><Wallet size={18}/> One account, all your shares</span></section>
@@ -36,11 +38,11 @@ export default function Home(){
     <section className="home-capabilities"><article><span className="home-feature-number">01 / Predict</span><h3>Your view.<br/>Your combination.</h3><p>Choose Yes or No. Combine up to three events into one position, with a price and payout rule you can inspect before buying.</p><div className="home-mini-claim"><span>Upgrade goes live <b>Yes</b></span><i>AND</i><span>Exchange supports it <b>Yes</b></span><small>Illustration · pays only when both answers are Yes</small></div></article><article><span className="home-feature-number">02 / Explore</span><h3>Ask a better<br/>“What if?”</h3><p>Compare the chance of two answers together with an independence baseline. Explore conditional probabilities and how a simulated trade changes them.</p><a className="text-link" href="#main">Try the example above <ArrowUpRight size={16}/></a></article><article><span className="home-feature-number">03 / Follow</span><h3>From prediction<br/>to outcome.</h3><p>Each market has its own page, price observations, source rules and settlement timeline. Your portfolio brings shares from your linked trading wallets together.</p><Link href="/portfolio" className="text-link">Your portfolio <ArrowUpRight size={16}/></Link></article></section>
     <section className="home-start" id="how-it-works"><div className="home-section-heading"><div><span className="eyebrow">A simple place to start</span><h2>Make your first <em>prediction.</em></h2></div><Link href={destination} className="button button-dark">{state.address?'Go to markets':'Create an account'}<ArrowUpRight size={16}/></Link></div><ol><li><span>01</span><h3>Create your account</h3><p>Sign in with a Mera passkey. This is your Flurbo identity.</p></li><li><span>02</span><h3>Connect & fund MetaMask</h3><p>Use Get test funds for test AUSD and a link to the MON faucet. MetaMask signs your trades.</p></li><li><span>03</span><h3>Pick your prediction</h3><p>Choose an answer, review the cost and confirm in MetaMask. Follow your shares in Portfolio.</p></li></ol></section>
     <section className="home-faq" id="faq"><div><span className="eyebrow">Before you begin</span><h2>A few things,<br/><em>made clear.</em></h2></div><div>{[
-      ['Is this real money?','No. Flurbo runs on Monad testnet with test AUSD and test MON. Collections can use real events or clearly labelled scripted practice events. Check the source and rules on each market.'],
+      ['Which assets does this preview use?','Test AUSD and test MON on Monad testnet only. Collections can use real events or clearly labelled scripted practice events. Check the source and rules on each market.'],
       ['What does a winning share pay?','A winning share pays 1 test AUSD; a losing share pays 0. VOID outcomes follow the published fractional-payout rule, not a refund of your purchase. Payout is not profit: subtract your cost and network fees.'],
       ['Who decides the result?','Each market commits its source rules and deadlines before trading. Answers are proposed with a bond and can be challenged. Current testnet disputes use reviewer wallets controlled by the Flurbo operator. Finalization and delivery must complete before you can collect payouts.'],
       ['Is What-if a prediction I can buy?','What-if is read-only. It shows probabilities implied by the pricing model, including conditional probabilities. Buying a combined AND position is different from trading a conditional. A purchase quote also includes the impact of trade size.'],
-      ['Are my trades private?','No. Transactions and wallet positions are visible on-chain today. Private participation is a research goal, not a feature of this testnet.'],
+      ['What can other people see?','Transactions and wallet positions are visible on-chain.'],
       ['Can I use more than one MetaMask wallet?','Yes. Link each trading wallet to your Mera account with a signature. Your portfolio shows their shares together. Funds and positions stay in the MetaMask wallet that owns them; use that wallet to sell or collect payouts.']
     ].map(([q,a])=><details key={q}><summary>{q}<span aria-hidden="true">+</span></summary><p>{a}</p></details>)}</div></section>
     <section className="home-final"><span className="eyebrow">Separate ideas. Connected possibilities.</span><h2>Put your view<br/><em>to the test.</em></h2><Link href={destination} className="button button-dark">{state.address?'Explore markets':'Start exploring'}<ArrowUpRight size={18}/></Link><p>Monad testnet · Test assets only</p></section>
