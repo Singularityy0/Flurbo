@@ -3,6 +3,7 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY crates/flurbo-core crates/flurbo-core
 RUN cargo build --offline --locked --release -p flurbo-core --example parlay_compare
+RUN cargo test --offline --locked -p flurbo-core --example pair_analytics && cargo build --offline --locked --release -p flurbo-core --example pair_analytics
 RUN cargo test --offline --locked -p flurbo-core --example parlay_testnet_model && cargo build --offline --locked --release -p flurbo-core --example parlay_testnet_model
 
 FROM node:24-bookworm-slim AS build
@@ -13,6 +14,8 @@ COPY apps/web apps/web
 COPY apps/dashboard apps/dashboard
 COPY config/learning-testnet.json config/learning-testnet.json
 COPY --from=learning-build /app/target/release/examples/parlay_compare bin/flurbo-parlay-compare
+COPY --from=learning-build /app/target/release/examples/pair_analytics bin/flurbo-pair-analytics
+RUN node --input-type=module -e "import {runPairModel} from './apps/web/server/pair-analytics.mjs'; const p=await runPairModel('1 4 0 1 100 0 1 2 3 0'); if(Math.round(p.joint*1000)!==250 || Math.round(p.givenYes*1000)!==500) throw Error('Pair analytics smoke check failed');"
 COPY --from=learning-build /app/target/release/examples/parlay_testnet_model bin/flurbo-learning-model
 RUN node --input-type=module -e "import {runComparison} from './apps/web/server/learning-comparison.mjs'; await runComparison();"
 RUN node --input-type=module -e "import {loadLearningModel} from './apps/web/server/learning-pool.mjs'; await loadLearningModel();"
@@ -24,6 +27,7 @@ WORKDIR /app
 COPY --from=build /app/apps/web/dist apps/web/dist
 COPY --from=build /app/apps/web/node_modules apps/web/node_modules
 COPY --from=build /app/bin/flurbo-parlay-compare bin/flurbo-parlay-compare
+COPY --from=build /app/bin/flurbo-pair-analytics bin/flurbo-pair-analytics
 COPY --from=build /app/bin/flurbo-learning-model bin/flurbo-learning-model
 COPY apps/web/server apps/web/server
 COPY apps/web/shared apps/web/shared

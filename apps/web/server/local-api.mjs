@@ -55,6 +55,12 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         }
         if(url.search) return send(res,400,{error:'Unexpected pilot query'});
         if(req.method==='GET' && url.pathname==='/api/pilot/markets') return send(res,200,await pilot.markets());
+        if(req.method==='POST' && url.pathname==='/api/pilot/analytics') {
+          const input=await body(req);
+          if(!input||Array.isArray(input)||Object.keys(input).sort().join(',')!=='a,b'||![input.a,input.b].every(x=>Number.isInteger(x)&&x>=0&&x<pilot.manifest.publication.draft.events.length)||input.a===input.b) return send(res,400,{error:'Choose two different events.'});
+          try {if(!pilot.analytics)throw new Error('Unavailable');return send(res,200,await pilot.analytics(input));}
+          catch {return send(res,503,{error:'This comparison is temporarily unavailable. Try again shortly. Trading is separate.'});}
+        }
         if(req.method==='POST' && url.pathname==='/api/pilot/prepare') return send(res,200,await pilot.prepare(await body(req)));
         if(req.method==='POST' && url.pathname==='/api/pilot/position') {
           const input=await body(req); return send(res,200,await pilot.position(input.owner,input.scope,input.mask));
