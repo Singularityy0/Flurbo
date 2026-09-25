@@ -68,7 +68,12 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
       return {status:receipt.success?'confirmed':'reverted',hash:pending.hash};
     }
     const state=await service.status(),plan=nextResolutionAction(state,owner,saved.owned,saved.deferred);
-    if(!enabled||['wait','complete'].includes(plan.kind))return {status:enabled?plan.kind:'dry-run',plan};
+    if(!enabled){
+      let monitoring='healthy';
+      try{await requireHealthyMonitor(command,manifest,now());}catch{monitoring='not-ready';}
+      return {status:'dry-run',plan,pool:manifest.pool,monitoring};
+    }
+    if(['wait','complete'].includes(plan.kind))return {status:plan.kind,plan};
     await requireHealthyMonitor(command,manifest,now());
     let input={owner,action:plan.action,...(plan.event===undefined?{}:{event:plan.event})};
     if(plan.kind==='evidence'){

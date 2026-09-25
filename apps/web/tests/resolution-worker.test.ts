@@ -52,6 +52,21 @@ test('unhealthy monitoring, stale review and excessive gas stop worker execution
   assert.throws(()=>validateWorkerReview({...review,requested:{...review.requested,event:1}},f.manifest,owner,now),/mismatch/);
 });
 
+test('dry run checks monitoring even while waiting, without evidence or signing',async()=>{
+  const f=pilotFixture(now),db=storage(f.manifest);
+  const forbidden=async()=>{assert.fail('Dry run must not prepare, gather evidence or sign');};
+  const options={manifest:f.manifest,owner,service:{status:f.service.status,prepare:forbidden},command:db.command,
+    evidence:forbidden,transport:{sign:forbidden,broadcast:forbidden},now:()=>now};
+  assert.deepEqual(await resolutionTick(options),{status:'dry-run',plan:{kind:'wait'},pool:f.manifest.pool,monitoring:'healthy'});
+  const healthy=JSON.parse(db.data.get(db.monitorKey)!);
+  for(const state of [null,{...healthy,checkpoint:{...healthy.checkpoint,checkedAt:now-901}},
+    {...healthy,queue:[{status:'pending'}]}, {...healthy,checkpoint:{...healthy.checkpoint,identity:'another-pool'}}]){
+    if(state)db.data.set(db.monitorKey,JSON.stringify(state));else db.data.delete(db.monitorKey);
+    const result=await resolutionTick(options);
+    assert.equal(result.status,'dry-run');assert.equal(result.monitoring,'not-ready');
+  }
+});
+
 test('worker approves only the exact bond, then asserts; unavailable evidence defers without blocking another event',async()=>{
   const f=pilotFixture(now);f.manifest.publication.draft.closesAt=now-100;
   f.manifest.publication.draft.events.forEach(e=>e.observationEndsAt=now-10);
