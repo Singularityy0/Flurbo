@@ -33,19 +33,17 @@ test('combined shares appear in a fresh browser before history responds, with no
     await combined.locator('strong').getByText('Test event 1 + Test event 2',{exact:true}).waitFor();
     await combined.locator('small').getByText('Yes AND Yes',{exact:true}).waitFor();
     await page.getByRole('cell',{name:'10',exact:true}).waitFor();
-    assert.equal(batches.length,1);assert.equal(batches[0].claims.length,16);
-    assert.equal(await page.getByRole('button',{name:'Stop loading',exact:true}).count(),1);
+    assert.equal(batches.length,2);assert.ok(batches.every(b=>b.claims.length===16));
+    assert.equal(await page.getByRole('button',{name:/^Refresh/}).count(),1);
     assert.equal(await page.evaluate(()=>localStorage.length),0);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-    // Other traders' active scopes must not be displayed as this wallet's holdings.
-    await page.getByText('Look up another address',{exact:true}).evaluate((el:any)=>el.parentElement.open=true);await page.getByRole('textbox',{name:'Wallet to view'}).fill(login);await page.getByRole('button',{name:'View wallet',exact:true}).click();
-    await page.getByText('No shares in the claims checked so far. Combinations may still be loading.',{exact:true}).waitFor();
-    assert.equal(await page.getByRole('cell',{name:'10',exact:true}).count(),0);
+    assert.equal(await page.locator('.portfolio-account-identity').getByText(login,{exact:true}).count(),1);
+    assert.equal(await page.getByRole('textbox',{name:'Wallet to view'}).count(),0);
     release();assert.deepEqual(errors,[]);
   }finally{release();await browser.close();}
 });
 
-test('pilot portfolio loads remembered wallet and catches up without repeat clicks; errors pause scans',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+test('account portfolio discovers older combinations on refresh without repeated background scans',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const fixture=pilotFixture();let scans=0,fail=false;
@@ -70,18 +68,18 @@ test('pilot portfolio loads remembered wallet and catches up without repeat clic
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
     await page.goto('https://flurbo.singu.online/portfolio');
-    await page.getByRole('button',{name:'Pause loading'}).waitFor();
+    await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();
+    assert.equal(scans,1);
+    await page.getByRole('button',{name:'Refresh',exact:true}).click();
     await page.getByText('Test event 1 + Test event 2',{exact:true}).waitFor();
     assert.equal(scans,2);
-    assert.equal(await page.getByText('Wallet '+owner.slice(0,8)+'…'+owner.slice(-6),{exact:true}).count(),1);
+    assert.equal(await page.locator('.portfolio-account-identity').getByText(login,{exact:true}).count(),1);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     fail=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
-    await page.getByText('Trade history is temporarily unavailable. Your holdings are loaded separately. Retry shortly.',{exact:true}).waitFor();
-    await page.getByText('Test event 1 + Test event 2',{exact:true}).waitFor();
+    await page.getByText('Older custom predictions may still be missing.',{exact:false}).waitFor();
     const stopped=scans;await page.waitForTimeout(1800);assert.equal(scans,stopped);
     fail=false;await page.getByRole('button',{name:'Refresh',exact:true}).click();
-    await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();
-    await page.waitForFunction(()=>!document.body.textContent?.includes('Trade history is temporarily unavailable'));
+    await page.getByText('Test event 1 + Test event 2',{exact:true}).waitFor();
     assert.equal(scans,stopped+1);assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });
@@ -130,16 +128,16 @@ test('practice history outage still shows owned shares; recovery shows the bet a
     await page.goto('https://flurbo.singu.online/portfolio');
     await page.getByRole('cell',{name:'10',exact:true}).waitFor();
     await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();
-    failAccount=true;await page.getByText('Look up another address',{exact:true}).evaluate((el:any)=>el.parentElement.open=true);await page.getByRole('textbox',{name:'Wallet to view'}).fill(login);await page.getByRole('button',{name:'View wallet',exact:true}).click();
-    await page.getByText('Wallet details could not be refreshed. Retry shortly.',{exact:true}).waitFor();
+    failAccount=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
+    await page.getByText('Some shares couldn’t be loaded. Refresh to complete your portfolio.',{exact:true}).waitFor();
     assert.equal(await page.getByRole('cell',{name:'10',exact:true}).count(),0);
     failAccount=false;await page.getByRole('button',{name:'Refresh',exact:true}).click();
-    await page.getByText('No shares in the claims checked on this page.',{exact:true}).waitFor();
+    await page.getByRole('cell',{name:'10',exact:true}).waitFor();
     assert.deepEqual(errors,[]);assert.ok(requests.every(p=>!p.endsWith('/prepare')&&!p.endsWith('/rpc')));
   }finally{await browser.close();}
 });
 
-test('switch wallets during pending reads; late replies cannot overwrite the new wallet',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+test('history lookup switches wallets during pending reads; late replies cannot overwrite the new wallet',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const fixture=pilotFixture(),login='0x'+'99'.repeat(20),other='0x'+'aa'.repeat(20);
@@ -171,7 +169,7 @@ test('switch wallets during pending reads; late replies cannot overwrite the new
       }
       if(path==='/api/rehearsal/history'){
         if(++scans===1)await oldGate;
-        return route.fulfill({json:{through:200,target:200,complete:true,logs:[]}});
+        return route.fulfill({json:{through:200,target:200,complete:false,logs:[]}});
       }
       if(path==='/api/rehearsal/positions'){
         const input=route.request().postDataJSON();if(input.owner===owner){heldPosition=true;await oldGate;}
@@ -181,7 +179,7 @@ test('switch wallets during pending reads; late replies cannot overwrite the new
       const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
-    await page.goto('https://flurbo.singu.online/portfolio');
+    await page.goto('https://flurbo.singu.online/history');
     for(let n=0;!heldPosition&&n<200;n++)await page.waitForTimeout(10);assert.equal(heldPosition,true);
     await page.getByText('Look up another address',{exact:true}).click();
     assert.equal(await page.getByRole('textbox',{name:'Wallet to view'}).isEnabled(),true);

@@ -4,6 +4,7 @@ import {discoverWallets,type BrowserWallet} from '../auth/wallet-choice';
 import {isPracticeNamespace,type PilotNamespace} from '../pilot';
 import PilotLedger from './PilotLedger';
 import Portfolio from './Portfolio';
+import AccountHoldings from './AccountHoldings';
 
 export default function AccountPortfolio({account,namespace,history}:{account:string;namespace:string;history:boolean}) {
   const [wallets,setWallets]=useState<string[]|null>(null),[error,setError]=useState(''),[tick,setTick]=useState(0),[busy,setBusy]=useState(false);
@@ -22,6 +23,13 @@ export default function AccountPortfolio({account,namespace,history}:{account:st
     await linkTradingWallet(p,account,addresses[0]);setTick(n=>n+1);
   }catch(e){setError(e instanceof Error?e.message:'Wallet linking failed.');}finally{setBusy(false);}}
   const ledger=(wallet:string)=>(isPracticeNamespace(namespace)||namespace==='pilot')?<PilotLedger key={account+namespace+wallet+history} namespace={namespace as PilotNamespace} account={account} history={history} initialWallet={wallet} linked/>:<Portfolio key={account+namespace+wallet+history} account={account} market={namespace==='learning'?'learning':'original'} history={history} initialWallet={wallet} linked/>;
+  if(!history)return <section className="account-portfolio" aria-label="Account portfolio">
+    <div className="portfolio-account-identity"><span className="eyebrow">Your Mera account</span><p>{account}</p></div>
+    {error&&<p role="alert">{error} <button className="button button-outline" onClick={()=>setTick(n=>n+1)}>Retry</button></p>}
+    {!wallets&&!error&&<p role="status">Loading your portfolio…</p>}
+    {wallets?.length===0&&<p>Connect MetaMask to add your trading shares. <button className="button button-outline" disabled={busy} onClick={()=>void connect()}>{busy?'Check MetaMask…':'Connect MetaMask'}</button></p>}
+    {wallets&&<AccountHoldings key={account+namespace} account={account} wallets={wallets} namespace={namespace}/>}
+  </section>;
   return <section className="account-portfolio" aria-label="Account portfolio">
     <div className="portfolio-toolbar"><p>{wallets?.length?`All your linked wallets. ${wallets.length} connected to this account.`:'Your predictions follow your Flurbo account.'}</p><button className="button button-outline" disabled={busy} onClick={()=>void connect()}>{busy?'Check MetaMask…':'Link a wallet'}</button></div>
     {error&&<p role="alert">{error} <button className="button button-outline" onClick={()=>setTick(n=>n+1)}>Retry</button></p>}

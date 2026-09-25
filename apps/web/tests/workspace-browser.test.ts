@@ -99,10 +99,10 @@ test('portfolio and history deep links restore auth, show full discovered claims
     });
     await page.addInitScript(()=>sessionStorage.setItem('flurbo.trading.market','original'));
     await page.goto('https://flurbo.singu.online/portfolio');
-    await page.getByRole('progressbar').waitFor();
-    assert.equal(await page.getByText('No open positions here.').count(), 0);
-    await page.getByText('The network read was interrupted. Retrying from the last verified block...').waitFor();
-    assert.equal(await page.getByRole('progressbar').isVisible(), true);
+    await page.getByText('Your shares could not all be checked yet. Refresh to try again.').waitFor();
+    await page.getByRole('button',{name:'Refresh',exact:true}).click();
+    await page.getByText('Some shares couldn’t be loaded. Refresh to complete your portfolio.').waitFor();
+    await page.getByRole('button',{name:'Refresh',exact:true}).click();
     await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     assert.match(await page.title(), /portfolio/);
     assert.equal(await page.locator('.core-market').count(), 0);
@@ -135,7 +135,8 @@ test('portfolio and history deep links restore auth, show full discovered claims
     await page.getByRole('link', { name: 'Portfolio', exact: true }).click();
     // A diagnostic lookup never replaces the account's default linked-wallet view.
     await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
-    await page.getByText('Look up another address',{exact:true}).evaluate((el:any)=>el.parentElement.open=true);await page.getByLabel('Wallet to view').fill(account);await page.getByRole('button', { name: 'View wallet', exact: true }).click();
+    await page.locator('.portfolio-account-identity').getByText(account,{exact:true}).waitFor();
+    assert.equal(await page.getByLabel('Wallet to view').count(),0);
     await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
