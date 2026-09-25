@@ -2,6 +2,50 @@
 
 # Mock-testing handoff
 
+## October acceptance checkpoint (September 25 update)
+
+The October deployment is separate from September. After the application update
+is live, run the following from Git Bash. These commands build the local Rust
+reference and perform public reads only:
+
+```bash
+cd ~/Flurbo
+cargo build --offline --locked -p flurbo-core --example pair_analytics
+node apps/web/scripts/check-mock-readiness.mjs --october-demo
+```
+
+The report is `target/mock-testing/october-demo-readiness.json`. It verifies the
+featured collection's pool/rules/close time, six authenticated API boundaries,
+five page/security-header checks, collateral and single/AND/OR quotes, and live
+What-if/independence/sensitivity calculations with the local Rust reference.
+`HOSTED_DIAGNOSTIC_NOT_DEPLOYED` means the application needs this diagnostic
+update, not a new contract deployment. `HOSTED_COLLECTION_MISMATCH` requires
+checking the registered manifest and featured pool setting. Health metadata
+is configuration only; `chain_state` stays `not_checked` on `/healthz`.
+
+Passing public reads still leaves this short human walkthrough:
+
+1. Sign in, refresh, and verify the same Mera address. Choose the intended trading wallet.
+2. Record the pool, wallet and A/B What-if snapshot. A new uniform pool normally
+   shows 50% marginals, 25% joint, and zero difference from independence.
+3. In the trading ticket, buy one share of A Yes AND B Yes. If needed, confirm
+   the payment approval and then the purchase. Save the purchase hash; do not
+   repeat an uncertain submission. Check that exactly one share appears in October Portfolio.
+4. Refresh What-if for A/B. With the initial uniform state and no intervening
+   trades, the simulated one-share example gives 52.5% for A given B Yes and
+   50.0% for A given B No. Use the current snapshot, not these example numbers,
+   if anyone else traded. Explain that this is market-implied dependence, not causation.
+5. Reject a second wallet prompt, reload, and confirm no duplicate purchase.
+   Switch to September Portfolio/History and confirm earlier holdings remain there.
+6. Repeat the wallet flow with Mera and MetaMask as separate signers. Record
+   observations and hashes; a pass on one wallet does not establish the other.
+
+No settlement pass is recorded before finalized outcomes, delivery and actual
+redemption. October trading closes October 14 at 12:00 UTC; assertions start
+at 12:02 UTC. Follow the collection's committed windows and existing monitoring.
+
+## Earlier September handoff
+
 September 24, 2026. The code is prepared for hosted trading tests and a separate
 public settlement rehearsal. This is a development checkpoint, not a claim that
 all partner integrations or the public alpha acceptance are complete.

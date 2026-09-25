@@ -98,6 +98,14 @@ test('hosted HTTP serves guarded SPA routes, secure login and public-only transa
     assert.equal((await request('/healthz')).json().learning_comparison,'ready');
     assert.equal((await request('/healthz')).json().pilot_pool,'disabled');
     assert.equal((await request('/healthz')).json().rehearsal_pool,'disabled');
+    const ns='practice-'+pool.slice(2),rulesHash='0x'+'44'.repeat(32);
+    (config as any).practiceCollections={catalog:{active:ns},services:new Map([[ns,{manifest:{pool,rulesHash,publication:{draft:{closesAt:1800000000}}},secret:'must-not-leak'}]])};
+    const health=(await request('/healthz')).json();
+    assert.equal(health.chain_state,'not_checked');
+    assert.deepEqual(health.practice_collections,{active:ns,configured:[{namespace:ns,pool,rulesHash,closesAt:1800000000}]});
+    assert.ok(!JSON.stringify(health).includes('must-not-leak'));
+    delete (config as any).practiceCollections;
+
     assert.equal((await request('/api/auth/challenge',{address:signer.address,method:'wallet'})).status,400);
     const challenge=await request('/api/auth/challenge',{address:signer.address,method:'passkey'});
     const verified=await request('/api/auth/verify',{signature:await signer.signMessage({message:challenge.json().message})},challenge.headers['set-cookie'][0].split(';')[0]);

@@ -1,5 +1,31 @@
 # Manual mock results
 
+## October read-only checkpoint, September 25, 2026
+
+User reported completing deployment, configuration and monitoring checks.
+Independent public reads at **09:33 UTC** inspected October pool
+`0x085b951ed24bbae44add2f9ff2b8198cd7517a07` and resolver
+`0xee75d046e083ac707ae05f483d86f2654b5e11a2`.
+
+- Block **65538111**: deployment anchor/code/rules binding verified; trading open;
+  27.725888 test AUSD collateral and zero required liability. One-share read quotes:
+  A Yes 0.512495, A No 0.512495, A Yes AND B Yes 0.259531, A Yes OR B Yes 0.759218 test AUSD.
+- Block **65538144**: live A/B analytics passed local Rust cross-check. Marginals
+  50.0% each, joint and independence baseline 25.0%, both conditionals 50.0%.
+  Both one-share sensitivity scenarios were available. These are separate
+  snapshots; quote costs are not marginal probabilities.
+- Six unauthenticated API checks returned 401. Five public SPA routes returned
+  the expected security headers. These do not prove authenticated browser UX.
+- Overall report: **attention_required**, four of five checks passed. The live
+  application did not yet expose the newly added featured-collection health
+  metadata. Rerun after deploying that application update; no new pool is required.
+
+Evidence: local `target/mock-testing/october-demo-readiness.json`. No transaction
+or email was sent. Wallet, settlement and redemption rows below remain **Not run**
+unless their specific observed results are recorded.
+
+## Manual acceptance record
+
 Tester: __________  Date: __________  Render commit: __________
 
 Real pilot pool: `0x28d5ee02b1eda6959ac3ee5a4f834237c84dee02`
