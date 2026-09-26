@@ -1,3 +1,4 @@
+import {decodeClaim} from '../shared/claims.mjs';
 export type Market = 'original' | 'learning';
 export type Position = { scope: number; mask: number; quantity_atoms: string; settlement: string; redeemable_atoms: string | null };
 export type PoolEvent = { kind: string; is_buy?: boolean; scope: number; mask: string; quantity_atoms: string; collateral_atoms?: string; block_number: number; transaction_hash: string; log_index: number };
@@ -45,5 +46,9 @@ function formatClaim(scope: number, mask: number, label: (event: number, yes: bo
     const loser = Array.from({ length: count }, (_, i) => i).find(i => !(mask & (1 << i)))!;
     return events.map((_, i) => leg(loser ^ (count - 1), i)).join(' OR ');
   }
+  try {
+    const named=decodeClaim(scope,mask);
+    if(named && ['EXACTLY_ONE','AT_LEAST_TWO'].includes(named.rule)) return `${named.rule==='EXACTLY_ONE'?'Exactly one':'At least two'} of: `+named.legs.map(l=>label(l.event,l.yes)).join(' / ');
+  } catch { /* Legacy shapes keep their explicit truth-table description. */ }
   return winners.map(state => '(' + events.map((_, i) => leg(state, i)).join(' AND ') + ')').join(' OR ');
 }

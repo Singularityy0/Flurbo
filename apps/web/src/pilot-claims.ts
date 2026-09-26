@@ -1,4 +1,5 @@
 import { validClaim } from '../shared/pilot.mjs';
+import {CLAIM_RULES, encodeClaim} from '../shared/claims.mjs';
 import type { PilotPending, PilotNamespace } from './pilot';
 
 export type ClaimHint={scope:number;mask:string};
@@ -28,7 +29,7 @@ export function rememberConfirmedClaim(namespace:PilotNamespace,saved:PilotPendi
 }
 export function portfolioClaims(events:number,scopes:number[],hints:ClaimHint[],indexed:ClaimHint[]):ClaimHint[]{
   const claims=new Map<string,ClaimHint>();
-  const add=(claim:ClaimHint)=>{if(valid(claim,events))claims.set(`${claim.scope}:${claim.mask}`,claim);};
+  const add=(claim:ClaimHint)=>{if(valid(claim,events))claims.set(`${claim.scope}:${claim.mask}`,{scope:claim.scope,mask:claim.mask});};
   // Recently confirmed claims are read on the first page, independently of index progress.
   hints.forEach(add);
   for(let event=0;event<events;event++)for(const mask of ['1','2'])add({scope:2**event,mask});
@@ -38,10 +39,12 @@ export function portfolioClaims(events:number,scopes:number[],hints:ClaimHint[],
     const bits=scope.toString(2).replaceAll('0','').length;
     if(bits<2||bits>3)continue;
     const states=2**bits,all=(1<<states)-1;
-    // All AND and OR answer choices supported by the consumer/advanced forms.
+    // Discover named consumer claims independently of an incomplete history index.
     for(let state=0;state<states;state++){
       add({scope,mask:String(1<<state)});
       add({scope,mask:String(all^(1<<state))});
+      const selected=Array.from({length:events},(_,i)=>i).filter(i=>scope&(1<<i));
+      for(const rule of CLAIM_RULES) add(encodeClaim({events,rule,legs:selected.map((event,i)=>({event,yes:!!(state&(1<<i))}))}));
     }
   }
   return [...claims.values()];

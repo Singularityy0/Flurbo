@@ -70,9 +70,12 @@ export default function Docs() {
           <p>A combined prediction is one position with a rule covering multiple answers. It is different from purchasing a separate position in each event. The current interface supports combinations of up to three events where the selected pool and ticket allow them. Combinations cannot span different pools.</p>
           <div className="docs-comparison">
             <div><h3>All selected answers (AND)</h3><p>The claim wins only when every selected answer is correct. “A Yes AND B Yes” requires both A and B to resolve Yes.</p></div>
-            <div><h3>Any selected answer (OR)</h3><p>Where offered, the claim wins when at least one selected answer is correct. It pays once per share, even if several answers are correct.</p></div>
+            <div><h3>Any selected answer (OR)</h3><p>The claim wins when at least one selected answer is correct, including when all are correct. It pays once per share, even if several answers are correct.</p></div>
+            <div><h3>Exactly one</h3><p>The claim wins when exactly one of your selected answers is correct. For three answers, all three matching is a loss. This is not an odd-parity rule.</p></div>
+            <div><h3>At least two</h3><p>The claim wins when two or more of your selected answers are correct. With two questions, this has the same winning outcomes as All.</p></div>
           </div>
           <p>Individual and combined claims use the same pool. An AND claim may cost less than either individual claim because it requires more conditions to be met. That does not make it a better-value prediction or guarantee a profit.</p>
+          <p>The ticket shows the selected answers, winning outcomes and an optional comparison with independence. This comparison evaluates your exact rule against a baseline that multiplies the individual event probabilities. It is a model-implied probability, not a purchase quote, causal relationship or recommendation. The trade quote includes size impact and is checked separately. A supported rule can still be unavailable if the pool’s graph or trade limits prevent quoting it.</p>
           <p>Only supported claim shapes can be quoted. Flurbo does not promise a tradable market for every possible combination. Unresolved outcomes follow the VOID rule described below.</p>
         </section>
         <section id="what-if" aria-labelledby="what-if-title">

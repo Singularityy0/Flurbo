@@ -3,6 +3,7 @@ import { pilotService, pilotRpc } from './pilot.mjs';
 import { pilotIndex } from './pilot-index.mjs';
 import { payoutIndexWithFallback } from './payout-index.mjs';
 import { pairAnalytics } from './pair-analytics.mjs';
+import { claimAnalytics } from './claim-analytics.mjs';
 import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
 
 const payouts=({manifest,rpcUrl,command})=>payoutIndexWithFallback({manifest,command,rpc:pilotRpc(rpcUrl),
@@ -21,6 +22,7 @@ export async function configurePilot({env=process.env,rpcUrl,command,read=readFi
   service.index=pilotIndex({manifest:service.manifest,rpc:pilotRpc(rpcUrl),command});
   service.payouts=payouts({manifest:service.manifest,rpcUrl,command});
   service.analytics=pairAnalytics({service,rpc:pilotRpc(rpcUrl)});
+  service.claimAnalytics=claimAnalytics({service,rpc:pilotRpc(rpcUrl)});
   return service;
 }
 
@@ -32,6 +34,7 @@ export async function configureRehearsal({env=process.env,rpcUrl,command}) {
   service.index=pilotIndex({manifest,rpc:pilotRpc(rpcUrl),command});
   service.payouts=payouts({manifest:service.manifest,rpcUrl,command});
   service.analytics=pairAnalytics({service,rpc:pilotRpc(rpcUrl)});
+  service.claimAnalytics=claimAnalytics({service,rpc:pilotRpc(rpcUrl)});
   return service;
 }
 
@@ -43,5 +46,6 @@ export async function configureCollection({manifest,rpcUrl,command}){
   service.index=pilotIndex({manifest,rpc:pilotRpc(rpcUrl),command});
   service.payouts=payouts({manifest:service.manifest,rpcUrl,command});
   service.analytics=pairAnalytics({service,rpc:pilotRpc(rpcUrl)});
+  service.claimAnalytics=claimAnalytics({service,rpc:pilotRpc(rpcUrl)});
   return service;
 }

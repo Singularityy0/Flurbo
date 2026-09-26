@@ -10,6 +10,10 @@ test('checkout drafts restore inputs after approval, isolate login and pool, and
   try{
     saveCheckout('rehearsal','0xABC',draft);assert.deepEqual(readCheckout('rehearsal','0xabc'),draft);
     assert.equal(readCheckout('pilot','0xabc'),null);assert.equal(readCheckout('rehearsal','0xdef'),null);
+    const combined={...draft,legs:[0,1],rule:'OR' as const};
+    saveCheckout('rehearsal','0xabc',combined);assert.deepEqual(readCheckout('rehearsal','0xabc'),combined);
+    assert.throws(()=>saveCheckout('rehearsal','0xabc',{...combined,rule:'XOR' as any}));
+    assert.throws(()=>saveCheckout('rehearsal','0xabc',{...draft,rule:'AT_LEAST_TWO'}));
     assert.throws(()=>saveCheckout('rehearsal','0xabc',{...draft,legs:[0,1,2,3]}));
     clearCheckout('rehearsal','0xabc');assert.equal(readCheckout('rehearsal','0xabc'),null);
     db.set('flurbo.checkout.v1:rehearsal:0xabc',JSON.stringify({...draft,event:99}));assert.throws(()=>readCheckout('rehearsal','0xabc'));

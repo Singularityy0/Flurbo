@@ -6,6 +6,7 @@ import { priceHistory } from './price-history.mjs';
 import { walletLinks } from './wallet-links.mjs';
 import { isTestingOperator, DEFAULT_TESTING_OPERATOR } from './testing-access.mjs';
 import {holderAuthorizer} from './holder-challenge.mjs';
+import {validateClaim} from '../shared/claims.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
@@ -140,6 +141,15 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           if(!input||Array.isArray(input)||Object.keys(input).sort().join(',')!=='a,b'||![input.a,input.b].every(x=>Number.isInteger(x)&&x>=0&&x<pilot.manifest.publication.draft.events.length)||input.a===input.b) return send(res,400,{error:'Choose two different events.'});
           try {if(!pilot.analytics)throw new Error('Unavailable');return send(res,200,await pilot.analytics(input));}
           catch {return send(res,503,{error:'This comparison is temporarily unavailable. Try again shortly. Trading is separate.'});}
+        }
+        if(req.method==='POST' && url.pathname==='/api/pilot/claim-analytics') {
+          const input=await body(req);
+          try {
+            if(!input||Array.isArray(input)||Object.keys(input).sort().join(',')!=='mask,scope')throw Error('Invalid input');
+            validateClaim(input.scope,input.mask,pilot.manifest.publication.draft.events.length);
+          }catch{return send(res,400,{error:'Choose a supported claim in this pool.'});}
+          try {if(!pilot.claimAnalytics)throw Error('Unavailable');return send(res,200,await pilot.claimAnalytics(input));}
+          catch{return send(res,503,{error:'This comparison is temporarily unavailable. Trading is separate.'});}
         }
         if(req.method==='POST' && url.pathname==='/api/pilot/prepare') {
           const input = await body(req);

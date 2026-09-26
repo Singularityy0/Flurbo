@@ -1,5 +1,6 @@
 // Independent outward-rounded enumeration for the 2..4-event pilot only.
 // All liability arithmetic remains integer token atoms. See docs/PAIR_ANALYTICS.md.
+import {validateClaim} from '../shared/claims.mjs';
 const S=10n**48n, U128=(1n<<128n)-1n;
 const ceil=(a,b)=>(a+b-1n)/b;
 const atom=v=>{if(typeof v!=='string'||! /^(0|[1-9][0-9]{0,38})$/.test(v)||BigInt(v)>U128)throw new Error('Invalid snapshot atom');return BigInt(v);};
@@ -43,13 +44,17 @@ const sum=xs=>xs.reduce(([a,b],[c,d])=>[a+c,b+d],[0n,0n]);
 const ratio=([a,b],[c,d])=>{if(c<=0n)throw new Error('Unbounded probability');return [a*S/d,ceil(b*S,c)];};
 const product=([a,b],[c,d])=>[a*c/S,ceil(b*d,S)];
 const rounded=v=>v<0n?-((-v*1000n+S/2n)/S):(v*1000n+S/2n)/S;
-export function certifiedPair(s) {
+function distribution(s) {
   validatePairSnapshot(s);
   const scores=Array.from({length:2**s.events},(_,state)=>s.factors.reduce((q,f)=>{
     let local=0,bit=0;for(let event=0;event<s.events;event++)if(f.scope&(1<<event)){if(state&(1<<event))local|=1<<bit;bit++;}
     return q+BigInt(f.values[local]);
   },0n));
   const max=scores.reduce((a,b)=>a>b?a:b,0n),weights=scores.map(q=>weight(max-q,BigInt(s.liquidity)));
+  return weights;
+}
+export function certifiedPair(s) {
+  const weights=distribution(s);
   const select=fn=>sum(weights.filter((_,x)=>fn(x))),total=sum(weights);
   const wa=select(x=>x&(1<<s.a)),wb=select(x=>x&(1<<s.b)),wnb=select(x=>!(x&(1<<s.b)));
   const wab=select(x=>(x&(1<<s.a))&&(x&(1<<s.b))),wanb=select(x=>(x&(1<<s.a))&&!(x&(1<<s.b)));
@@ -61,6 +66,27 @@ export function certifiedPair(s) {
   for(const [key,bounds] of Object.entries(intervals)){
     values[key]=bounds&&rounded(bounds[0])===rounded(bounds[1])?Number(rounded(bounds[0])):null;
     if(values[key]===null)reasons[key]=bounds?'rounding_uncertain':'rare_condition';
+  }
+  return {values,reasons};
+}
+// Sum the chosen truth-table states, using the same outward-rounded weights.
+// Independence is the product distribution of the selected event marginals.
+// Never derive these values from already rounded pair probabilities or buy quotes.
+export function certifiedClaim(s,scope,mask) {
+  const selected=validateClaim(scope,mask,s.events),weights=distribution({...s,a:0,b:1}),total=sum(weights);
+  const probabilities=selected.map(event=>[false,true].map(yes=>ratio(sum(weights.filter((_,state)=>Boolean(state&(1<<event))===yes)),total)));
+  let market=[0n,0n],independent=[0n,0n];
+  for(let state=0;state<2**selected.length;state++)if(BigInt(mask)&(1n<<BigInt(state))){
+    const matching=sum(weights.filter((_,global)=>selected.every((event,i)=>Boolean(global&(1<<event))===Boolean(state&(1<<i)))));
+    market=sum([market,matching]);
+    independent=sum([independent,selected.reduce((p,_,i)=>product(p,probabilities[i][Number(Boolean(state&(1<<i)))]),[S,S])]);
+  }
+  market=ratio(market,total);
+  const bounds={market,independent,difference:[market[0]-independent[1],market[1]-independent[0]]};
+  const values={},reasons={};
+  for(const [key,interval] of Object.entries(bounds)){
+    values[key]=rounded(interval[0])===rounded(interval[1])?Number(rounded(interval[0])):null;
+    if(values[key]===null)reasons[key]='rounding_uncertain';
   }
   return {values,reasons};
 }

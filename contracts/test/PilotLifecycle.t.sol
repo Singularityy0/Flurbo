@@ -45,6 +45,24 @@ contract PilotLifecycleTest {
         deploy(3, 3);
     }
 
+    function testConsumerBooleanClaimsRedeemWithUniformVoid() public {
+        // A Yes, B No, C VOID: OR pays 1; exactly one and at least two pay 1/2.
+        buy(7, 254, 2e6);
+        buy(7, 22, 2e6);
+        buy(7, 232, 2e6);
+        vm.warp(3000);
+        propose(0, R.Outcome.Yes);
+        propose(1, R.Outcome.No);
+        vm.warp(6601);
+        for (uint8 i; i < 3; ++i) resolver.finalize(i);
+        resolver.deliver();
+        assert(pool.resolvedState() == 1 && pool.voidMask() == 4);
+        vm.prank(ALICE); assert(pool.redeem(7, 254, 2e6) == 2e6);
+        vm.prank(ALICE); assert(pool.redeem(7, 22, 2e6) == 1e6);
+        vm.prank(ALICE); assert(pool.redeem(7, 232, 2e6) == 1e6);
+        assert(pool.requiredCollateral() == 0);
+    }
+
     function testFourEventsTradeAndSettleWithOneVoid() public {
         deploy(4, 3);
         buy(8, 2, 2e6);

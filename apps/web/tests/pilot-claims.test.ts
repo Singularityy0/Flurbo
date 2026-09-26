@@ -10,7 +10,8 @@ test('active pool scopes discover all AND and OR choices without a history scan'
   const claims=portfolioClaims(4,[1,2,3,7],[],[]);
   for(const mask of ['1','2','4','8','7','11','13','14'])assert.ok(claims.some(c=>c.scope===3&&c.mask===mask));
   for(const mask of ['1','2','4','8','16','32','64','128','254','253','251','247','239','223','191','127'])assert.ok(claims.some(c=>c.scope===7&&c.mask===mask));
-  assert.equal(claims.length,32);
+  for(const mask of ['22','232'])assert.ok(claims.some(c=>c.scope===7&&c.mask===mask));
+  assert.equal(claims.length,50);
   assert.equal(new Set(claims.map(c=>c.scope+':'+c.mask)).size,claims.length);
   assert.equal(portfolioClaims(4,[0,15,16,-1],[],[]).length,8);
   assert.ok(portfolioClaims(4,[3],[],[{scope:3,mask:'6'}]).some(c=>c.mask==='6'));

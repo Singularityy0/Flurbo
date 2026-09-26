@@ -12,7 +12,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
   f.manifest.publication.draft.events.forEach((e:any,i:number)=>e.question=['Will the night market open?','Will the concert sell out?','Will it rain on Saturday?','Will the new cafe open?'][i]);
   f.manifest.publication.reviewerControl='single-operator';
   {f.manifest.publication.mode='rehearsal';f.manifest.publication.draft.title='Public rehearsal: scripted settlement checks';}
-  let login=true,reads=0,historyReads=0,linked=false;const preparedQuantities:string[]=[];const errors:string[]=[];
+  let login=true,reads=0,historyReads=0,linked=false;const preparedQuantities:string[]=[];const preparedClaims:any[]=[];const errors:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
     await page.clock.install();
@@ -63,7 +63,11 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
         return route.fulfill({json:{pool:f.manifest.pool,sampling:'current',points:[0,300,600].map((offset,i)=>({timestamp:end-600+offset,blockNumber:String(100+i),prices:[0,1,2,3].map(event=>({event,yes:String(400000+i*50000),no:String(620000-i*50000)}))}))}});
       }
       if(path==='/api/'+namespace+'/status'){reads++;return route.fulfill({json:await f.service.status(url.searchParams.get('wallet')||undefined)});}
-      if(path==='/api/'+namespace+'/prepare'){preparedQuantities.push(route.request().postDataJSON().quantity);return route.fulfill({json:await f.service.prepare(route.request().postDataJSON())});}
+      if(path==='/api/'+namespace+'/prepare'){preparedQuantities.push(route.request().postDataJSON().quantity);preparedClaims.push(route.request().postDataJSON());return route.fulfill({json:await f.service.prepare(route.request().postDataJSON())});}
+      if(path==='/api/'+namespace+'/claim-analytics'){
+        const claim=route.request().postDataJSON(),snapshot=(await f.service.status()).snapshot;
+        return route.fulfill({json:{schema:'flurbo.claim-analytics.v1',model:'bounded-lmsr-enumeration-v1',chainId:10143,pool:f.manifest.pool,rulesHash:f.manifest.rulesHash,...claim,snapshot,expiresAt:snapshot.timestamp+60,stateDigest:'ab'.repeat(32),unit:'tenths_of_percentage_point',closed:false,values:{market:480,independent:580,difference:-100}}});
+      }
       if(path==='/api/'+namespace+'/positions')return route.fulfill({json:{rows:[{mask:'2',quantity:'0',payoutAtoms:null},{mask:'1',quantity:'5000000',payoutAtoms:null}]}});
       if(path==='/api/'+namespace+'/position')return route.fulfill({json:{quantity:'5000000',payoutAtoms:null}});
       if(path==='/api/'+namespace+'/rpc'){
@@ -174,6 +178,47 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.match(await reviewPanel.textContent(),/night market open/);
     assert.match(await reviewPanel.textContent(),/concert sell out/);
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
+    var orQuote=page.waitForResponse((r:any)=>r.url().endsWith('/prepare')&&r.request().postDataJSON().mask==='11');
+    await page.getByRole('radio',{name:'Any One or more, including all',exact:true}).check();
+    await orQuote;
+    await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
+    assert.equal(preparedClaims.at(-1).mask,'11'); // A Yes OR B No.
+    assert.match(await reviewPanel.textContent(),/ OR /);
+    await page.getByRole('button',{name:'Compare with independence',exact:true}).click();
+    await page.getByText('48.0%',{exact:true}).waitFor();
+    await page.getByText('See winning outcomes',{exact:true}).click();
+    assert.equal(await page.locator('.combination-table tr.wins').count(),3);
+    const exactQuote=page.waitForResponse((r:any)=>r.url().endsWith('/prepare')&&r.request().postDataJSON().mask==='9');
+    await page.getByRole('radio',{name:'Exactly one One answer, no more',exact:true}).check();
+    await exactQuote;
+    await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
+    assert.equal(preparedClaims.at(-1).mask,'9');
+    assert.equal(await page.getByText('48.0%',{exact:true}).count(),0); // Old analysis removed.
+    await page.getByRole('checkbox',{name:'Will it rain on Saturday?',exact:true}).check();
+    const thresholdQuote=page.waitForResponse((r:any)=>r.url().endsWith('/prepare')&&r.request().postDataJSON().mask==='178');
+    await page.getByRole('radio',{name:'At least two Two or more answers',exact:true}).check();
+    await thresholdQuote;
+    await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
+    assert.equal(preparedClaims.at(-1).scope,7);assert.equal(preparedClaims.at(-1).mask,'178');
+    assert.equal(await page.getByRole('checkbox',{name:'Will the new cafe open?',exact:true}).isDisabled(),true);
+    await page.reload();
+    await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
+    assert.equal(await page.getByRole('radio',{name:'At least two Two or more answers',exact:true}).isChecked(),true);
+    assert.equal(preparedClaims.at(-1).mask,'178');
+    if(namespace==='rehearsal'){
+      await page.setViewportSize({width:1440,height:1000});
+      await page.locator('.combination-builder').screenshot({path:new URL('../../../target/combination-desktop.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1')});
+      await page.setViewportSize({width:390,height:844});
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+      await page.locator('.combination-builder').screenshot({path:new URL('../../../target/combination-mobile.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1')});
+      await page.setViewportSize({width:1440,height:1000});
+    }
+    await page.getByRole('checkbox',{name:'Will it rain on Saturday?',exact:true}).uncheck();
+    var orQuote=page.waitForResponse((r:any)=>r.url().endsWith('/prepare')&&r.request().postDataJSON().mask==='11');
+    await page.getByRole('radio',{name:'Any One or more, including all',exact:true}).check();
+    await orQuote;
+    await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
 
     // Oversized combinations must explain the on-chain bound, without requesting

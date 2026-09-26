@@ -1,6 +1,7 @@
 import type { PilotNamespace } from './pilot';
+import {CLAIM_RULES, type ClaimRule} from '../shared/claims.mjs';
 
-export type CheckoutDraft={event:number;yes:boolean;legs:number[];answers:Record<number,boolean>;quantity:string;side:'buy'|'sell'|'redeem';walletKind?:'mera'|'browser'};
+export type CheckoutDraft={event:number;yes:boolean;legs:number[];answers:Record<number,boolean>;rule?:ClaimRule;quantity:string;side:'buy'|'sell'|'redeem';walletKind?:'mera'|'browser'};
 const key=(namespace:PilotNamespace,login:string)=>`flurbo.checkout.v1:${namespace}:${login.toLowerCase()}`;
 function valid(value:unknown):value is CheckoutDraft {
   const d=value as CheckoutDraft;
@@ -8,6 +9,7 @@ function valid(value:unknown):value is CheckoutDraft {
     &&Array.isArray(d.legs)&&d.legs.length>0&&d.legs.length<=3&&new Set(d.legs).size===d.legs.length&&d.legs.includes(d.event)
     &&d.legs.every(i=>Number.isInteger(i)&&i>=0&&i<4)&&!!d.answers&&typeof d.answers==='object'
     &&Object.entries(d.answers).every(([i,v])=>/^[0-3]$/.test(i)&&typeof v==='boolean')
+    &&(d.rule===undefined||CLAIM_RULES.includes(d.rule))&&(d.rule!=='AT_LEAST_TWO'||d.legs.length>=2)
     &&typeof d.quantity==='string'&&d.quantity.length<=40
     &&['buy','sell','redeem'].includes(d.side)&&[undefined,'mera','browser'].includes(d.walletKind);
 }
