@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: '4-59/5 * * * *'
   workflow_dispatch:
+  # Runs right after a monitor run so every pool has fresh monitoring. Inactive unless
+  # the repository variable FLURBO_RESOLUTION_AFTER_MONITOR is set to true.
+  workflow_run:
+    workflows: ['Settlement monitor']
+    types: [completed]
 permissions:
   contents: read
 concurrency:
@@ -10,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   resolve:
-    if: vars.FLURBO_RESOLUTION_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    if: vars.FLURBO_RESOLUTION_ENABLED == 'true' && ((github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_run' && vars.FLURBO_RESOLUTION_AFTER_MONITOR == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'))
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
@@ -24,7 +29,7 @@ jobs:
           cache-dependency-path: apps/web/package-lock.json
       - run: npm ci --omit=dev --ignore-scripts
         working-directory: apps/web
-      - name: Reconcile or advance one resolver transaction
+      - name: Reconcile or advance resolver transactions
         run: node apps/web/scripts/run-resolution.mjs --drain
         env:
           FLURBO_RESOLUTION_EXECUTE: ${{ vars.FLURBO_RESOLUTION_EXECUTE }}
@@ -32,6 +37,9 @@ jobs:
           FLURBO_RESOLUTION_RULES_HASH: ${{ vars.FLURBO_RESOLUTION_RULES_HASH }}
           FLURBO_RESOLUTION_SIGNER_ADDRESS: ${{ vars.FLURBO_RESOLUTION_SIGNER_ADDRESS }}
           FLURBO_RESOLUTION_MANIFEST_JSON: ${{ secrets.FLURBO_RESOLUTION_MANIFEST_JSON }}
+          # Optional finish-only pools. Both must be set and match exactly; unset keeps single-pool mode.
+          FLURBO_RESOLUTION_COLLECTIONS_JSON: ${{ secrets.FLURBO_RESOLUTION_COLLECTIONS_JSON }}
+          FLURBO_RESOLUTION_FINISH_ALLOWLIST: ${{ vars.FLURBO_RESOLUTION_FINISH_ALLOWLIST }}
           FLURBO_RESOLUTION_PRIVATE_KEY: ${{ secrets.FLURBO_RESOLUTION_PRIVATE_KEY }}
           FLURBO_ALCHEMY_TESTNET_RPC_URL: ${{ secrets.FLURBO_ALCHEMY_TESTNET_RPC_URL }}
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}

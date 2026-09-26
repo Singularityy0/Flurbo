@@ -6,7 +6,7 @@ import {monadTestnet} from 'viem/chains';
 import {pilotService,pilotRpc,pilotEvidence} from '../server/pilot.mjs';
 import {redisCommand} from '../server/redis-session.mjs';
 import {evidenceAssistant} from '../server/evidence-assistant.mjs';
-import {resolutionTick} from '../server/resolution-worker.mjs';
+import {resolutionTick,resolutionRound} from '../server/resolution-worker.mjs';
 import {activityEvidence} from '../server/ethereum-activity.mjs';
 import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
 
@@ -36,6 +36,30 @@ export function resolutionSigner(value,owner){
   return account;
 }
 const guarded=(code,fn)=>async(...args)=>{try{return await fn(...args);}catch{throw new ResolutionDiagnostic(code);}};
+
+// Opt-in multi-pool finishing. Both the bundle and an exact pool:rulesHash allowlist are required
+// and must match one to one, so editing the secret bundle alone cannot add a pool.
+export function finishingManifests(env,primary){
+  const bundle=env.FLURBO_RESOLUTION_COLLECTIONS_JSON,list=env.FLURBO_RESOLUTION_FINISH_ALLOWLIST;
+  if(!bundle&&!list)return null;
+  if(!bundle||!list)throw Error('Finishing pools need both a manifest bundle and an allowlist');
+  const allowed=list.split(',').map(v=>v.trim().toLowerCase()).filter(Boolean);
+  if(!allowed.length||allowed.some(v=>!/^0x[0-9a-f]{40}:0x[0-9a-f]{64}$/.test(v))||new Set(allowed).size!==allowed.length)throw Error('Invalid finishing allowlist');
+  const rows=JSON.parse(bundle);
+  if(!Array.isArray(rows))throw Error('Invalid finishing bundle');
+  const primaryPool=primary.pool.toLowerCase();
+  // The proposing pool is configured separately; a bundle copy of it is ignored, not doubled.
+  const manifests=rows.map(row=>row?.manifest||row).filter(m=>String(m?.pool).toLowerCase()!==primaryPool);
+  const keys=manifests.map(m=>(m?.pool+':'+m?.rulesHash).toLowerCase());
+  const expected=allowed.filter(k=>!k.startsWith(primaryPool+':'));
+  if(new Set(keys).size!==keys.length||keys.length!==expected.length||keys.some(k=>!expected.includes(k)))throw Error('Finishing bundle must match the allowlist exactly');
+  for(const m of manifests){
+    if(m.chainId!==10143)throw Error('Finishing pools must be Monad testnet');
+    pilotService({manifest:m,rpc:async()=>{throw Error('No read during configuration');}});
+    if(m.publication?.mode==='ethereum-activity')validateActivityDraft(m.publication.draft);
+  }
+  return manifests;
+}
 
 export async function runResolution(env=process.env){
   let configured=false;
@@ -75,7 +99,7 @@ export async function runResolution(env=process.env){
     async broadcast(raw){if(!enabled)throw Error('Execution disabled');return client.sendRawTransaction({serializedTransaction:raw});}
   };
   const archive=pilotEvidence(command,'https://flurbo.singu.online');
-  const evidence=async event=>{
+  const evidenceFor=manifest=>async event=>{
     const q=manifest.publication.draft.events[event];
     if(manifest.publication.mode==='ethereum-activity'){
       try{return await (await activityEvidence(manifest,command,archive,owner))(event);}catch{return null;}
@@ -93,8 +117,12 @@ export async function runResolution(env=process.env){
       attachment:JSON.stringify({reportHash:report.reportHash,assessment:report.assessment,ai:report.ai,sourceHash:report.evidence[0].payloadHash})},owner,manifest.draftHash);
     return {...saved,outcome:2};
   };
+  const finishing=finishingManifests(env,manifest);
   configured=true;
-  return await resolutionTick({manifest,owner,service,command,evidence,transport,enabled});
+  if(!finishing)return await resolutionTick({manifest,owner,service,command,evidence:evidenceFor(manifest),transport,enabled});
+  // Only the explicitly allowlisted FLURBO_RESOLUTION_POOL may propose. Every other registered pool is finish-only.
+  const pools=[{manifest,service,evidence:evidenceFor(manifest)},...finishing.map(m=>({manifest:m,service:pilotService({manifest:m,rpc}),evidence:null}))];
+  return await resolutionRound({pools,owner,command,transport,enabled});
   }catch(error){
     if(error instanceof ResolutionDiagnostic)throw error;
     throw new ResolutionDiagnostic(configured?'WORKER_CHECK_FAILED':'CONFIGURATION_INVALID');

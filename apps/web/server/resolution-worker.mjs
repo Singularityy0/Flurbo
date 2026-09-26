@@ -4,8 +4,9 @@ import {pilotCash,pilotCall} from '../shared/pilot.mjs';
 import {settlementLease} from './settlement-store.mjs';
 import {monitorIdentity} from './settlement-monitor.mjs';
 import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
+import {settlementCalendar,nextWake,priority} from '../shared/settlement-calendar.mjs';
 
-export function nextResolutionAction(state,owner,owned={},deferred={}){
+export function nextResolutionAction(state,owner,owned={},deferred={},{evidence=true}={}){
   if(state.delivered)return {kind:'complete'};
   const now=state.snapshot.timestamp,p=state.manifest.publication;
   if(BigInt(state.poolCash)<BigInt(state.requiredCollateral))throw Error('Collateral coverage failed');
@@ -16,7 +17,7 @@ export function nextResolutionAction(state,owner,owned={},deferred={}){
     if(c.phase===0&&now>=Number(c.assertionDeadline)||c.phase===2&&now>=Number(c.voteUntil))return {kind:'transaction',action:'finalize',event};
     if(c.phase===1&&now>=Number(c.challengeUntil)&&c.asserter.toLowerCase()===owner.toLowerCase()
       &&owned[event]?.evidenceHash===c.evidenceHash&&owned[event]?.outcome===c.proposal)return {kind:'transaction',action:'finalize',event};
-    if(c.phase===0&&now>=end&&!(deferred[event]>now)){
+    if(evidence&&c.phase===0&&now>=end&&!(deferred[event]>now)){
       // Preserve the published B dispute and C no-assertion exercises.
       if(p.mode==='rehearsal'&&![0,3].includes(event))continue;
       return {kind:'evidence',event};
@@ -53,7 +54,7 @@ export async function requireHealthyMonitor(command,manifest,now){
 
 // Dependencies are deliberately explicit: source/model reads cannot call signer.
 // One durable transaction at a time, across every pool using this signer.
-export async function resolutionTick({manifest,owner,service,command,evidence,transport,enabled=false,now=()=>Math.floor(Date.now()/1000)}){
+export async function resolutionTick({manifest,owner,service,command,evidence,transport,enabled=false,allowEvidence=true,now=()=>Math.floor(Date.now()/1000)}){
   if(manifest.chainId!==10143||owner.toLowerCase()===manifest.publication.creator.toLowerCase()
     ||manifest.publication.reviewers.some(r=>r.address.toLowerCase()===owner.toLowerCase()))throw Error('Use a dedicated non-reviewer testnet signer');
   const lease=await settlementLease(command,'resolution-worker-v1:'+owner.toLowerCase());
@@ -76,7 +77,7 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
       saved.last={hash:pending.hash,success:receipt.success,at:now()};saved.pending=null;await save();
       return {status:receipt.success?'confirmed':'reverted',hash:pending.hash};
     }
-    const state=await service.status(),plan=nextResolutionAction(state,owner,saved.owned,saved.deferred);
+    const state=await service.status(),plan=nextResolutionAction(state,owner,saved.owned,saved.deferred,{evidence:allowEvidence});
     if(!enabled){
       let monitoring='healthy';
       try{await requireHealthyMonitor(command,manifest,now());}catch{monitoring='not-ready';}
@@ -93,7 +94,7 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
     }
     const review=await service.prepare(input);validateWorkerReview(review,manifest,owner,now());
     // A second current read closes the model/approval latency gap.
-    const current=await service.status(),next=nextResolutionAction(current,owner,saved.owned,saved.deferred);
+    const current=await service.status(),next=nextResolutionAction(current,owner,saved.owned,saved.deferred,{evidence:allowEvidence});
     if(next.kind!==plan.kind||next.event!==plan.event||next.action!==plan.action)throw Error('Resolver changed during preparation');
     await lease.renew();
     const signed=await transport.sign(review),tx=parseTransaction(signed);
@@ -106,4 +107,62 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
     await transport.broadcast(signed);
     return {status:'submitted',hash,action:review.action};
   }finally{await lease.release();}
+}
+
+const journalKey=owner=>'flurbo:monitor:v1:'+createHash('sha256').update('resolution-worker-v1:'+owner.toLowerCase()).digest('hex')+':state';
+const roleConflict=(manifest,owner)=>owner.toLowerCase()===manifest.publication.creator.toLowerCase()
+  ||manifest.publication.reviewers.some(r=>r.address.toLowerCase()===owner.toLowerCase());
+const TRANSACTIONAL=new Set(['submitted','pending','confirmed','reverted']);
+
+// Plans every registered pool, earliest deadline first. Signing still goes through resolutionTick,
+// which holds the one signer lease and journal. Only pools given an evidence function may propose;
+// all others only finalize timeouts, their own assertions and deliver. One unreadable or unmonitored
+// pool is skipped and reported, never allowed to block the others.
+export async function resolutionRound({pools,owner,command,transport,enabled=false,now=()=>Math.floor(Date.now()/1000)}){
+  if(!Array.isArray(pools)||!pools.length)throw Error('Register at least one pool');
+  const keys=pools.map(p=>p.manifest.pool.toLowerCase());
+  if(new Set(keys).size!==keys.length)throw Error('Duplicate pool registration');
+  if(pools.filter(p=>p.evidence).length>1)throw Error('Only one explicitly allowlisted pool may propose outcomes');
+  const raw=await command('GET',journalKey(owner)),stored=raw?JSON.parse(raw):null;
+  const book=stored?.schema==='flurbo.resolution-journals.v2'?stored.pools:stored?{[stored.pool]:stored}:{};
+  const pending=Object.values(book||{}).find(entry=>entry?.pending);
+  const tick=(p,live)=>resolutionTick({manifest:p.manifest,owner,service:p.service,command,evidence:p.evidence,transport,enabled:live,allowEvidence:!!p.evidence,now});
+  if(pending){
+    // Reconcile first; resolutionTick rechecks this under the lease.
+    const target=pools.find(p=>p.manifest.pool===pending.pool);
+    if(!target)throw Error('A pending transaction belongs to an unregistered pool');
+    return {...await tick(target,enabled),pool:target.manifest.pool};
+  }
+  const rows=[],skipped=[];
+  for(const p of pools){
+    const pool=p.manifest.pool;
+    if(p.manifest.chainId!==10143||roleConflict(p.manifest,owner)){skipped.push({pool,reason:'signer-role-conflict'});continue;}
+    try{
+      const state=await p.service.status(),saved=book?.[pool];
+      const plan=nextResolutionAction(state,owner,saved?.owned||{},saved?.deferred||{},{evidence:!!p.evidence});
+      const calendar=settlementCalendar(state,{owner,owned:saved?.owned||{},evidence:!!p.evidence});
+      rows.push({p,pool,plan,calendar,state});
+    }catch{skipped.push({pool,reason:'read-or-plan-failed'});}
+  }
+  const wake=nextWake(rows.map(r=>r.calendar),now());
+  const monitoring=async p=>{try{await requireHealthyMonitor(command,p.manifest,now());return 'healthy';}catch{return 'not-ready';}};
+  if(!enabled){
+    const pools=[];
+    for(const r of rows)pools.push({pool:r.pool,plan:r.plan,monitoring:await monitoring(r.p)});
+    return {status:'dry-run',pools,skipped,nextWake:wake};
+  }
+  const entryFor=r=>r.calendar.entries.find(e=>e.action===(r.plan.kind==='evidence'?'evidence':r.plan.action)&&e.event===(r.plan.event??null))
+    ||{deadline:null,readyAt:0};
+  const candidates=rows.filter(r=>['transaction','evidence'].includes(r.plan.kind))
+    .sort((a,b)=>{const x=priority(entryFor(a)),y=priority(entryFor(b));return x[0]-y[0]||x[1]-y[1];});
+  const results=[];
+  for(const r of candidates){
+    if(await monitoring(r.p)!=='healthy'){skipped.push({pool:r.pool,reason:'monitoring-stale'});continue;}
+    const result=await tick(r.p,true);
+    if(TRANSACTIONAL.has(result.status))return {...result,pool:r.pool,skipped,nextWake:wake};
+    results.push({pool:r.pool,status:result.status,event:result.event});
+  }
+  const status=rows.length&&rows.every(r=>r.plan.kind==='complete')&&!skipped.length?'complete'
+    :skipped.some(s=>s.reason==='monitoring-stale')?'monitoring-stale':'wait';
+  return {status,results,skipped,nextWake:wake};
 }
