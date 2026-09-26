@@ -81,7 +81,7 @@ function CollectionMarkets({collections,namespace,onCollectionChange}:{collectio
     </>:<>
       <details className="market-archive"><summary>Choose a market collection</summary><label htmlFor="market-collection">Collection</label><select id="market-collection" value={archive} onChange={e=>{setArchive(e.target.value);try{sessionStorage.setItem("flurbo.trading.market",e.target.value);}catch{}}}>{collections.collections.map(row=><option key={row.namespace} value={row.namespace}>{row.label}</option>)}<option value="pilot">Earlier real-event markets</option><option value="original">Earlier demo markets</option><option value="learning">Learning experiment</option></select></details>
       {testingAccess&&isPracticeNamespace(archive)&&<p><Link href={'/rehearsal?collection='+archive}>Settlement tools for this collection</Link></p>}
-      {auth.address&&<AccountPortfolio key={auth.address+archive+location} account={auth.address} namespace={archive} history={false}/>}
+      {auth.address&&<AccountPortfolio key={auth.address+archive+location} account={auth.address} namespace={archive}/>}
     </>}
     <footer className="market-footer"><span>One pool. More possibilities.</span>{testingAccess&&<details><summary>Testing tools</summary><a href="/privacy-lab/">Privacy proof lab</a><Link href={'/rehearsal?collection='+namespace}>Settlement and combined predictions</Link><Link href="/events">Earlier real-event pool</Link><Link href="/kuru">Kuru trading</Link><Link href="/account">Research workspace</Link></details>}</footer>
   </main>;

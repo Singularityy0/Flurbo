@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { pilotFixture,owner } from './pilot-fixture.ts';
 
-test('featured markets and archive holdings route to different pools, including redemption links',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+test('featured markets and archive holdings route to different pools, including portfolio results',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const f=pilotFixture(Math.floor(Date.now()/1000),4),namespace='practice-'+f.manifest.pool.slice(2),oldPool='0x'+'ab'.repeat(20),errors:string[]=[],calls:string[]=[];
@@ -26,6 +26,7 @@ test('featured markets and archive holdings route to different pools, including 
         if(path.endsWith('/markets'))return route.fulfill({json:await f.service.markets()});
         if(path.endsWith('/account')){const account=await f.service.account(owner);return route.fulfill({json:{...account,manifest:{...account.manifest,pool:old?oldPool:f.manifest.pool},claimScopes:[1]}});}
         if(path.endsWith('/positions'))return route.fulfill({json:{snapshot:{blockNumber:'100'},rows:route.request().postDataJSON().claims.map((c:any)=>({...c,quantity:c.scope===1&&c.mask==='2'?(old?'7000000':'3000000'):'0',payoutAtoms:null}))}});
+        if(path.endsWith('/status'))return route.fulfill({json:await f.service.status()});
         if(path.endsWith('/history'))return route.fulfill({json:{complete:true,through:100,target:100,logs:[]}});
         return route.fulfill({status:503,json:{error:'Not used in fixture'}});
       }
@@ -36,15 +37,16 @@ test('featured markets and archive holdings route to different pools, including 
     await page.goto('https://flurbo.singu.online/markets');await page.locator('.market-card').first().waitFor();
     assert.ok(calls.includes('/api/'+namespace+'/markets'));assert.ok(!calls.includes('/api/rehearsal/markets'));
     await page.goto('https://flurbo.singu.online/portfolio');await page.getByRole('cell',{name:'3',exact:true}).waitFor();
+    const archiveResults=page.waitForRequest((r:any)=>new URL(r.url()).pathname==='/api/rehearsal/status');
     await page.getByText('Choose a market collection',{exact:true}).click();await page.getByLabel('Collection',{exact:true}).selectOption('rehearsal');
     await page.getByRole('cell',{name:'7',exact:true}).waitFor();assert.equal(await page.getByRole('cell',{name:'3',exact:true}).count(),0);
-    assert.equal(await page.getByRole('link',{name:'Settlement and redemption for this collection'}).getAttribute('href'),'/rehearsal?collection=rehearsal');
+    // Payout collection lives in Portfolio; results must be read from the selected collection, never the featured one.
+    await archiveResults;await page.getByRole('region',{name:'Market results'}).getByRole('heading',{name:'Results'}).waitFor();
+    assert.equal(await page.getByRole('link',{name:'Settlement and redemption for this collection'}).count(),0);
     await page.reload();await page.getByRole('cell',{name:'7',exact:true}).waitFor();
+    const featuredResults=page.waitForRequest((r:any)=>new URL(r.url()).pathname==='/api/'+namespace+'/status');
     await page.getByText('Choose a market collection',{exact:true}).click();await page.getByLabel('Collection',{exact:true}).selectOption(namespace);
     await page.getByRole('cell',{name:'3',exact:true}).waitFor();
-    assert.equal(await page.getByRole('link',{name:'Settlement and redemption for this collection'}).getAttribute('href'),'/rehearsal?collection='+namespace);
-    await page.getByRole('link',{name:'Settlement and redemption for this collection'}).click();
-    await page.waitForURL('**/rehearsal?collection='+namespace);await page.getByText('Not used in fixture',{exact:true}).waitFor();
-    assert.ok(calls.includes('/api/'+namespace+'/status'));assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[]);
+    await featuredResults;assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });

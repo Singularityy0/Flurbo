@@ -56,7 +56,7 @@ test('activity panels remain unique across repeated navigation and session resto
   } finally { await browser.close(); }
 });
 
-test('portfolio and history deep links restore auth, show full discovered claims and isolate wallet and market changes', {
+test('portfolio deep links and the retired history route restore auth, show full discovered claims and isolate wallet and market changes', {
   skip: !process.env.FLURBO_TEST_PLAYWRIGHT,
 }, async () => {
   const { chromium } = await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
@@ -109,31 +109,26 @@ test('portfolio and history deep links restore auth, show full discovered claims
     assert.match(await page.title(), /portfolio/);
     assert.equal(await page.locator('.core-market').count(), 0);
     if (process.env.FLURBO_TEST_SCREENSHOT) await page.screenshot({ path: process.env.FLURBO_TEST_SCREENSHOT, fullPage: true });
-    await page.getByRole('link', { name: 'History', exact: true }).click();
-    await page.getByText('Bought', { exact: true }).waitFor();
-    assert.equal(new URL(page.url()).pathname, '/history');
+    // History is retired. The old route must land on Portfolio without losing holdings.
+    await page.goto('https://flurbo.singu.online/history');
+    await page.waitForURL('**/portfolio');
+    await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     unavailable = true;
     const beforeFailure = requests;
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-    await page.getByText(/We could not verify your activity with Monad/).waitFor();
-    assert.equal(requests - beforeFailure, 3);
-    assert.equal(await page.getByText('No pool activity yet.').count(), 0);
+    await page.getByText('Some shares couldn’t be loaded. Refresh to complete your portfolio.').waitFor();
+    assert.equal(requests - beforeFailure, 1, 'a failed read is not retried automatically');
     await new Promise(resolve => setTimeout(resolve, 2200));
-    assert.equal(requests - beforeFailure, 3, 'persistent failures must stop automatic reads');
+    assert.equal(requests - beforeFailure, 1, 'persistent failures must stop automatic reads');
     unavailable = false;
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-    await page.getByText('Bought', { exact: true }).waitFor();
-    assert.equal(await page.getByText(/We could not verify your activity with Monad/).count(), 0);
-    if (process.env.FLURBO_TEST_SCREENSHOT) await page.screenshot({ path: process.env.FLURBO_TEST_SCREENSHOT.replace('.png', '-history.png'), fullPage: true });
-    await page.getByRole('button', { name: 'Next', exact: true }).click();
-    await page.getByText('Sold', { exact: true }).waitFor();
-    await page.reload(); await page.getByText('Bought', { exact: true }).waitFor();
+    await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
+    assert.equal(await page.getByText('Some shares couldn’t be loaded. Refresh to complete your portfolio.').count(), 0);
     await page.getByText('Choose a market collection',{exact:true}).click();
     await page.getByLabel('Collection', { exact: true }).selectOption('learning');
-    await page.getByText('Bought', { exact: true }).waitFor();
-    await page.getByText('Look up another address',{exact:true}).evaluate((el:any)=>el.parentElement.open=true);await page.getByLabel('Wallet to view').fill(other);
-    await page.getByRole('button', { name: 'View wallet', exact: true }).click();
-    await page.getByText('No pool activity yet.').waitFor();
+    await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
+    // Consumer holdings come from verified links; there is no manual address lookup to confuse the account view.
+    assert.equal(await page.getByText('Look up another address',{exact:true}).count(),0);
     await page.getByRole('link', { name: 'Portfolio', exact: true }).click();
     // A diagnostic lookup never replaces the account's default linked-wallet view.
     await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();

@@ -76,7 +76,8 @@ test('account portfolio discovers older combinations on refresh without repeated
     assert.equal(await page.locator('.portfolio-account-identity').getByText(login,{exact:true}).count(),1);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     fail=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
-    await page.getByText('Older custom predictions may still be missing.',{exact:false}).waitFor();
+    await page.getByText('Older activity is still being indexed.',{exact:false}).waitFor();
+    assert.equal(await page.getByRole('link',{name:'Check history'}).count(),0);
     const stopped=scans;await page.waitForTimeout(1800);assert.equal(scans,stopped);
     fail=false;await page.getByRole('button',{name:'Refresh',exact:true}).click();
     await page.getByText('Test event 1 + Test event 2',{exact:true}).waitFor();
@@ -84,7 +85,7 @@ test('account portfolio discovers older combinations on refresh without repeated
   }finally{await browser.close();}
 });
 
-test('practice history outage still shows owned shares; recovery shows the bet and wallet changes clear prior holdings',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+test('practice history outage still shows owned shares through the retired history route; failed reads clear prior holdings',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const fixture=pilotFixture(Math.floor(Date.now()/1000),4),login='0x'+'99'.repeat(20);
@@ -112,22 +113,17 @@ test('practice history outage still shows owned shares; recovery shows the bet a
       const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
-    await page.goto('https://flurbo.singu.online/history');
+    await page.goto('https://flurbo.singu.online/history');await page.waitForURL('**/portfolio');
     await page.getByRole('cell',{name:'10',exact:true}).waitFor();
     await page.getByText('Test event 1',{exact:true}).waitFor();
-    assert.match(await page.locator('body').innerText(),/history is temporarily unavailable/);
-    assert.doesNotMatch(await page.locator('body').innerText(),/No indexed activity/);
+    await page.getByText('Older activity is still being indexed.',{exact:false}).waitFor();
+    assert.doesNotMatch(await page.locator('body').innerText(),/No indexed activity|No shares in this collection yet/);
     await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();
     const stopped=scans;await page.waitForTimeout(1800);assert.equal(scans,stopped);
     failHistory=false;await page.getByRole('button',{name:'Refresh',exact:true}).click();
-    await page.getByText('Bought',{exact:true}).waitFor();
-    await page.getByRole('cell',{name:'6.201146',exact:true}).waitFor();
-    assert.equal(await page.getByRole('link',{name:'View transaction',exact:true}).getAttribute('href'),'https://testnet.monadscan.com/tx/'+hash);
+    await page.getByRole('cell',{name:'10',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     if(process.env.FLURBO_TEST_SCREENSHOT) await page.screenshot({path:process.env.FLURBO_TEST_SCREENSHOT,fullPage:true});
-    await page.goto('https://flurbo.singu.online/portfolio');
-    await page.getByRole('cell',{name:'10',exact:true}).waitFor();
-    await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();
     failAccount=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
     await page.getByText('Some shares couldn’t be loaded. Refresh to complete your portfolio.',{exact:true}).waitFor();
     assert.equal(await page.getByRole('cell',{name:'10',exact:true}).count(),0);
@@ -137,21 +133,28 @@ test('practice history outage still shows owned shares; recovery shows the bet a
   }finally{await browser.close();}
 });
 
-test('history lookup switches wallets during pending reads; late replies cannot overwrite the new wallet',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+const serveDist=async(route:any,path:string)=>{
+  const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
+  return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
+};
+const until=async(check:()=>boolean)=>{for(let n=0;!check()&&n<300;n++)await new Promise(r=>setTimeout(r,10));assert.equal(check(),true);};
+
+test('portfolio collection and linked-wallet changes during pending reads cannot be overwritten by late replies',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
-  const fixture=pilotFixture(),login='0x'+'99'.repeat(20),other='0x'+'aa'.repeat(20);
-  let scans=0,heldPosition=false,holdAccount=false,releaseOld!:()=>void,releaseAccount!:()=>void;
-  const oldGate=new Promise<void>(r=>releaseOld=r),accountGate=new Promise<void>(r=>releaseAccount=r),errors:string[]=[];
+  const fixture=pilotFixture(Math.floor(Date.now()/1000),4),login='0x'+'99'.repeat(20),second='0x'+'aa'.repeat(20),other='practice-'+'cd'.repeat(20);
+  fixture.manifest.publication.mode='rehearsal';
+  let linked=[owner],holdOld=true,heldOld=false,holdLinked=false,heldLinked=false,releaseOld!:()=>void,releaseLinked!:()=>void;
+  const oldGate=new Promise<void>(r=>releaseOld=r),linkedGate=new Promise<void>(r=>releaseLinked=r),errors:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:390,height:844}});
     page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.addInitScript(({login,owner}:any)=>{
       sessionStorage.setItem('flurbo.trading.market','rehearsal');sessionStorage.setItem('flurbo.view-wallet:'+login,owner);
-      // Deliver late replies despite cancellation to exercise the generation guard too.
+      // Deliver late replies despite cancellation, so the stale-result guard is exercised, not only fetch abort.
       const original=window.fetch;(window as any).cancelledReads=0;
       window.fetch=(input,options)=>{
-        if(String(input).startsWith('/api/rehearsal/')){
+        if(/^\/api\/(rehearsal|practice-)/.test(String(input))){
           options?.signal?.addEventListener('abort',()=>{(window as any).cancelledReads++;},{once:true});
           return original(input,{...options,signal:undefined});
         }
@@ -159,80 +162,93 @@ test('history lookup switches wallets during pending reads; late replies cannot 
       };
     },{login,owner});
     await page.route('**/*',async(route:any)=>{
-      const url=new URL(route.request().url()),path=url.pathname;
-      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
-      if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
+      const url=new URL(route.request().url()),path=url.pathname,namespace=path.split('/')[2];
+      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[
+        {namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt},
+        {namespace:other,label:'October practice',pool:'0x'+'cd'.repeat(20),closesAt:fixture.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:linked}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
-      if(path==='/api/rehearsal/account'){
-        const address=url.searchParams.get('wallet')!;if(holdAccount&&address===login)await accountGate;
-        return route.fulfill({json:await fixture.service.account(address)});
-      }
-      if(path==='/api/rehearsal/history'){
-        if(++scans===1)await oldGate;
-        return route.fulfill({json:{through:200,target:200,complete:false,logs:[]}});
-      }
-      if(path==='/api/rehearsal/positions'){
-        const input=route.request().postDataJSON();if(input.owner===owner){heldPosition=true;await oldGate;}
-        return route.fulfill({json:{snapshot:{blockNumber:'200'},rows:input.claims.map((c:any)=>({...c,quantity:c.scope===1&&c.mask==='2'?(input.owner===owner?'10000000':input.owner===login?'3000000':'7000000'):'0',payoutAtoms:null}))}});
+      if(path.endsWith('/account')){const account=await fixture.service.account(url.searchParams.get('wallet'));return route.fulfill({json:namespace===other?{...account,manifest:{...account.manifest,pool:'0x'+'cd'.repeat(20)}}:account});}
+      if(path.endsWith('/history'))return route.fulfill({json:{through:200,target:200,complete:true,logs:[]}});
+      if(path.endsWith('/positions')){
+        const input=route.request().postDataJSON();let quantity='0';
+        if(namespace==='rehearsal'&&input.owner===owner){if(holdOld){heldOld=true;await oldGate;}quantity='10000000';}
+        else if(namespace===other&&input.owner===owner){if(holdLinked){heldLinked=true;await linkedGate;quantity='10000000';}else quantity='3000000';}
+        else if(namespace===other&&input.owner===second)quantity='5000000';
+        return route.fulfill({json:{snapshot:{blockNumber:'200'},rows:input.claims.map((c:any)=>({...c,quantity:c.scope===1&&c.mask==='2'?quantity:'0',payoutAtoms:null}))}}).catch(()=>{});
       }
       if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unexpected API'}});
-      const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
-      return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
+      return serveDist(route,path);
     });
-    await page.goto('https://flurbo.singu.online/history');
-    for(let n=0;!heldPosition&&n<200;n++)await page.waitForTimeout(10);assert.equal(heldPosition,true);
-    await page.getByText('Look up another address',{exact:true}).click();
-    assert.equal(await page.getByRole('textbox',{name:'Wallet to view'}).isEnabled(),true);
-    assert.equal(await page.getByRole('button',{name:'View wallet',exact:true}).isEnabled(),true);
-    await page.getByText('Look up another address',{exact:true}).evaluate((el:any)=>el.parentElement.open=true);await page.getByRole('textbox',{name:'Wallet to view'}).fill(login);await page.getByRole('button',{name:'View wallet',exact:true}).click();
-    await page.getByRole('cell',{name:'3',exact:true}).waitFor();releaseOld();await page.waitForTimeout(100);
+    await page.goto('https://flurbo.singu.online/portfolio');
+    await until(()=>heldOld);
+    // Switching collections while the old collection is still reading must show only the new collection.
+    await page.getByText('Choose a market collection',{exact:true}).click();await page.getByLabel('Collection',{exact:true}).selectOption(other);
+    await page.getByRole('cell',{name:'3',exact:true}).waitFor();
+    releaseOld();await page.waitForTimeout(300);
     assert.equal(await page.getByRole('cell',{name:'10',exact:true}).count(),0);
+    assert.equal(await page.getByRole('cell',{name:'3',exact:true}).count(),1);
+    // A wallet linked while a read is pending replaces the account view; the older read cannot land afterwards.
+    holdLinked=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();await until(()=>heldLinked);
+    holdLinked=false;linked=[owner,second];await page.evaluate(()=>window.dispatchEvent(new Event('flurbo:wallet-linked')));
+    await page.getByRole('cell',{name:'8',exact:true}).waitFor();
+    releaseLinked();await page.waitForTimeout(300);
+    assert.equal(await page.getByRole('cell',{name:'8',exact:true}).count(),1);
+    assert.equal(await page.getByRole('cell',{name:/^(10|13|18)$/}).count(),0);
     assert.ok(await page.evaluate(()=>(window as any).cancelledReads)>=2);
-    holdAccount=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
-    await page.getByRole('button',{name:'Stop loading',exact:true}).waitFor();
-    await page.getByText('Look up another address',{exact:true}).evaluate((el:any)=>el.parentElement.open=true);await page.getByRole('textbox',{name:'Wallet to view'}).fill(other);
-    await page.getByRole('button',{name:'View wallet',exact:true}).click();
-    await page.getByRole('cell',{name:'7',exact:true}).waitFor();releaseAccount();await page.waitForTimeout(100);
-    assert.equal(await page.getByRole('cell',{name:'3',exact:true}).count(),0);
-    assert.equal(await page.getByRole('textbox',{name:'Wallet to view'}).inputValue(),other);
-    assert.equal(await page.evaluate((login:string)=>sessionStorage.getItem('flurbo.view-wallet:'+login),login),other);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     assert.deepEqual(errors,[]);
-  }finally{releaseOld();releaseAccount();await browser.close();}
+  }finally{releaseOld();releaseLinked();await browser.close();}
 });
 
-test('automatic catch-up stops after five batches; Stop loading cancels an active read',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+test('portfolio shares one discovery read across linked wallets, bounds reads and batches, and cancels work on leaving',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
-  const fixture=pilotFixture();let scans=0,release!:()=>void;const gate=new Promise<void>(r=>release=r);
+  const fixture=pilotFixture(Math.floor(Date.now()/1000),4),login='0x'+'99'.repeat(20),wallets=[owner,'0x'+'aa'.repeat(20),'0x'+'bb'.repeat(20)];
+  let scans=0,active=0,peak=0,hold=false,held=false,release!:()=>void;const gate=new Promise<void>(r=>release=r);
+  const batches:number[]=[],errors:string[]=[];
   try{
-    const page=await browser.newPage();await page.addInitScript((owner:string)=>{sessionStorage.setItem('flurbo.trading.market','rehearsal');sessionStorage.setItem('flurbo.view-wallet:'+owner,owner);},owner);
+    const page=await browser.newPage({viewport:{width:1280,height:900}});
+    page.on('pageerror',(e:Error)=>errors.push(e.message));
+    await page.addInitScript(()=>{
+      sessionStorage.setItem('flurbo.trading.market','rehearsal');
+      const original=window.fetch;(window as any).cancelledReads=0;
+      window.fetch=(input,options)=>{options?.signal?.addEventListener('abort',()=>{(window as any).cancelledReads++;},{once:true});return original(input,options);};
+    });
     await page.route('**/*',async(route:any)=>{
-      const path=new URL(route.request().url()).pathname;
+      const url=new URL(route.request().url()),path=url.pathname;
       if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
-      if(path==='/api/account/wallets')return route.fulfill({json:{account:owner,wallets:[owner]}});
-      if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600000}}});
-      if(path==='/api/rehearsal/account')return route.fulfill({json:await fixture.service.account(owner)});
-      if(path==='/api/rehearsal/positions')return route.fulfill({json:{snapshot:{blockNumber:'200'},rows:[]}});
-      if(path==='/api/rehearsal/history'){
-        const call=++scans;if(call===6)await gate;
-        return route.fulfill({json:{through:call*100,target:10000,complete:false,logs:[]}}).catch(()=>{});
+      if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets}});
+      if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
+      if(path==='/api/rehearsal/history'){scans++;return route.fulfill({json:{through:150,target:200,complete:false,logs:[]}});}
+      if(path==='/api/rehearsal/account'||path==='/api/rehearsal/positions'){
+        active++;peak=Math.max(peak,active);
+        try{
+          await new Promise(r=>setTimeout(r,60));
+          if(path.endsWith('/account'))return await route.fulfill({json:{...await fixture.service.account(url.searchParams.get('wallet')),claimScopes:[1,2,3]}}).catch(()=>{});
+          const input=route.request().postDataJSON();batches.push(input.claims.length);
+          if(hold){held=true;await gate;}
+          return await route.fulfill({json:{snapshot:{blockNumber:'200'},rows:input.claims.map((c:any)=>({...c,quantity:c.scope===1&&c.mask==='2'?'1000000':'0',payoutAtoms:null}))}}).catch(()=>{});
+        }finally{active--;}
       }
       if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unexpected API'}});
-      const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
-      return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
+      return serveDist(route,path);
     });
-    await page.goto('https://flurbo.singu.online/history');
-    await page.getByRole('button',{name:'Continue loading',exact:true}).waitFor();
-    assert.equal(scans,5);await page.waitForTimeout(1800);assert.equal(scans,5);
-    await page.getByRole('button',{name:'Continue loading',exact:true}).click();
-    for(let n=0;scans<6&&n<200;n++)await page.waitForTimeout(10);assert.equal(scans,6);
-    await page.getByRole('button',{name:'Stop loading',exact:true}).click();
-    await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();release();
-    await page.waitForTimeout(1800);assert.equal(scans,6);
-    assert.doesNotMatch(await page.locator('body').innerText(),/temporarily unavailable|could not be refreshed/);
-    assert.match(await page.locator('body').innerText(),/History checked through block 500/);
-    await page.getByRole('button',{name:'Continue loading',exact:true}).click();
-    await page.getByText('History checked through block 700.',{exact:false}).waitFor();
-    await page.getByRole('button',{name:'Pause loading',exact:true}).click();
+    await page.goto('https://flurbo.singu.online/portfolio');
+    // Three linked wallets plus the Mera account each hold one share of the same claim, combined into one row.
+    await page.getByRole('cell',{name:'4',exact:true}).waitFor();
+    await page.getByText('Older activity is still being indexed.',{exact:false}).waitFor();
+    assert.equal(scans,1,'one shared discovery read, not one per wallet');
+    assert.ok(peak<=2,`at most two concurrent account reads, saw ${peak}`);
+    assert.ok(batches.length>0&&batches.every(n=>n>0&&n<=30),`position batches exceed 30 claims: ${batches}`);
+    await page.waitForTimeout(1800);assert.equal(scans,1,'an incomplete index must not trigger automatic rescans');
+    hold=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();await until(()=>held);
+    assert.equal(scans,2);
+    const cancelled=await page.evaluate(()=>(window as any).cancelledReads);
+    await page.getByRole('link',{name:'Markets',exact:true}).first().click();await page.waitForURL('**/markets');
+    assert.ok(await page.evaluate(()=>(window as any).cancelledReads)>cancelled,'leaving Portfolio cancels pending reads');
+    release();await page.waitForTimeout(300);
+    assert.equal(scans,2);assert.equal(await page.locator('.account-holdings').count(),0);
+    assert.deepEqual(errors,[]);
   }finally{release();await browser.close();}
 });

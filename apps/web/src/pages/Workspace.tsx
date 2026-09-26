@@ -99,8 +99,8 @@ export default function Workspace() {
   const search=useSearch(),collection=new URLSearchParams(search).get('collection')||'rehearsal';
   const rehearsalNamespace=isPracticeNamespace(collection)?collection:null;
   const pilotPage = location === '/events' || rehearsalPage;
-  const portfolioPage = location === '/portfolio', historyPage = location === '/history', kuruPage = location === '/kuru';
-  const panel = portfolioPage ? 'positions' : historyPage ? 'activity' : accountPanel;
+  const portfolioPage = location === '/portfolio', kuruPage = location === '/kuru';
+  const panel = portfolioPage ? 'positions' : accountPanel;
   const [copied, setCopied] = useState(false);
   const [market, setMarket] = useState<Market>(() => {
     try { const saved = sessionStorage.getItem('flurbo.trading.market'); return publicTestnet && (saved === 'learning' || saved === 'pilot' || saved === 'rehearsal') ? saved : 'original'; }
@@ -119,7 +119,7 @@ export default function Workspace() {
     <aside className="workspace-sidebar">
       <Link className="workspace-back" href="/"><ArrowLeft size={16} /> Back to the idea</Link>
       <span className="eyebrow">Your workspace</span>
-      <nav aria-label="Workspace">{tabs.map(({key,label,icon: Icon,href}) => <Link key={key} href={href} aria-disabled={marketBusy || undefined} aria-current={location === href && (key !== 'trade' || accountPanel === 'trade') ? 'page' : undefined} onClick={event => { if (marketBusy) event.preventDefault(); else setPanel('trade'); }}><Icon size={18}/>{label}{location === href && <span className="workspace-nav-dot"/>}</Link>)}<button disabled={marketBusy} aria-current={!portfolioPage && !historyPage && !kuruPage && !pilotPage && accountPanel === 'activity' ? 'page' : undefined} onClick={() => { setPanel('activity'); navigate('/account'); }}><Activity size={18}/>Activity & network</button></nav>
+      <nav aria-label="Workspace">{tabs.map(({key,label,icon: Icon,href}) => <Link key={key} href={href} aria-disabled={marketBusy || undefined} aria-current={location === href && (key !== 'trade' || accountPanel === 'trade') ? 'page' : undefined} onClick={event => { if (marketBusy) event.preventDefault(); else setPanel('trade'); }}><Icon size={18}/>{label}{location === href && <span className="workspace-nav-dot"/>}</Link>)}<button disabled={marketBusy} aria-current={!portfolioPage && !kuruPage && !pilotPage && accountPanel === 'activity' ? 'page' : undefined} onClick={() => { setPanel('activity'); navigate('/account'); }}><Activity size={18}/>Activity & network</button></nav>
       <div className="workspace-note"><span className="eyebrow">One shared pool</span><p>Separate ideas.<br/><em>Connected possibilities.</em></p><span>{(rehearsalPage || market==='rehearsal' && !kuruPage) ? 'Scripted public testnet rehearsal. Test assets only.' : (pilotPage || market === 'pilot' && !kuruPage) ? 'Official-source pilot. Named testnet reviewers. Test assets only.' : publicTestnet ? 'Synthetic events on public Monad testnet. Test assets only.' : 'Synthetic events on a local Monad fork. Test assets only.'}</span></div>
       {address && <button className="workspace-signout" onClick={() => { void controller.signOut('Signed out. Your wallet and passkey remain yours.'); }}><LogOut size={15}/> Sign out</button>}
     </aside>
@@ -132,7 +132,7 @@ export default function Workspace() {
       </section>
       {state.error && <p role="alert" className="auth-error">{state.error}</p>}
       {state.notice && <p role="status" className="auth-feedback">{state.notice}</p>}
-      {publicTestnet && address && !portfolioPage && !historyPage && <Funding key={address + state.method}/>}
+      {publicTestnet && address && !portfolioPage && <Funding key={address + state.method}/>}
       {publicTestnet && !kuruPage && !pilotPage && <section className="workspace-market" aria-label="Trading market">
         <label htmlFor="trading-market">Market</label>
         <select id="trading-market" value={market} disabled={marketBusy} onChange={event => {
@@ -145,9 +145,9 @@ export default function Workspace() {
         <p className="auth-help">{market === 'rehearsal' ? 'Separate scripted testnet rehearsal. These outcomes are fixtures, not real events.' : market === 'pilot' ? 'Separate real-event pool with official-source questions and a named testnet reviewer panel. Publication requires verified deployment.' : market === 'learning' ? 'Synthetic test market with funded operator price updates. Its positions and pool allowance are separate from the original pool. Kuru and receipt conversion are not enabled here.' : 'Original synthetic market with H YES receipts and Kuru. Your existing positions remain here.'} AUSD wallet funds can be used across these pools. Positions and allowances are separate.</p>
         {marketBusy && <p className="auth-help">Finish or cancel the review, or resolve the pending transaction, before switching markets.</p>}
       </section>}
-      {pilotPage ? (rehearsalPage&&!rehearsalNamespace?<p role="alert">Unknown practice collection.</p>:<Pilot key={`pilot:${rehearsalNamespace}:${rehearsalPage}:${address}`} namespace={rehearsalPage?rehearsalNamespace!:'pilot'} onBusy={setMarketBusy}/>) : kuruPage ? <Kuru key={`kuru:${address}`} onBusy={setMarketBusy} onConvert={() => { try { sessionStorage.setItem('flurbo.trading.market', 'original'); } catch { /* View preference only. */ } setMarket('original'); }}/> : address && (portfolioPage || historyPage) ? <AccountPortfolio key={address+market+location} account={address} namespace={market} history={historyPage}/> : (market === 'pilot'||market==='rehearsal') ? <Pilot key={`pilot-market:${market}:${address}`} namespace={market==='rehearsal'?'rehearsal':'pilot'} onBusy={setMarketBusy}/> : <CoreMarket key={`market:${market}`} account={address} panel={panel} market={market} onBusy={setMarketBusy}/>}
-      {publicTestnet && panel === 'activity' && !historyPage && !kuruPage && !pilotPage && market !== 'pilot' && market !== 'rehearsal' && <LearningComparison key={`comparison:${address}`}/>}
-      {publicTestnet && panel === 'activity' && !historyPage && !kuruPage && !pilotPage && market !== 'pilot' && market !== 'rehearsal' && <LearningPool key={`pool:${address}`}/>}
+      {pilotPage ? (rehearsalPage&&!rehearsalNamespace?<p role="alert">Unknown practice collection.</p>:<Pilot key={`pilot:${rehearsalNamespace}:${rehearsalPage}:${address}`} namespace={rehearsalPage?rehearsalNamespace!:'pilot'} onBusy={setMarketBusy}/>) : kuruPage ? <Kuru key={`kuru:${address}`} onBusy={setMarketBusy} onConvert={() => { try { sessionStorage.setItem('flurbo.trading.market', 'original'); } catch { /* View preference only. */ } setMarket('original'); }}/> : address && portfolioPage ? <AccountPortfolio key={address+market+location} account={address} namespace={market}/> : (market === 'pilot'||market==='rehearsal') ? <Pilot key={`pilot-market:${market}:${address}`} namespace={market==='rehearsal'?'rehearsal':'pilot'} onBusy={setMarketBusy}/> : <CoreMarket key={`market:${market}`} account={address} panel={panel} market={market} onBusy={setMarketBusy}/>}
+      {publicTestnet && panel === 'activity' && !kuruPage && !pilotPage && market !== 'pilot' && market !== 'rehearsal' && <LearningComparison key={`comparison:${address}`}/>}
+      {publicTestnet && panel === 'activity' && !kuruPage && !pilotPage && market !== 'pilot' && market !== 'rehearsal' && <LearningPool key={`pool:${address}`}/>}
       <footer className="workspace-footer"><span>One pool. More possibilities.</span><span>{(rehearsalPage || market==='rehearsal' && !kuruPage) ? 'Scripted public testnet rehearsal. Test assets only.' : (pilotPage || market === 'pilot' && !kuruPage) ? 'Monad testnet / Real-event pilot / Test AUSD' : publicTestnet ? 'Monad testnet / Test AUSD / Synthetic outcomes' : 'Local prototype / AUSD collateral / Synthetic outcomes'}</span></footer>
     </div>
   </main>;
