@@ -7,7 +7,7 @@ import { useAuth } from '../auth/context';
 import { describeClaim, walletKey, tradingWalletKey } from '../portfolio';
 import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
 import {watchTradingWallet} from '../auth/trading-session';
-import { readCheckout, saveCheckout, clearCheckout, type CheckoutDraft } from '../checkout';
+import { readCheckout, saveCheckout, clearCheckout, assertCheckoutBinding, type CheckoutDraft } from '../checkout';
 import { rememberConfirmedClaim } from '../pilot-claims';
 import {encodeClaim, type ClaimRule} from '../../shared/claims.mjs';
 import CombinationBuilder from './CombinationBuilder';
@@ -105,7 +105,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
     if(!consumer||!auth.address)return;
     try{
       if(completed)clearCheckout(namespace,auth.address);
-      else saveCheckout(namespace,auth.address,{event:consumer.event,yes:consumer.yes,legs,answers,rule:legs.length===1?'AND':rule,quantity,side:side as CheckoutDraft['side'],walletKind:'browser'});
+      else saveCheckout(namespace,auth.address,{event:consumer.event,yes:consumer.yes,legs,answers,rule:legs.length===1?'AND':rule,quantity,side:side as CheckoutDraft['side'],walletKind:'browser',...(restored?.binding?{binding:restored.binding}:{})});
     }catch{setStorageError(true);setNotice('Your browser could not save this purchase. Enable site storage before continuing.');}
   },[!!consumer,auth.address,legs,answers,rule,quantity,side,choice,completed]);
   useEffect(()=>{
@@ -121,6 +121,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
       const input={owner,action:side,scope,mask,quantity:parseUnits(quantity,6).toString(),slippageBps:50};
       void request<PilotReview>('prepare',input,namespace,controller.signal).then(result=>{
         validatePilotReview(result);
+        assertCheckoutBinding(restored,result.manifest);
         if(result.requested.owner.toLowerCase()!==owner||result.requested.action!==side||result.requested.scope!==scope||result.requested.mask!==mask||result.requested.quantity!==input.quantity)throw new Error('Quote differs from your prediction. Refresh the price.');
         if(live.current&&version===quoteVersion.current&&walletGeneration===generation.current){setReview(result);setNotice('Price ready. Confirm in your wallet when you are ready.');}
       }).catch(e=>{if(!controller.signal.aborted&&live.current&&version===quoteVersion.current)setNotice(e instanceof Error?e.message:'Price unavailable. Refresh the price.');})
@@ -171,6 +172,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
     const version=generation.current; setReview(null);
     const result=await pilotRequest<PilotReview>('prepare',{...input,owner});
     validatePilotReview(result);
+    if(consumer)assertCheckoutBinding(restored,result.manifest);
     if(payout&&(result.action!=='redeem'||result.requested.owner.toLowerCase()!==owner||result.requested.scope!==scope||result.requested.mask!==mask||result.requested.quantity!==input.quantity))throw Error('Payout review changed. Refresh before collecting.');
     if(live.current&&version===generation.current){setReview(result);setNotice(payout?'Check the payout amount, then confirm in MetaMask.':result.notice);}
   }
@@ -207,6 +209,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
     await prepare({action:'dispute',event,outcome,evidenceHash:saved.hash,evidenceURI:saved.uri,stake:witness});
   }
   async function confirm(){
+    if(consumer&&review)assertCheckoutBinding(restored,review.manifest);
     if(!review||!provider.current||!auth.address||pending||storageError)return;
     if(payout&&(review.action!=='redeem'||review.requested.scope!==scope||review.requested.mask!==mask||!payout.owners.includes(owner)))throw Error('Select the MetaMask wallet that holds these shares.');
     if(challenge&&review.requested.action==='dispute'){

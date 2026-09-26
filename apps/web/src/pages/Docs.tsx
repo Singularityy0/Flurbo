@@ -4,7 +4,7 @@ import './docs.css';
 const sections = [
   ['overview', 'Overview'], ['getting-started', 'Getting started'],
   ['accounts', 'Accounts and wallets'], ['trading', 'Trading and shares'],
-  ['combinations', 'Combined predictions'], ['what-if', 'What-if and prices'],
+  ['combinations', 'Combined predictions'], ['what-if', 'What-if and prices'], ['thesis', 'Build your thesis'],
   ['settlement', 'Settlement and payouts'], ['portfolio', 'Portfolio and payouts'],
   ['preview', 'Preview limitations'],
 ] as const;
@@ -91,8 +91,16 @@ export default function Docs() {
           <p>Price sensitivity simulates a specified trade and shows how the displayed values would change under that scenario. It is not a measure of reliability or a forecast of what traders will do.</p>
           <p>These values reflect the pool’s state, not independently verified probabilities. Mathematical consistency does not establish accuracy, and conditional relationships do not establish causation. Price history charts show sampled quotes; gaps indicate missing observations rather than a complete trading record.</p>
         </section>
+        <section id="thesis" aria-labelledby="thesis-title">
+          <p className="docs-eyebrow">07 / EXPRESS YOUR VIEW</p>
+          <h2 id="thesis-title">Build your thesis</h2>
+          <p>Open a market and choose Explore your view to compare two questions from its shared pool. Enter the chance of A being Yes, the chance of B being Yes if A is Yes, and the chance of B being Yes if A is No. All three estimates are needed for a complete forecast.</p>
+          <p>The explorer compares individual, AND, OR and exactly-one claims at equal share counts. It shows your probabilities alongside the pool's estimates, current buy quotes, and the payout in each scenario. Your expected net uses your own estimates, excludes gas and assumes binary outcomes. It is not a recommendation or guaranteed profit. VOID payouts are shown separately.</p>
+          <p>An AND claim is not a conditional contract: if either selected answer fails, it pays zero rather than refunding your purchase. Pool relationships do not establish causation. Estimates and optional reasoning notes stay in the page's memory and are lost when you leave.</p>
+          <p>Review this prediction carries only the selected claim into the existing trade ticket. A fresh quote, linked MetaMask wallet and wallet confirmation are still required. Closed markets remain available for exploration, but cannot be traded.</p>
+        </section>
         <section id="settlement" aria-labelledby="settlement-title">
-          <p className="docs-eyebrow">07 / FROM OUTCOME TO PAYOUT</p>
+          <p className="docs-eyebrow">08 / FROM OUTCOME TO PAYOUT</p>
           <h2 id="settlement-title">Settlement and payouts</h2>
           <p>Trading closes at the time specified by the market. Resolution follows the observation window and the pool’s published deadlines. A closed market is not necessarily settled.</p>
           <ol className="docs-steps">
@@ -107,7 +115,7 @@ export default function Docs() {
           <div className="docs-note"><strong>Resolution has trust and timing limits.</strong><p>A wrong uncontested assertion can finalize. Background automation assists eligible steps, but does not guarantee correct evidence or timely execution. Disputes, source availability and network failures can delay settlement. Use the market’s current status and rules, rather than treating an estimated result time as a guarantee.</p></div>
         </section>
         <section id="portfolio" aria-labelledby="portfolio-title">
-          <p className="docs-eyebrow">08 / KEEPING TRACK</p>
+          <p className="docs-eyebrow">09 / KEEPING TRACK</p>
           <h2 id="portfolio-title">Portfolio and payouts</h2>
           <p>Your <Link href="/portfolio">portfolio</Link> brings together the shares associated with your linked trading wallets under your Flurbo account. Individual and combined positions appear in one holdings table. The Activity tab shows confirmed purchases, sales and collected payouts for those wallets. Collected lists the amount received and the transaction even after the redeemed shares leave your holdings. Payouts collected is money received, not profit.</p>
           <p>Results and payout collection live in Portfolio. Select an eligible holding, connect its owning MetaMask wallet and confirm the collection. Holdings stay combined under your Mera account; each wallet receives its own payout.</p>
@@ -115,7 +123,7 @@ export default function Docs() {
           <p>The Performance tab’s realized PnL chart tracks sale proceeds and collected payouts minus the average purchase cost of those shares, calculated separately for each wallet and position. It excludes open positions, uncollected payouts and test MON gas. A chart appears only when indexed history is complete and reconciles with holdings. Until then, it is unavailable rather than an estimated profit figure.</p>
         </section>
         <section id="preview" aria-labelledby="preview-title">
-          <p className="docs-eyebrow">09 / CURRENT SCOPE</p>
+          <p className="docs-eyebrow">10 / CURRENT SCOPE</p>
           <h2 id="preview-title">Preview limitations</h2>
           <p>Flurbo is available for supervised testnet use. Wallet transactions and positions are public on chain. Account-level organization does not conceal on-chain activity.</p>
           <p>The current preview does not provide an audit assurance or independent adjudication. Automated resolution steps should not be understood as AI judgment. Features and availability differ by market; the published rules and live transaction state govern the selected market.</p>

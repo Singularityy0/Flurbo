@@ -7,6 +7,7 @@ import {useAuth} from '../auth/context';
 import {pilotRequest,type PilotNamespace,type PilotState} from '../pilot';
 import {rememberedTradingWallet} from '../portfolio';
 import {settlementView} from '../market-detail';
+import {marketHref} from '../market-detail';
 import Pilot from './Pilot';
 import ShowcaseSource from './ShowcaseSource';
 import WhatIf from './WhatIf';
@@ -56,6 +57,7 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
           {positionError?<p role="alert">{positionError}</p>:positions?<div className="detail-holdings">{positions.map(p=><div key={p.mask}><span>{p.mask==='2'?'Yes':'No'}</span><strong>{cash(p.quantity)} shares</strong><small>{p.payoutAtoms===null?'Awaiting settlement':`${cash(p.payoutAtoms)} test AUSD to collect`}</small></div>)}</div>:<p role="status">Loading your shares…</p>}
           <p className="market-caption">View results and collect payouts in your portfolio.</p>
         </section>
+        <section className="detail-panel"><span className="eyebrow">Where do you disagree?</span><h2>Build your thesis</h2><p>Express a view about two questions. Compare it with the pool and see what each possible outcome would pay.</p><Link className="button button-outline" href={marketHref(namespace,event)+'/thesis'}>Explore your view</Link></section>
         <PriceHistory namespace={namespace} event={event} pool={state.manifest.pool} refresh={attempt}/>
         <details className="detail-panel"><summary>Explore how these markets connect</summary><WhatIf namespace={namespace} manifest={state.manifest}/></details>
       </div><aside className="detail-sidebar">

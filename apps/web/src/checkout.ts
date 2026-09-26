@@ -1,7 +1,7 @@
 import type { PilotNamespace } from './pilot';
 import {CLAIM_RULES, type ClaimRule} from '../shared/claims.mjs';
 
-export type CheckoutDraft={event:number;yes:boolean;legs:number[];answers:Record<number,boolean>;rule?:ClaimRule;quantity:string;side:'buy'|'sell'|'redeem';walletKind?:'mera'|'browser'};
+export type CheckoutDraft={event:number;yes:boolean;legs:number[];answers:Record<number,boolean>;rule?:ClaimRule;quantity:string;side:'buy'|'sell'|'redeem';walletKind?:'mera'|'browser';binding?:{pool:string;rulesHash:string}};
 const key=(namespace:PilotNamespace,login:string)=>`flurbo.checkout.v1:${namespace}:${login.toLowerCase()}`;
 function valid(value:unknown):value is CheckoutDraft {
   const d=value as CheckoutDraft;
@@ -11,6 +11,7 @@ function valid(value:unknown):value is CheckoutDraft {
     &&Object.entries(d.answers).every(([i,v])=>/^[0-3]$/.test(i)&&typeof v==='boolean')
     &&(d.rule===undefined||CLAIM_RULES.includes(d.rule))&&(d.rule!=='AT_LEAST_TWO'||d.legs.length>=2)
     &&typeof d.quantity==='string'&&d.quantity.length<=40
+    &&(d.binding===undefined||!!d.binding&&/^0x[0-9a-f]{40}$/i.test(d.binding.pool)&&/^0x[0-9a-f]{64}$/i.test(d.binding.rulesHash))
     &&['buy','sell','redeem'].includes(d.side)&&[undefined,'mera','browser'].includes(d.walletKind);
 }
 // Only form fields are restored. A saved draft never grants signing permission.
@@ -27,3 +28,6 @@ export function saveCheckout(namespace:PilotNamespace,login:string,draft:Checkou
   localStorage.setItem(key(namespace,login),JSON.stringify(draft));
 }
 export function clearCheckout(namespace:PilotNamespace,login:string){localStorage.removeItem(key(namespace,login));}
+export function assertCheckoutBinding(draft:CheckoutDraft|null,manifest:{pool:string;rulesHash:string}){
+  if(draft?.binding&&(draft.binding.pool.toLowerCase()!==manifest.pool.toLowerCase()||draft.binding.rulesHash.toLowerCase()!==manifest.rulesHash.toLowerCase()))throw Error('This thesis belongs to a different market version. Return to the explorer and compare again.');
+}

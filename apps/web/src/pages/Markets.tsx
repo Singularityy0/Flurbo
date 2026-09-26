@@ -8,6 +8,7 @@ import {loadMarketDirectory,marketStatus,type MarketGroup,type MarketSnapshot} f
 import {marketHref} from '../market-detail';
 import {marketQuestion} from '../showcase-copy';
 import MarketDetail from './MarketDetail';
+import ThesisExplorer from './ThesisExplorer';
 import AccountPortfolio from './AccountPortfolio';
 import './workspace.css';
 import './markets.css';
@@ -19,10 +20,10 @@ export default function Markets(){
   const [groups,setGroups]=useState<MarketGroup[]|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
   useEffect(()=>{const c=new AbortController();setError('');void loadMarketDirectory(c.signal).then(setGroups).catch(e=>{if(!c.signal.aborted)setError(e.message);});return()=>c.abort();},[attempt]);
   if(!groups)return <main id="main" className="markets-page"><h1>Markets</h1><p role={error?'alert':'status'}>{error||'Loading markets...'}</p>{error&&<button className="button button-dark" onClick={()=>setAttempt(x=>x+1)}>Retry</button>}</main>;
-  const detail=location.match(/^\/markets\/(rehearsal|pilot|practice-[0-9a-f]{40})\/([0-3])$/);
+  const detail=location.match(/^\/markets\/(rehearsal|pilot|practice-[0-9a-f]{40})\/([0-3])(\/thesis)?$/);
   if(location.startsWith('/markets/')){
     if(!detail||!groups.some(g=>g.namespace===detail[1]))return <main id="main" className="markets-page"><h1>Market not found</h1><Link href="/markets">All markets</Link></main>;
-    return <MarketDetail key={location} namespace={detail[1] as PilotNamespace} event={Number(detail[2])}/>;
+    return detail[3]?<ThesisExplorer key={location} namespace={detail[1] as PilotNamespace} event={Number(detail[2])}/>:<MarketDetail key={location} namespace={detail[1] as PilotNamespace} event={Number(detail[2])}/>;
   }
   if(location==='/portfolio')return <main id="main" tabIndex={-1} className="markets-page"><div className="market-topline"><span className="market-badge">Monad testnet / Test assets</span><Link href="/access">Your account</Link></div><header className="market-heading"><span className="eyebrow">Your Flurbo</span><h1>Your <em>portfolio.</em></h1><p>All your linked wallet positions. Results and payouts in one place.</p></header>{auth.address&&<AccountPortfolio account={auth.address} namespace="all" groups={groups}/>}</main>;
   return <MarketDirectory groups={groups}/>;

@@ -7,6 +7,7 @@ import { walletLinks } from './wallet-links.mjs';
 import { isTestingOperator, DEFAULT_TESTING_OPERATOR } from './testing-access.mjs';
 import {holderAuthorizer} from './holder-challenge.mjs';
 import {validateClaim} from '../shared/claims.mjs';
+import {validateThesisInput} from '../shared/thesis.mjs';
 import {agentApi} from './agents/agent-api.mjs';
 import {agentRpc} from './agents/agent-market.mjs';
 
@@ -164,6 +165,13 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           }catch{return send(res,400,{error:'Choose a supported claim in this pool.'});}
           try {if(!pilot.claimAnalytics)throw Error('Unavailable');return send(res,200,await pilot.claimAnalytics(input));}
           catch{return send(res,503,{error:'This comparison is temporarily unavailable. Trading is separate.'});}
+        }
+        if(req.method==='POST' && url.pathname==='/api/pilot/thesis') {
+          const input=await body(req);
+          try{validateThesisInput(input,pilot.manifest.publication.draft.events.length);}
+          catch{return send(res,400,{error:'Choose two questions and a supported share quantity.'});}
+          try{if(!pilot.thesisAnalytics)throw Error('Unavailable');return send(res,200,await pilot.thesisAnalytics(input));}
+          catch{return send(res,503,{error:'The pool comparison could not load. Your view is still available; retry shortly.'});}
         }
         if(req.method==='POST' && url.pathname==='/api/pilot/prepare') {
           const input = await body(req);

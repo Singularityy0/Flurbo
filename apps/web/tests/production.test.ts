@@ -88,7 +88,7 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     // Direct visits and refreshes must serve the same shell as client-side navigation.
     // Agent data remains protected by the API's passkey and invite checks.
     const agentPath='/agents/12345678-1234-4234-8234-123456789abc';
-    for(const path of ['/agents',agentPath,agentPath+'?view=activity']) {
+    for(const path of ['/agents',agentPath,agentPath+'?view=activity','/markets/pilot/0/thesis','/markets/rehearsal/1/thesis','/markets/practice-'+ '22'.repeat(20)+'/2/thesis']) {
       for(const method of ['GET','HEAD']) {
         const page=await request(path,undefined,'','flurbo.singu.online','',method);
         assert.equal(page.status,200,method+' '+path);
