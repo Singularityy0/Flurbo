@@ -1,3 +1,5 @@
+import {previewAccess} from './preview-access.mjs';
+
 export const TESTNET = Object.freeze({
   environment: 'public_testnet', chain_id: 10143, name: 'Monad testnet',
   rpc: 'https://testnet-rpc.monad.xyz', explorer: 'https://testnet.monadscan.com',
@@ -18,5 +20,5 @@ export function hostedConfig(env = process.env) {
   const testFaucet = env.FLURBO_TEST_AUSD_FAUCET?.toLowerCase() || null;
   const testingOperatorAccount = env.FLURBO_TESTING_OPERATOR_ACCOUNT?.toLowerCase();
   for (const address of [testFaucet, testingOperatorAccount]) if (address && (!/^0x[0-9a-f]{40}$/.test(address) || /^0x0{40}$/.test(address))) throw Error('Invalid faucet or testing operator address');
-  return { origin: env.FLURBO_ORIGIN, rpcUrl: rpc.href, port, testFaucet, testingOperatorAccount };
+  return { origin: env.FLURBO_ORIGIN, rpcUrl: rpc.href, port, testFaucet, testingOperatorAccount, previewAccess:previewAccess(env) };
 }

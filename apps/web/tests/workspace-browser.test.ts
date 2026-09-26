@@ -16,7 +16,7 @@ test('activity panels remain unique across repeated navigation and session resto
     page.on('pageerror', (error: Error) => errors.push(error.message));
     await page.route('**/*', async (route: any) => {
       const path = new URL(route.request().url()).pathname;
-      if(path==='/api/account/access')return route.fulfill({json:{testingTools:true}});
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:true}});
       if (path === '/api/auth/session') return route.fulfill({ json: { session: {
         address: '0x2ff9ca4cb64fa82915144e8d9cf6a6ceddaa35e3', method: 'passkey', expiresAt: Date.now() + 3600000,
       } } });
@@ -70,9 +70,9 @@ test('portfolio deep links and the retired history route restore auth, show full
     page.on('pageerror', (e: Error) => errors.push(e.message));
     await page.route('**/*', async (route: any) => {
       const url = new URL(route.request().url()), path = url.pathname;
-      if (path === '/api/practice-collections') return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'Practice markets',pool:'0x'+'22'.repeat(20),closesAt:1900000000}]}});
+      if (path === '/api/market-directory') return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[]}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:account,wallets:[account]}});
-      if(path==='/api/account/access')return route.fulfill({json:{testingTools:true}});
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:true}});
       if (path === '/api/auth/session') return route.fulfill({ json: { session: signedIn ? { address: account, method: 'passkey', expiresAt: Date.now() + 3600000 } : null } });
       if (path.startsWith('/api/') && path.endsWith('/portfolio')) {
         requests++;
@@ -100,41 +100,42 @@ test('portfolio deep links and the retired history route restore auth, show full
       return route.fulfill({ body: await readFile(new URL('../dist/' + relative, import.meta.url)), contentType: relative.endsWith('.js') ? 'text/javascript' : relative.endsWith('.css') ? 'text/css' : relative.endsWith('.woff2') ? 'font/woff2' : 'text/html' });
     });
     await page.addInitScript(()=>sessionStorage.setItem('flurbo.trading.market','original'));
-    await page.goto('https://flurbo.singu.online/portfolio');
+    const legacy=page.locator('.legacy-original');
+    async function openLegacy(){await page.getByText('Earlier experimental holdings',{exact:true}).click();await page.getByText('Earlier demo holdings',{exact:true}).click();}
+    await page.goto('https://flurbo.singu.online/portfolio');await openLegacy();
     await page.getByText('Your shares could not all be checked yet. Refresh to try again.').waitFor();
-    await page.getByRole('button',{name:'Refresh',exact:true}).click();
+    await legacy.getByRole('button',{name:'Refresh',exact:true}).click();
     await page.getByText('Some shares couldn’t be loaded. Refresh to complete your portfolio.').waitFor();
-    await page.getByRole('button',{name:'Refresh',exact:true}).click();
-    await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
+    await legacy.getByRole('button',{name:'Refresh',exact:true}).click();
+    await legacy.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     assert.match(await page.title(), /portfolio/);
     assert.equal(await page.locator('.core-market').count(), 0);
     if (process.env.FLURBO_TEST_SCREENSHOT) await page.screenshot({ path: process.env.FLURBO_TEST_SCREENSHOT, fullPage: true });
     // History is retired. The old route must land on Portfolio without losing holdings.
     await page.goto('https://flurbo.singu.online/history');
-    await page.waitForURL('**/portfolio');
-    await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
+    await page.waitForURL('**/portfolio');await openLegacy();
+    await legacy.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     unavailable = true;
     const beforeFailure = requests;
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await legacy.getByRole('button', { name: 'Refresh', exact: true }).click();
     await page.getByText('Some shares couldn’t be loaded. Refresh to complete your portfolio.').waitFor();
     assert.equal(requests - beforeFailure, 1, 'a failed read is not retried automatically');
     await new Promise(resolve => setTimeout(resolve, 2200));
     assert.equal(requests - beforeFailure, 1, 'persistent failures must stop automatic reads');
     unavailable = false;
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-    await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
+    await legacy.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await legacy.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     assert.equal(await page.getByText('Some shares couldn’t be loaded. Refresh to complete your portfolio.').count(), 0);
-    await page.getByText('Choose a market collection',{exact:true}).click();
-    await page.getByLabel('Collection', { exact: true }).selectOption('learning');
-    await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
+    await page.getByText('Learning experiment holdings',{exact:true}).click();
+    await legacy.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     // Consumer holdings come from verified links; there is no manual address lookup to confuse the account view.
     assert.equal(await page.getByText('Look up another address',{exact:true}).count(),0);
     await page.getByRole('link', { name: 'Portfolio', exact: true }).click();
     // A diagnostic lookup never replaces the account's default linked-wallet view.
-    await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
+    await legacy.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     await page.locator('.portfolio-account-identity').getByText(account,{exact:true}).waitFor();
     assert.equal(await page.getByLabel('Wallet to view').count(),0);
-    await page.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
+    await legacy.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     if (process.env.FLURBO_TEST_SCREENSHOT) await page.screenshot({ path: process.env.FLURBO_TEST_SCREENSHOT.replace('.png', '-mobile.png'), fullPage: true });

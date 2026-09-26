@@ -15,8 +15,9 @@ test('combined shares appear in a fresh browser before history responds, with no
     await page.addInitScript(({login,owner}:any)=>{sessionStorage.setItem('flurbo.trading.market','rehearsal');sessionStorage.setItem('flurbo.view-wallet:'+login,owner);},{login,owner});
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
-      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/account')return route.fulfill({json:{...await f.service.account(url.searchParams.get('wallet')),claimScopes:[1,2,3]}});
       if(path==='/api/rehearsal/history'){await gate;return route.fulfill({status:503,json:{error:'History unavailable'}}).catch(()=>{});}
@@ -54,8 +55,9 @@ test('account portfolio discovers older combinations on refresh without repeated
     await page.addInitScript(({login,owner}:any)=>{sessionStorage.setItem('flurbo.trading.market','pilot');sessionStorage.setItem('flurbo.view-wallet:'+login,owner);},{login,owner});
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
-      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'pilot',label:'Earlier real-event markets',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/pilot/account')return route.fulfill({json:await fixture.service.account(owner)});
       if(path==='/api/pilot/history'){
@@ -97,8 +99,9 @@ test('practice history outage still shows owned shares through the retired histo
     await page.addInitScript(({login,owner}:any)=>{sessionStorage.setItem('flurbo.trading.market','rehearsal');sessionStorage.setItem('flurbo.view-wallet:'+login,owner);},{login,owner});
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;requests.push(path);
-      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/account')return failAccount?route.fulfill({status:503,json:{error:'Account unavailable'}}):route.fulfill({json:await fixture.service.account(url.searchParams.get('wallet'))});
       if(path==='/api/rehearsal/history'){
@@ -139,7 +142,7 @@ const serveDist=async(route:any,path:string)=>{
 };
 const until=async(check:()=>boolean)=>{for(let n=0;!check()&&n<300;n++)await new Promise(r=>setTimeout(r,10));assert.equal(check(),true);};
 
-test('portfolio collection and linked-wallet changes during pending reads cannot be overwritten by late replies',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+test('portfolio pool isolation and linked-wallet changes survive late replies',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const fixture=pilotFixture(Math.floor(Date.now()/1000),4),login='0x'+'99'.repeat(20),second='0x'+'aa'.repeat(20),other='practice-'+'cd'.repeat(20);
@@ -163,10 +166,11 @@ test('portfolio collection and linked-wallet changes during pending reads cannot
     },{login,owner});
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname,namespace=path.split('/')[2];
-      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[
         {namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt},
         {namespace:other,label:'October practice',pool:'0x'+'cd'.repeat(20),closesAt:fixture.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:linked}});
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path.endsWith('/account')){const account=await fixture.service.account(url.searchParams.get('wallet'));return route.fulfill({json:namespace===other?{...account,manifest:{...account.manifest,pool:'0x'+'cd'.repeat(20)}}:account});}
       if(path.endsWith('/history'))return route.fulfill({json:{through:200,target:200,complete:true,logs:[]}});
@@ -183,18 +187,18 @@ test('portfolio collection and linked-wallet changes during pending reads cannot
     await page.goto('https://flurbo.singu.online/portfolio');
     await until(()=>heldOld);
     // Switching collections while the old collection is still reading must show only the new collection.
-    await page.getByText('Choose a market collection',{exact:true}).click();await page.getByLabel('Collection',{exact:true}).selectOption(other);
+    const october=page.getByRole('region',{name:'October practice',exact:true});
     await page.getByRole('cell',{name:'3',exact:true}).waitFor();
     releaseOld();await page.waitForTimeout(300);
-    assert.equal(await page.getByRole('cell',{name:'10',exact:true}).count(),0);
-    assert.equal(await page.getByRole('cell',{name:'3',exact:true}).count(),1);
+    assert.equal(await october.getByRole('cell',{name:'10',exact:true}).count(),0);
+    assert.equal(await october.getByRole('cell',{name:'3',exact:true}).count(),1);
     // A wallet linked while a read is pending replaces the account view; the older read cannot land afterwards.
-    holdLinked=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();await until(()=>heldLinked);
+    holdLinked=true;await october.getByRole('button',{name:'Refresh',exact:true}).click();await until(()=>heldLinked);
     holdLinked=false;linked=[owner,second];await page.evaluate(()=>window.dispatchEvent(new Event('flurbo:wallet-linked')));
     await page.getByRole('cell',{name:'8',exact:true}).waitFor();
     releaseLinked();await page.waitForTimeout(300);
     assert.equal(await page.getByRole('cell',{name:'8',exact:true}).count(),1);
-    assert.equal(await page.getByRole('cell',{name:/^(10|13|18)$/}).count(),0);
+    assert.equal(await october.getByRole('cell',{name:/^(10|13|18)$/}).count(),0);
     assert.ok(await page.evaluate(()=>(window as any).cancelledReads)>=2);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     assert.deepEqual(errors,[]);
@@ -217,8 +221,9 @@ test('portfolio shares one discovery read across linked wallets, bounds reads an
     });
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
-      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets}});
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/history'){scans++;return route.fulfill({json:{through:150,target:200,complete:false,logs:[]}});}
       if(path==='/api/rehearsal/account'||path==='/api/rehearsal/positions'){

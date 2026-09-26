@@ -9,7 +9,7 @@ import {holderAuthorizer} from './holder-challenge.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
-  testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {} } = {}) {
+  previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {} } = {}) {
   const hosted = publicOrigin !== null;
   const links = walletLinks({command:store.command});
   const authorizeHolder=holderAuthorizer(challengeOptions);
@@ -40,12 +40,28 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (current !== minute) { minute = current; requests = 0; }
         if (++requests > 600) { res.setHeader('Retry-After', '60'); return send(res, 429, { error: 'Service busy. Retry shortly.' }); }
       }
-      if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? {...TESTNET, faucet:testFaucet || TESTNET.faucet, flurboFaucet:!!testFaucet} : { environment: 'local_fork', chain_id: 10143 });
+      if (req.method === 'GET' && url.pathname === '/api/preview') return send(res,200,{inviteOnly:!!previewAccess,applicationUrl:previewAccess?.applicationUrl||null});
       if (url.pathname === '/api/account/access' && req.method === 'GET') {
         const login = await store.read(sid, origin);
         if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
         res.setHeader('Set-Cookie', toolsCookie(login, sid));
-        return send(res, 200, {testingTools:isTestingOperator(login, testingOperatorAccount)});
+        return send(res, 200, {testingTools:isTestingOperator(login, testingOperatorAccount),approved:!previewAccess||previewAccess.allows(login)||isTestingOperator(login,testingOperatorAccount),applicationUrl:previewAccess?.applicationUrl||null});
+      }
+      // Guard every app data/action route, including legacy namespaces and RPC.
+      // Published evidence stays readable by counterparties during settlement.
+      const publicEvidence=req.method==='GET'&&!url.search&&/^\/api\/(pilot|rehearsal|practice-[0-9a-f]{40})\/evidence\/0x[0-9a-f]{64}$/.test(url.pathname);
+      if(previewAccess&&!url.pathname.startsWith('/api/auth/')&&!publicEvidence){
+        const login=await store.read(sid,origin);
+        if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
+        if(!previewAccess.allows(login)&&!isTestingOperator(login,testingOperatorAccount))return send(res,403,{code:'INVITE_REQUIRED',error:'Testnet access has not been approved for this Mera account.'});
+      }
+      if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? {...TESTNET, faucet:testFaucet || TESTNET.faucet, flurboFaucet:!!testFaucet} : { environment: 'local_fork', chain_id: 10143 });
+      if(url.pathname==='/api/market-directory'&&req.method==='GET'&&!url.search){
+        const login=await store.read(sid,origin);
+        if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
+        const entries=[...(practiceCollections?.catalog?.collections||[])];
+        if(publishedPilot&&!entries.some(row=>row.pool===publishedPilot.manifest.pool))entries.push({namespace:'pilot',label:'Release milestones',pool:publishedPilot.manifest.pool,closesAt:publishedPilot.manifest.publication.draft.closesAt});
+        return send(res,200,{schema:'flurbo.market-directory.v1',markets:entries});
       }
       if (url.pathname === '/api/evidence-beta' || url.pathname.startsWith('/api/learning/') || ['/api/kuru','/api/kuru-scan'].includes(url.pathname)) {
         const login = await store.read(sid, origin);

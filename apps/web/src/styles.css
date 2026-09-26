@@ -349,3 +349,6 @@ section[id] { scroll-margin-top: 24px; }
   .event-plane-number { font-size: 10px; }
   .auth-switch a { padding-block: 8px; }
 }
+
+.button.button-outline { border:1px solid var(--line); background:transparent; color:var(--forest); }
+.button.button-outline:hover:not(:disabled) { background:var(--ivory-deep); }

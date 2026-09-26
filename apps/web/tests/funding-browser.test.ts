@@ -35,10 +35,10 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
       if(path==='/api/network')return route.fulfill({json:{...TESTNET,flurboFaucet:true}});
-      if(path==='/api/account/access')return route.fulfill({json:{testingTools:false}});
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
-      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'Practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'Practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/rehearsal/markets')return route.fulfill({json:await f.service.markets()});
       if(path==='/api/rpc'){
         const {method,params}=route.request().postDataJSON();
@@ -97,7 +97,7 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     await page.screenshot({path:fileURLToPath(new URL('../../../target/showcase-ui/funding-mobile.png',import.meta.url)),fullPage:true});
     await page.goto('https://flurbo.singu.online/markets');
-    await page.getByRole('heading',{name:'Practice',exact:true}).waitFor();
+    await page.locator('.market-card').first().waitFor();
     assert.equal(await page.getByText('Testing tools',{exact:true}).count(),0);
     await page.goto('https://flurbo.singu.online/rehearsal');
     await page.getByRole('heading',{name:'Operator access only'}).waitFor();

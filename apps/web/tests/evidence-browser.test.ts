@@ -17,7 +17,7 @@ test('evidence review stays read-only, labels unavailable AI and safely renders 
     await page.addInitScript(()=>{(window as any).ethereum={isMetaMask:true,request:()=>{(window as any).walletTouched();throw Error('No signing allowed');}};});
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
-      if(path==='/api/account/access')return route.fulfill({json:{testingTools:true}});
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:true}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:'0x'+'11'.repeat(20),method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/evidence-beta'){
         if(route.request().method()==='GET')return route.fulfill({json:{operator:true,model:'gemini-2.5-flash-lite',aiConfigured:true,events:[{id:'A',question:'Official release question'}]}});

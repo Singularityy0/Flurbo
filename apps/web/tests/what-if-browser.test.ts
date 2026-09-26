@@ -28,9 +28,13 @@ test('What-if stays read-only, replaces pending pairs, expires snapshots and fit
     page.on('pageerror',(error:Error)=>errors.push(error.message));
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
-      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
-      if(path==='/api/account/access')return route.fulfill({json:{testingTools:false}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600_000}}});
+      if(path==='/api/rehearsal/status')return route.fulfill({json:await f.service.status()});
+      if(path==='/api/account/wallets')return route.fulfill({json:{account:owner,wallets:[]}});
+      if(path==='/api/network')return route.fulfill({status:503,json:{error:'Offline fixture'}});
+      if(path==='/api/rehearsal/price-history')return route.fulfill({status:503,json:{error:'Offline fixture'}});
       if(path==='/api/rehearsal/markets')return route.fulfill({json:await f.service.markets()});
       if(path==='/api/rehearsal/analytics'){
         const input=route.request().postDataJSON();requests.push(input);
@@ -41,7 +45,8 @@ test('What-if stays read-only, replaces pending pairs, expires snapshots and fit
       const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
-    await page.goto('https://flurbo.singu.online/markets');
+    await page.goto('https://flurbo.singu.online/markets/rehearsal/0');
+    await page.getByText('Explore how these markets connect',{exact:true}).click();
     const panel=page.locator('.what-if');
     await panel.getByRole('button',{name:'Compare these questions'}).click();
     await panel.getByText('Both Yes, together',{exact:true}).waitFor();

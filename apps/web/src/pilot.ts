@@ -30,7 +30,10 @@ export async function pilotRequest<T>(path:string,input?:unknown,namespace:Pilot
   const response=await fetch('/api/'+namespace+'/'+path,{method:input===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',
     headers:input===undefined?{}:{'Content-Type':'application/json'},body:input===undefined?undefined:JSON.stringify(input),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60_000)]):AbortSignal.timeout(60_000)});
   const result=await response.json();
-  if(!response.ok) throw new Error(result.error || 'Pilot request failed. Refresh before retrying.');
+  if(!response.ok) {
+    if(result.code==='INVITE_REQUIRED'&&typeof window!=='undefined')window.dispatchEvent(new Event('flurbo:access-required'));
+    throw new Error(result.error || 'Pilot request failed. Refresh before retrying.');
+  }
   if(result.manifest&&namespace.startsWith('practice-')&&(result.manifest.pool!=='0x'+namespace.slice(9)||!['rehearsal','ethereum-activity'].includes(result.manifest.publication?.mode)))throw Error('Response belongs to a different collection.');
   return result;
 }

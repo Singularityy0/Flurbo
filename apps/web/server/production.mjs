@@ -7,6 +7,7 @@ import { localApi } from './local-api.mjs';
 import { cookieValue } from './session.mjs';
 import { isTestingOperator, testingPages } from './testing-access.mjs';
 import { hostedConfig } from './network.mjs';
+import {previewAccess} from './preview-access.mjs';
 import { RedisSessionStore, redisCommand } from './redis-session.mjs';
 import { runComparison } from './learning-comparison.mjs';
 import { learningService, learningRpc, loadLearningModel } from './learning-pool.mjs';
@@ -25,7 +26,7 @@ const security = {
 
 export function productionServer(config, store, staticRoot = dist) {
   const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
-    testingOperatorAccount:config.testingOperatorAccount, testFaucet:config.testFaucet, learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
+    previewAccess:config.previewAccess===undefined?previewAccess():config.previewAccess, testingOperatorAccount:config.testingOperatorAccount, testFaucet:config.testFaucet, learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
     learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, rehearsal: config.rehearsal, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions, challengeOptions:config.challengeOptions });
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
@@ -53,7 +54,7 @@ export function productionServer(config, store, staticRoot = dist) {
           res.setHeader('Cache-Control','no-store');
           if (!isTestingOperator(session, config.testingOperatorAccount)) { res.writeHead(404); res.end('Not found'); return; }
         }
-        const page = /^\/markets\/(?:rehearsal|pilot|practice-[0-9a-f]{40})\/[0-3]$/.test(pathname) || ['/', '/docs', '/markets', '/fund', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal', '/evidence'].includes(pathname);
+        const page = /^\/markets\/(?:rehearsal|pilot|practice-[0-9a-f]{40})\/[0-3]$/.test(pathname) || ['/', '/docs', '/markets', '/fund', '/access', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal', '/evidence'].includes(pathname);
         const labPage=['/privacy-lab','/privacy-lab/'].includes(pathname);
         const labAsset=/^\/privacy-lab\/(?:assets\/[a-zA-Z0-9_.-]+|semaphore-8\.(?:wasm|zkey))$/.test(pathname);
         if(labPage||labAsset)res.setHeader('Content-Security-Policy',security['Content-Security-Policy'].replace("script-src 'self'","script-src 'self' 'wasm-unsafe-eval'")+"; worker-src 'self' blob:");

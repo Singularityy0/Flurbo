@@ -19,7 +19,7 @@ test('operator-only pages, assets and actions use the server session, while cons
   let phase=1;
   const service={manifest:{draftHash:'fixture',publication:{draft:{events:[{id:'event-0'}]}}},status:async()=>({snapshot:{timestamp:100},cases:[{phase,challengeUntil:'200',proposal:2}]}),prepare:async(input:any)=>{prepares++;return input;}};
   const namespace='practice-'+'12'.repeat(20);
-  const server=productionServer({origin:'https://flurbo.singu.online',rpcUrl:TESTNET.rpc,pilot:service,rehearsal:service,practiceCollections:{services:new Map([[namespace,service]])},pilotEvidence:{get:async()=>'{"public":true}',put:async()=>({saved:true})}},store,dir);
+  const server=productionServer({previewAccess:null, origin:'https://flurbo.singu.online',rpcUrl:TESTNET.rpc,pilot:service,rehearsal:service,practiceCollections:{services:new Map([[namespace,service]])},pilotEvidence:{get:async()=>'{"public":true}',put:async()=>({saved:true})}},store,dir);
   await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
   const port=(server.address() as any).port;
   const request=(path:string,id='',data?:any):Promise<any>=>new Promise((resolve,reject)=>{

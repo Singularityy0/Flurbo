@@ -11,6 +11,7 @@ test('public docs load directly, navigate by section and fit desktop and mobile 
     const page=await browser.newPage();
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:null}});
       if(path.startsWith('/api/')||path==='/healthz'){unexpected.push(path);return route.fulfill({status:503,json:{error:'Unexpected request'}});}
       const file=path.startsWith('/assets/')?path.slice(1):'index.html';

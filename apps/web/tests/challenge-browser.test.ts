@@ -36,8 +36,8 @@ test('ordinary account challenges from the market page with separate approval, r
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname,api='/api/'+namespace+'/';
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
-      if(path==='/api/account/access')return route.fulfill({json:{testingTools:false}});
-      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:namespace,collections:[{namespace,label:'Challenge fixture',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:namespace,markets:[{namespace,label:'Challenge fixture',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path===api+'status')return route.fulfill({json:await f.service.status(url.searchParams.get('wallet')||undefined)});
       if(path===api+'markets')return route.fulfill({json:await f.service.markets()});

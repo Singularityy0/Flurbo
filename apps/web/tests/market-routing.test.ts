@@ -11,7 +11,7 @@ test('learning reads require login; Mera submissions remain disabled across pool
   const signer = privateKeyToAccount(('0x' + '11'.repeat(32)) as `0x${string}`); // Test fixture only.
   const originalPool = '0x' + '22'.repeat(20);
   const store = { read: async (id: string) => id === 'fixture' ? { address: signer.address.toLowerCase(), method: 'passkey' } : null };
-  const server = productionServer({ origin, rpcUrl: TESTNET.rpc, learningDashboardUrl: 'http://127.0.0.1:18768' }, store);
+  const server = productionServer({previewAccess:null,  origin, rpcUrl: TESTNET.rpc, learningDashboardUrl: 'http://127.0.0.1:18768' }, store);
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = (server.address() as { port: number }).port;
   const originalFetch = globalThis.fetch; const urls: string[] = []; let broadcasts = 0, substituted = false;

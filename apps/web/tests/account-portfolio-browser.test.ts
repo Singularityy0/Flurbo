@@ -13,9 +13,10 @@ test('fresh devices see both linked wallets; market totals and sparse chart rema
       page.on('pageerror',(e:Error)=>errors.push(e.message));
       await page.route('**/*',async(route:any)=>{
         const u=new URL(route.request().url()),p=u.pathname;
+        if(p==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
         if(p==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
         if(p==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner,second]}});
-        if(p==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'October practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+        if(p==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'October practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
         if(p==='/api/rehearsal/account')return route.fulfill({json:await f.service.account(u.searchParams.get('wallet'))});
         if(p==='/api/rehearsal/status')return route.fulfill({json:await f.service.status()});
         if(p==='/api/rehearsal/markets')return route.fulfill({json:await f.service.markets()});

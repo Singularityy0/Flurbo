@@ -94,11 +94,12 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
   // never promises of execution or wallet approvals.
   async function markets() {
     const s=await snapshot(),tag=tagFor(s);
-    const open=s.timestamp<manifest.publication.draft.closesAt && !await read(manifest.pool,pilotPoolAbi,'resolved',[],tag);
+    const resolved=await read(manifest.pool,pilotPoolAbi,'resolved',[],tag);
+    const open=s.timestamp<manifest.publication.draft.closesAt && !resolved;
     const prices=await Promise.all(manifest.publication.draft.events.map(async(_,event)=>({event,
       yes:open?await read(manifest.pool,pilotPoolAbi,'quoteBuy',[2**event,2n,1_000_000n],tag):null,
       no:open?await read(manifest.pool,pilotPoolAbi,'quoteBuy',[2**event,1n,1_000_000n],tag):null})));
-    await stable(s);return json({manifest,snapshot:s,open,prices});
+    await stable(s);return json({manifest,snapshot:s,open,resolved,prices});
   }
   async function prepare(input) {
     if(!input || typeof input!=='object' || Array.isArray(input) || Object.keys(input).some(k=>!['owner','action','event','outcome','evidenceHash','evidenceURI','scope','mask','quantity','slippageBps','authorization','signature'].includes(k))) throw new Error('Invalid action');

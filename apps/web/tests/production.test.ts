@@ -54,7 +54,7 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
   await writeFile(join(directory,'index.html'),'<html>Flurbo</html>');
   const store = new SessionStore();
   const learningReport = {schema:'flurbo.learning-comparison.v1',input:'synthetic',changesExecutablePrices:false};
-  const config = {testingOperatorAccount:signer.address.toLowerCase(),origin,rpcUrl:TESTNET.rpc,learningReport: learningReport as typeof learningReport | null, learningStatus: 'starting', androidAssetLinks: null as object[] | null};
+  const config = {previewAccess:null,testingOperatorAccount:signer.address.toLowerCase(),origin,rpcUrl:TESTNET.rpc,learningReport: learningReport as typeof learningReport | null, learningStatus: 'starting', androidAssetLinks: null as object[] | null};
   const server = productionServer(config,store,directory);
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const port = (server.address() as {port:number}).port;

@@ -30,20 +30,21 @@ export default function Docs() {
           <p className="docs-eyebrow">01 / THE PRODUCT</p>
           <h2 id="overview-title">One shared market. Related predictions.</h2>
           <p>Flurbo brings individual and combined predictions into one shared market, letting you see how the market prices relationships between events.</p>
-          <p>Each question has defined outcomes and resolution rules. A collection groups questions that share a pool. You can take a position on one answer or, where supported, combine answers into a single prediction. Different collections have separate positions and settlement schedules.</p>
-          <div className="docs-note"><strong>This is a testnet preview.</strong><p>Trading uses test AUSD on Monad testnet. Test MON pays network fees. Practice collections have scripted outcomes; other collections use specified external observations. Read the selected market’s rules before trading.</p></div>
+          <p>Each question has defined outcomes and resolution rules. Related questions can share a pool. You can take a position on one answer or, where supported, combine answers into a single prediction. Separate pools have separate positions and schedules. The Markets page brings their questions together; you do not need to choose a collection.</p>
+          <div className="docs-note"><strong>This is a testnet preview.</strong><p>Trading uses test AUSD on Monad testnet. Test MON pays network fees. Practice questions have scripted outcomes; real-event questions use specified external observations. Read the selected market’s rules before trading.</p></div>
         </section>
         <section id="getting-started" aria-labelledby="getting-started-title">
           <p className="docs-eyebrow">02 / YOUR FIRST PREDICTION</p>
           <h2 id="getting-started-title">Getting started</h2>
           <ol className="docs-steps">
             <li><strong>Create your account.</strong> Use a Mera passkey to sign in to Flurbo.</li>
+            <li><strong>Request access.</strong> Open your account page and copy your public Mera address into the application form when applications open. The team approves accounts manually. Return to the same account and select Check access after approval.</li>
             <li><strong>Connect MetaMask.</strong> Choose the wallet you want to trade with and complete the account-linking signature when prompted.</li>
             <li><strong>Get test funds.</strong> Open <Link href="/fund">Get test funds</Link> for the available funding options. You need test MON for gas and test AUSD for purchases. Faucet availability and claim limits apply.</li>
-            <li><strong>Choose a market.</strong> Check the question, collection, close time and resolution rules. Select your answer and number of shares.</li>
+            <li><strong>Choose a market.</strong> Check the question, close time and resolution rules. Select your answer and number of shares.</li>
             <li><strong>Review and confirm.</strong> Check the quoted cost and confirm the requested action in MetaMask. A token approval may be required before the purchase.</li>
           </ol>
-          <p>The markets, funding and portfolio pages require sign-in. These documentation pages are public.</p>
+          <p>The landing page and docs are public. Markets, funding and portfolio require a signed-in, approved Mera account. Creating a passkey does not submit an application. If no application link is available, applications are not open yet.</p>
         </section>
         <section id="accounts" aria-labelledby="accounts-title">
           <p className="docs-eyebrow">03 / IDENTITY AND OWNERSHIP</p>
@@ -65,7 +66,7 @@ export default function Docs() {
         <section id="combinations" aria-labelledby="combinations-title">
           <p className="docs-eyebrow">05 / MORE THAN ONE ANSWER</p>
           <h2 id="combinations-title">Combined predictions</h2>
-          <p>A combined prediction is one position with a rule covering multiple answers. It is different from purchasing a separate position in each event. The current interface supports combinations of up to three events where the selected collection and ticket allow them.</p>
+          <p>A combined prediction is one position with a rule covering multiple answers. It is different from purchasing a separate position in each event. The current interface supports combinations of up to three events where the selected pool and ticket allow them. Combinations cannot span different pools.</p>
           <div className="docs-comparison">
             <div><h3>All selected answers (AND)</h3><p>The claim wins only when every selected answer is correct. “A Yes AND B Yes” requires both A and B to resolve Yes.</p></div>
             <div><h3>Any selected answer (OR)</h3><p>Where offered, the claim wins when at least one selected answer is correct. It pays once per share, even if several answers are correct.</p></div>
@@ -89,12 +90,12 @@ export default function Docs() {
         <section id="settlement" aria-labelledby="settlement-title">
           <p className="docs-eyebrow">07 / FROM OUTCOME TO PAYOUT</p>
           <h2 id="settlement-title">Settlement and payouts</h2>
-          <p>Trading closes at the time specified by the market. Resolution follows the observation window and the collection’s published deadlines. A closed market is not necessarily settled.</p>
+          <p>Trading closes at the time specified by the market. Resolution follows the observation window and the pool’s published deadlines. A closed market is not necessarily settled.</p>
           <ol className="docs-steps">
             <li><strong>An answer is proposed.</strong> After the observation window, an asserter can post Yes, No or VOID with a test AUSD bond and an evidence reference.</li>
             <li><strong>The answer can be challenged.</strong> A challenge within the deadline sends the disputed outcome to the configured reviewer panel. Current testnet panels use operator-controlled wallets and a two-vote quorum.</li>
             <li><strong>The outcome is finalized.</strong> An uncontested answer can finalize after its challenge window. A missing assertion or a dispute that times out without the required votes follows the resolver’s VOID path.</li>
-            <li><strong>Results reach the pool.</strong> Once all underlying events in the collection are finalized, their outcomes are delivered to the pool. Individual and combined payouts follow from those answers.</li>
+            <li><strong>Results reach the pool.</strong> Once all underlying events in the same pool are finalized, their outcomes are delivered to the pool. Individual and combined payouts follow from those answers.</li>
             <li><strong>You collect the payout.</strong> Eligible shares can be redeemed using their owning MetaMask wallet. Settlement does not automatically send winnings to every holder. Redemption requires a transaction and test MON for gas.</li>
           </ol>
           <h3>What happens with VOID?</h3>
@@ -104,15 +105,17 @@ export default function Docs() {
         <section id="portfolio" aria-labelledby="portfolio-title">
           <p className="docs-eyebrow">08 / KEEPING TRACK</p>
           <h2 id="portfolio-title">Portfolio and payouts</h2>
-          <p>Your <Link href="/portfolio">portfolio</Link> brings together the shares associated with your linked trading wallets under your Flurbo account. Choose the relevant collection to see its positions, including supported combined predictions.</p>
+          <p>Your <Link href="/portfolio">portfolio</Link> brings together the shares associated with your linked trading wallets under your Flurbo account. Positions from the published markets load together, including supported combined predictions. Labels distinguish older practice questions that share the same wording.</p>
           <p>Results and payout collection live in Portfolio. Select an eligible holding, connect its owning MetaMask wallet and confirm the collection. Holdings stay combined under your Mera account; each wallet receives its own payout.</p>
-          <p>Activity is indexed in the background. An approval is not a completed purchase. If a transaction is pending, check its confirmation before submitting again. If shares are missing, check the collection and linked wallet, then refresh.</p>
+          <p>Activity is indexed in the background. An approval is not a completed purchase. If a transaction is pending, check its confirmation before submitting again. If shares are missing, check that the owning wallet is linked, then refresh.</p>
         </section>
         <section id="preview" aria-labelledby="preview-title">
           <p className="docs-eyebrow">09 / CURRENT SCOPE</p>
           <h2 id="preview-title">Preview limitations</h2>
           <p>Flurbo is available for supervised testnet use. Wallet transactions and positions are public on chain. Account-level organization does not conceal on-chain activity.</p>
-          <p>The current preview does not provide an audit assurance or independent adjudication. Automated resolution steps should not be understood as AI judgment. Features and availability differ by collection; the published rules and live transaction state govern the selected market.</p>
+          <p>The current preview does not provide an audit assurance or independent adjudication. Automated resolution steps should not be understood as AI judgment. Features and availability differ by market; the published rules and live transaction state govern the selected market.</p>
+          <p>Invitations control access to the hosted app. They do not make on-chain contracts permissioned or hide trades. The operator can approve or remove app access; existing on-chain balances and contract rights are not changed by that decision.</p>
+          <p>Each market displays its actual schedule. Questions that share an existing pool share its trading close, and payouts wait for all underlying outcomes. Different pools can have different schedules. A new question and deadline must be published before it can appear as a tradable market.</p>
           <p>This guide describes the public product experience. For the exact question, evidence requirements, deadlines and payout conditions, read the rules linked from the individual market.</p>
           <Link href="/markets" className="docs-explore">Explore markets ↗</Link>
         </section>

@@ -49,9 +49,9 @@ test('portfolio alone collects owned payouts, preserves combined totals and reco
     await page.route('**/*',async(route:any)=>{
       const u=new URL(route.request().url()),p=u.pathname,api='/api/rehearsal/';
       if(p==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
-      if(p==='/api/account/access')return route.fulfill({json:{testingTools:false}});
+      if(p==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(p==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner,second,empty]}});
-      if(p==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:'rehearsal',collections:[{namespace:'rehearsal',label:'Settled round',pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(p==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'Settled round',pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(p===api+'status'){const s=await service.status(u.searchParams.get('wallet')||undefined);s.cases.forEach((c:any,i:number)=>{c.phase=3;c.result=i===3?3:2;});s.resolved=true;s.delivered=true;return route.fulfill({json:s});}
       if(p===api+'account')return route.fulfill({json:{...await service.account(u.searchParams.get('wallet')),claimScopes:[3]}});
       if(p===api+'history')return route.fulfill({json:{complete:true,logs:[]}});

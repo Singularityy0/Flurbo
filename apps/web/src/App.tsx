@@ -11,6 +11,8 @@ import Markets from './pages/Markets';
 import EvidenceReview from './pages/EvidenceReview';
 import FundingPage from './pages/FundingPage';
 import {useTestingAccess} from './auth/testing-access';
+import {usePreviewAccess} from './auth/preview-access';
+import AccessPage from './pages/AccessPage';
 
 export const brand = "flurbo";
 
@@ -62,14 +64,12 @@ function Header() {
           onClick={(event) => {
             if ((event.target as HTMLElement).closest("a")) setOpen(false);
           }}>
-          {isHome || !state.address ? <><a href="/#how-it-works">How it works</a>
-          <a href="/#the-idea">The idea</a>
-          <a href="/#faq">FAQ</a></> : <><Link href="/markets">Markets</Link><Link href="/portfolio">Portfolio</Link><Link href="/fund">Get test funds</Link></>}
+          {state.address ? <><Link href="/markets">Markets</Link><Link href="/portfolio">Portfolio</Link><Link href="/access">Your account</Link></> : <><a href="/#how-it-works">How it works</a><a href="/#the-idea">The idea</a></>}
           <Link href="/docs" aria-current={location === '/docs' ? 'page' : undefined}>Docs</Link>
           <span className="nav-rule" aria-hidden="true" />
           {state.address ? (isHome ? <Link href="/markets" className="nav-cta">Explore markets <ArrowUpRight size={15} strokeWidth={1.8} /></Link> : <Link href="/" className="nav-login">About Flurbo</Link>) : <>
             <Link href="/login" className="nav-login">Sign in</Link>
-            <Link href="/signup" className="nav-cta">Create an account <ArrowUpRight size={15} strokeWidth={1.8} /></Link>
+            <Link href="/signup" className="nav-cta">Get early access <ArrowUpRight size={15} strokeWidth={1.8} /></Link>
           </>}
         </nav>
         <button ref={menuButton} className="mobile-menu" type="button" aria-label={open ? "Close navigation" : "Open navigation"} aria-controls="main-nav" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
@@ -99,6 +99,7 @@ function AuthShell({ mode }: { mode: "login" | "signup" | "account" }) {
 }
 
 function AccountRoute() {
+  const preview = usePreviewAccess();
   const testingAccess = useTestingAccess();
   const [location] = useLocation();
   const { controller, state } = useAuth();
@@ -119,7 +120,7 @@ function AccountRoute() {
   // server-backed login has been restored. Remembered addresses are not login.
   return <AppShell>{state.restoring
     ? <main id="main" tabIndex={-1} className="auth-page"><p role="status">Checking your session...</p></main>
-    : authenticated ? (location==='/fund'?<FundingPage/>:['/account','/kuru','/events','/rehearsal','/evidence'].includes(location)&&!testingAccess?<main id="main" className="auth-page"><h1>Operator access only</h1><Link href="/markets">Back to markets</Link></main>:location==='/evidence'?<EvidenceReview/>:(location.startsWith('/markets/')||['/markets','/portfolio'].includes(location)) ? <Markets /> : <Workspace />) : null}</AppShell>;
+    : authenticated ? ((!preview.access?.approved || location==='/access')?<AccessPage {...preview}/>:location==='/fund'?<FundingPage/>:['/account','/kuru','/events','/rehearsal','/evidence'].includes(location)&&!testingAccess?<main id="main" className="auth-page"><h1>Operator access only</h1><Link href="/markets">Back to markets</Link></main>:location==='/evidence'?<EvidenceReview/>:(location.startsWith('/markets/')||['/markets','/portfolio'].includes(location)) ? <Markets /> : <Workspace />) : null}</AppShell>;
 }
 
 export default function App() {
@@ -129,6 +130,7 @@ export default function App() {
     document.title = location === "/login" ? "Sign in | flurbo"
       : location === "/signup" ? "Create an account | flurbo"
       : location.startsWith("/markets") ? "Markets | flurbo"
+      : location === "/access" ? "Your access | flurbo"
       : location === "/fund" ? "Get test funds | flurbo"
       : location === "/docs" ? "Documentation | flurbo"
       : location === "/account" ? "Your account | flurbo"
@@ -157,6 +159,7 @@ export default function App() {
       <Route path="/markets" component={AccountRoute} />
       <Route path="/markets/:collection/:event" component={AccountRoute} />
       <Route path="/fund" component={AccountRoute} />
+      <Route path="/access" component={AccountRoute} />
       <Route path="/account" component={AccountRoute} />
       <Route path="/portfolio" component={AccountRoute} />
       <Route path="/history"><Redirect to="/portfolio" replace /></Route>

@@ -71,7 +71,7 @@ test('live reports archive source, gate AI by durable quota and never expose sec
 test('evidence endpoint requires Mera login, configured operator and same origin before source/model requests',async()=>{
   const f=fixture(),operator='0x'+'33'.repeat(20);let calls=0;
   const store={command:f.command,read:async sid=>sid?{address:sid==='operator'?operator:'0x'+'44'.repeat(20),method:'passkey'}:null};
-  const server=productionServer({testingOperatorAccount:operator,origin:'https://flurbo.singu.online',rpcUrl:'https://testnet-rpc.monad.xyz',pilot:{manifest:f.manifest},
+  const server=productionServer({previewAccess:null, testingOperatorAccount:operator,origin:'https://flurbo.singu.online',rpcUrl:'https://testnet-rpc.monad.xyz',pilot:{manifest:f.manifest},
     evidenceOptions:{env:{FLURBO_EVIDENCE_OPERATOR:operator},now:()=>time,fetcher:async()=>{calls++;return new Response(payload());}}},store);
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const port=server.address().port;

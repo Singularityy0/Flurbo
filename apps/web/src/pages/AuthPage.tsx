@@ -14,12 +14,12 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
   const [copyStatus, setCopyStatus] = useState("");
   const isLogin = mode !== "signup";
   const active = !!state.address;
-  useEffect(() => { if (active && !state.busy) navigate('/markets'); }, [active, state.busy, navigate]);
+  useEffect(() => { if (active && !state.busy) navigate('/access'); }, [active, state.busy, navigate]);
   const localHref = policy.localUrl ? new URL(isLogin ? "/login" : "/signup", policy.localUrl).href : undefined;
 
   async function authenticate(chooseAnother = false) {
     const succeeded = await controller.authenticate(isLogin ? "login" : "signup", name, chooseAnother, allowNew);
-    if (succeeded) navigate("/markets");
+    if (succeeded) navigate("/access");
   }
   function submit(event: FormEvent) { event.preventDefault(); void authenticate(); }
   async function copyAddress() {
@@ -47,10 +47,10 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
             <div className="auth-panel-brand"><Logo /><span>{policy.local ? "local test" : "passkey account"}</span></div>
             <div className="unavailable-icon"><LockKeyhole size={21} strokeWidth={1.6} /></div>
             <p className="eyebrow">{active ? "Signed in with Mera" : "Powered by Mera"}</p>
-            <h2>{active ? "You're in." : isLogin ? "Sign in with your passkey." : "One passkey. Your account."}</h2>
+            <h2>{active ? "Account created." : isLogin ? "Sign in with your passkey." : "One passkey. Your account."}</h2>
             {policy.local && <div className="honesty-note">Local test account only. This passkey will not work on flurbo.singu.online. Do not send real funds to this account.</div>}
             {active ? <>
-              <p className="auth-panel-copy">Your account is ready. Opening your workspace.</p>
+              <p className="auth-panel-copy">Your account is ready. Checking your testnet access.</p>
               <div className="account-address"><span className="eyebrow">Mera account address</span><code>{state.address}</code></div>
               <button type="button" className="text-link auth-copy" onClick={() => void copyAddress()}><Copy size={15} /> Copy address</button>
               <p className="auth-feedback" role="status">{copyStatus}</p>
@@ -75,7 +75,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
                 {isLogin && state.remembered && <button type="button" className="text-link auth-alternative" disabled={state.busy} onClick={() => void authenticate(true)}>Choose another passkey</button>}
                 {state.busy && <button type="button" className="text-link auth-alternative" onClick={() => controller.signOut("Sign-in cancelled here. Dismiss any remaining device prompt before trying again.")}>Cancel</button>}
               </form>}
-              <p className="auth-help">Your Mera passkey is your Flurbo login. After signing in, connect MetaMask to trade. Mera is for account access only.</p>
+              <p className="auth-help">Your Mera passkey is your Flurbo login. Testnet access requires approval. Once approved, connect MetaMask to trade.</p>
               {state.error && <p className="auth-error" role="alert">{state.error}</p>}
               <div className="auth-switch">{isLogin ? "New to Flurbo?" : "Already have a passkey?"} <Link href={isLogin ? "/signup" : "/login"}>{isLogin ? "Create an account" : "Sign in"} <ArrowUpRight size={14} /></Link></div>
             </>}

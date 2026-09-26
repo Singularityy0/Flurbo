@@ -37,7 +37,7 @@ for(const namespace of ['pilot','rehearsal'] as const) test(namespace+' flow kee
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
       if(path==='/api/account/wallets')return route.fulfill({json:{account:loginAddress,wallets:[owner]}});
-      if(path==='/api/account/access')return route.fulfill({json:{testingTools:true}});
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:true}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:login?{address:loginAddress,method:'passkey',expiresAt:Date.now()+3600_000}:null}});
       if(path==='/api/'+namespace+'/status'){reads++;return route.fulfill({json:await f.service.status(url.searchParams.get('wallet')||undefined)});}
       if(path==='/api/'+namespace+'/prepare')return route.fulfill({json:await f.service.prepare(route.request().postDataJSON())});

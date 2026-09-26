@@ -2,10 +2,12 @@ import {useEffect,useState} from 'react';
 import {linkedWallets,linkTradingWallet} from '../wallet-links';
 import {discoverWallets,type BrowserWallet} from '../auth/wallet-choice';
 import AccountHoldings from './AccountHoldings';
+import type {MarketGroup} from '../market-directory';
 
-export default function AccountPortfolio({account,namespace}:{account:string;namespace:string}) {
+export default function AccountPortfolio({account,namespace,groups}:{account:string;namespace:string;groups?:MarketGroup[]}) {
   const [wallets,setWallets]=useState<string[]|null>(null),[error,setError]=useState(''),[tick,setTick]=useState(0),[busy,setBusy]=useState(false);
   const [providers,setProviders]=useState<BrowserWallet[]>([]);
+  const [legacy,setLegacy]=useState(false);
   useEffect(()=>discoverWallets(w=>setProviders(old=>old.some(x=>x.provider===w.provider)?old:[...old,w])),[]);
   useEffect(()=>{const changed=()=>setTick(n=>n+1);window.addEventListener('flurbo:wallet-linked',changed);return()=>window.removeEventListener('flurbo:wallet-linked',changed);},[]);
   useEffect(()=>{const c=new AbortController();setError('');setWallets(null);
@@ -23,6 +25,11 @@ export default function AccountPortfolio({account,namespace}:{account:string;nam
     {error&&<p role="alert">{error} <button className="button button-outline" onClick={()=>setTick(n=>n+1)}>Retry</button></p>}
     {!wallets&&!error&&<p role="status">Loading your portfolio…</p>}
     {wallets?.length===0&&<p>Connect MetaMask to add your trading shares. <button className="button button-outline" disabled={busy} onClick={()=>void connect()}>{busy?'Check MetaMask…':'Connect MetaMask'}</button></p>}
-    {wallets&&<AccountHoldings key={account+namespace} account={account} wallets={wallets} namespace={namespace}/>}
+    {wallets&&(groups?<>{groups.map(group=><section className="portfolio-market-group" key={group.namespace} aria-label={group.label}><header><span className="eyebrow">{group.label}</span><p>Trading closed or closes {new Date(group.closesAt*1000).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</p></header><AccountHoldings account={account} wallets={wallets} namespace={group.namespace}/></section>)}<details className="portfolio-legacy" onToggle={e=>setLegacy(e.currentTarget.open)}><summary>Earlier experimental holdings</summary>{legacy&&<><EarlierHoldings account={account} wallets={wallets} namespace="original" label="Earlier demo holdings"/><EarlierHoldings account={account} wallets={wallets} namespace="learning" label="Learning experiment holdings"/></>}</details></>:<AccountHoldings key={account+namespace} account={account} wallets={wallets} namespace={namespace}/>)}
   </section>;
+}
+
+function EarlierHoldings({account,wallets,namespace,label}:{account:string;wallets:string[];namespace:string;label:string}){
+  const [open,setOpen]=useState(false);
+  return <details className={'legacy-'+namespace} onToggle={e=>setOpen(e.currentTarget.open)}><summary>{label}</summary>{open&&<AccountHoldings account={account} wallets={wallets} namespace={namespace}/>}</details>;
 }

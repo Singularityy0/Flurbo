@@ -7,6 +7,51 @@ Garamond, warm ivory, forest green, lime, mint/lilac event cards and editorial
 sections. This app runs independently of Manus hosting; it includes no Manus
 badge, platform runtime, analytics script or account dependency.
 
+## Invite-based testnet hosting
+
+The hosted app requires a verified Mera session and account approval. Landing,
+docs and authentication remain public. Published assertion evidence remains
+readable without an invitation so counterparties can inspect it. Public chain
+data is not hidden by this gate. No contract permissions change.
+
+Set these **Render environment variables**, not GitHub Actions variables:
+
+- `FLURBO_TESTNET_APPROVED_ACCOUNTS`: comma-separated public **Mera account**
+  addresses, not MetaMask trading addresses. Empty means no invited accounts.
+  The existing verified testing-operator account retains staff access.
+- `FLURBO_TESTNET_APPLICATION_URL`: your HTTPS Google Form URL, or a single
+  `mailto:address@example.com`. Leave unset until ready. The page then says
+  applications are not open and does not show a broken application button.
+
+Applicants create a passkey, copy their Mera address from `/access`, and submit
+it with their contact email through your form. Do not ask for seeds, private
+keys, passkey exports or biometric data. Submission does not grant access or
+send an automatic approval email. Review applications, append accepted Mera
+addresses to the environment variable and redeploy. Tell accepted testers to
+return with the same passkey and select **Check access**. Removing an address
+also takes effect after redeploy, including for existing sessions.
+
+Before deploying this gate, include existing testers who need to manage
+positions. Approval removal blocks the hosted market and payout pages; it
+does not move funds or revoke on-chain ownership. No monitoring or resolution
+worker settings need to change for this release.
+
+`/markets` now lists all configured pool questions, with status filters and
+individual deep links. There is no consumer collection selector. Keep the
+existing deployment manifests registered so old links, holdings and redemption
+remain available. `FLURBO_PRACTICE_COLLECTIONS_JSON` is still internal deployment
+configuration, not a user-facing selection. Its existing limit is eight added
+pools plus the legacy rehearsal; the separately published pilot is also listed.
+This release does not create markets or change contract deadlines. Existing
+shared-pool questions share their trading close, and all base outcomes must be
+delivered before redemption. Different pools may have different schedules.
+
+Market reads are limited to two pools at a time in the directory. Failure of
+one does not hide the others. Closed/settled cards do not invent live buy prices.
+Combinations and What-if stay within their originating pool. Local development
+uses the existing unrestricted fixture API; the production server denies
+unapproved accounts by default. Approval is checked on every app API request.
+
 ## Run locally
 
 From the repository root (PowerShell or Git Bash):

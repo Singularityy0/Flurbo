@@ -14,7 +14,7 @@ import { authPolicy } from '../src/auth/policy.ts';
 test('pilot endpoints require Mera login; public evidence remains readable; raw submission is disabled',async()=>{
   const signer=privateKeyToAccount(('0x'+'11'.repeat(32)) as `0x${string}`),f=pilotFixture(),origin='https://flurbo.singu.online';
   const store={read:async(id:string)=>id==='fixture'?{address:signer.address.toLowerCase(),method:'passkey'}:null};
-  const server=productionServer({origin,rpcUrl:TESTNET.rpc,pilot:f.service,pilotEvidence:{get:async()=>'{"public":true}'}},store);
+  const server=productionServer({previewAccess:null, origin,rpcUrl:TESTNET.rpc,pilot:f.service,pilotEvidence:{get:async()=>'{"public":true}'}},store);
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const port=(server.address() as {port:number}).port,original=globalThis.fetch;let writes=0;
   globalThis.fetch=async()=>{writes++;return Response.json({result:hash});};
@@ -55,7 +55,7 @@ test('rehearsal API is authenticated and cannot sign for the official pool',asyn
   const namespace='practice-'+'bb'.repeat(20), archivedPool=('0x'+'bb'.repeat(20)) as `0x${string}`;
   const archived={...rehearsal,manifest:{...manifest,pool:archivedPool},status:async()=>({pool:archivedPool})};
   const practiceCollections={services:new Map([[namespace,archived]]),catalog:{active:namespace}};
-  const server=productionServer({origin,rpcUrl:TESTNET.rpc,pilot:f.service,rehearsal,practiceCollections},store);
+  const server=productionServer({previewAccess:null, origin,rpcUrl:TESTNET.rpc,pilot:f.service,rehearsal,practiceCollections},store);
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const port=(server.address() as {port:number}).port,original=globalThis.fetch;let writes=0;
   globalThis.fetch=async()=>{writes++;return Response.json({result:hash});};

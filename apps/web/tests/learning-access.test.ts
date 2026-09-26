@@ -17,7 +17,7 @@ test('learning status requires Mera login and proposal preparation requires the 
   }
   const adminCookie = await login(admin), visitorCookie = await login(visitor);
   let reads = 0, preparations = 0;
-  const server = productionServer({ origin, rpcUrl: 'https://testnet-rpc.monad.xyz',
+  const server = productionServer({previewAccess:null,  origin, rpcUrl: 'https://testnet-rpc.monad.xyz',
     testingOperatorAccount: admin.address.toLowerCase(), learningOperatorAccount: admin.address.toLowerCase(), learningPool: {
       async status() { reads++; return { schema: 'flurbo.learning-pool.v1' }; },
       async prepare() { preparations++; return { schema: 'flurbo.learning-review.v1' }; },

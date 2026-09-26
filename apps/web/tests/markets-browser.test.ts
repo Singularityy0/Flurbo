@@ -50,10 +50,11 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
       if(path.endsWith('/history'))historyReads++;
-      if(path==='/api/practice-collections')return route.fulfill({json:{schema:'flurbo.practice-collections.v1',active:namespace,collections:[{namespace,label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:namespace,markets:[{namespace,label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:loginAddress,wallets:linked?[owner]:[]}});
       if(path==='/api/account/wallets/challenge'){assert.equal(route.request().postDataJSON().wallet,owner);return route.fulfill({json:{id:'fixture-proof',message:'Link this MetaMask wallet to your Flurbo account; no transaction.'}});}
       if(path==='/api/account/wallets/verify'){assert.equal(route.request().postDataJSON().id,'fixture-proof');linked=true;return route.fulfill({json:{account:loginAddress,wallets:[owner]}});}
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:login?{address:loginAddress,method:'passkey',expiresAt:Date.now()+3600_000}:null}});
       if(path==='/api/'+namespace+'/markets')return route.fulfill({json:await f.service.markets()});
       if(path==='/api/'+namespace+'/price-history'){
@@ -76,11 +77,11 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
     await page.goto('https://flurbo.singu.online/login');
-    await page.waitForURL('**/markets');
+    await page.waitForURL('**/access');await page.getByRole('link',{name:'Explore markets',exact:true}).click();await page.waitForURL('**/markets');
     await page.getByRole('heading',{name:'Will the new cafe open?',exact:true}).waitFor();
     assert.equal(await page.locator('.market-card').count(),4);
     if(process.env.FLURBO_TEST_SCREENSHOT)await page.screenshot({path:process.env.FLURBO_TEST_SCREENSHOT,fullPage:true});
-    await page.getByRole('button',{name:'No: Will the concert sell out?',exact:true}).click();
+    await page.getByRole('link',{name:'No: Will the concert sell out?',exact:true}).click();
     assert.equal(new URL(page.url()).pathname,'/markets/'+namespace+'/1');
     assert.equal(await page.locator('.market-card').count(),0);
     await page.getByRole('region',{name:'Settlement timeline'}).waitFor();
