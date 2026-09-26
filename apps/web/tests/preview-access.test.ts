@@ -22,6 +22,7 @@ test('invite configuration denies by default, validates inputs, and approves onl
 
 test('hosted invite checks cover every app route, preserve evidence and auth, and never trust request addresses',async()=>{
   const fixture=pilotFixture();
+  fixture.service.payouts={refresh:async()=>({complete:true,logs:[]})};
   let policy=previewAccess({FLURBO_TESTNET_APPROVED_ACCOUNTS:account});
   const store={read:async(id:string)=>id==='approved'?{address:account,method:'passkey'}:id==='pending'?{address:other,method:'passkey'}:id==='operator'?{address:DEFAULT_TESTING_OPERATOR,method:'passkey'}:id==='wallet'?{address:account,method:'wallet'}:null};
   const ns='practice-'+fixture.manifest.pool.slice(2);
@@ -43,8 +44,10 @@ test('hosted invite checks cover every app route, preserve evidence and auth, an
     }
     for(const namespace of ['pilot','rehearsal',ns]){
       for(const endpoint of ['markets','status','price-history'])assert.equal((await request('/api/'+namespace+'/'+endpoint,'pending')).status,403);
-      for(const endpoint of ['prepare','positions','analytics','history','challenge-eligibility','rpc','evidence'])assert.equal((await request('/api/'+namespace+'/'+endpoint,'pending',{owner:account,approved:true})).status,403);
+      for(const endpoint of ['prepare','positions','analytics','history','collected-payouts','challenge-eligibility','rpc','evidence'])assert.equal((await request('/api/'+namespace+'/'+endpoint,'pending',{owner:account,approved:true})).status,403);
       assert.equal((await request('/api/'+namespace+'/markets','approved')).status,200);
+      assert.equal((await request('/api/'+namespace+'/collected-payouts','approved',{})).status,200);
+      assert.equal((await request('/api/'+namespace+'/collected-payouts','',{})).status,401);
       assert.equal((await request('/api/'+namespace+'/markets','wallet')).status,401);
       assert.equal((await request('/api/'+namespace+'/evidence/0x'+'ab'.repeat(32))).status,200);
     }

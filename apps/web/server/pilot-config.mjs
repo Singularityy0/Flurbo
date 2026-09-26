@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { pilotService, pilotRpc } from './pilot.mjs';
 import { pilotIndex } from './pilot-index.mjs';
+import { payoutIndex } from './payout-index.mjs';
 import { pairAnalytics } from './pair-analytics.mjs';
 import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
 
@@ -15,6 +16,7 @@ export async function configurePilot({env=process.env,rpcUrl,command,read=readFi
   const service=pilotService({manifest:JSON.parse(raw),rpc:pilotRpc(rpcUrl)});
   if(['rehearsal','ethereum-activity'].includes(service.manifest.publication.mode))throw new Error('New collections cannot replace the original pilot');
   service.index=pilotIndex({manifest:service.manifest,rpc:pilotRpc(rpcUrl),command});
+  service.payouts=payoutIndex({manifest:service.manifest,rpc:pilotRpc(rpcUrl),command});
   service.analytics=pairAnalytics({service,rpc:pilotRpc(rpcUrl)});
   return service;
 }
@@ -25,6 +27,7 @@ export async function configureRehearsal({env=process.env,rpcUrl,command}) {
   if(manifest.publication?.mode!=='rehearsal'||manifest.publication.draft?.title!=='Public rehearsal: scripted settlement checks')throw new Error('Verified scripted rehearsal required');
   const service=pilotService({manifest,rpc:pilotRpc(rpcUrl)});
   service.index=pilotIndex({manifest,rpc:pilotRpc(rpcUrl),command});
+  service.payouts=payoutIndex({manifest:service.manifest,rpc:pilotRpc(rpcUrl),command});
   service.analytics=pairAnalytics({service,rpc:pilotRpc(rpcUrl)});
   return service;
 }
@@ -35,6 +38,7 @@ export async function configureCollection({manifest,rpcUrl,command}){
   validateActivityDraft(manifest.publication.draft);
   const service=pilotService({manifest,rpc:pilotRpc(rpcUrl)});
   service.index=pilotIndex({manifest,rpc:pilotRpc(rpcUrl),command});
+  service.payouts=payoutIndex({manifest:service.manifest,rpc:pilotRpc(rpcUrl),command});
   service.analytics=pairAnalytics({service,rpc:pilotRpc(rpcUrl)});
   return service;
 }

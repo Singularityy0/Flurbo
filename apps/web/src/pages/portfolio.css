@@ -9,7 +9,7 @@
 .portfolio-performance { border:1px solid var(--line); border-radius:20px; padding:24px; margin:20px 0 32px; background:rgba(255,255,255,.3); }
 .portfolio-performance .portfolio-section-heading { margin:0 0 20px; }
 .portfolio-performance .eyebrow { display:block; margin-bottom:10px; }
-.portfolio-chart-empty { position:relative; display:flex; min-height:190px; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; gap:12px; }
+.portfolio-chart-empty { display:flex; flex-direction:column; padding:8px 0 20px; gap:8px; }
 .portfolio-chart-empty p,.portfolio-chart-empty small { position:relative; background:var(--ivory); padding:6px 10px; font-size:13px; line-height:1.6; max-width:440px; }
 .portfolio-chart-empty small { color:var(--ink-soft); font-size:12px; }
 .portfolio-chart-grid { position:absolute; inset:10px 0; background:repeating-linear-gradient(to bottom,transparent 0,transparent 49px,var(--line) 50px,transparent 51px); opacity:.6; }
@@ -103,6 +103,17 @@
 .portfolio-table strong { display: block; font-size: 15px; font-weight: 500; line-height: 1.6; }
 .portfolio-table small { display: block; font-size: 10px; color: var(--ink-soft); margin-top: 6px; }
 .portfolio-table a { white-space: nowrap; }
+.unified-portfolio .unified-holdings table { table-layout:fixed; }
+.unified-portfolio .unified-holdings th:first-child { width:62%; }
+.unified-portfolio .unified-holdings th:nth-child(2) { width:12%; }
+.unified-portfolio .portfolio-table td:first-child { min-width:0; max-width:none; }
+.unified-portfolio .portfolio-table td:first-child a { white-space:normal; overflow-wrap:anywhere; }
+.portfolio-collected-link { display:block; margin-top:10px; background:none; border:0; padding:0; color:var(--forest); text-decoration:underline; font-size:12px; cursor:pointer; }
+.portfolio-archive-link { display:inline-block; margin-top:30px; font-size:12px; color:var(--ink-soft); }
+.portfolio-account-identity { padding:12px 0; border:0; background:none; margin:12px 0 20px; }
+.portfolio-summary-grid article { padding:18px 20px; }
+.portfolio-tabs { overflow-x:auto; }
+.portfolio-tabs button { white-space:nowrap; }
 .portfolio-tag { display: inline-block; font-size: 10px; border-radius: 20px; background: #e8ecd9; padding: 5px 9px; margin-bottom: 5px; white-space: nowrap; }
 .portfolio-empty { padding: 52px 24px; text-align: center; border: 1px solid var(--line); background: rgba(255,255,255,.3); }
 .portfolio-empty > svg { margin: 0 auto 20px; color: var(--ink-soft); }
@@ -120,4 +131,12 @@
 @media(max-width:600px) {
  .unified-portfolio .unified-holdings td { border:0; padding:0; min-width:0; max-width:none; }
  .unified-portfolio .unified-holdings tr:first-child { border-top:0; }
+ .unified-portfolio .portfolio-summary-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+ .unified-portfolio .portfolio-summary-grid article { display:flex; flex-direction:column; align-items:flex-start; gap:8px; padding:14px 10px; border-radius:12px; }
+ .unified-portfolio .portfolio-summary-grid article>span { min-height:32px; font-size:11px; line-height:1.4; }
+ .unified-portfolio .portfolio-summary-grid strong { font-size:21px; text-align:left; }
+ .unified-portfolio .portfolio-summary-grid small,.portfolio-collected-link { font-size:10px; }
+ .portfolio-account-identity p { font-size:12px; }
+ .portfolio-tabs { gap:0; justify-content:space-between; }
+ .portfolio-tabs button { font-size:12px; padding:16px 0; }
 }

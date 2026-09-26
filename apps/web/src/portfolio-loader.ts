@@ -5,7 +5,7 @@ import type {MarketGroup} from './market-directory';
 import type {ActivityLog} from './portfolio-performance';
 
 export type HistoryRead={complete:boolean;through?:number;target?:number;logs:ActivityLog[]};
-export type PoolRead={group:MarketGroup;manifest?:PilotState['manifest'];owners:Record<string,AccountHolding[]>;blocks:Record<string,string>;holdingsComplete:boolean;history?:HistoryRead;error?:string;historyError?:boolean};
+export type PoolRead={group:MarketGroup;manifest?:PilotState['manifest'];owners:Record<string,AccountHolding[]>;blocks:Record<string,string>;holdingsComplete:boolean;history?:HistoryRead;payouts?:HistoryRead;payoutError?:boolean;error?:string;historyError?:boolean};
 export type PortfolioRequest=<T>(path:string,input:unknown,namespace:PilotNamespace,signal:AbortSignal)=>Promise<T>;
 type AccountRead=Pick<PilotState,'manifest'|'snapshot'>&{claimScopes?:number[]};
 export async function loadPortfolio({groups,account,wallets,signal,publish,request=pilotRequest,historyOnly=false,previous={}}:{groups:MarketGroup[];account:string;wallets:string[];signal:AbortSignal;publish:(namespace:string,value:PoolRead)=>void;request?:PortfolioRequest;historyOnly?:boolean;previous?:Record<string,PoolRead>}){
@@ -13,8 +13,8 @@ export async function loadPortfolio({groups,account,wallets,signal,publish,reque
   const send=(value:PoolRead)=>{data[value.group.namespace]=value;if(!signal.aborted)publish(value.group.namespace,{...value,owners:{...value.owners},blocks:{...value.blocks}});};
   const call=<T,>(group:MarketGroup,path:string,input?:unknown)=>request<T>(path,input,group.namespace,AbortSignal.any([signal,AbortSignal.timeout(45000)]));
   async function balances(value:PoolRead,claims:ClaimHint[],owner:string){
-    for(let offset=0;offset<claims.length&&!signal.aborted;offset+=8){
-      const batch=claims.slice(offset,offset+8);
+    for(let offset=0;offset<claims.length&&!signal.aborted;offset+=30){
+      const batch=claims.slice(offset,offset+30);
       const response=await call<{rows:AccountHolding[];owner?:string;snapshot?:{blockNumber:string}}>(value.group,'positions',{owner,claims:batch});
       if(response.owner&&response.owner.toLowerCase()!==owner)throw Error('Wrong owner');
       if(!Array.isArray(response.rows)||response.rows.length!==batch.length||response.rows.some((row,i)=>row.scope!==batch[i].scope||row.mask!==batch[i].mask||!/^\d+$/.test(row.quantity)||row.payoutAtoms!==null&&!/^\d+$/.test(row.payoutAtoms)))throw Error('Incomplete balances');
@@ -43,6 +43,16 @@ export async function loadPortfolio({groups,account,wallets,signal,publish,reque
         }
         value.holdingsComplete=!failed;send(value);
       }catch{value.error='Some shares could not be refreshed. The totals below are incomplete.';send(value);}
+    }
+  }));
+  // Positive collected payouts have a separate verified index. They need not
+  // wait for every trading block since deployment to be scanned for cost basis.
+  const payoutQueue=[...groups];
+  await Promise.all(Array.from({length:Math.min(2,groups.length)},async()=>{
+    while(payoutQueue.length&&!signal.aborted){
+      const group=payoutQueue.shift()!,value=data[group.namespace];if(!value)continue;
+      try{value.payouts=await call<HistoryRead>(group,'collected-payouts',{});value.payoutError=false;}
+      catch{value.payoutError=true;}send(value);
     }
   }));
   // One bounded history scan per pool. Further catch-up is explicit and never

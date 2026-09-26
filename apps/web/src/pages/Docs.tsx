@@ -105,10 +105,10 @@ export default function Docs() {
         <section id="portfolio" aria-labelledby="portfolio-title">
           <p className="docs-eyebrow">08 / KEEPING TRACK</p>
           <h2 id="portfolio-title">Portfolio and payouts</h2>
-          <p>Your <Link href="/portfolio">portfolio</Link> brings together the shares associated with your linked trading wallets under your Flurbo account. Individual and combined positions appear in one holdings table. The Activity tab shows confirmed purchases, sales and collected payouts for those wallets.</p>
+          <p>Your <Link href="/portfolio">portfolio</Link> brings together the shares associated with your linked trading wallets under your Flurbo account. Individual and combined positions appear in one holdings table. The Activity tab shows confirmed purchases, sales and collected payouts for those wallets. Collected lists the amount received and the transaction even after the redeemed shares leave your holdings. Payouts collected is money received, not profit.</p>
           <p>Results and payout collection live in Portfolio. Select an eligible holding, connect its owning MetaMask wallet and confirm the collection. Holdings stay combined under your Mera account; each wallet receives its own payout.</p>
           <p>Activity is indexed in the background. An approval is not a completed purchase. If a transaction is pending, check its confirmation before submitting again. If shares are missing, check that the owning wallet is linked, then refresh.</p>
-          <p>The realized PnL chart tracks sale proceeds and collected payouts minus the average purchase cost of those shares, calculated separately for each wallet and position. It excludes open positions, uncollected payouts and test MON gas. A chart appears only when indexed history is complete and reconciles with holdings. Until then, it is unavailable rather than an estimated profit figure.</p>
+          <p>The Performance tab’s realized PnL chart tracks sale proceeds and collected payouts minus the average purchase cost of those shares, calculated separately for each wallet and position. It excludes open positions, uncollected payouts and test MON gas. A chart appears only when indexed history is complete and reconciles with holdings. Until then, it is unavailable rather than an estimated profit figure.</p>
         </section>
         <section id="preview" aria-labelledby="preview-title">
           <p className="docs-eyebrow">09 / CURRENT SCOPE</p>

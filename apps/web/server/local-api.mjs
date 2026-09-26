@@ -176,6 +176,12 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if(req.method==='POST' && url.pathname==='/api/pilot/positions') {
           const input=await body(req); return send(res,200,await pilot.positions(input.owner,input.claims));
         }
+        if(req.method==='POST' && url.pathname==='/api/pilot/collected-payouts') {
+          const input=await body(req);
+          if(!pilot.payouts||Object.keys(input).length)return send(res,400,{error:'Payout history unavailable or unexpected input'});
+          try{await pilot.snapshot();return send(res,200,await pilot.payouts.refresh());}
+          catch{return send(res,503,{error:'Collected payouts could not be checked. Your current holdings are separate.'});}
+        }
         if(req.method==='POST' && url.pathname==='/api/pilot/history') {
           const input=await body(req);
           if(!pilot.index || Object.keys(input).length) return send(res,400,{error:'Pilot history unavailable or unexpected input'});

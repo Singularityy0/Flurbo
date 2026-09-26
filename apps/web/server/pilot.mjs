@@ -1,4 +1,4 @@
-import { decodeFunctionResult, encodeFunctionData, keccak256, stringToHex } from 'viem';
+import { decodeFunctionResult, encodeFunctionData, keccak256, stringToHex, parseAbi } from 'viem';
 import { pilotCash, pilotCashAbi, pilotPoolAbi, resolverAbi, pilotCall, evidenceURI, validClaim } from '../shared/pilot.mjs';
 import {holderResolverAbi,dependsOnEvent,challengeCandidates} from '../shared/holder-challenge.mjs';
 
@@ -13,7 +13,7 @@ export function pilotRpc(endpoint,request=fetch) {
   const url=new URL(endpoint);
   if(url.protocol!=='https:'||url.username||url.password||url.hash||url.port||!['testnet-rpc.monad.xyz','monad-testnet.g.alchemy.com'].includes(url.hostname))throw new Error('Public Monad testnet RPC required');
   let id=0;
-  return async(method,params=[])=>{
+  const rpc=async(method,params=[])=>{
     if(!['eth_chainId','eth_getBlockByNumber','eth_getCode','eth_call','eth_estimateGas','eth_gasPrice','eth_getLogs'].includes(method))throw new Error('Pilot service is read-only');
     const callId=++id;
     const response=await request(endpoint,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:callId,method,params}),signal:AbortSignal.timeout(15_000)});
@@ -31,6 +31,17 @@ export function pilotRpc(endpoint,request=fetch) {
     if(!response.ok||!Object.hasOwn(result,'result'))throw new Error('Pilot RPC rejected the read');
     return result.result;
   };
+  // The same deployed Multicall3 used by the proposer guard. This is eth_call,
+  // never a transaction. A failed inner read fails the whole response.
+  const aggregateAbi=parseAbi(['function aggregate3((address target,bool allowFailure,bytes callData)[] calls) payable returns ((bool success,bytes returnData)[] returnData)']);
+  rpc.readBatch=async(calls,tag)=>{
+    if(calls.length>60)throw Error('Read batch too large');
+    const data=encodeFunctionData({abi:aggregateAbi,functionName:'aggregate3',args:[calls.map(c=>({target:c.to,allowFailure:false,callData:encodeFunctionData({abi:c.abi,functionName:c.fn,args:c.args})}))]});
+    const rows=decodeFunctionResult({abi:aggregateAbi,functionName:'aggregate3',data:await rpc('eth_call',[{to:'0xca11bde05977b3631167028862be2a173976ca11',data},tag])});
+    if(rows.length!==calls.length||rows.some(r=>!r.success))throw Error('Incomplete read batch');
+    return rows.map((row,i)=>decodeFunctionResult({abi:calls[i].abi,functionName:calls[i].fn,data:row.returnData}));
+  };
+  return rpc;
 }
 
 export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)}) {
@@ -45,17 +56,16 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     return decodeFunctionResult({abi,functionName,data:await rpc('eth_call',[{to,data},tag])});
   }
   async function snapshot() {
-    if(BigInt(await rpc('eth_chainId',[]))!==10143n) throw new Error('Wrong network');
-    const anchor=await rpc('eth_getBlockByNumber',['0x'+BigInt(manifest.verifiedBlock).toString(16),false]);
+    const [chain,anchor,head]=await Promise.all([rpc('eth_chainId',[]),rpc('eth_getBlockByNumber',['0x'+BigInt(manifest.verifiedBlock).toString(16),false]),rpc('eth_getBlockByNumber',['latest',false])]);
+    if(BigInt(chain)!==10143n) throw new Error('Wrong network');
     if(anchor?.hash?.toLowerCase()!==manifest.verifiedBlockHash) throw new Error('Deployment anchor changed');
-    const head=await rpc('eth_getBlockByNumber',['latest',false]);
     if(!head || !/^0x[0-9a-f]{64}$/i.test(head.hash) || now()-Number(BigInt(head.timestamp))>180 || now()-Number(BigInt(head.timestamp)) < -15) throw new Error('Stale chain data');
-    for(const to of [manifest.pool,manifest.resolver]) {
+    await Promise.all([manifest.pool,manifest.resolver].map(async to=>{
       const code=await rpc('eth_getCode',[to,head.number]);
       if(keccak256(code)!==manifest.codeHashes[to]) throw new Error('Contract code changed');
-    }
-    if((await read(manifest.pool,pilotPoolAbi,'settlementRulesHash',[],head.number)).toLowerCase()!==manifest.rulesHash
-      || (await read(manifest.resolver,resolverAbi,'pool',[],head.number)).toLowerCase()!==manifest.pool) throw new Error('Pilot binding changed');
+    }));
+    const [rulesHash,boundPool]=await Promise.all([read(manifest.pool,pilotPoolAbi,'settlementRulesHash',[],head.number),read(manifest.resolver,resolverAbi,'pool',[],head.number)]);
+    if(rulesHash.toLowerCase()!==manifest.rulesHash||boundPool.toLowerCase()!==manifest.pool) throw new Error('Pilot binding changed');
     if(manifest.challengePolicy&&(await read(manifest.resolver,holderResolverAbi,'eligibilitySigner',[],head.number)).toLowerCase()!==manifest.challengePolicy.authority)throw Error('Challenge authority changed');
     return {blockNumber:BigInt(head.number).toString(),blockHash:head.hash.toLowerCase(),timestamp:Number(BigInt(head.timestamp))};
   }
@@ -180,7 +190,13 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
       const mask=uint(claim.mask);
       if(!validClaim(claim.scope,mask,manifest.publication.draft.events.length))throw new Error('Unsupported claim');
     }
-    for(let offset=0;offset<claims.length;offset+=4)rows.push(...await Promise.all(claims.slice(offset,offset+4).map(async claim=>{
+    if(rpc.readBatch&&claims.length){
+      const quantities=await rpc.readBatch(claims.map(c=>({to:manifest.pool,abi:pilotPoolAbi,fn:'holdings',args:[owner,c.scope,uint(c.mask)]})),tag);
+      const payable=claims.map((c,i)=>({c,i})).filter(({i})=>resolved&&quantities[i]>0n);
+      const fractions=payable.length?await rpc.readBatch(payable.map(({c})=>({to:manifest.pool,abi:pilotPoolAbi,fn:'payoutFraction',args:[c.scope,uint(c.mask)]})),tag):[];
+      const payouts=new Map(payable.map(({i},j)=>[i,quantities[i]*fractions[j][0]/fractions[j][1]]));
+      claims.forEach((claim,i)=>rows.push({...claim,quantity:quantities[i],payoutAtoms:resolved?(payouts.get(i)||0n):null}));
+    }else for(let offset=0;offset<claims.length;offset+=4)rows.push(...await Promise.all(claims.slice(offset,offset+4).map(async claim=>{
       const mask=uint(claim.mask),quantity=await read(manifest.pool,pilotPoolAbi,'holdings',[owner,claim.scope,mask],tag);
       const fraction=resolved&&quantity>0n?await read(manifest.pool,pilotPoolAbi,'payoutFraction',[claim.scope,mask],tag):null;
       return {...claim,quantity,payoutAtoms:resolved?(fraction?quantity*fraction[0]/fraction[1]:0n):null};
