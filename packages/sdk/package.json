@@ -1,0 +1,19 @@
+{
+  "name": "@flurbo/sdk",
+  "version": "0.1.0-beta.0",
+  "private": true,
+  "description": "Flurbo agent SDK: typed market reads, structured joint forecasts, a reference strategy and paper trading. Testnet preview only.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser": "./src/transport-browser.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "typecheck": "node ../../apps/web/node_modules/typescript/bin/tsc -p tsconfig.json",
+    "example": "node examples/offline-research.ts"
+  }
+}

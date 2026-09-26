@@ -7,6 +7,8 @@ import { walletLinks } from './wallet-links.mjs';
 import { isTestingOperator, DEFAULT_TESTING_OPERATOR } from './testing-access.mjs';
 import {holderAuthorizer} from './holder-challenge.mjs';
 import {validateClaim} from '../shared/claims.mjs';
+import {agentApi} from './agents/agent-api.mjs';
+import {agentRpc} from './agents/agent-market.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
@@ -15,6 +17,9 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
   const links = walletLinks({command:store.command});
   const authorizeHolder=holderAuthorizer(challengeOptions);
   const priceArchives=new WeakMap();
+  // Agents: account-isolated profiles, paper trading and user-approved proposals. Never a signer.
+  const agents=(()=>{try{return agentApi({command:store.command||null,hosted,links,rpc:agentRpc(rpcUrl,{hosted}),
+    serviceFor:namespace=>namespace==='pilot'?publishedPilot:namespace==='rehearsal'?rehearsal:practiceCollections?.services.get(namespace)||null});}catch{return null;}})();
   const assistant=publishedPilot&&store.command?evidenceAssistant({manifest:publishedPilot.manifest,command:store.command,...evidenceOptions}):null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
   // A bounded global limit avoids trusting spoofable forwarded IP headers.
@@ -55,6 +60,15 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         const login=await store.read(sid,origin);
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
         if(!previewAccess.allows(login)&&!isTestingOperator(login,testingOperatorAccount))return send(res,403,{code:'INVITE_REQUIRED',error:'Testnet access has not been approved for this Mera account.'});
+      }
+      // Agent routes sit behind the same session and invite checks as every application route.
+      if(url.pathname==='/api/agents'||url.pathname.startsWith('/api/agents/')){
+        const login=await store.read(sid,origin);
+        if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
+        if(!agents)return send(res,503,{error:'Agents are unavailable on this server.'});
+        if(url.search||!['GET','POST'].includes(req.method))return send(res,400,{error:'Unexpected agent request.'});
+        const result=await agents.handle({method:req.method,path:url.pathname,input:req.method==='POST'?await body(req):undefined,login,origin});
+        return send(res,result.status,result.body);
       }
       if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? {...TESTNET, faucet:testFaucet || TESTNET.faucet, flurboFaucet:!!testFaucet} : { environment: 'local_fork', chain_id: 10143 });
       if(url.pathname==='/api/market-directory'&&req.method==='GET'&&!url.search){

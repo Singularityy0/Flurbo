@@ -13,6 +13,7 @@ import FundingPage from './pages/FundingPage';
 import {useTestingAccess} from './auth/testing-access';
 import {usePreviewAccess} from './auth/preview-access';
 import AccessPage from './pages/AccessPage';
+import Agents from './pages/Agents';
 
 export const brand = "flurbo";
 
@@ -64,7 +65,7 @@ function Header() {
           onClick={(event) => {
             if ((event.target as HTMLElement).closest("a")) setOpen(false);
           }}>
-          {state.address ? <><Link href="/markets">Markets</Link><Link href="/portfolio">Portfolio</Link><Link href="/access">Your account</Link></> : <><a href="/#how-it-works">How it works</a><a href="/#the-idea">The idea</a></>}
+          {state.address ? <><Link href="/markets">Markets</Link><Link href="/agents">Agents</Link><Link href="/portfolio">Portfolio</Link><Link href="/access">Your account</Link></> : <><a href="/#how-it-works">How it works</a><a href="/#the-idea">The idea</a></>}
           <Link href="/docs" aria-current={location === '/docs' ? 'page' : undefined}>Docs</Link>
           <span className="nav-rule" aria-hidden="true" />
           {state.address ? (isHome ? <Link href="/markets" className="nav-cta">Explore markets <ArrowUpRight size={15} strokeWidth={1.8} /></Link> : <Link href="/" className="nav-login">About Flurbo</Link>) : <>
@@ -120,7 +121,7 @@ function AccountRoute() {
   // server-backed login has been restored. Remembered addresses are not login.
   return <AppShell>{state.restoring
     ? <main id="main" tabIndex={-1} className="auth-page"><p role="status">Checking your session...</p></main>
-    : authenticated ? ((!preview.access?.approved || location==='/access')?<AccessPage {...preview}/>:location==='/fund'?<FundingPage/>:['/account','/kuru','/events','/rehearsal','/evidence'].includes(location)&&!testingAccess?<main id="main" className="auth-page"><h1>Operator access only</h1><Link href="/markets">Back to markets</Link></main>:location==='/evidence'?<EvidenceReview/>:(location.startsWith('/markets/')||['/markets','/portfolio'].includes(location)) ? <Markets /> : <Workspace />) : null}</AppShell>;
+    : authenticated ? ((!preview.access?.approved || location==='/access')?<AccessPage {...preview}/>:location==='/fund'?<FundingPage/>:['/account','/kuru','/events','/rehearsal','/evidence'].includes(location)&&!testingAccess?<main id="main" className="auth-page"><h1>Operator access only</h1><Link href="/markets">Back to markets</Link></main>:location==='/evidence'?<EvidenceReview/>:location==='/agents'||location.startsWith('/agents/')?<Agents/>:(location.startsWith('/markets/')||['/markets','/portfolio'].includes(location)) ? <Markets /> : <Workspace />) : null}</AppShell>;
 }
 
 export default function App() {
@@ -135,6 +136,7 @@ export default function App() {
       : location === "/docs" ? "Documentation | flurbo"
       : location === "/account" ? "Your account | flurbo"
       : location === "/portfolio" ? "Your portfolio | flurbo"
+      : location.startsWith("/agents") ? "Agents | flurbo"
       : location === "/kuru" ? "Kuru order book | flurbo"
       : location === "/events" ? "Real events | flurbo"
       : location === "/evidence" ? "Evidence review | flurbo"
@@ -162,6 +164,8 @@ export default function App() {
       <Route path="/access" component={AccountRoute} />
       <Route path="/account" component={AccountRoute} />
       <Route path="/portfolio" component={AccountRoute} />
+      <Route path="/agents" component={AccountRoute} />
+      <Route path="/agents/:id" component={AccountRoute} />
       <Route path="/history"><Redirect to="/portfolio" replace /></Route>
       <Route path="/kuru" component={AccountRoute} />
       <Route path="/events" component={AccountRoute} />
