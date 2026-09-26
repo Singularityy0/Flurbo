@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { redisCommand } from '../server/redis-session.mjs';
-import { agentStore, redisBackend, attributionKey } from '../server/agents/agent-store.mjs';
+import { agentStore, redisBackend, ownershipKey } from '../server/agents/agent-store.mjs';
 
 // Validates the agent store's Redis operations (SET NX PX locks, the Lua scripts, MGET) against a real
 // Redis-compatible service before hosted rollout. Run it only against a test database or namespace:
@@ -45,32 +45,29 @@ export async function checkAgentRedis(command, log = () => {}) {
       ok(await backend.save(s, r, '0', { n: 2 }) === 0, 'stale save accepted');
       const [rev, value] = await backend.versioned(s, r); ok(rev === '1' && value.n === 1, 'state or revision wrong');
     });
-    const h = hash(), key = attributionKey(10143, h), mine = { owner: 'a', agentId: 'x', proposalId: 'p', transaction: 'd' };
-    await check('attribution claim is written atomically with the state', async () => {
-      ok(await backend.save(s, r, '1', { n: 2 }, [{ key, value: mine, mode: 'claim' }]) === 1, 'claim save failed');
-      ok(JSON.stringify(await backend.get(key)) === JSON.stringify(mine), 'attribution not stored');
+    const h = hash(), key = ownershipKey(10143, h), mine = { owner: 'a', agentId: 'x', proposalId: 'p', transaction: 'd' };
+    await check('ownership is written atomically with the state', async () => {
+      ok(await backend.save(s, r, '1', { n: 2 }, [{ key, value: mine }]) === 1, 'ownership save failed');
+      ok(JSON.stringify(await backend.get(key)) === JSON.stringify(mine), 'ownership not stored');
     });
-    await check('a conflicting claim refuses the whole write', async () => {
-      ok(await backend.save(s, r, '2', { n: 3 }, [{ key, value: { ...mine, proposalId: 'q' }, mode: 'claim' }]) === -1, 'conflict not detected');
+    await check('conflicting ownership refuses the whole write', async () => {
+      ok(await backend.save(s, r, '2', { n: 3 }, [{ key, value: { ...mine, proposalId: 'q' } }]) === -1, 'conflict not detected');
       const [rev, value] = await backend.versioned(s, r); ok(rev === '2' && value.n === 2, 'state changed despite conflict');
+      ok((await backend.get(key)).proposalId === 'p', 'ownership overwritten');
     });
-    await check('the same claim again is accepted; backfill never overwrites', async () => {
-      ok(await backend.save(s, r, '2', { n: 3 }, [{ key, value: mine, mode: 'claim' }, { key, value: { ...mine, proposalId: 'z' }, mode: 'backfill' }]) === 1, 'save failed');
-      ok((await backend.get(key)).proposalId === 'p', 'backfill overwrote');
+    await check('the same ownership again is accepted unchanged', async () => {
+      ok(await backend.save(s, r, '2', { n: 3 }, [{ key, value: mine }]) === 1, 'idempotent save refused');
     });
-    await check('release removes only the exact attribution', async () => {
-      ok(await backend.save(s, r, '3', { n: 4 }, [{ key, value: { ...mine, proposalId: 'other' }, mode: 'release' }]) === 1 && await backend.get(key), 'released another attribution');
-      ok(await backend.save(s, r, '4', { n: 5 }, [{ key, value: mine, mode: 'release' }]) === 1 && !await backend.get(key), 'did not release');
+    await check('concurrent ownership of one transaction: exactly one wins', async () => {
+      const k2 = ownershipKey(10143, hash()), s2 = base + ':race', r2 = base + ':race-rev';
+      const outcomes = await Promise.all(['one', 'two', 'three'].map((p, i) => backend.save(s2 + i, r2 + i, '0', { p }, [{ key: k2, value: { ...mine, proposalId: p } }])));
+      ok(outcomes.filter(x => x === 1).length === 1 && outcomes.filter(x => x === -1).length === 2, `outcomes ${outcomes}`);
     });
-    await check('concurrent claims of one transaction: exactly one wins', async () => {
-      const h2 = hash(), k2 = attributionKey(10143, h2), s2 = base + ':race', r2 = base + ':race-rev';
-      const outcomes = await Promise.all(['one', 'two'].map((p, i) => backend.save(s2 + i, r2 + i, '0', { p }, [{ key: k2, value: { ...mine, proposalId: p }, mode: 'claim' }])));
-      ok(outcomes.filter(x => x === 1).length === 1 && outcomes.filter(x => x === -1).length === 1, `outcomes ${outcomes}`);
-    });
-    await check('store: create, mutate with attribution, archive, read back', async () => {
+    await check('store: create, mutate, archive, read back', async () => {
       const profile = await store.create(account, { name: 'Redis check', status: 'active' }), h3 = hash();
-      await store.mutate(account, profile.id, (state, _p, tx) => { state.proposals.push({ id: 'p1', status: 'submitted', reviews: [], transactions: [] }); tx.attribute(h3, { proposalId: 'p1', transaction: 'd' }); return true; });
-      written.add(attributionKey(10143, h3));
+      await store.mutate(account, profile.id, (state, _p, own) => { state.proposals.push({ id: 'p1', status: 'confirmed', reviews: [], transactions: [] }); own.claim(h3, 'p1', 'd'); return true; });
+      written.add(ownershipKey(10143, h3));
+      ok((await backend.get(ownershipKey(10143, h3)))?.proposalId === 'p1', 'ownership not written by the store');
       ok(await store.archive(account, profile.id, 0), 'archive failed');
       const read = await store.get(account, profile.id);
       ok(read.profile.status === 'archived' && read.state.proposals[0].id === 'p1', 'archived agent not readable');

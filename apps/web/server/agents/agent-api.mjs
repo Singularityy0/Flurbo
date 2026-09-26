@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { pilotCall } from '../../shared/pilot.mjs';
-import { agentStore, memoryBackend, redisBackend, addPaperFill, addConfirmedPurchase, compactReview, transactionDigest, AGENT_LIMITS } from './agent-store.mjs';
+import { agentStore, memoryBackend, redisBackend, addPaperFill, addConfirmedPurchase, compactReview, transactionDigest, ownsPurchase, VERIFIED, AGENT_LIMITS } from './agent-store.mjs';
 import { quoteClaims, verifyReceipt, readResolution } from './agent-market.mjs';
 import { STRATEGY, DEFAULT_CONFIG, SCHEMAS, FlurboError, assertConfig, candidateClaims, decide, claimKey, parseMarket, parseForecast, parseQuoteResult,
   parsePairAnalytics, parseClaimImplied, decisionToJSON, decisionFromJSON, recordPaperFill, paperFillToJSON, paperFillFromJSON, evaluatePaper, forecastToJSON, FILL_MODEL,
@@ -48,6 +48,9 @@ export const DEFAULT_PROFILE_CONFIG = Object.freeze({ quantityAtoms: DEFAULT_CON
 //   submitted -> confirmed | approval-confirmed | failed;  approval-confirmed -> awaiting-approval | rejected
 // Every review a proposal issues is kept. Expiry, dismissal or archiving does not prove a review was never
 // sent, so a hash for any of them can still be recorded (one tracked transaction at a time) and verified.
+// Recording a hash is provisional and exclusive to nobody. Ownership of a transaction (one proposal per
+// chain and hash, across agents and accounts) is written only when the receipt check proves the chain
+// transaction is that proposal's reviewed transaction, atomically with the purchase it counts.
 // Every change bumps `version`. A change computed from an older read is refused, never merged.
 const hasSubmitted = p => p.transactions.some(t => t.status === 'submitted');
 const reserving = (p, now) => p.status === 'preparing' && now < p.reservedUntil;
@@ -270,28 +273,22 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
       const sent = input.transaction;
       if (!sent || typeof sent !== 'object' || TX_FIELDS.some(f => typeof sent[f] !== 'string')) fail(400, 'Include the reviewed transaction that was sent.');
       const hash = input.hash.toLowerCase(), digest = transactionDigest(sent);
-      return change(account, id, async (next, latest, tx) => {
+      return change(account, id, async (next, latest, own) => {
         const r = next.proposals.find(p => p.id === proposalId), t = now();
         if (!r) fail(404, 'Proposal not found.');
-        // A transaction hash is attributed to one proposal across all agents and accounts, atomically with
-        // this write. Registering it again for the same proposal and transaction is a no-op, so a retry
-        // after a lost response is safe; any other proposal is refused and never counts it.
-        const existing = await tx.attribution(hash);
-        const ours = !!existing && existing.owner === tx.owner && existing.agentId === id && existing.proposalId === r.id && existing.transaction === digest;
-        if (existing && !ours) fail(409, 'This transaction is already recorded by another proposal.', 'HASH_CONFLICT');
+        // Only verified ownership is final. A hash another proposal merely recorded does not block this
+        // one: the receipt check decides whose reviewed transaction it is.
+        const owner = await own.read(hash);
+        if (owner && !own.owns(owner, r.id, digest)) fail(409, 'This transaction was verified for another proposal.', 'HASH_CONFLICT');
         const known = r.transactions.find(x => x.hash === hash);
-        if (known) {
-          if (transactionDigest(known.review.transaction) !== digest) fail(409, 'This hash is already tracked for a different transaction.', 'HASH_CONFLICT');
-          if (!ours) tx.attribute(hash, { proposalId: r.id, transaction: digest });
-          return proposalView(r, t);
-        }
+        // Recording the same hash for the same transaction again is a no-op, so a retry is safe.
+        if (known) return transactionDigest(known.review.transaction) === digest ? proposalView(r, t)
+          : fail(409, 'This hash is already tracked for a different transaction.', 'HASH_CONFLICT');
         if (hasSubmitted(r)) fail(409, 'A different transaction is already being tracked for this proposal. Check it first and do not send again.', 'HASH_CONFLICT');
         const review = r.reviews.find(v => transactionDigest(v.transaction) === digest);
         if (!review) fail(409, 'This transaction is not one prepared for this proposal.', 'REVIEW_MISMATCH');
-        tx.attribute(hash, { proposalId: r.id, transaction: digest });
-        if (!r.review || transactionDigest(r.review.transaction) !== digest) r.review = review;
+        r.transactions = [...r.transactions, { hash, action: review.action, status: 'submitted', review, submittedAt: t, statusBefore: r.status }];
         r.status = 'submitted'; r.version++; r.updatedAt = t;
-        r.transactions = [...r.transactions, { hash, action: review.action, status: 'submitted', review, submittedAt: t }];
         return proposalView(r, t);
       });
     }
@@ -307,21 +304,30 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
     try { result = await verifyReceipt({ rpc, review: pending.review, hash: pending.hash, manifest: service(profile.market.namespace).manifest }); }
     catch { fail(503, 'The transaction could not be checked. Try again shortly.'); }
     if (['unknown', 'pending', 'confirming'].includes(result.status)) return { ...proposalView(current, now()), check: result.status };
-    return change(account, id, (next, latest, attribution) => {
+    // Re-run from a fresh read if another server verified the same transaction at the same moment.
+    return change(account, id, async (next, latest, own) => {
       const r = next.proposals.find(p => p.id === proposalId), t = now();
       if (!r) fail(404, 'Proposal not found.');
       const tx = r.transactions.find(x => x.hash === pending.hash);
       if (!tx || tx.status !== 'submitted') return proposalView(r, t); // already resolved by another request
       let done = { ...tx, status: result.status, blockNumber: result.blockNumber ?? null, paidAtoms: result.paidAtoms ?? null };
-      if (result.status === 'confirmed' && tx.action === 'buy') done = addConfirmedPurchase(next.live, done);
-      // A hash that is not the reviewed transaction releases its attribution for whoever really sent it.
-      if (result.status === 'mismatch') attribution.attribute(tx.hash, { proposalId: r.id, transaction: transactionDigest(tx.review.transaction) }, 'release');
+      if (VERIFIED.includes(result.status)) {
+        // The chain transaction is this proposal's reviewed transaction. Claim it unless another proposal
+        // with an identical reviewed transaction was verified first; then it is not counted here.
+        const digest = transactionDigest(tx.review.transaction), owner = await own.read(tx.hash);
+        if (owner && !own.owns(owner, r.id, digest)) done.attributedElsewhere = true;
+        else { own.claim(tx.hash, r.id, digest); if (result.status === 'confirmed' && tx.action === 'buy') done = addConfirmedPurchase(next.live, done); }
+      }
       r.transactions = r.transactions.map(x => (x.hash === tx.hash ? done : x));
-      // A confirmed purchase stays confirmed whatever later transactions on the same proposal do.
-      const bought = r.transactions.some(x => x.action === 'buy' && x.status === 'confirmed');
-      const status = bought ? 'confirmed' : result.status === 'confirmed' ? 'approval-confirmed' : 'failed';
-      r.status = status; r.version++; r.updatedAt = t;
-      if (result.status !== 'confirmed') r.failure = result.status === 'mismatch' ? 'The transaction does not match the reviewed purchase.' : 'The transaction reverted on-chain.';
+      // A confirmed purchase this proposal owns stays confirmed whatever later transactions do.
+      if (done.attributedElsewhere) {
+        r.status = ownsPurchase(r) ? 'confirmed' : tx.statusBefore ?? 'attributed-elsewhere';
+        r.failure = 'This transaction was verified for another proposal first, so it is not counted here.';
+      } else {
+        r.status = ownsPurchase(r) ? 'confirmed' : result.status === 'confirmed' ? 'approval-confirmed' : 'failed';
+        if (result.status !== 'confirmed') r.failure = result.status === 'mismatch' ? 'The transaction does not match the reviewed purchase.' : 'The transaction reverted on-chain.';
+      }
+      r.version++; r.updatedAt = t;
       return proposalView(r, t);
     });
   }
@@ -341,10 +347,14 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
     paper.missing = paper.missing.filter(m => !m.startsWith('No current sell quote'));
     if (!resolution && positions.length) paper.missing.unshift('Paper positions have no current sell quote, so their value is unknown.');
     if (!resolutionKnown) paper.missing.push('The pool resolution could not be read just now.');
+    // Totals rebuilt from capped records written before this version cover only what was kept.
+    const incomplete = 'Records from before this version were capped, so earlier trades may be missing from these totals.';
+    paper.complete = !state.paper.incomplete;
+    if (state.paper.incomplete) paper.missing.push(incomplete);
     const l = state.live;
-    const live = { mode: 'live', confirmedPurchases: l.confirmedPurchases, costBasisAtoms: l.unknownCost ? null : l.costAtoms,
+    const live = { mode: 'live', complete: !l.incomplete, confirmedPurchases: l.confirmedPurchases, costBasisAtoms: l.unknownCost ? null : l.costAtoms,
       realizedPnlAtoms: null, collectedPayoutAtoms: null,
-      missing: [...(l.unknownCost ? ['Some purchase costs could not be read from their receipts.'] : []),
+      missing: [...(l.unknownCost ? ['Some purchase costs could not be read from their receipts.'] : []), ...(l.incomplete ? [incomplete] : []),
         'Collected payouts and realized results are shown per wallet in Portfolio and are not attributed to this agent.'] };
     const s = v => (v === null || v === undefined ? null : v.toString());
     return { schema: 'flurbo.agent-performance.v1', paper: { ...paper, costBasisAtoms: s(paper.costBasisAtoms),

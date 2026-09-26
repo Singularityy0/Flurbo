@@ -131,7 +131,7 @@ test('a hash is bound to the exact reviewed transaction it came from, including 
   const refused=await s.call(alice,'POST',path,{action:'submitted',hash:'0x'+'f0'.repeat(32),transaction:stranger});
   assert.equal(refused.status,409);assert.equal(refused.body.code,'REVIEW_MISMATCH');
   const hash='0x'+'f1'.repeat(32),bound=(await s.call(alice,'POST',path,{action:'submitted',hash,transaction:opened})).body;
-  assert.equal(bound.status,'submitted');assert.equal(bound.review.action,'approve');assert.equal(bound.transactions[0].review.transaction.data,opened.data);
+  assert.equal(bound.status,'submitted');assert.equal(bound.transactions[0].review.action,'approve');assert.equal(bound.transactions[0].review.transaction.data,opened.data);
   s.mine(opened,hash);
   assert.equal((await s.call(alice,'POST',path,{action:'check'})).body.status,'approval-confirmed','verified against the review that was actually sent');
   // The same hash on another proposal of this agent is a conflict, not a second purchase record.
@@ -152,11 +152,12 @@ test('records stored under the previous schema are read, counted once and conver
   assert.equal((await s.call(alice,'POST',path,{action:'check'})).body.status,'confirmed');
   const before=(await s.call(alice,'POST',`/api/agents/${id}/performance`,{})).body;
   // Rewrite the stored state as the v1 single capped list, as deployed before this change.
-  const stateKey=[...s.redis.data.keys()].find(k=>k.endsWith(':state:'+id))!,base=stateKey.slice(0,-(':state:'+id).length);
-  const state=JSON.parse(s.redis.data.get(stateKey)!);
+  const stateKey=(await s.redis.keys()).find(k=>k.endsWith(':state:'+id))!,base=stateKey.slice(0,-(':state:'+id).length);
+  const state=JSON.parse((await s.redis.get(stateKey))!);
   const legacy=[...state.proposals.map(({version,decision,superseded,...p}:any)=>({...p,transactions:p.transactions.map(({accounted,submittedAt,...t}:any)=>t)})),
     ...state.paper.recent,...state.decisions.map(({paperFillId,...d}:any)=>d)];
-  s.redis.data.delete(stateKey);s.redis.data.delete(base+':rev:'+id);s.redis.data.set(base+':records:'+id,JSON.stringify(legacy));
+  await s.redis.del(stateKey);await s.redis.del(base+':rev:'+id);await s.redis.set(base+':records:'+id,JSON.stringify(legacy));
+  for(const k of await s.redis.keys())if(k.includes(':owner:'))await s.redis.del(k); // v1 had no ownership records
   const read=(await s.call(alice,'GET',`/api/agents/${id}`)).body.records;
   assert.equal(read.filter((r:any)=>r.kind==='proposal')[0].status,'confirmed');
   const after=(await s.call(alice,'POST',`/api/agents/${id}/performance`,{})).body;
@@ -165,7 +166,7 @@ test('records stored under the previous schema are read, counted once and conver
   assert.match((await s.call(alice,'POST',`/api/agents/${id}/paper`,{decisionId:decision.id})).body.error,/already paper traded/,'a migrated decision keeps its fill');
   assert.equal((await s.call(alice,'POST',`/api/agents/${id}/proposal`,{decisionId:decision.id,owner})).body.code,'PROPOSAL_EXISTS','a migrated confirmed proposal still blocks');
   await s.call(alice,'POST',`/api/agents/${id}/evaluate`,{forecast:forecast(s.f.manifest.pool)});
-  assert.ok(s.redis.data.has(stateKey)&&!s.redis.data.has(base+':records:'+id),'converted on the first change');
+  assert.ok(await s.redis.get(stateKey)&&!await s.redis.get(base+':records:'+id),'converted on read');
   const converted=(await s.call(alice,'POST',`/api/agents/${id}/performance`,{})).body;
   assert.equal(converted.live.confirmedPurchases,1,'the confirmed purchase is not counted twice');assert.equal(converted.paper.fills,1);
 });
@@ -176,7 +177,7 @@ test('a writer whose lock lapsed while another server took over cannot overwrite
   const slow=store.mutate(alice,id,async(state:any)=>{await hold.promise;state.decisions=[];return 'stale';});
   await new Promise(r=>setTimeout(r,20));
   // Simulate the lock expiring, then a second server committing a change.
-  for(const k of [...s.redis.data.keys()])if(k.endsWith(':lock'))s.redis.data.delete(k);
+  for(const k of await s.redis.keys())if(k.endsWith(':lock'))await s.redis.del(k);
   assert.equal(await store.mutate(alice,id,async(state:any)=>{state.decisions[0].note='newer';return 'newer';}),'newer');
   hold.open();
   await assert.rejects(slow,/in progress/);

@@ -27,7 +27,7 @@ test('agents persist per account across restarts and cannot be read or changed b
     assert.equal((await s.call(bob,method,path,input)).status,404,path);
   assert.equal((await s.call(alice,'GET',`/api/agents/${id}`)).body.profile.status,'active');
   // Storage keys never contain the raw account address.
-  assert.ok([...s.redis.data.keys()].every(k=>!k.includes(alice.slice(2))));
+  assert.ok((await s.redis.keys()).every(k=>!k.includes(alice.slice(2))));
   assert.equal((await s.call(alice,'POST',`/api/agents/${id}/update`,{status:'paused',name:'Release watcher two'})).body.status,'paused');
   // Deleting archives: hidden from the list, refused for new work, still readable for recovery.
   assert.equal((await s.call(alice,'POST',`/api/agents/${id}/delete`,{})).body.deleted,true);

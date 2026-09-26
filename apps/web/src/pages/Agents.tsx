@@ -24,7 +24,7 @@ const STATUS: Record<string, string> = {
   preparing: 'Preparing the transaction review', 'awaiting-approval': 'Awaiting your approval in MetaMask', submitted: 'Submitted, waiting for confirmation',
   'approval-confirmed': 'Token approval confirmed. Purchase not sent yet.', confirmed: 'Purchase confirmed on-chain', failed: 'Failed',
   rejected: 'Rejected in MetaMask or dismissed', expired: 'Review expired before a transaction was recorded', 'preparation-failed': 'Could not be prepared',
-  'preparation-expired': 'Preparation timed out',
+  'preparation-expired': 'Preparation timed out', 'attributed-elsewhere': 'Its transaction was verified for another proposal and is not counted here',
 };
 // Statuses that keep a decision from getting another proposal (the server enforces the same rule).
 const BLOCKING = ['preparing', 'awaiting-approval', 'expired', 'submitted', 'approval-confirmed', 'confirmed'];
@@ -302,7 +302,7 @@ function Approvals({ id, profile, records, setRecords, questions, login, reload 
     if (recovery === 'resolved') {
       const current = localStorage.getItem(pendingKeyFor(namespace));
       if (current !== JSON.stringify(pending)) return;
-      if (registered.status === 'confirmed') rememberConfirmedClaim(namespace, pending);
+      if (registered.status === 'confirmed' && !registered.attributedElsewhere) rememberConfirmedClaim(namespace, pending);
       save(null);
     } else if (recovery === 'unregistered' && !busy && !resumed.current.has(pending.hash!)) {
       resumed.current.add(pending.hash!);
@@ -362,12 +362,12 @@ function Performance({ data }: { data: any }) {
   const paper = data.paper, live = data.live, a = (v: string | null) => (v === null ? 'Unknown' : `${amount(v)} test AUSD`);
   return <div className="agents-performance">
     <div><h3>Paper (simulated)</h3><dl>
-      <dt>Paper fills</dt><dd>{paper.fills}</dd><dt>Paper cost</dt><dd>{a(paper.costBasisAtoms)}</dd>
+      <dt>Paper fills</dt><dd>{paper.fills}{paper.complete === false ? ' (incomplete)' : ''}</dd><dt>Paper cost</dt><dd>{a(paper.costBasisAtoms)}</dd>
       <dt>Realized result</dt><dd>{paper.realized ? a(paper.realized.pnlAtoms) : 'Not realized yet'}</dd>
       <dt>Open value</dt><dd>{paper.unrealized ? a(paper.unrealized.valueAtoms) : 'Unknown'}</dd></dl>
       {paper.missing.map((m: string) => <p key={m} className="agents-fine">{m}</p>)}</div>
     <div><h3>On-chain, agent-originated</h3><dl>
-      <dt>Confirmed purchases</dt><dd>{live.confirmedPurchases}</dd><dt>Paid</dt><dd>{a(live.costBasisAtoms)}</dd>
+      <dt>Confirmed purchases</dt><dd>{live.confirmedPurchases}{live.complete === false ? ' (incomplete)' : ''}</dd><dt>Paid</dt><dd>{a(live.costBasisAtoms)}</dd>
       <dt>Realized result</dt><dd>Shown per wallet in Portfolio</dd><dt>Collected payouts</dt><dd><Link href="/portfolio" className="text-link">Collect in Portfolio</Link></dd></dl>
       {live.missing.map((m: string) => <p key={m} className="agents-fine">{m}</p>)}</div>
   </div>;

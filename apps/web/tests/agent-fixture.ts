@@ -1,6 +1,7 @@
 import {decodeFunctionData,encodeFunctionResult,parseAbi} from 'viem';
 import {agentApi} from '../server/agents/agent-api.mjs';
 import {pilotFixture,owner} from './pilot-fixture.ts';
+import {namespacedRedis} from './redis-resp.ts';
 
 // Shared by agent API and browser tests: fake durable storage, an agent RPC over the pilot fixture with
 // transaction mining, and a valid structured forecast. Not a test file.
@@ -16,11 +17,11 @@ export function fakeRedis(){
     if(op==='DEL'){return data.delete(a[0])?1:0;}
     if(op==='MGET')return a.map(key=>data.get(key)??null);
     if(op==='EVAL'&&a[0].includes('ARGV[3]')){
-      // The agent state save script: revision check, attribution claims, then the writes.
-      const n=Number(a[1]),keys=a.slice(2,2+n),argv=a.slice(2+n),[key,rev]=keys,claims=keys.slice(2).map((k:string,i:number)=>({k,value:argv[3+2*i],mode:argv[4+2*i]}));
+      // The agent state save script: revision check, ownership checks, then the writes.
+      const n=Number(a[1]),keys=a.slice(2,2+n),argv=a.slice(2+n),[key,rev]=keys,owned=keys.slice(2).map((k:string,i:number)=>({k,value:argv[3+i]}));
       if((data.get(rev)??'0')!==argv[0])return 0;
-      if(claims.some((c:any)=>data.has(c.k)&&data.get(c.k)!==c.value&&c.mode==='claim'))return -1;
-      for(const c of claims){if(c.mode==='release'){if(data.get(c.k)===c.value)data.delete(c.k);}else if(!data.has(c.k))data.set(c.k,c.value);}
+      if(owned.some((c:any)=>data.has(c.k)&&data.get(c.k)!==c.value))return -1;
+      for(const c of owned)if(!data.has(c.k))data.set(c.k,c.value);
       data.set(key,argv[1]);data.set(rev,argv[2]);return 1;
     }
     if(op==='EVAL'&&a[0].includes("redis.call('DEL'")){const [,,key,token]=a;if(data.get(key)===token){data.delete(key);return 1;}return 0;}
@@ -32,8 +33,17 @@ export function fakeRedis(){
   return {data,command};
 }
 
+// Agent tests run on the fake by default, and on a real isolated Redis when FLURBO_TEST_REDIS_URL is set
+// (for example redis://127.0.0.1:6390/0). The helpers are the same either way.
+export type TestRedis={real:boolean;command:(op:string,...a:any[])=>Promise<any>;keys():Promise<string[]>;get(k:string):Promise<string|null>;set(k:string,v:string):Promise<void>;del(k:string):Promise<void>};
+export function agentRedis():TestRedis{
+  if(process.env.FLURBO_TEST_REDIS_URL)return {real:true,...namespacedRedis(process.env.FLURBO_TEST_REDIS_URL)};
+  const r=fakeRedis();
+  return {real:false,command:r.command,keys:async()=>[...r.data.keys()],get:async k=>r.data.get(k)??null,set:async(k,v)=>{r.data.set(k,v);},del:async k=>{r.data.delete(k);}};
+}
+
 export function setup({links=[owner],at=now}:{links?:string[];at?:number}={}){
-  const f=pilotFixture(at,3),redis=fakeRedis(),txs=new Map<string,any>(),receipts=new Map<string,any>();
+  const f=pilotFixture(at,3),redis=agentRedis(),txs=new Map<string,any>(),receipts=new Map<string,any>();
   // Agent RPC: multicall is expanded into the fixture's single reads; receipts come from a local table.
   const rpc=async(method:string,params:any[]=[])=>{
     if(method==='eth_call'&&params[0].to==='0xca11bde05977b3631167028862be2a173976ca11'){
