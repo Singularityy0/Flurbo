@@ -9,7 +9,10 @@ export function payoutIndex({manifest,rpc,command}){
   const key=`flurbo:pilot:payouts:v1:${manifest.pool}`,start=Number(manifest.verifiedBlock);
   const tag=n=>'0x'+n.toString(16),serialize=v=>JSON.stringify(v,(_,x)=>typeof x==='bigint'?String(x):x);
   const block=n=>rpc('eth_getBlockByNumber',[tag(n),false]);
-  const read=async(fn,n)=>decodeFunctionResult({abi:pilotPoolAbi,functionName:fn,data:await rpc('eth_call',[{to:manifest.pool,data:encodeFunctionData({abi:pilotPoolAbi,functionName:fn})},tag(n)])});
+  const read=async(fn,n)=>{
+    try{return decodeFunctionResult({abi:pilotPoolAbi,functionName:fn,data:await rpc('eth_call',[{to:manifest.pool,data:encodeFunctionData({abi:pilotPoolAbi,functionName:fn})},tag(n)])});}
+    catch{throw Object.assign(Error('Historical payout state unavailable'),{code:'PAYOUT_ARCHIVE_UNAVAILABLE'});}
+  };
   async function events(n){
     const header=await block(n),raw=await rpc('eth_getLogs',[{address:manifest.pool,fromBlock:tag(n),toBlock:tag(n),topics:encodeEventTopics({abi:pilotPoolAbi,eventName:'Redeemed'})}]);
     return raw.map(l=>{
@@ -57,4 +60,22 @@ export function payoutIndex({manifest,rpc,command}){
   }
   let active=null;
   return {refresh(){if(!active)active=scan().finally(()=>{active=null;});return active;}};
+}
+
+// Hosted providers may serve current balances without historical contract state.
+// Retry the whole verified scan, not individual answers mixed between providers.
+export function payoutIndexWithFallback({fallbackRpc,...options}){
+  const primary=payoutIndex(options),fallback=fallbackRpc?payoutIndex({...options,rpc:fallbackRpc}):null;
+  let active=null;
+  async function refresh(){
+    try{return await primary.refresh();}
+    catch(error){
+      if(error.code!=='PAYOUT_ARCHIVE_UNAVAILABLE'||!fallback)throw error;
+      if(BigInt(await fallbackRpc('eth_chainId',[]))!==10143n)throw Error('Wrong payout archive network');
+      // Anchor, checkpoint, fixed-head and payout/log reconciliation checks all
+      // run again. A missing payout is never converted to a successful zero.
+      return fallback.refresh();
+    }
+  }
+  return {refresh(){if(!active)active=refresh().finally(()=>{active=null;});return active;}};
 }

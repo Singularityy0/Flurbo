@@ -56,8 +56,8 @@ for(const namespace of ['pilot','rehearsal'] as const) test(namespace+' flow kee
     await page.goto('https://flurbo.singu.online/'+(namespace==='pilot'?'events':'rehearsal'));
     await page.getByRole('heading',{name:'Operator-run testnet alpha'}).waitFor();
     await page.getByLabel('MetaMask wallet',{exact:true}).selectOption('0');
-    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
-    await page.getByText('Wallet connected. Review and confirm each action separately.').waitFor();
+    await page.locator('.portfolio-wallet .portfolio-address').waitFor();
+    assert.equal(await page.locator('.portfolio-wallet .portfolio-address').textContent(),owner);
     assert.equal(await page.evaluate((key:string)=>sessionStorage.getItem(key),'flurbo.view-wallet:'+loginAddress),owner);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('flurbo.trading.market')),namespace);
     await page.getByRole('button',{name:'Review buy',exact:true}).click();
@@ -74,8 +74,8 @@ for(const namespace of ['pilot','rehearsal'] as const) test(namespace+' flow kee
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
     // Reload keeps transaction tracking but deliberately requires reconnecting the signer.
     await page.getByLabel('MetaMask wallet',{exact:true}).selectOption('0');
-    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
-    await page.getByText('Wallet connected. Review and confirm each action separately.').waitFor();
+    await page.locator('.portfolio-wallet .portfolio-address').waitFor();
+    assert.equal(await page.locator('.portfolio-wallet .portfolio-address').textContent(),owner);
     await page.getByRole('button',{name:'Review approved buy',exact:true}).click();
     await page.getByRole('heading',{name:'Buy shares',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');

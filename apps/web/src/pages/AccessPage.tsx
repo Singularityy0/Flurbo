@@ -2,6 +2,7 @@ import {useState} from 'react';
 import {Link} from 'wouter';
 import {useAuth} from '../auth/context';
 import type {Access} from '../auth/preview-access';
+import TradingWallets from './TradingWallets';
 import './access.css';
 
 export default function AccessPage({access,error,refresh}:{access:Access|null;error:string;refresh():void}){
@@ -19,6 +20,7 @@ export default function AccessPage({access,error,refresh}:{access:Access|null;er
       {error&&<p role="alert">{error}</p>}
       <p className="access-note">Approval is for this Mera account. Once approved, link MetaMask to trade. Never include a seed phrase, private key or passkey recovery details in an application.</p>
     </section>
+    {access?.approved&&state.address&&<TradingWallets key={state.address} account={state.address}/>}
     <footer><Link href="/docs">Read the guide</Link><button className="text-link" onClick={()=>void controller.signOut()}>Sign out</button></footer>
   </main>;
 }

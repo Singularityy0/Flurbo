@@ -71,7 +71,7 @@ test('ordinary account challenges from the market page with separate approval, r
     const evidence=page.getByRole('link',{name:'Read proposed answer evidence',exact:true});await evidence.waitFor();assert.equal(await evidence.getAttribute('href'),'/api/'+namespace+'/evidence/'+hash);
     await page.getByRole('button',{name:'Challenge proposed answer',exact:true}).click();
     const form=page.getByRole('region',{name:'Challenge an answer'});
-    await form.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
+    await form.getByRole('button',{name:'Switch wallet',exact:true}).waitFor();
     await form.getByLabel('Correct answer').selectOption('1');
     await form.getByLabel('Why is the proposed answer wrong?').fill('The published evidence meets the NO rule for this test event.');
     await form.getByLabel('Supporting source URL').fill('https://ethereum.org/');
@@ -121,7 +121,7 @@ test('ordinary account challenges from the market page with separate approval, r
     // Expiry while a review is open removes the submit action immediately, without a server refresh.
     f.c.phase=1;f.c.disputer='0x'+'00'.repeat(20);f.c.counterEvidenceHash='0x'+'00'.repeat(32);f.c.challengeUntil=BigInt(f.now+3600);
     await page.goto('https://flurbo.singu.online/markets/'+namespace+'/0?challenge=1');
-    await form.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
+    await form.getByRole('button',{name:'Switch wallet',exact:true}).waitFor();
     await form.getByLabel('Correct answer').selectOption('1');
     await form.getByLabel('Why is the proposed answer wrong?').fill('The published evidence meets the NO rule for this test event.');
     await form.getByLabel('Supporting source URL').fill('https://ethereum.org/');

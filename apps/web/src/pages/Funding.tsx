@@ -1,4 +1,5 @@
-import {linkTradingWallet} from '../wallet-links';
+import {linkedWallets,linkTradingWallet} from '../wallet-links';
+import {watchTradingWallet} from '../auth/trading-session';
 import {useEffect, useRef, useState} from 'react';
 import {formatUnits, toFunctionSelector} from 'viem';
 import {Link} from 'wouter';
@@ -30,6 +31,9 @@ function fundingError(error:unknown, sending=false) {
 export default function Funding({expanded=false}:{expanded?:boolean}) {
   const {state}=useAuth();
   const [wallets,setWallets]=useState<BrowserWallet[]>([]),[owner,setOwner]=useState('');
+  const [walletStatus,setWalletStatus]=useState('checking');
+  const [correctChain,setCorrectChain]=useState(false);
+  const activeOwner=useRef('');
   const [network,setNetwork]=useState<Network|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
   const [balances,setBalances]=useState<{ausd:bigint;mon:bigint;stock:bigint;nextClaim:bigint}|null>(null);
   const [pending,setPending]=useState<Pending|null>(null),[checking,setChecking]=useState(false),[uncertain,setUncertain]=useState(false);
@@ -46,21 +50,27 @@ export default function Funding({expanded=false}:{expanded?:boolean}) {
     return()=>c.abort();
   },[key]);
   useEffect(()=>{
-    const p=wallets[0]?.provider as any;
-    const changed=()=>{generation.current++;providerRef.current=null;setOwner('');setBalances(null);};
-    for(const event of ['accountsChanged','chainChanged','disconnect'])p?.on?.(event,changed);
-    return()=>{changed();for(const event of ['accountsChanged','chainChanged','disconnect'])p?.removeListener?.(event,changed);};
-  },[wallets[0]?.provider]);
+    const p=wallets[0]?.provider;
+    if(!p||!state.address){setWalletStatus('disconnected');return;}
+    const stop=watchTradingWallet({provider:p,account:state.address,links:linkedWallets,publish:value=>{
+      setWalletStatus(value.status);
+      if(activeOwner.current===value.owner&&value.status!=='checking')return;
+      generation.current++;activeOwner.current=value.owner;providerRef.current=value.owner?p:null;setOwner(value.owner);setBalances(null);setCorrectChain(false);
+    }});
+    return()=>{generation.current++;providerRef.current=null;stop();};
+  },[wallets[0]?.provider,state.address]);
+  useEffect(()=>{let active=true;if(owner&&network){void readBalances().catch(e=>{if(active)setMessage(fundingError(e));});void providerRef.current?.request({method:'eth_chainId'}).then(chain=>{if(active)setCorrectChain(chain==='0x279f');}).catch(()=>{});}return()=>{active=false;};},[owner,network]);
   async function readBalances(address=owner, version=generation.current) {
     if(!address||!network)return;
     const balanceOf=(account:string)=>rpc('eth_call',[{to:TESTNET.cash,data:'0x70a08231'+account.slice(2).padStart(64,'0')},'latest']);
     const values=await Promise.all([balanceOf(address),rpc('eth_getBalance',[address,'latest']),balanceOf(network.faucet),network.flurboFaucet?rpc('eth_call',[{to:network.faucet,data:toFunctionSelector('nextClaimAt(address)')+address.slice(2).padStart(64,'0')},'latest']):'0x0']);
     if(version===generation.current)setBalances({ausd:uint(values[0]),mon:uint(values[1]),stock:uint(values[2]),nextClaim:uint(values[3])});
   }
-  async function connect() {
+  async function connect(switchAccount=false) {
     if(busyRef.current||!network)return;busyRef.current=true;setBusy(true);setMessage('');
     try {
       const p=wallets[0]?.provider;if(!p)throw Error('Install MetaMask or open Flurbo in the MetaMask browser.');
+      if(switchAccount)await p.request({method:'wallet_requestPermissions',params:[{eth_accounts:{}}]});
       await p.request({method:'eth_requestAccounts'});
       if(await p.request({method:'eth_chainId'})!=='0x279f'){
         try{await p.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x279f'}]});}
@@ -73,6 +83,7 @@ export default function Funding({expanded=false}:{expanded?:boolean}) {
       await linkTradingWallet(p,state.address,address,()=>version===generation.current);
       if(version!==generation.current)throw Error('Wallet changed. Reconnect MetaMask.');
       providerRef.current=p;setOwner(address);
+      activeOwner.current=address;setCorrectChain(true);
       try{sessionStorage.setItem(walletKey(state.address),address);sessionStorage.setItem(tradingWalletKey(state.address),address);}catch{}
       await readBalances(address,version);
     }catch(e){setMessage(fundingError(e));}finally{busyRef.current=false;setBusy(false);}
@@ -121,14 +132,14 @@ export default function Funding({expanded=false}:{expanded?:boolean}) {
   const cooldown=balances&&balances.nextClaim>BigInt(Math.floor(Date.now()/1000));
   const content=<div className="funding-card">
     <div><h2>Your trading wallet</h2><p>Test funds go to MetaMask. Your Mera account keeps you signed in.</p></div>
-    <div className="funding-actions"><button className="button button-dark" disabled={busy||!network} onClick={()=>void connect()}>{busy?'Check MetaMask…':owner?'Reconnect MetaMask':'Connect MetaMask'}</button>{owner&&<button className="button button-outline" disabled={busy} onClick={()=>void readBalances().catch(e=>setMessage(fundingError(e)))}>Refresh balances</button>}</div>
+    <div className="funding-actions"><button className="button button-dark" disabled={busy||!network} onClick={()=>void connect(!!owner)}>{busy?'Check MetaMask...':owner?'Switch wallet':walletStatus==='checking'?'Checking wallet...':walletStatus==='unlinked'?'Link selected wallet':'Connect MetaMask'}</button>{owner&&<button className="button button-outline" disabled={busy} onClick={()=>void readBalances().catch(e=>setMessage(fundingError(e)))}>Refresh balances</button>}{owner&&!correctChain&&<button className="button button-outline" disabled={busy} onClick={()=>void connect()}>Switch to Monad testnet</button>}</div>
     {owner&&<p className="funding-address">{owner}</p>}
     {balances&&<div className="funding-balances"><div><span>Trading balance</span><strong>{formatUnits(balances.ausd,6)} AUSD</strong></div><div><span>Network fees</span><strong>{Number(formatUnits(balances.mon,18)).toFixed(4)} MON</strong></div></div>}
     <section><h2>1. Get test MON</h2><p>MON pays the small network fee. Use the MetaMask address shown above.</p><div className="funding-actions"><a className="button button-outline" href={TESTNET.monFaucet} target="_blank" rel="noreferrer">Open MON faucet ↗</a>{owner&&<button className="button button-outline" onClick={()=>void navigator.clipboard.writeText(owner).then(()=>setMessage('MetaMask address copied.')).catch(()=>setMessage('Copy the MetaMask address shown above.'))}>Copy wallet address</button>}</div></section>
     <section><h2>2. Get test AUSD</h2><p>{network?.flurboFaucet?'Request 50 AUSD, once every 24 hours per wallet.':'Request test tokens from the AUSD faucet.'}</p>
       {empty&&<p role="status">The test AUSD dispenser needs a refill. Please try again later.</p>}
       {cooldown&&<p>Next request: {new Date(Number(balances!.nextClaim)*1000).toLocaleString()}.</p>}
-      <button className="button button-dark" disabled={busy||!!pending||uncertain||!owner||!balances||balances.mon===0n||!!empty||!!cooldown} onClick={()=>void requestFunds()}>Request test AUSD</button>
+      <button className="button button-dark" disabled={busy||!!pending||uncertain||!owner||!correctChain||!balances||balances.mon===0n||!!empty||!!cooldown} onClick={()=>void requestFunds()}>Request test AUSD</button>
       {owner&&balances?.mon===0n&&<p>Get test MON first, then refresh balances.</p>}
     </section>
     {pending&&<div className="funding-actions"><a href={`${TESTNET.explorer}/tx/${pending.hash}`} target="_blank" rel="noreferrer">View faucet transaction ↗</a><button className="button button-outline" disabled={checking} onClick={()=>void checkStatus()}>Check status</button></div>}

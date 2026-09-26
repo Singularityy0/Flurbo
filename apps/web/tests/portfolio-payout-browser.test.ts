@@ -79,7 +79,7 @@ test('portfolio alone collects owned payouts, preserves combined totals and reco
     assert.equal(await page.locator('a[href="/history"]').count(),0);
     await page.getByRole('button',{name:'Collect payout',exact:true}).click();
     const form=page.getByRole('region',{name:'Collect portfolio payout'});
-    await form.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
+    await form.getByRole('button',{name:'Switch wallet',exact:true}).waitFor();
     await form.getByText('This wallet has no eligible payout for this holding. Switch to its owning MetaMask wallet.').waitFor();
     assert.equal(await form.getByRole('button',{name:'Review payout',exact:true}).isDisabled(),true);assert.equal(intents.length,0);
     await page.evaluate((wallet:string)=>(window as any).selectedWallet=wallet,owner);

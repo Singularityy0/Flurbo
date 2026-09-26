@@ -52,8 +52,9 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
     });
     async function openFunding(){
       await page.goto('https://flurbo.singu.online/fund');
-      await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
-      await page.getByRole('button',{name:'Reconnect MetaMask',exact:true}).waitFor();
+      await page.getByRole('button',{name:'Switch wallet',exact:true}).waitFor();
+      if(await page.evaluate(()=>sessionStorage.getItem('chain'))!=='0x279f')await page.getByRole('button',{name:'Switch to Monad testnet',exact:true}).click();
+      await page.getByRole('button',{name:'Request test AUSD',exact:true}).waitFor();
     }
     await openFunding();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('chain')),'0x279f');
@@ -72,7 +73,7 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
     await page.evaluate(()=>sessionStorage.removeItem('reject'));
     await page.evaluate(()=>sessionStorage.setItem('change','1'));
     await page.getByRole('button',{name:'Request test AUSD',exact:true}).click();
-    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).waitFor();
+    await page.getByText('Wallet changed. Reconnect MetaMask.',{exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('funding.tx')),null);
     await page.evaluate(()=>sessionStorage.removeItem('change'));
     await openFunding();
@@ -85,8 +86,7 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
     await page.reload();
     await page.getByRole('link',{name:'View faucet transaction'}).waitFor();
     assert.equal(await page.getByRole('button',{name:'Request test AUSD',exact:true}).isDisabled(),true);
-    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
-    await page.getByRole('button',{name:'Reconnect MetaMask',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Switch wallet',exact:true}).waitFor();
     receipt={transactionHash:hash,to:TESTNET.faucet,from:owner,status:'0x1'};
     await page.getByRole('button',{name:'Check status',exact:true}).click();
     await page.getByText('Test AUSD request confirmed. You can return to the markets.').waitFor();

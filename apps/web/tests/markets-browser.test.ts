@@ -27,7 +27,8 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
         if(method==='eth_requestAccounts'&&sessionStorage.getItem('wallet.rejectConnect'))throw Object.assign(new Error('Rejected'),{code:4001});
         if(method==='wallet_requestPermissions')return [];
         if(method==='personal_sign'){if(sessionStorage.getItem('wallet.rejectLink'))throw Error('Link signature rejected');sessionStorage.setItem('link.signatures',String(Number(sessionStorage.getItem('link.signatures')||0)+1));return '0x'+'11'.repeat(65);}
-        if(['eth_accounts','eth_requestAccounts'].includes(method))return[owner];
+        if(method==='eth_requestAccounts')sessionStorage.setItem('connect.requests',String(Number(sessionStorage.getItem('connect.requests')||0)+1));
+        if(['eth_accounts','eth_requestAccounts'].includes(method))return sessionStorage.getItem('wallet.disconnected')?[]:[owner];
         if(method==='eth_chainId')return'0x279f';
         if(method==='eth_getBlockByNumber')return{number:'0x65',hash};
         if(method==='eth_getCode')return code;
@@ -99,15 +100,15 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     assert.equal(await page.getByRole('button',{name:/Unlock.*wallet|Unlock signing/i}).count(),0);
     assert.equal(await page.locator('.ticket-wallet').getByText('MetaMask',{exact:true}).count(),1);
     assert.equal(await page.locator('#consumer-wallet').count(),0);
-    const connectStyle = await page.getByRole('button',{name:'Connect MetaMask',exact:true}).evaluate((el:any)=>({height:el.getBoundingClientRect().height,border:getComputedStyle(el).borderStyle}));
+    const connectStyle = await page.getByRole('button',{name:/^(Connect MetaMask|Link selected wallet)$/}).evaluate((el:any)=>({height:el.getBoundingClientRect().height,border:getComputedStyle(el).borderStyle}));
     assert.ok(connectStyle.height>=44);assert.equal(connectStyle.border,'solid');
     await page.evaluate(()=>sessionStorage.setItem('wallet.rejectLink','1'));
-    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
+    await page.getByRole('button',{name:/^(Connect MetaMask|Link selected wallet)$/}).click();
     await page.getByText('Link signature rejected',{exact:true}).waitFor();
     assert.equal(linked,false);assert.equal(await page.getByRole('button',{name:'Allow payment',exact:true}).count(),0);
     await page.evaluate(()=>sessionStorage.removeItem('wallet.rejectLink'));
-    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
-    await page.getByText('Your wallet is ready. Choose your answer and number of shares.').waitFor();
+    await page.getByRole('button',{name:/^(Connect MetaMask|Link selected wallet)$/}).click();
+    await page.getByRole('button',{name:'Switch wallet',exact:true}).waitFor();
     assert.equal(linked,true);assert.equal(await page.evaluate(()=>sessionStorage.getItem('link.signatures')),'1');
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),null);
 
@@ -126,15 +127,15 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     // A failed reconnect must not leave the earlier signer/review available.
     await page.evaluate(()=>sessionStorage.setItem('wallet.rejectConnect','1'));
     await page.getByRole('button',{name:'Switch wallet',exact:true}).click();
-    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).waitFor();
+    await page.getByRole('button',{name:/^(Connect MetaMask|Link selected wallet)$/}).waitFor();
     assert.equal(await page.getByRole('button',{name:'Allow payment',exact:true}).count(),0);
     await page.evaluate(()=>sessionStorage.removeItem('wallet.rejectConnect'));
-    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
+    await page.getByRole('button',{name:/^(Connect MetaMask|Link selected wallet)$/}).click();
     await page.getByRole('button',{name:'Allow payment',exact:true}).waitFor();
-    await page.evaluate(()=>(window as any).walletEvent('accountsChanged'));
-    await page.getByText('Wallet changed. Reconnect. Submitted actions remain in tracking.').waitFor();
+    await page.evaluate(()=>{sessionStorage.setItem('wallet.disconnected','1');(window as any).walletEvent('accountsChanged');});
+    await page.getByRole('button',{name:/^(Connect MetaMask|Link selected wallet)$/}).waitFor();
     assert.equal(await page.getByRole('button',{name:'Allow payment',exact:true}).count(),0);
-    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
+    await page.evaluate(()=>{sessionStorage.removeItem('wallet.disconnected');(window as any).walletEvent('accountsChanged');});
     await page.getByRole('button',{name:'Allow payment',exact:true}).click();
     await page.getByText('Sent to the network. Confirmation is checked automatically.').waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
@@ -147,11 +148,13 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
     // Approval is already confirmed and tracking cleared. The draft must still reopen.
     assert.equal(await page.evaluate((ns:string)=>localStorage.getItem('flurbo.'+ns+'.pending.v1'),namespace),null);
+    const connectionsBeforeReload=await page.evaluate(()=>sessionStorage.getItem('connect.requests'));
     await page.reload();await page.getByLabel('Shares',{exact:true}).waitFor();
     assert.equal(await page.getByLabel('Shares',{exact:true}).inputValue(),'5');
     assert.equal(await page.getByLabel('Your answer',{exact:true}).inputValue(),'no');
-    await page.getByRole('button',{name:'Connect MetaMask',exact:true}).click();
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('connect.requests')),connectionsBeforeReload);
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('link.signatures')),'1');
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).click();
     await page.getByRole('heading',{name:'Purchase complete',exact:true}).waitFor();

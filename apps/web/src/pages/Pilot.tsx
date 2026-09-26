@@ -6,6 +6,7 @@ import { formatUnits, parseUnits, type Hex } from 'viem';
 import { useAuth } from '../auth/context';
 import { describeClaim, walletKey, tradingWalletKey } from '../portfolio';
 import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
+import {watchTradingWallet} from '../auth/trading-session';
 import { readCheckout, saveCheckout, clearCheckout, type CheckoutDraft } from '../checkout';
 import { rememberConfirmedClaim } from '../pilot-claims';
 import { pilotRequest as request, submitPilot, checkPilotPending, readPilotPending as readPending, pendingKeyFor, validatePilotReview,
@@ -25,6 +26,8 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
   const [restored]=useState(()=>{try{const draft=consumer&&auth.address?readCheckout(namespace,auth.address):null;return draft?.event===consumer?.event&&draft?.yes===consumer?.yes?draft:null;}catch{return null;}});
   const [state,setState]=useState<PilotState|null>(null),[notice,setNotice]=useState('Loading the real-event pilot...');
   const [wallets,setWallets]=useState<BrowserWallet[]>([]),[choice,setChoice]=useState('0'),[owner,setOwner]=useState('');
+  const [walletStatus,setWalletStatus]=useState('checking');
+  const activeOwner=useRef('');
   const [busy,setBusy]=useState(false),[review,setReview]=useState<PilotReview|null>(null),[pending,setPending]=useState<PilotPending|null>(null);
   const [storageError,setStorageError]=useState(false),[hash,setHash]=useState('');
   const [confirmedHash,setConfirmedHash]=useState(''),[approved,setApproved]=useState<PilotInput|null>(null);
@@ -62,6 +65,23 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
     window.addEventListener('storage',sync);
     return()=>{live.current=false;generation.current++;cleanup.current();stop();window.removeEventListener('storage',sync);};
   },[]);
+  useEffect(()=>{
+    const p=wallets[Number(choice)]?.provider;
+    if(!p||!auth.address){setWalletStatus('disconnected');return;}
+    return watchTradingWallet({provider:p,account:auth.address,links:linkedWallets,publish:value=>{
+      if(!live.current)return;
+      setWalletStatus(value.status);
+      if(activeOwner.current===value.owner&&value.status!=='checking')return;
+      const version=++generation.current;
+      activeOwner.current=value.owner;provider.current=value.owner?p:null;
+      reviewRef.current=null;setReview(null);setPosition(null);setOwner(value.owner);onTradingWalletChange?.(value.owner);
+      if(value.owner){
+        try{sessionStorage.setItem(walletKey(auth.address!),value.owner);sessionStorage.setItem(tradingWalletKey(auth.address!),value.owner);}catch{}
+        setNotice('');
+        void pilotRequest<PilotState>('status?wallet='+value.owner).then(result=>{if(live.current&&version===generation.current)setState(result);}).catch(()=>{if(live.current&&version===generation.current)setNotice('Wallet restored. Market data could not be refreshed.');});
+      }
+    }});
+  },[wallets[Number(choice)]?.provider,auth.address]);
   useEffect(()=>{onBusy(busy||!consumer&&!!review||!!pending||storageError);return()=>onBusy(false);},[busy,review,pending,storageError,onBusy,!!consumer]);
   useEffect(()=>{setEvidence(null);},[event,outcome,statement,source,attachment]);
   useEffect(()=>{setStake(null);setEligibilityCursor(0);setEligibilityNotice('');},[owner,event]);
@@ -123,22 +143,20 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
     return()=>clearTimeout(timer);
   },[!!consumer,!!challenge,!!payout,pending,busy,pollPaused,auth.address]);
   async function connect(switchAccount=false){
-    cleanup.current(); const version=++generation.current;
-    provider.current=null;reviewRef.current=null;setOwner('');onTradingWalletChange?.('');setReview(null);setPosition(null);
+    cleanup.current(); let version=++generation.current;
+    activeOwner.current='';provider.current=null;reviewRef.current=null;setOwner('');onTradingWalletChange?.('');setReview(null);setPosition(null);
     const p:Provider|undefined=wallets[Number(choice)]?.provider;
     if(!p)throw new Error('Open this site in MetaMask’s browser or install the MetaMask extension, then reconnect.');
     if(switchAccount)await p.request({method:'wallet_requestPermissions',params:[{eth_accounts:{}}]});
-    const changed=()=>{generation.current++;reviewRef.current=null;setOwner('');setReview(null);provider.current=null;onTradingWalletChange?.('');setNotice('Wallet changed. Reconnect. Submitted actions remain in tracking.');};
-    for(const name of ['accountsChanged','chainChanged','disconnect'])p.on?.(name,changed);
-    cleanup.current=()=>{for(const name of ['accountsChanged','chainChanged','disconnect'])p.removeListener?.(name,changed);};
     const accounts=await p.request({method:'eth_requestAccounts'}) as string[];
+    version=generation.current;
     if(!Array.isArray(accounts)||!/^0x[0-9a-f]{40}$/i.test(accounts[0]||''))throw new Error('No wallet account returned');
     if(!auth.address)throw Error('Sign in first.');
     setNotice('Confirm the account link in MetaMask if requested.');
     await linkTradingWallet(p,auth.address,accounts[0],()=>live.current&&version===generation.current);
     await refresh(accounts[0]); if(!live.current||version!==generation.current)return;
     if(auth.address)try{sessionStorage.setItem(walletKey(auth.address),accounts[0].toLowerCase());sessionStorage.setItem(tradingWalletKey(auth.address),accounts[0].toLowerCase());}catch{ /* Optional read-only preference. */ }
-    provider.current=p;setOwner(accounts[0].toLowerCase());onTradingWalletChange?.(accounts[0].toLowerCase());setNotice('Wallet connected. Review and confirm each action separately.');
+    activeOwner.current=accounts[0].toLowerCase();provider.current=p;setOwner(activeOwner.current);setWalletStatus('connected');onTradingWalletChange?.(activeOwner.current);setNotice('');
   }
   async function prepare(input:Omit<PilotInput,'owner'>){
     if(!owner||!provider.current)throw new Error('Connect MetaMask first');
@@ -240,7 +258,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
     const eligible=payout.owners.includes(owner);
     return <section className="portfolio-wallet pilot-form portfolio-payout" aria-label="Collect portfolio payout">
       <h3>Collect payout</h3><p>{payout.title}</p><p role="status">{busy?'Checking...':notice==='Loading the real-event pilot...'?'Loading payout details...':notice}</p>
-      {!pending&&!completed&&<><div className="ticket-wallet"><span>{owner?`${owner.slice(0,6)}…${owner.slice(-4)}`:'MetaMask'}</span><button className="button button-outline" disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':'Connect MetaMask'}</button></div>
+      {!pending&&!completed&&<><div className="ticket-wallet"><span>{owner?`${owner.slice(0,6)}…${owner.slice(-4)}`:'MetaMask'}</span><button className="button button-outline" disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':walletStatus==='checking'?'Checking wallet...':walletStatus==='unlinked'?'Link selected wallet':'Connect MetaMask'}</button></div>
         {!owner&&<p>Connect the MetaMask wallet holding these shares. Each wallet receives its own payout.</p>}
         {owner&&!eligible&&<p>This wallet has no eligible payout for this holding. Switch to its owning MetaMask wallet.</p>}
         {!review&&<button className="button button-dark" disabled={busy||!eligible||storageError} onClick={()=>void run(async()=>{
@@ -276,7 +294,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
         <p>Proposed answer: <strong>{labels[current.proposal]}</strong>. Challenges close {date(current.challengeUntil)}.</p>
         {!closed&&<p>Bond: <strong>{cash(state.manifest.publication.bondAtoms)} test AUSD</strong>, plus network fees. You can lose the bond under the published dispute rules. The testnet panel is controlled by the Flurbo operator.</p>}</>}
       {unavailable&&<p role="status">{unavailable}</p>}
-      {!pending&&(!unavailable||mine)&&<div className="ticket-wallet"><span>{owner?`${owner.slice(0,6)}…${owner.slice(-4)}`:'MetaMask'}</span><button className="button button-outline" disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':'Connect MetaMask'}</button></div>}
+      {!pending&&(!unavailable||mine)&&<div className="ticket-wallet"><span>{owner?`${owner.slice(0,6)}…${owner.slice(-4)}`:'MetaMask'}</span><button className="button button-outline" disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':walletStatus==='checking'?'Checking wallet...':walletStatus==='unlinked'?'Link selected wallet':'Connect MetaMask'}</button></div>}
       {!unavailable&&<p className="market-caption">Shares in any linked wallet qualify. Review your challenge, then confirm it in MetaMask before the deadline.</p>}
       {!unavailable&&state&&!state.manifest.challengePolicy&&<p className="market-caption">This older pool enforces account eligibility in Flurbo only. Its deployed contract still permits direct challenges without a holdings check.</p>}
       {owner&&!unavailable&&!pending&&!review&&<p role="status">{eligibilityNotice}</p>}
@@ -328,7 +346,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
       <p className="ticket-status" role="status">{busy?'Working...':quantityError||consumerNotice(notice)}</p>
       <div className="ticket-wallet">
         <div><strong>{owner ? `${owner.slice(0,6)}…${owner.slice(-4)}` : 'MetaMask'}</strong>{owner&&state?.wallet&&<small>{cash(state.wallet.cash)} test AUSD</small>}</div>
-        <button className={owner?"button button-outline":"button button-dark"} disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':'Connect MetaMask'}</button>
+        <button className={owner?"button button-outline":"button button-dark"} disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':walletStatus==='checking'?'Checking wallet...':walletStatus==='unlinked'?'Link selected wallet':'Connect MetaMask'}</button>
       </div>
       {!pending&&!completed&&<><div className="pilot-fields"><label>Your answer<select aria-label="Your answer" disabled={disabled} value={(answers[consumer.event]??true)?'yes':'no'} onChange={e=>setAnswers(old=>({...old,[consumer.event]:e.target.value==='yes'}))}><option value="yes">Yes</option><option value="no">No</option></select></label><label>Shares<input value={quantity} inputMode="decimal" disabled={disabled} onChange={e=>setQuantity(e.target.value)}/></label></div><label>Action<select value={side} disabled={disabled} onChange={e=>setSide(e.target.value)}><option value="buy">Buy</option><option value="sell">Sell</option></select></label><details><summary>Combine with another prediction</summary><p>Choose up to three events. All your chosen answers must be right to win.</p>{state?.manifest.publication.draft.events.map((e,i)=>i===consumer.event?null:<div className="ticket-combine" key={e.id}><label><input type="checkbox" checked={legs.includes(i)} disabled={disabled||!legs.includes(i)&&legs.length>=3} onChange={()=>setLegs(old=>old.includes(i)?old.filter(v=>v!==i):[...old,i].sort())}/>{marketQuestion(e)}</label>{legs.includes(i)&&<select aria-label={marketQuestion(e)+" answer"} disabled={disabled} value={(answers[i]??true)?"yes":"no"} onChange={e=>setAnswers(old=>({...old,[i]:e.target.value==="yes"}))}><option value="yes">Yes</option><option value="no">No</option></select>}</div>)}</details>{legs.length>1&&<p>{answerSummary}</p>}</>}
       {!pending&&!completed&&tradeLimit!==null&&['buy','sell'].includes(side)&&<p className="market-caption">Up to {formatUnits(tradeLimit,6)} shares per trade, including combinations.</p>}
@@ -351,7 +369,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,challenge,payou
     {pending&&<section className="portfolio-wallet pilot-form"><h2>Follow your transaction.</h2><p>{pending.hash||'No hash returned yet. Check wallet activity before doing anything else.'}</p>{!pending.hash&&<><label>Transaction hash<input value={hash} onChange={e=>setHash(e.target.value)}/></label><button className="button button-outline" onClick={()=>void run(async()=>{if(!/^0x[0-9a-f]{64}$/i.test(hash))throw new Error('Paste a transaction hash');save({...pending,hash:hash.toLowerCase() as Hex});})}>Attach hash</button></>}<button className="button button-dark" disabled={busy||!pending.hash} onClick={()=>void run(check)}>Check confirmation</button></section>}
     {state&&<>
       {operatorRun&&<section className="portfolio-wallet pilot-rules" aria-label="Resolution control"><h2>Operator-run testnet alpha</h2><p>All reviewer wallets are controlled by the Flurbo operator. {Math.floor(state.manifest.publication.reviewers.length/2)+1} matching votes are required, but these are not independent reviewers. The operator can determine disputed outcomes. Test assets only.</p><p>Operator: {state.manifest.publication.creator}</p></section>}
-      <section className="portfolio-wallet"><div><label htmlFor="pilot-wallet">MetaMask wallet</label><select id="pilot-wallet" value={choice} disabled={disabled} onChange={e=>{cleanup.current();generation.current++;setChoice(e.target.value);setOwner('');provider.current=null;}}>{wallets.map((w,i)=><option key={i} value={i}>{w.name}</option>)}</select></div><button className="button button-dark" disabled={busy||!!review} onClick={()=>void run(connect)}>Connect MetaMask</button>{owner&&<p className="portfolio-address">{owner}</p>}{state.wallet&&<p>{cash(state.wallet.cash)} test AUSD available. {state.wallet.reviewer?'Registered panel reviewer.':'Assertions and challenges require a test AUSD bond.'}</p>}</section>
+      <section className="portfolio-wallet"><div><label htmlFor="pilot-wallet">MetaMask wallet</label><select id="pilot-wallet" value={choice} disabled={disabled} onChange={e=>{if(e.target.value===choice)return;cleanup.current();generation.current++;activeOwner.current='';setChoice(e.target.value);setOwner('');provider.current=null;}}>{wallets.map((w,i)=><option key={i} value={i}>{w.name}</option>)}</select></div><button className="button button-dark" disabled={busy||!!review} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':'Connect MetaMask'}</button>{owner&&<p className="portfolio-address">{owner}</p>}{state.wallet&&<p>{cash(state.wallet.cash)} test AUSD available. {state.wallet.reviewer?'Registered panel reviewer.':'Assertions and challenges require a test AUSD bond.'}</p>}</section>
       <section className="portfolio-wallet pilot-rules"><h2>{state.manifest.publication.draft.title}</h2><p>Trading closes {date(state.manifest.publication.draft.closesAt)}. Pool holds {cash(state.poolCash)} test AUSD against {cash(state.requiredCollateral)} required for payouts.</p><details><summary>Read the rules and panel</summary><p>{state.manifest.publication.draft.exceptionPolicy}</p><p>{state.manifest.publication.draft.disputePolicy}</p><p>Pool {state.manifest.pool}</p><p>Resolver {state.manifest.resolver}</p><p>{operatorRun?'One operator controls these reviewer wallets.':'The named reviewer panel is explicitly trusted.'} Test bonds and account creation do not provide decentralized security.</p></details></section>
       <div className="pilot-events">{state.manifest.publication.draft.events.map((e,i)=><article key={e.id} className="portfolio-wallet"><span className="eyebrow">Event {i+1} / {phases[state.cases[i].phase]}</span><h3>{marketQuestion(e)}</h3><p>Observation ends {date(e.observationEndsAt)}.</p><p>{state.cases[i].phase===3?`Final result: ${labels[state.cases[i].result]}`:state.cases[i].phase>0?`Proposed: ${labels[state.cases[i].proposal]}`:'Awaiting the observation window and evidence.'}</p><a href={e.source.referenceUrl} target="_blank" rel="noreferrer">{state.manifest.publication.mode==='ethereum-activity'?'Ethereum API documentation':'Official source'}</a><details><summary>YES and NO rules</summary><p>{e.yesRule}</p><p>{e.noRule}</p></details></article>)}</div>
       <section className="portfolio-wallet pilot-form"><h2>Build a combined view.</h2><p>Combine YES or NO outcomes with an AND or OR rule. Each winning share pays 1 AUSD. Void outcomes follow the rules above.</p><fieldset disabled={disabled}><legend>Events</legend>{state.manifest.publication.draft.events.map((e,i)=><label key={e.id}><input type="checkbox" checked={legs.includes(i)} onChange={()=>setLegs(old=>old.includes(i)?old.filter(v=>v!==i):[...old,i].sort())}/>{marketQuestion(e)}</label>)}</fieldset>{legs.map(i=><label key={i}>Event {i+1} outcome<select disabled={disabled} value={(answers[i]??true)?'yes':'no'} onChange={e=>setAnswers(old=>({...old,[i]:e.target.value==='yes'}))}><option value="yes">YES</option><option value="no">NO</option></select></label>)}<label>Payout rule<select disabled={disabled} value={rule} onChange={e=>setRule(e.target.value)}><option value="AND">All selected outcomes happen (AND)</option><option value="OR">Any selected outcome happens (OR)</option></select></label><div className="pilot-fields"><label>Action<select value={side} disabled={disabled} onChange={e=>setSide(e.target.value)}><option value="buy">Buy</option><option value="sell">Sell</option><option value="redeem">Redeem settled shares</option></select></label><label>Shares<input value={quantity} disabled={disabled} inputMode="decimal" onChange={e=>setQuantity(e.target.value)}/></label></div><p>Trading uses a 0.5% slippage limit. Approvals and trades are separate confirmations.</p><div className="pilot-actions"><button className="button button-dark" disabled={disabled||!owner||!legs.length} onClick={()=>void run(async()=>{if(!/^(0|[1-9][0-9]*)(\.[0-9]{1,6})?$/.test(quantity))throw new Error('Enter a positive share amount with up to six decimals');await prepare({action:side,scope,mask,quantity:parseUnits(quantity,6).toString(),slippageBps:50});})}>Review {side}</button><button className="button button-outline" disabled={busy||!owner||!legs.length} onClick={()=>void run(async()=>{setPosition(await pilotRequest('position',{owner,scope,mask}));})}>Check these holdings</button></div>{position&&<p>{cash(position.quantity)} shares held. {position.payoutAtoms===null?'Settlement pending.':`${cash(position.payoutAtoms)} AUSD redeemable.`}</p>}</section>

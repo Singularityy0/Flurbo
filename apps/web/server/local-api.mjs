@@ -180,7 +180,11 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           const input=await body(req);
           if(!pilot.payouts||Object.keys(input).length)return send(res,400,{error:'Payout history unavailable or unexpected input'});
           try{await pilot.snapshot();return send(res,200,await pilot.payouts.refresh());}
-          catch{return send(res,503,{error:'Collected payouts could not be checked. Your current holdings are separate.'});}
+          catch(error){
+            const code=error?.code==='PAYOUT_ARCHIVE_UNAVAILABLE'?'PAYOUT_ARCHIVE_UNAVAILABLE':'PAYOUT_READ_FAILED';
+            console.warn(JSON.stringify({status:'payout_read_failed',pool:pilot.manifest.pool,code}));
+            return send(res,503,{code,error:'Collected payouts could not be checked. Your current holdings are separate.'});
+          }
         }
         if(req.method==='POST' && url.pathname==='/api/pilot/history') {
           const input=await body(req);

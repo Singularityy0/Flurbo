@@ -39,7 +39,8 @@ export default function Docs() {
           <ol className="docs-steps">
             <li><strong>Create your account.</strong> Use a Mera passkey to sign in to Flurbo.</li>
             <li><strong>Request access.</strong> Open your account page and copy your public Mera address into the application form when applications open. The team approves accounts manually. Return to the same account and select Check access after approval.</li>
-            <li><strong>Connect MetaMask.</strong> Choose the wallet you want to trade with and complete the account-linking signature when prompted.</li>
+            <li><strong>Link MetaMask once.</strong> Choose the wallet you want to trade with and sign the account-linking message. Its shares, trades and collected payouts stay in your Mera account's portfolio across devices, even when MetaMask is disconnected. Funds remain in the trading wallet.</li>
+            <li><strong>Return or switch wallets.</strong> Flurbo restores an already linked wallet when MetaMask still authorizes this site. Manage wallets from Your account, or switch on a trade. A new wallet needs its own linking signature. Unlocking MetaMask or reconnecting after permission is revoked can still require your approval.</li>
             <li><strong>Get test funds.</strong> Open <Link href="/fund">Get test funds</Link> for the available funding options. You need test MON for gas and test AUSD for purchases. Faucet availability and claim limits apply.</li>
             <li><strong>Choose a market.</strong> Check the question, close time and resolution rules. Select your answer and number of shares.</li>
             <li><strong>Review and confirm.</strong> Check the quoted cost and confirm the requested action in MetaMask. A token approval may be required before the purchase.</li>
