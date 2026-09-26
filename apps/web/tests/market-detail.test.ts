@@ -8,6 +8,9 @@ test('market URLs bind collections and outcomes; settlement follows resolver sta
   assert.equal(settlementView(s,0).title,'Open for predictions');
   s.snapshot.timestamp=s.manifest.publication.draft.events[0].observationEndsAt;
   assert.equal(settlementView(s,0).title,'Resolving');
+  const pending={...s,cases:s.cases.map(c=>({...c}))};pending.snapshot={...s.snapshot,timestamp:Number(pending.cases[0].assertionDeadline)};
+  assert.equal(settlementView(pending,0).title,'Settling as void');assert.equal(settlementView(pending,0).lapsed,true);
+  pending.snapshot.timestamp-=1;assert.equal(settlementView(pending,0).lapsed,false);
   s.cases[0].phase=1;s.cases[0].proposal=2;s.cases[0].challengeUntil='1800000000';
   assert.equal(settlementView(s,0).title,'Proposed Yes');assert.equal(settlementView(s,0).deadline,1800000000);
   s.cases[0].phase=3;s.cases[0].result=3;
