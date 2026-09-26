@@ -54,7 +54,9 @@ export function productionServer(config, store, staticRoot = dist) {
           res.setHeader('Cache-Control','no-store');
           if (!isTestingOperator(session, config.testingOperatorAccount)) { res.writeHead(404); res.end('Not found'); return; }
         }
-        const page = /^\/markets\/(?:rehearsal|pilot|practice-[0-9a-f]{40})\/[0-3]$/.test(pathname) || ['/', '/docs', '/markets', '/fund', '/access', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal', '/evidence'].includes(pathname);
+        // Serve agent deep links on direct visits too; API session and invite gates still protect data.
+        const agentPage = /^\/agents(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$/.test(pathname);
+        const page = agentPage || /^\/markets\/(?:rehearsal|pilot|practice-[0-9a-f]{40})\/[0-3]$/.test(pathname) || ['/', '/docs', '/markets', '/fund', '/access', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal', '/evidence'].includes(pathname);
         const labPage=['/privacy-lab','/privacy-lab/'].includes(pathname);
         const labAsset=/^\/privacy-lab\/(?:assets\/[a-zA-Z0-9_.-]+|semaphore-8\.(?:wasm|zkey))$/.test(pathname);
         if(labPage||labAsset)res.setHeader('Content-Security-Policy',security['Content-Security-Policy'].replace("script-src 'self'","script-src 'self' 'wasm-unsafe-eval'")+"; worker-src 'self' blob:");

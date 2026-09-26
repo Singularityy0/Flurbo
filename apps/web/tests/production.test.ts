@@ -58,9 +58,9 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
   const server = productionServer(config,store,directory);
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const port = (server.address() as {port:number}).port;
-  function request(path:string,body?:object,cookie='',host='flurbo.singu.online',requestOrigin=origin):Promise<any> {
+  function request(path:string,body?:object,cookie='',host='flurbo.singu.online',requestOrigin=origin,method=body?'POST':'GET'):Promise<any> {
     return new Promise((resolve,reject)=>{
-      const req=httpRequest({hostname:'127.0.0.1',port,path,method:body?'POST':'GET',headers:{Host:host,Origin:requestOrigin,'Content-Type':'application/json',Cookie:cookie}},res=>{
+      const req=httpRequest({hostname:'127.0.0.1',port,path,method,headers:{Host:host,Origin:requestOrigin,'Content-Type':'application/json',Cookie:cookie}},res=>{
         let text='';res.on('data',chunk=>text+=chunk);res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,text,json:()=>JSON.parse(text)}));
       });req.on('error',reject);req.end(body?JSON.stringify(body):undefined);
     });
@@ -85,6 +85,23 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     assert.equal((await request('/account')).status,404); // Client route waits for verified auth.
     assert.equal((await request('/portfolio')).status,200);
     assert.equal((await request('/history')).status,200);
+    // Direct visits and refreshes must serve the same shell as client-side navigation.
+    // Agent data remains protected by the API's passkey and invite checks.
+    const agentPath='/agents/12345678-1234-4234-8234-123456789abc';
+    for(const path of ['/agents',agentPath,agentPath+'?view=activity']) {
+      for(const method of ['GET','HEAD']) {
+        const page=await request(path,undefined,'','flurbo.singu.online','',method);
+        assert.equal(page.status,200,method+' '+path);
+        assert.equal(page.headers['content-type'],'text/html; charset=utf-8');
+        assert.equal(page.headers['cache-control'],'no-store');
+        assert.match(page.headers['content-security-policy'],/script-src 'self'/);
+        assert.equal(page.text,method==='HEAD'?'':'<html>Flurbo</html>');
+      }
+    }
+    for(const path of ['/agents/not-an-id',agentPath+'/extra','/agents/.env'])
+      assert.equal((await request(path)).status,404,path);
+    assert.equal((await request('/agents',{})).status,405);
+    assert.equal((await request('/api/agents')).status,401);
     assert.equal((await request('/rehearsal')).status,404);
     assert.equal((await request('/markets')).status,200);
     const docs = await request('/docs',undefined,'','flurbo.singu.online','');
