@@ -40,7 +40,9 @@ test('directory and portfolio include multiple pools without a collection select
     await page.getByRole('cell',{name:'7',exact:true}).waitFor();
     assert.equal(await page.getByRole('cell',{name:'3',exact:true}).count(),1);
     assert.equal(await page.getByLabel('Collection',{exact:true}).count(),0);
-    assert.equal(await page.getByRole('region',{name:'Market results'}).count(),2);
+    assert.equal(await page.getByRole('region',{name:'Market results'}).count(),0);
+    assert.equal(await page.getByRole('heading',{name:'Your shares',exact:true}).count(),1);
+    assert.equal(await page.getByRole('table').count(),1);
     await page.reload();await page.getByRole('cell',{name:'7',exact:true}).waitFor();
     await page.getByRole('cell',{name:'3',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[]);

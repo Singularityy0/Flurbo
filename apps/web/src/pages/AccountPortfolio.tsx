@@ -2,6 +2,7 @@ import {useEffect,useState} from 'react';
 import {linkedWallets,linkTradingWallet} from '../wallet-links';
 import {discoverWallets,type BrowserWallet} from '../auth/wallet-choice';
 import AccountHoldings from './AccountHoldings';
+import PortfolioDashboard from './PortfolioDashboard';
 import type {MarketGroup} from '../market-directory';
 
 export default function AccountPortfolio({account,namespace,groups}:{account:string;namespace:string;groups?:MarketGroup[]}) {
@@ -25,7 +26,7 @@ export default function AccountPortfolio({account,namespace,groups}:{account:str
     {error&&<p role="alert">{error} <button className="button button-outline" onClick={()=>setTick(n=>n+1)}>Retry</button></p>}
     {!wallets&&!error&&<p role="status">Loading your portfolio…</p>}
     {wallets?.length===0&&<p>Connect MetaMask to add your trading shares. <button className="button button-outline" disabled={busy} onClick={()=>void connect()}>{busy?'Check MetaMask…':'Connect MetaMask'}</button></p>}
-    {wallets&&(groups?<>{groups.map(group=><section className="portfolio-market-group" key={group.namespace} aria-label={group.label}><header><span className="eyebrow">{group.label}</span><p>Trading closed or closes {new Date(group.closesAt*1000).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</p></header><AccountHoldings account={account} wallets={wallets} namespace={group.namespace}/></section>)}<details className="portfolio-legacy" onToggle={e=>setLegacy(e.currentTarget.open)}><summary>Earlier experimental holdings</summary>{legacy&&<><EarlierHoldings account={account} wallets={wallets} namespace="original" label="Earlier demo holdings"/><EarlierHoldings account={account} wallets={wallets} namespace="learning" label="Learning experiment holdings"/></>}</details></>:<AccountHoldings key={account+namespace} account={account} wallets={wallets} namespace={namespace}/>)}
+    {wallets&&(groups?<><PortfolioDashboard key={account+wallets.join(',')} account={account} wallets={wallets} groups={groups}/><details className="portfolio-legacy" onToggle={e=>setLegacy(e.currentTarget.open)}><summary>Earlier experimental holdings</summary>{legacy&&<><EarlierHoldings account={account} wallets={wallets} namespace="original" label="Earlier demo holdings"/><EarlierHoldings account={account} wallets={wallets} namespace="learning" label="Learning experiment holdings"/></>}</details></>:<AccountHoldings key={account+namespace} account={account} wallets={wallets} namespace={namespace}/>)}
   </section>;
 }
 

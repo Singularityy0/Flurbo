@@ -34,7 +34,7 @@ test('combined shares appear in a fresh browser before history responds, with no
     await combined.locator('strong').getByText('Test event 1 + Test event 2',{exact:true}).waitFor();
     await combined.locator('small').getByText('Yes AND Yes',{exact:true}).waitFor();
     await page.getByRole('cell',{name:'10',exact:true}).waitFor();
-    assert.equal(batches.length,2);assert.ok(batches.every(b=>b.claims.length===16));
+    assert.equal(batches.length,4);assert.ok(batches.every(b=>b.claims.length===8));
     assert.equal(await page.getByRole('button',{name:/^Refresh/}).count(),1);
     assert.equal(await page.evaluate(()=>localStorage.length),0);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
@@ -78,7 +78,7 @@ test('account portfolio discovers older combinations on refresh without repeated
     assert.equal(await page.locator('.portfolio-account-identity').getByText(login,{exact:true}).count(),1);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     fail=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
-    await page.getByText('Older activity is still being indexed.',{exact:false}).waitFor();
+    await page.getByText('More history is needed for your activity and PnL.',{exact:true}).waitFor();
     assert.equal(await page.getByRole('link',{name:'Check history'}).count(),0);
     const stopped=scans;await page.waitForTimeout(1800);assert.equal(scans,stopped);
     fail=false;await page.getByRole('button',{name:'Refresh',exact:true}).click();
@@ -119,7 +119,7 @@ test('practice history outage still shows owned shares through the retired histo
     await page.goto('https://flurbo.singu.online/history');await page.waitForURL('**/portfolio');
     await page.getByRole('cell',{name:'10',exact:true}).waitFor();
     await page.getByText('Test event 1',{exact:true}).waitFor();
-    await page.getByText('Older activity is still being indexed.',{exact:false}).waitFor();
+    await page.getByText('More history is needed for your activity and PnL.',{exact:true}).waitFor();
     assert.doesNotMatch(await page.locator('body').innerText(),/No indexed activity|No shares in this collection yet/);
     await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();
     const stopped=scans;await page.waitForTimeout(1800);assert.equal(scans,stopped);
@@ -128,7 +128,7 @@ test('practice history outage still shows owned shares through the retired histo
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     if(process.env.FLURBO_TEST_SCREENSHOT) await page.screenshot({path:process.env.FLURBO_TEST_SCREENSHOT,fullPage:true});
     failAccount=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
-    await page.getByText('Some shares couldn’t be loaded. Refresh to complete your portfolio.',{exact:true}).waitFor();
+    await page.getByRole('alert').filter({hasText:'Some shares could not be refreshed.'}).waitFor();
     assert.equal(await page.getByRole('cell',{name:'10',exact:true}).count(),0);
     failAccount=false;await page.getByRole('button',{name:'Refresh',exact:true}).click();
     await page.getByRole('cell',{name:'10',exact:true}).waitFor();
@@ -186,14 +186,14 @@ test('portfolio pool isolation and linked-wallet changes survive late replies',{
     });
     await page.goto('https://flurbo.singu.online/portfolio');
     await until(()=>heldOld);
-    // Switching collections while the old collection is still reading must show only the new collection.
-    const october=page.getByRole('region',{name:'October practice',exact:true});
+    // Both pools share a table but quantities must never merge across pool IDs.
+    const october=page.getByRole('row').filter({has:page.locator(`a[href="/markets/${other}/0"]`)});
     await page.getByRole('cell',{name:'3',exact:true}).waitFor();
     releaseOld();await page.waitForTimeout(300);
     assert.equal(await october.getByRole('cell',{name:'10',exact:true}).count(),0);
     assert.equal(await october.getByRole('cell',{name:'3',exact:true}).count(),1);
     // A wallet linked while a read is pending replaces the account view; the older read cannot land afterwards.
-    holdLinked=true;await october.getByRole('button',{name:'Refresh',exact:true}).click();await until(()=>heldLinked);
+    holdLinked=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();await until(()=>heldLinked);
     holdLinked=false;linked=[owner,second];await page.evaluate(()=>window.dispatchEvent(new Event('flurbo:wallet-linked')));
     await page.getByRole('cell',{name:'8',exact:true}).waitFor();
     releaseLinked();await page.waitForTimeout(300);
@@ -242,18 +242,18 @@ test('portfolio shares one discovery read across linked wallets, bounds reads an
     await page.goto('https://flurbo.singu.online/portfolio');
     // Three linked wallets plus the Mera account each hold one share of the same claim, combined into one row.
     await page.getByRole('cell',{name:'4',exact:true}).waitFor();
-    await page.getByText('Older activity is still being indexed.',{exact:false}).waitFor();
+    await page.getByText('More history is needed for your activity and PnL.',{exact:true}).waitFor();
     assert.equal(scans,1,'one shared discovery read, not one per wallet');
     assert.ok(peak<=2,`at most two concurrent account reads, saw ${peak}`);
-    assert.ok(batches.length>0&&batches.every(n=>n>0&&n<=30),`position batches exceed 30 claims: ${batches}`);
+    assert.ok(batches.length>0&&batches.every(n=>n>0&&n<=8),`position batches exceed eight claims: ${batches}`);
     await page.waitForTimeout(1800);assert.equal(scans,1,'an incomplete index must not trigger automatic rescans');
     hold=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();await until(()=>held);
-    assert.equal(scans,2);
+    assert.equal(scans,1,'history must wait for initial holdings, including on refresh');
     const cancelled=await page.evaluate(()=>(window as any).cancelledReads);
     await page.getByRole('link',{name:'Markets',exact:true}).first().click();await page.waitForURL('**/markets');
     assert.ok(await page.evaluate(()=>(window as any).cancelledReads)>cancelled,'leaving Portfolio cancels pending reads');
     release();await page.waitForTimeout(300);
-    assert.equal(scans,2);assert.equal(await page.locator('.account-holdings').count(),0);
+    assert.equal(scans,1);assert.equal(await page.locator('.unified-portfolio').count(),0);
     assert.deepEqual(errors,[]);
   }finally{release();await browser.close();}
 });

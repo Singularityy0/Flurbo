@@ -74,7 +74,8 @@ test('portfolio alone collects owned payouts, preserves combined totals and reco
     });
     await page.goto('https://flurbo.singu.online/portfolio');
     await page.getByRole('cell',{name:'17',exact:true}).waitFor();
-    await page.getByRole('region',{name:'Market results'}).getByText('Void',{exact:true}).waitFor();
+    await page.getByRole('region',{name:'Your shares'}).getByText('17 test AUSD',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('region',{name:'Market results'}).count(),0);
     assert.equal(await page.locator('a[href="/history"]').count(),0);
     await page.getByRole('button',{name:'Collect payout',exact:true}).click();
     const form=page.getByRole('region',{name:'Collect portfolio payout'});

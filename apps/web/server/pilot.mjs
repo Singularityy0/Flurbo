@@ -174,13 +174,17 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     address(owner);
     if(!Array.isArray(claims)||claims.length>30)throw new Error('Use pages of at most thirty claims');
     const s=await snapshot(),tag=tagFor(s),resolved=await read(manifest.pool,pilotPoolAbi,'resolved',[],tag),rows=[];
+    // Validate the entire request before doing holdings reads. Bound parallelism
+    // so a page does not serialize thirty RPC round trips (or burst thirty).
     for(const claim of claims){
       const mask=uint(claim.mask);
       if(!validClaim(claim.scope,mask,manifest.publication.draft.events.length))throw new Error('Unsupported claim');
-      const quantity=await read(manifest.pool,pilotPoolAbi,'holdings',[owner,claim.scope,mask],tag);
-      const fraction=resolved?await read(manifest.pool,pilotPoolAbi,'payoutFraction',[claim.scope,mask],tag):null;
-      rows.push({...claim,quantity,payoutAtoms:fraction?quantity*fraction[0]/fraction[1]:null});
     }
+    for(let offset=0;offset<claims.length;offset+=4)rows.push(...await Promise.all(claims.slice(offset,offset+4).map(async claim=>{
+      const mask=uint(claim.mask),quantity=await read(manifest.pool,pilotPoolAbi,'holdings',[owner,claim.scope,mask],tag);
+      const fraction=resolved&&quantity>0n?await read(manifest.pool,pilotPoolAbi,'payoutFraction',[claim.scope,mask],tag):null;
+      return {...claim,quantity,payoutAtoms:resolved?(fraction?quantity*fraction[0]/fraction[1]:0n):null};
+    })));
     await stable(s);return json({snapshot:s,owner,rows});
   }
   async function stakeAt(event,stake,s){
