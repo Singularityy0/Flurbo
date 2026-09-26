@@ -1,6 +1,7 @@
 # Example only. Not deployed. Review before any activation.
 # Copy to wrangler.toml, then:
 #   wrangler secret put FLURBO_ALARM_GITHUB_TOKEN
+#   wrangler secret put FLURBO_ALARM_HEALTHCHECK_URL   (a dedicated Healthchecks check, period 1 min, grace 15 min)
 # Token: fine-grained, this repository only, Actions read and write (Metadata read is implicit).
 # GitHub cannot limit it to one workflow. It can dispatch, cancel and re-run any workflow in the
 # repository, enable or disable workflows, and delete run logs, artifacts and caches. It cannot read

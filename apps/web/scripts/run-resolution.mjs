@@ -7,6 +7,7 @@ import {pilotService,pilotRpc,pilotEvidence} from '../server/pilot.mjs';
 import {redisCommand} from '../server/redis-session.mjs';
 import {evidenceAssistant} from '../server/evidence-assistant.mjs';
 import {resolutionTick,resolutionRound} from '../server/resolution-worker.mjs';
+import {proposerHoldings as readProposerHoldings} from '../server/proposer-guard.mjs';
 import {activityEvidence} from '../server/ethereum-activity.mjs';
 import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
 
@@ -59,6 +60,13 @@ export function finishingManifests(env,primary){
     if(m.publication?.mode==='ethereum-activity')validateActivityDraft(m.publication.draft);
   }
   return manifests;
+}
+
+// Proposals are off unless explicitly "true"; unset (or GitHub's empty string for an unset variable) means off.
+export function proposalMode(env){
+  const value=env.FLURBO_RESOLUTION_PROPOSALS??'';
+  if(!['','true','false'].includes(value))throw Error('Invalid proposal mode');
+  return value==='true';
 }
 
 export async function runResolution(env=process.env){
@@ -117,12 +125,16 @@ export async function runResolution(env=process.env){
       attachment:JSON.stringify({reportHash:report.reportHash,assessment:report.assessment,ai:report.ai,sourceHash:report.evidence[0].payloadHash})},owner,manifest.draftHash);
     return {...saved,outcome:2};
   };
+  // Proposals are off unless explicitly enabled, independently of execution, so rollout testing can
+  // execute finishing actions while no outcome is ever proposed.
+  const proposals=proposalMode(env);
   const finishing=finishingManifests(env,manifest);
   configured=true;
-  if(!finishing)return await resolutionTick({manifest,owner,service,command,evidence:evidenceFor(manifest),transport,enabled});
+  const proposerHoldings=()=>readProposerHoldings({manifest,rpc,owner});
+  if(!finishing)return {...await resolutionTick({manifest,owner,service,command,evidence:proposals?evidenceFor(manifest):null,transport,proposerHoldings,enabled,allowEvidence:proposals,preflight:true}),proposals};
   // Only the explicitly allowlisted FLURBO_RESOLUTION_POOL may propose. Every other registered pool is finish-only.
-  const pools=[{manifest,service,evidence:evidenceFor(manifest)},...finishing.map(m=>({manifest:m,service:pilotService({manifest:m,rpc}),evidence:null}))];
-  return await resolutionRound({pools,owner,command,transport,enabled});
+  const pools=[{manifest,service,evidence:proposals?evidenceFor(manifest):null,proposerHoldings},...finishing.map(m=>({manifest:m,service:pilotService({manifest:m,rpc}),evidence:null}))];
+  return {...await resolutionRound({pools,owner,command,transport,enabled}),proposals};
   }catch(error){
     if(error instanceof ResolutionDiagnostic)throw error;
     throw new ResolutionDiagnostic(configured?'WORKER_CHECK_FAILED':'CONFIGURATION_INVALID');

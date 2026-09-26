@@ -5,6 +5,8 @@ import {settlementLease} from './settlement-store.mjs';
 import {monitorIdentity} from './settlement-monitor.mjs';
 import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
 import {settlementCalendar,nextWake,priority} from '../shared/settlement-calendar.mjs';
+import {proposerStatus} from './proposer-guard.mjs';
+export {proposerStatus};
 
 export function nextResolutionAction(state,owner,owned={},deferred={},{evidence=true}={}){
   if(state.delivered)return {kind:'complete'};
@@ -52,9 +54,12 @@ export async function requireHealthyMonitor(command,manifest,now){
     ||!Array.isArray(monitor.queue)||monitor.queue.length)throw Error('Fresh independent monitoring and delivered alerts required');
 }
 
+// Any event still Pending may need a proposal later, so the proposer must stay position-free.
+const undecided=state=>!state.delivered&&state.cases.some(c=>c.phase===0);
+
 // Dependencies are deliberately explicit: source/model reads cannot call signer.
 // One durable transaction at a time, across every pool using this signer.
-export async function resolutionTick({manifest,owner,service,command,evidence,transport,enabled=false,allowEvidence=true,now=()=>Math.floor(Date.now()/1000)}){
+export async function resolutionTick({manifest,owner,service,command,evidence,transport,proposerHoldings,enabled=false,allowEvidence=true,preflight=false,now=()=>Math.floor(Date.now()/1000)}){
   if(manifest.chainId!==10143||owner.toLowerCase()===manifest.publication.creator.toLowerCase()
     ||manifest.publication.reviewers.some(r=>r.address.toLowerCase()===owner.toLowerCase()))throw Error('Use a dedicated non-reviewer testnet signer');
   const lease=await settlementLease(command,'resolution-worker-v1:'+owner.toLowerCase());
@@ -81,12 +86,23 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
     if(!enabled){
       let monitoring='healthy';
       try{await requireHealthyMonitor(command,manifest,now());}catch{monitoring='not-ready';}
-      return {status:'dry-run',plan,pool:manifest.pool,monitoring};
+      const result={status:'dry-run',plan,pool:manifest.pool,monitoring};
+      if(plan.kind==='evidence')result.proposer=await proposerStatus(proposerHoldings);
+      else if(preflight&&undecided(state))result.proposerPreflight=await proposerStatus(proposerHoldings);
+      return result;
     }
-    if(['wait','complete'].includes(plan.kind))return {status:plan.kind,plan};
+    if(['wait','complete'].includes(plan.kind)){
+      const result={status:plan.kind,plan};
+      // Preflight: surface a proposer position while it can still be fixed, before observation ends.
+      if(preflight&&plan.kind==='wait'&&undecided(state))result.proposerPreflight=await proposerStatus(proposerHoldings);
+      return result;
+    }
     await requireHealthyMonitor(command,manifest,now());
     let input={owner,action:plan.action,...(plan.event===undefined?{}:{event:plan.event})};
     if(plan.kind==='evidence'){
+      // A proposer with a stake in the pool must not propose. Checked before evidence and again before signing.
+      const guard=await proposerStatus(proposerHoldings);
+      if(guard.status!=='clear')return {status:'proposer-blocked',event:plan.event,proposer:guard};
       const proposal=await evidence(plan.event);
       if(!proposal){saved.deferred={...saved.deferred,[plan.event]:now()+600};await save();return {status:'awaiting-evidence',event:plan.event};}
       if(!(manifest.publication.mode==='ethereum-activity'?[1,2]:[2]).includes(proposal.outcome))throw Error('Unsupported source-checked outcome');
@@ -96,6 +112,10 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
     // A second current read closes the model/approval latency gap.
     const current=await service.status(),next=nextResolutionAction(current,owner,saved.owned,saved.deferred,{evidence:allowEvidence});
     if(next.kind!==plan.kind||next.event!==plan.event||next.action!==plan.action)throw Error('Resolver changed during preparation');
+    if(plan.kind==='evidence'){
+      const guard=await proposerStatus(proposerHoldings);
+      if(guard.status!=='clear')return {status:'proposer-blocked',event:plan.event,proposer:guard};
+    }
     await lease.renew();
     const signed=await transport.sign(review),tx=parseTransaction(signed);
     if((await recoverTransactionAddress({serializedTransaction:signed})).toLowerCase()!==owner.toLowerCase()
@@ -126,7 +146,7 @@ export async function resolutionRound({pools,owner,command,transport,enabled=fal
   const raw=await command('GET',journalKey(owner)),stored=raw?JSON.parse(raw):null;
   const book=stored?.schema==='flurbo.resolution-journals.v2'?stored.pools:stored?{[stored.pool]:stored}:{};
   const pending=Object.values(book||{}).find(entry=>entry?.pending);
-  const tick=(p,live)=>resolutionTick({manifest:p.manifest,owner,service:p.service,command,evidence:p.evidence,transport,enabled:live,allowEvidence:!!p.evidence,now});
+  const tick=(p,live)=>resolutionTick({manifest:p.manifest,owner,service:p.service,command,evidence:p.evidence,transport,proposerHoldings:p.proposerHoldings,enabled:live,allowEvidence:!!p.evidence,preflight:!!p.proposerHoldings,now});
   if(pending){
     // Reconcile first; resolutionTick rechecks this under the lease.
     const target=pools.find(p=>p.manifest.pool===pending.pool);
@@ -148,7 +168,8 @@ export async function resolutionRound({pools,owner,command,transport,enabled=fal
   const monitoring=async p=>{try{await requireHealthyMonitor(command,p.manifest,now());return 'healthy';}catch{return 'not-ready';}};
   if(!enabled){
     const pools=[];
-    for(const r of rows)pools.push({pool:r.pool,plan:r.plan,monitoring:await monitoring(r.p)});
+    for(const r of rows)pools.push({pool:r.pool,plan:r.plan,monitoring:await monitoring(r.p),...(r.plan.kind==='evidence'?{proposer:await proposerStatus(r.p.proposerHoldings)}
+      :r.p.proposerHoldings&&undecided(r.state)?{proposerPreflight:await proposerStatus(r.p.proposerHoldings)}:{})});
     return {status:'dry-run',pools,skipped,nextWake:wake};
   }
   const entryFor=r=>r.calendar.entries.find(e=>e.action===(r.plan.kind==='evidence'?'evidence':r.plan.action)&&e.event===(r.plan.event??null))
@@ -164,5 +185,7 @@ export async function resolutionRound({pools,owner,command,transport,enabled=fal
   }
   const status=rows.length&&rows.every(r=>r.plan.kind==='complete')&&!skipped.length?'complete'
     :skipped.some(s=>s.reason==='monitoring-stale')?'monitoring-stale':'wait';
-  return {status,results,skipped,nextWake:wake};
+  const proposing=rows.find(r=>r.p.proposerHoldings&&r.plan.kind!=='evidence'&&undecided(r.state));
+  const preflightResult=proposing?{proposerPreflight:{pool:proposing.pool,...await proposerStatus(proposing.p.proposerHoldings)}}:{};
+  return {status,results,skipped,nextWake:wake,...preflightResult};
 }

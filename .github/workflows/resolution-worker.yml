@@ -10,11 +10,13 @@ on:
     types: [completed]
 permissions:
   contents: read
-concurrency:
-  group: testnet-resolution-worker
-  cancel-in-progress: false
 jobs:
   resolve:
+    # Job-level, not workflow-level: a workflow_run-triggered run whose job is skipped must never
+    # enter the group, because a newly pending entry cancels any pending scheduled run.
+    concurrency:
+      group: testnet-resolution-worker
+      cancel-in-progress: false
     if: vars.FLURBO_RESOLUTION_ENABLED == 'true' && ((github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_run' && vars.FLURBO_RESOLUTION_AFTER_MONITOR == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'))
     runs-on: ubuntu-latest
     timeout-minutes: 4
@@ -33,6 +35,8 @@ jobs:
         run: node apps/web/scripts/run-resolution.mjs --drain
         env:
           FLURBO_RESOLUTION_EXECUTE: ${{ vars.FLURBO_RESOLUTION_EXECUTE }}
+          # Proposals are off unless this is exactly true, independently of execution.
+          FLURBO_RESOLUTION_PROPOSALS: ${{ vars.FLURBO_RESOLUTION_PROPOSALS }}
           FLURBO_RESOLUTION_POOL: ${{ vars.FLURBO_RESOLUTION_POOL }}
           FLURBO_RESOLUTION_RULES_HASH: ${{ vars.FLURBO_RESOLUTION_RULES_HASH }}
           FLURBO_RESOLUTION_SIGNER_ADDRESS: ${{ vars.FLURBO_RESOLUTION_SIGNER_ADDRESS }}

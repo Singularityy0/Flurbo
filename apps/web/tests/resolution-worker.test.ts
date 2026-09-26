@@ -74,7 +74,8 @@ test('worker approves only the exact bond, then asserts; unavailable evidence de
   f.manifest.publication.draft.events.forEach(e=>e.observationEndsAt=now-10);
   const db=storage(f.manifest);let nonce=0;
   const transport={sign:async(review:any)=>account.signTransaction({chainId:10143,type:'legacy',nonce:nonce++,to:review.transaction.to,data:review.transaction.data,value:0n,gas:BigInt(review.gasLimit),gasPrice:BigInt(review.gasPrice)}),broadcast:async()=>{},receipt:async()=>({confirmed:true,success:true})};
-  const options={manifest:f.manifest,owner,service:f.service,command:db.command,transport,enabled:true,now:()=>now,evidence:async()=>({outcome:2,hash:'0x'+'ab'.repeat(32),uri:'https://flurbo.singu.online/api/pilot/evidence/fixture'})};
+  const clear=async()=>({clear:true,positions:[],wrapped:[],blockNumber:'100',checkedClaims:2});
+  const options={manifest:f.manifest,owner,service:f.service,command:db.command,transport,proposerHoldings:clear,enabled:true,now:()=>now,evidence:async()=>({outcome:2,hash:'0x'+'ab'.repeat(32),uri:'https://flurbo.singu.online/api/pilot/evidence/fixture'})};
   assert.equal((await resolutionTick(options)).action,'approve');
   assert.equal((await resolutionTick(options)).status,'confirmed');f.options.allowance=1000000n;
   assert.equal((await resolutionTick(options)).action,'assertOutcome');

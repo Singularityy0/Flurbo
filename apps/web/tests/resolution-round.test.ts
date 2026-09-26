@@ -25,6 +25,7 @@ function store(healthy:any[]){
 const signer={sign:async(review:any)=>account.signTransaction({chainId:10143,type:'legacy',nonce:0,to:review.transaction.to,data:review.transaction.data,value:0n,gas:BigInt(review.gasLimit),gasPrice:BigInt(review.gasPrice)}),
   broadcast:async()=>{},receipt:async()=>({confirmed:true,success:true})};
 const forbidden=async()=>{assert.fail('This pool must not prepare, gather evidence or sign');};
+const clear=async()=>({clear:true,positions:[],wrapped:[],blockNumber:'100',checkedClaims:2});
 
 // Finish-only pool: the real fixture, with its assertion deadline passed so a timeout finalize is due.
 async function finishPool(){
@@ -37,7 +38,7 @@ async function evidencePool(evidence:any=async()=>null){
   const manifest={...structuredClone(f.manifest),pool:'0x'+'aa'.repeat(20),resolver:'0x'+'ab'.repeat(20)};
   manifest.publication.draft.events.forEach((e:any)=>e.observationEndsAt=now-10);
   s.manifest=manifest;s.cases.forEach((c:any)=>c.assertionDeadline=String(now+3600));
-  return {manifest,service:{status:async()=>structuredClone(s),prepare:forbidden},evidence};
+  return {manifest,service:{status:async()=>structuredClone(s),prepare:forbidden},evidence,proposerHoldings:clear};
 }
 
 test('calendar lists exactly the actions the planner can take, at every phase and time',async()=>{
@@ -135,4 +136,15 @@ test('finishing pools need a bundle and an exact allowlist; unset keeps single-p
   assert.throws(()=>finishingManifests({FLURBO_RESOLUTION_COLLECTIONS_JSON:JSON.stringify([m,other]),FLURBO_RESOLUTION_FINISH_ALLOWLIST:key},primary),/exactly/);
   assert.throws(()=>finishingManifests({FLURBO_RESOLUTION_COLLECTIONS_JSON:JSON.stringify([m]),FLURBO_RESOLUTION_FINISH_ALLOWLIST:key+','+key},primary),/allowlist/);
   assert.throws(()=>finishingManifests({FLURBO_RESOLUTION_COLLECTIONS_JSON:JSON.stringify([{...m,rulesHash:'0x'+'00'.repeat(32)}]),FLURBO_RESOLUTION_FINISH_ALLOWLIST:key},primary),/exactly/);
+});
+
+test('regression: an unreadable pool never removes healthy pools from the plan or the next wake time',async()=>{
+  const a=await evidencePool(forbidden),b=await finishPool();
+  const broken={...a,service:{status:async()=>{throw Error('RPC outage');},prepare:forbidden}};
+  const later=await b.service.status();later.cases.forEach((c:any)=>c.assertionDeadline=String(now+7200));
+  const healthy={...b,service:{status:async()=>structuredClone(later),prepare:forbidden}};
+  const result=await resolutionRound({pools:[broken,healthy],owner,command:store([b.manifest]).command,transport:{sign:forbidden,broadcast:forbidden},now:()=>now});
+  assert.deepEqual(result.skipped,[{pool:a.manifest.pool,reason:'read-or-plan-failed'}]);
+  assert.deepEqual(result.pools.map((p:any)=>p.pool),[b.manifest.pool]);
+  assert.equal(result.nextWake,now+7200,'the healthy pool still reports when it next needs the worker');
 });

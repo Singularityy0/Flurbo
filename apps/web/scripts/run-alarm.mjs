@@ -3,8 +3,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { alarmConfig, alarmPoolsFromManifests, alarmTick, githubActions, jsonRpc } from '../server/settlement-alarm.mjs';
 
-// Local or scheduled alarm runner. Report-only by default: it never dispatches unless --dispatch is
-// given AND FLURBO_ALARM_GITHUB_TOKEN is set. Without a token it can still list public run history.
+// Local or scheduled alarm runner. Report-only by default: it dispatches only with --dispatch AND
+// FLURBO_ALARM_GITHUB_TOKEN, and pings Healthchecks only with --ping AND FLURBO_ALARM_HEALTHCHECK_URL.
+// Without a token it can still list public run history.
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const json = async path => JSON.parse(await readFile(resolve(root, path), 'utf8'));
 
@@ -18,12 +19,13 @@ export async function localAlarmConfig(env = process.env) {
 }
 
 export async function runAlarm({ args = process.argv.slice(2), env = process.env, fetcher = fetch } = {}) {
-  if (args.some(a => a !== '--dispatch')) throw new Error('Use no arguments (report only) or --dispatch');
+  if (args.some(a => !['--dispatch', '--ping'].includes(a))) throw new Error('Use no arguments (report only), --dispatch and/or --ping');
   const config = await localAlarmConfig(env);
   const github = githubActions({ repository: config.repository, token: env.FLURBO_ALARM_GITHUB_TOKEN || null,
     monitorWorkflow: config.monitorWorkflow, workerWorkflow: config.workerWorkflow, fetcher });
-  return alarmTick({ config, rpc: jsonRpc(env.FLURBO_ALARM_RPC_URL || 'https://testnet-rpc.monad.xyz', fetcher), github,
-    dispatch: args.includes('--dispatch') && !!env.FLURBO_ALARM_GITHUB_TOKEN });
+  return alarmTick({ config, rpc: jsonRpc(env.FLURBO_ALARM_RPC_URL || 'https://testnet-rpc.monad.xyz', fetcher), github, fetcher,
+    dispatch: args.includes('--dispatch') && !!env.FLURBO_ALARM_GITHUB_TOKEN,
+    healthUrl: args.includes('--ping') ? env.FLURBO_ALARM_HEALTHCHECK_URL || null : null });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

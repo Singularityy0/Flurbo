@@ -12,8 +12,19 @@ export function settlementCalendar(state, { owner, owned = {}, evidence = false 
   const p = state?.manifest?.publication, pool = state?.manifest?.pool;
   if (!p?.draft?.events || !Array.isArray(state.cases) || state.cases.length !== p.draft.events.length) throw new Error('Invalid calendar state');
   const snapshot = { blockNumber: String(state.snapshot.blockNumber), timestamp: time(state.snapshot.timestamp) };
-  if (state.delivered) return { pool, snapshot, complete: true, entries: [] };
-  const entries = [];
+  if (state.delivered) return { pool, snapshot, complete: true, entries: [], watch: [] };
+  const entries = [], watch = [];
+  // Phases a person may need to act on, whether or not the bot has anything to do. Monitoring must stay
+  // fresh for all of them, especially foreign assertions that only a challenge can correct.
+  state.cases.forEach((c, event) => {
+    if (c.phase === 1) watch.push({ event, reason: owner && c.asserter?.toLowerCase() === owner.toLowerCase() ? 'own-assertion' : 'foreign-assertion', until: time(c.challengeUntil) });
+    else if (c.phase === 2) watch.push({ event, reason: 'dispute', until: time(c.voteUntil) });
+    else if (c.phase === 0 && snapshot.timestamp >= time(p.draft.events[event].observationEndsAt)) {
+      const deadline = time(c.assertionDeadline);
+      watch.push({ event, reason: snapshot.timestamp >= deadline ? 'assertion-timeout' : 'assertion-window', until: deadline });
+    }
+  });
+  if (state.cases.every(c => c.phase === 3)) watch.push({ event: null, reason: 'delivery-pending', until: null });
   if (state.cases.every(c => c.phase === 3)) entries.push({ action: 'deliver', event: null, readyAt: 0, deadline: null });
   state.cases.forEach((c, event) => {
     if (c.phase === 3) return;
@@ -33,7 +44,7 @@ export function settlementCalendar(state, { owner, owned = {}, evidence = false 
       entries.push({ action: 'finalize', event, readyAt: time(c.voteUntil), deadline: null });
     }
   });
-  return { pool, snapshot, complete: false, entries };
+  return { pool, snapshot, complete: false, entries, watch };
 }
 
 // An evidence proposal is only useful before its assertion deadline; finishing actions never expire.
