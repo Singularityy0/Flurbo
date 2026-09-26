@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { pilotCall } from '../../shared/pilot.mjs';
-import { agentStore, memoryBackend, redisBackend } from './agent-store.mjs';
+import { agentStore, memoryBackend, redisBackend, addPaperFill, addConfirmedPurchase, compactReview, transactionDigest, AGENT_LIMITS } from './agent-store.mjs';
 import { quoteClaims, verifyReceipt, readResolution } from './agent-market.mjs';
 import { STRATEGY, DEFAULT_CONFIG, SCHEMAS, FlurboError, assertConfig, candidateClaims, decide, claimKey, parseMarket, parseForecast, parseQuoteResult,
-  parsePairAnalytics, parseClaimImplied, decisionToJSON, decisionFromJSON, recordPaperFill, paperFillToJSON, paperFillFromJSON, evaluatePaper, forecastToJSON,
+  parsePairAnalytics, parseClaimImplied, decisionToJSON, decisionFromJSON, recordPaperFill, paperFillToJSON, paperFillFromJSON, evaluatePaper, forecastToJSON, FILL_MODEL,
   claimFromJSON, isNamespace, parseAtoms } from '../../../../packages/sdk/src/index.ts';
 
 // Agent routes. Called only after the application's session and invite checks, with the verified login.
@@ -17,6 +17,11 @@ const keysExactly = (input, allowed, required = allowed) => {
   return input;
 };
 const PROPOSAL_TTL_SECONDS = 300;
+// A decision is reserved for this long while its transaction is prepared. A server that stops mid-way
+// leaves a reservation that lapses instead of blocking the decision forever.
+const RESERVATION_SECONDS = 60;
+// An unsent review stays recoverable (a hash can still be attached) for a day after its decision lapses.
+const RECOVERY_SECONDS = 86_400;
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 const MODES = ['paper', 'approval'];
 
@@ -37,15 +42,44 @@ export const DEFAULT_PROFILE_CONFIG = Object.freeze({ quantityAtoms: DEFAULT_CON
   minEdgeBps: DEFAULT_CONFIG.minEdgeBps, minEdgeAtoms: DEFAULT_CONFIG.minEdgeAtoms.toString(), maxCostAtoms: DEFAULT_CONFIG.maxCostAtoms.toString(),
   minEvidence: DEFAULT_CONFIG.minEvidence, maxEvidenceAgeDays: DEFAULT_CONFIG.maxEvidenceAgeDays, includeSingles: DEFAULT_CONFIG.includeSingles, paperBudgetAtoms: '50000000' });
 
+// Proposal lifecycle:
+//   preparing -> awaiting-approval | preparation-failed | preparation-expired
+//   awaiting-approval -> submitted | rejected (refresh keeps it awaiting-approval with a new review)
+//   submitted -> confirmed | approval-confirmed | failed;  approval-confirmed -> awaiting-approval | rejected
+// Every review a proposal issues is kept. Expiry, dismissal or archiving does not prove a review was never
+// sent, so a hash for any of them can still be recorded (one tracked transaction at a time) and verified.
+// Every change bumps `version`. A change computed from an older read is refused, never merged.
+const hasSubmitted = p => p.transactions.some(t => t.status === 'submitted');
+const reserving = (p, now) => p.status === 'preparing' && now < p.reservedUntil;
+// Proposals that block another proposal for the same decision. An expired, unsent review still blocks:
+// it may have been sent from MetaMask with tracking lost, so the user refreshes or dismisses it first.
+const LIVE = ['awaiting-approval', 'submitted', 'approval-confirmed', 'confirmed'];
+const blocksDecision = (p, now) => reserving(p, now) || LIVE.includes(p.status);
+const decisionDeadline = p => Math.max(p.decision?.proposal ? p.decision.proposal.quoteExpiresAt + PROPOSAL_TTL_SECONDS : 0, p.review?.expiresAt ?? 0);
+// Records that are never trimmed: anything preparing, any transaction not yet resolved, and unsent
+// reviews that could still be recovered.
+export const unresolvedProposal = (p, now) => reserving(p, now) || hasSubmitted(p)
+  || (['awaiting-approval', 'approval-confirmed'].includes(p.status) && now < decisionDeadline(p) + RECOVERY_SECONDS);
+const TX_FIELDS = ['from', 'to', 'data', 'chainId', 'value'];
+const reviewCount = state => state.proposals.reduce((n, p) => n + (p.reviews?.length ?? 0), 0);
+const hasReview = (p, review) => p.reviews.some(v => transactionDigest(v.transaction) === transactionDigest(review.transaction));
+const reviewLimit = () => fail(409, `This agent has prepared its limit of ${AGENT_LIMITS.reviewsPerAgent} transaction reviews. Create a new agent to continue.`, 'REVIEW_LIMIT');
+const requireActive = profile => { if (profile.status === 'archived') fail(409, 'This agent is archived. Its transactions can still be recorded and checked.', 'ARCHIVED'); };
+
 // Proposal status as the user should read it. An expired review with no transaction is shown as expired.
 export function proposalView(record, now = nowSeconds()) {
-  if (record.status === 'awaiting-approval' && now >= record.review.expiresAt && !record.transactions.some(t => t.status === 'submitted')) return { ...record, status: 'expired' };
-  return record;
+  // The embedded decision stays server-side; replaced reviews are exposed only as the transactions they carried.
+  const { decision, reviews, superseded, reservedUntil, ...rest } = record, view = { ...rest, reviewedTransactions: (reviews ?? []).map(v => v.transaction) };
+  if (record.status === 'awaiting-approval' && now >= record.review.expiresAt && !hasSubmitted(record)) return { ...view, status: 'expired' };
+  if (record.status === 'preparing' && !reserving(record, now)) return { ...view, status: 'preparation-expired' };
+  return view;
 }
+const recordsView = (state, now) => [...state.proposals.map(p => proposalView(p, now)), ...state.paper.recent, ...state.decisions]
+  .sort((a, b) => b.createdAt - a.createdAt);
 
 export function agentApi({ command = null, hosted = false, serviceFor, links, rpc, now = nowSeconds }) {
   if (hosted && !command) throw new Error('Durable agent storage is required when hosted');
-  const store = agentStore(command ? redisBackend(command) : memoryBackend());
+  const store = agentStore(command ? redisBackend(command) : memoryBackend(), { unresolved: p => unresolvedProposal(p, now()) });
   const service = namespace => {
     if (!isNamespace(namespace)) fail(400, 'Choose a supported market.');
     const s = serviceFor(namespace);
@@ -53,6 +87,7 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
     return s;
   };
   const load = async (account, id) => { const found = await store.get(account, id); if (!found) fail(404, 'Agent not found.'); return found; };
+  const change = async (account, id, fn) => { const result = await store.mutate(account, id, fn); return result ?? fail(404, 'Agent not found.'); };
   const linkedOwner = async (account, owner, origin) => {
     if (typeof owner !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(owner)) fail(400, 'Choose a linked MetaMask wallet.');
     const { wallets } = await links.list(account, origin);
@@ -63,6 +98,7 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
   async function evaluate(account, id, input) {
     keysExactly(input, ['forecast']);
     const { profile } = await load(account, id);
+    requireActive(profile);
     if (profile.status !== 'active') fail(409, 'Resume this agent before evaluating.');
     if (!await store.allowEvaluation(account, now() * 1000)) fail(429, 'Evaluation limit reached for this hour. Try later.', 'RATE_LIMITED');
     const svc = service(profile.market.namespace);
@@ -96,25 +132,34 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
     }
     const record = { id: randomUUID(), kind: 'decision', createdAt: now(), strategy: STRATEGY, forecast: forecastToJSON(forecast),
       decision: decisionToJSON(decision), impliedStale: !!implied?.stale, proposalImplied };
-    await store.records(account, id, async list => [[record, ...list], null]);
-    return record;
+    return change(account, id, state => { state.decisions.unshift(record); return record; });
   }
 
   async function paper(account, id, input) {
     keysExactly(input, ['decisionId']);
     const { profile } = await load(account, id), eventCount = await eventCountFor(profile);
-    return store.records(account, id, async list => {
-      const source = list.find(r => r.kind === 'decision' && r.id === input.decisionId);
+    requireActive(profile);
+    return change(account, id, async (state, current) => {
+      requireActive(current);
+      const source = state.decisions.find(r => r.id === input.decisionId);
       if (!source) fail(404, 'Decision not found.');
-      const fills = list.filter(r => r.kind === 'paper').map(r => paperFillFromJSON(r.fill, eventCount));
-      const memory = { fills: async () => fills, add: async () => {} };
+      if (source.paperFillId) fail(409, 'This decision was already paper traded.');
+      const decision = decisionFromJSON(source.decision, eventCount), p = decision.proposal;
+      // The budget counts every paper fill ever recorded, not only those still shown in the feed.
+      if (p && BigInt(state.paper.costAtoms) + p.quoteAtoms > BigInt(current.config.paperBudgetAtoms)) fail(409, 'This paper trade would exceed the agent\'s paper budget.');
       let fill;
-      try { fill = await recordPaperFill(memory, decisionFromJSON(source.decision, eventCount), { now: now(), id: randomUUID(), budgetAtoms: BigInt(profile.config.paperBudgetAtoms) }); }
+      try { fill = await recordPaperFill({ fills: async () => paperPositions(state.paper, eventCount), add: async () => {} }, decision, { now: now(), id: randomUUID() }); }
       catch (e) { fail(409, e instanceof FlurboError ? e.message : 'Paper trade rejected.'); }
       const record = { id: fill.id, kind: 'paper', createdAt: now(), decisionId: source.id, fill: paperFillToJSON(fill) };
-      return [[record, ...list], record];
+      state.paper.recent.unshift(record); addPaperFill(state.paper, record.fill); source.paperFillId = record.id;
+      return record;
     });
   }
+  // One position per claim from the running totals: its total quantity and cost and its newest quote
+  // block. The fill model's rule (a strictly newer block per claim) applies to these unchanged.
+  const paperPositions = (paper, eventCount) => Object.values(paper.claims).map(c => paperFillFromJSON({ schema: SCHEMAS.paperFill, mode: 'paper', id: 'position',
+    decisionKey: 'position', claim: c.claim, quantityAtoms: c.quantityAtoms, costAtoms: c.costAtoms, snapshotBlock: c.lastBlock, snapshotTimestamp: 0, filledAt: 0,
+    model: FILL_MODEL, assumptions: [] }, eventCount));
   async function eventCountFor(profile) { return service(profile.market.namespace).manifest.publication.draft.events.length; }
 
   // Prepare the unsigned review through the existing transaction preparation, then prove it still carries
@@ -138,68 +183,146 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
     return review;
   }
 
+  // Reserve the decision atomically, prepare outside the lock, then activate only if the reservation is
+  // still ours and unexpired. Two servers racing on one decision: exactly one reserves, the other gets
+  // PROPOSAL_EXISTS without preparing anything.
   async function propose(account, id, input, origin) {
     keysExactly(input, ['decisionId', 'owner']);
     const { profile } = await load(account, id);
+    requireActive(profile);
     if (profile.status !== 'active') fail(409, 'Resume this agent before proposing a trade.');
     if (profile.mode !== 'approval') fail(409, 'This agent is in paper mode. Switch it to approval mode to prepare real trades.');
     const owner = await linkedOwner(account, input.owner, origin), eventCount = await eventCountFor(profile);
-    const found = (await load(account, id)).records.find(r => r.kind === 'decision' && r.id === input.decisionId);
-    if (!found) fail(404, 'Decision not found.');
-    const decision = decisionFromJSON(found.decision, eventCount);
-    if (decision.outcome !== 'propose' || !decision.proposal) fail(409, 'This decision abstained. There is nothing to approve.');
-    // One live proposal per decision: a confirmed, in-flight or waiting proposal blocks another, so a single
-    // decision can never turn into a second purchase. Rejected, failed or expired proposals may be retried.
-    const records = (await load(account, id)).records;
-    if (records.some(r => r.kind === 'proposal' && r.decisionId === found.id && ['awaiting-approval', 'submitted', 'approval-confirmed', 'confirmed'].includes(proposalView(r, now()).status)))
-      fail(409, 'This decision already has a proposal in progress or confirmed. Evaluate again for a new decision.', 'PROPOSAL_EXISTS');
-    if (now() >= decision.proposal.quoteExpiresAt + PROPOSAL_TTL_SECONDS) fail(409, 'This decision is too old. Evaluate again.');
-    const review = await prepareFor(profile, decision, owner);
-    const record = { id: randomUUID(), kind: 'proposal', createdAt: now(), updatedAt: now(), decisionId: found.id, owner, account: account.toLowerCase(),
-      claim: found.decision.proposal.claim, quantityAtoms: found.decision.proposal.quantityAtoms, status: 'awaiting-approval', review, transactions: [] };
-    return store.records(account, id, async list => [[record, ...list], record]);
+    const reservation = await change(account, id, state => {
+      const t = now(), found = state.decisions.find(r => r.id === input.decisionId);
+      if (!found) fail(404, 'Decision not found.');
+      const decision = decisionFromJSON(found.decision, eventCount);
+      if (decision.outcome !== 'propose' || !decision.proposal) fail(409, 'This decision abstained. There is nothing to approve.');
+      for (const p of state.proposals) if (p.status === 'preparing' && !reserving(p, t)) { p.status = 'preparation-expired'; p.version++; p.updatedAt = t; delete p.reservedUntil; }
+      // One live proposal per decision: a confirmed, in-flight, waiting or preparing proposal blocks another, so a
+      // single decision can never turn into a second purchase. Rejected or failed proposals may be retried.
+      if (state.proposals.some(p => p.decisionId === found.id && blocksDecision(p, t)))
+        fail(409, 'This decision already has a proposal in progress or confirmed. Evaluate again for a new decision.', 'PROPOSAL_EXISTS');
+      if (t >= decision.proposal.quoteExpiresAt + PROPOSAL_TTL_SECONDS) fail(409, 'This decision is too old. Evaluate again.');
+      if (reviewCount(state) >= AGENT_LIMITS.reviewsPerAgent) reviewLimit();
+      const record = { id: randomUUID(), kind: 'proposal', version: 1, createdAt: t, updatedAt: t, decisionId: found.id, decision: found.decision, owner, account: account.toLowerCase(),
+        claim: found.decision.proposal.claim, quantityAtoms: found.decision.proposal.quantityAtoms, status: 'preparing', reservedUntil: t + RESERVATION_SECONDS,
+        review: null, reviews: [], transactions: [] };
+      state.proposals.unshift(record);
+      return record;
+    });
+    let review = null, failure = null;
+    try { review = await prepareFor(profile, decisionFromJSON(reservation.decision, eventCount), owner); } catch (e) { failure = e; }
+    const outcome = await change(account, id, (state, current) => {
+      const t = now(), r = state.proposals.find(p => p.id === reservation.id);
+      if (!failure && current.status === 'archived') failure = new HttpError(409, 'This agent was archived while the purchase was being prepared.', 'ARCHIVED');
+      if (!failure && reviewCount(state) >= AGENT_LIMITS.reviewsPerAgent) failure = new HttpError(409, 'This agent has reached its limit of transaction reviews.', 'REVIEW_LIMIT');
+      if (!r || r.status !== 'preparing' || r.version !== reservation.version)
+        return { error: new HttpError(409, 'This proposal changed while it was being prepared. Reload before approving.', 'PROPOSAL_CHANGED') };
+      delete r.reservedUntil; r.version++; r.updatedAt = t;
+      if (failure) { r.status = 'preparation-failed'; r.failure = failure instanceof HttpError ? failure.message : 'The purchase could not be prepared.'; return { error: failure }; }
+      if (t >= reservation.reservedUntil) { r.status = 'preparation-expired'; return { error: new HttpError(409, 'Preparing this purchase took too long. Try again.', 'RESERVATION_EXPIRED') }; }
+      r.status = 'awaiting-approval'; r.review = review; r.reviews = [compactReview(review)];
+      return { record: proposalView(r, t) };
+    });
+    if (outcome.error) throw outcome.error;
+    return outcome.record;
   }
 
-  // Proposal lifecycle. Only a verified receipt for the reviewed purchase marks it confirmed.
+  // Proposal lifecycle. Only a verified receipt for the reviewed purchase marks it confirmed. Slow work
+  // (transaction preparation, receipt reads) happens outside the lock; the write then checks that the
+  // proposal did not change meanwhile.
   async function track(account, id, proposalId, input, origin) {
-    const allowed = { refresh: ['action'], submitted: ['action', 'hash'], check: ['action'], rejected: ['action'] };
+    const allowed = { refresh: ['action'], submitted: ['action', 'hash', 'transaction'], check: ['action'], rejected: ['action'] };
     if (!input || !allowed[input.action]) fail(400, 'Unknown proposal action.');
     keysExactly(input, allowed[input.action]);
-    const { profile, records } = await load(account, id), eventCount = await eventCountFor(profile);
-    const current = records.find(r => r.kind === 'proposal' && r.id === proposalId);
-    if (!current) fail(404, 'Proposal not found.');
-    if (current.account !== account.toLowerCase()) fail(404, 'Proposal not found.');
-    let next = { ...current, updatedAt: now() };
+    const { profile, state } = await load(account, id), eventCount = await eventCountFor(profile);
+    const current = state.proposals.find(r => r.id === proposalId);
+    if (!current || current.account !== account.toLowerCase()) fail(404, 'Proposal not found.');
+    const update = fn => change(account, id, (next, latest) => {
+      const r = next.proposals.find(p => p.id === proposalId);
+      if (!r) fail(404, 'Proposal not found.');
+      requireActive(latest);
+      const t = now(), result = fn(r, next, t);
+      r.version++; r.updatedAt = t;
+      return result ?? proposalView(r, t);
+    });
+
     if (input.action === 'refresh') {
-      if (current.transactions.some(t => t.status === 'submitted')) fail(409, 'A transaction is still being tracked. Check it before preparing another.');
-      if (!['awaiting-approval', 'approval-confirmed', 'rejected', 'expired'].includes(proposalView(current, now()).status)) fail(409, 'This proposal can no longer be refreshed.');
+      requireActive(profile);
+      if (hasSubmitted(current)) fail(409, 'A transaction is still being tracked. Check it before preparing another.');
+      if (!['awaiting-approval', 'approval-confirmed'].includes(current.status)) fail(409, 'This proposal can no longer be refreshed.');
       await linkedOwner(account, current.owner, origin);
-      const decision = decisionFromJSON(records.find(r => r.kind === 'decision' && r.id === current.decisionId).decision, eventCount);
+      const source = current.decision ?? state.decisions.find(r => r.id === current.decisionId)?.decision;
+      if (!source) fail(409, 'The decision behind this proposal is no longer available. Evaluate again.');
+      const decision = decisionFromJSON(source, eventCount);
       if (now() >= decision.proposal.quoteExpiresAt + PROPOSAL_TTL_SECONDS) fail(409, 'This decision is too old. Evaluate again.');
-      next = { ...next, status: 'awaiting-approval', review: await prepareFor(profile, decision, current.owner) };
-    } else if (input.action === 'submitted') {
-      if (typeof input.hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(input.hash)) fail(400, 'Invalid transaction hash.');
-      if (current.transactions.some(t => t.status === 'submitted')) fail(409, 'A transaction is already being tracked for this proposal.');
-      if (current.status !== 'awaiting-approval') fail(409, 'This proposal is not waiting for a transaction.');
-      next = { ...next, status: 'submitted', transactions: [...current.transactions, { hash: input.hash.toLowerCase(), action: current.review.action, status: 'submitted', review: current.review }] };
-    } else if (input.action === 'rejected') {
-      if (current.status !== 'awaiting-approval') fail(409, 'Only a waiting proposal can be marked rejected.');
-      next = { ...next, status: 'rejected' };
-    } else {
-      const pending = current.transactions.find(t => t.status === 'submitted');
-      if (!pending) return proposalView(current, now());
-      let result;
-      try { result = await verifyReceipt({ rpc, review: pending.review, hash: pending.hash, manifest: service(profile.market.namespace).manifest }); }
-      catch { fail(503, 'The transaction could not be checked. Try again shortly.'); }
-      if (['unknown', 'pending', 'confirming'].includes(result.status)) return { ...proposalView(current, now()), check: result.status };
-      const tx = { ...pending, status: result.status, blockNumber: result.blockNumber ?? null, paidAtoms: result.paidAtoms ?? null };
-      const transactions = current.transactions.map(t => (t.hash === pending.hash ? tx : t));
-      const status = result.status === 'confirmed' ? (pending.action === 'buy' ? 'confirmed' : 'approval-confirmed') : 'failed';
-      next = { ...next, status, transactions, ...(status === 'failed' ? { failure: result.status === 'mismatch' ? 'The transaction does not match the reviewed purchase.' : 'The transaction reverted on-chain.' } : {}) };
+      const review = await prepareFor(profile, decision, current.owner);
+      return update((r, next) => {
+        if (r.version !== current.version) fail(409, 'This proposal changed while the review was being prepared. Reload before approving.', 'PROPOSAL_CHANGED');
+        // Earlier reviews stay attached: any of them may already be open in MetaMask or sent.
+        if (!hasReview(r, review)) { if (reviewCount(next) >= AGENT_LIMITS.reviewsPerAgent) reviewLimit(); r.reviews.push(compactReview(review)); }
+        r.status = 'awaiting-approval'; r.review = review;
+      });
     }
-    return store.records(account, id, async list => {
-      if (!list.some(r => r.id === proposalId)) fail(404, 'Proposal not found.');
-      return [list.map(r => (r.id === proposalId ? next : r)), proposalView(next, now())];
+    if (input.action === 'submitted') {
+      if (typeof input.hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(input.hash)) fail(400, 'Invalid transaction hash.');
+      const sent = input.transaction;
+      if (!sent || typeof sent !== 'object' || TX_FIELDS.some(f => typeof sent[f] !== 'string')) fail(400, 'Include the reviewed transaction that was sent.');
+      const hash = input.hash.toLowerCase(), digest = transactionDigest(sent);
+      return change(account, id, async (next, latest, tx) => {
+        const r = next.proposals.find(p => p.id === proposalId), t = now();
+        if (!r) fail(404, 'Proposal not found.');
+        // A transaction hash is attributed to one proposal across all agents and accounts, atomically with
+        // this write. Registering it again for the same proposal and transaction is a no-op, so a retry
+        // after a lost response is safe; any other proposal is refused and never counts it.
+        const existing = await tx.attribution(hash);
+        const ours = !!existing && existing.owner === tx.owner && existing.agentId === id && existing.proposalId === r.id && existing.transaction === digest;
+        if (existing && !ours) fail(409, 'This transaction is already recorded by another proposal.', 'HASH_CONFLICT');
+        const known = r.transactions.find(x => x.hash === hash);
+        if (known) {
+          if (transactionDigest(known.review.transaction) !== digest) fail(409, 'This hash is already tracked for a different transaction.', 'HASH_CONFLICT');
+          if (!ours) tx.attribute(hash, { proposalId: r.id, transaction: digest });
+          return proposalView(r, t);
+        }
+        if (hasSubmitted(r)) fail(409, 'A different transaction is already being tracked for this proposal. Check it first and do not send again.', 'HASH_CONFLICT');
+        const review = r.reviews.find(v => transactionDigest(v.transaction) === digest);
+        if (!review) fail(409, 'This transaction is not one prepared for this proposal.', 'REVIEW_MISMATCH');
+        tx.attribute(hash, { proposalId: r.id, transaction: digest });
+        if (!r.review || transactionDigest(r.review.transaction) !== digest) r.review = review;
+        r.status = 'submitted'; r.version++; r.updatedAt = t;
+        r.transactions = [...r.transactions, { hash, action: review.action, status: 'submitted', review, submittedAt: t }];
+        return proposalView(r, t);
+      });
+    }
+    if (input.action === 'rejected') {
+      return update(r => {
+        if (hasSubmitted(r) || !['awaiting-approval', 'approval-confirmed'].includes(r.status)) fail(409, 'Only a waiting proposal can be dismissed.');
+        r.status = 'rejected';
+      });
+    }
+    const pending = current.transactions.find(t => t.status === 'submitted');
+    if (!pending) return proposalView(current, now());
+    let result;
+    try { result = await verifyReceipt({ rpc, review: pending.review, hash: pending.hash, manifest: service(profile.market.namespace).manifest }); }
+    catch { fail(503, 'The transaction could not be checked. Try again shortly.'); }
+    if (['unknown', 'pending', 'confirming'].includes(result.status)) return { ...proposalView(current, now()), check: result.status };
+    return change(account, id, (next, latest, attribution) => {
+      const r = next.proposals.find(p => p.id === proposalId), t = now();
+      if (!r) fail(404, 'Proposal not found.');
+      const tx = r.transactions.find(x => x.hash === pending.hash);
+      if (!tx || tx.status !== 'submitted') return proposalView(r, t); // already resolved by another request
+      let done = { ...tx, status: result.status, blockNumber: result.blockNumber ?? null, paidAtoms: result.paidAtoms ?? null };
+      if (result.status === 'confirmed' && tx.action === 'buy') done = addConfirmedPurchase(next.live, done);
+      // A hash that is not the reviewed transaction releases its attribution for whoever really sent it.
+      if (result.status === 'mismatch') attribution.attribute(tx.hash, { proposalId: r.id, transaction: transactionDigest(tx.review.transaction) }, 'release');
+      r.transactions = r.transactions.map(x => (x.hash === tx.hash ? done : x));
+      // A confirmed purchase stays confirmed whatever later transactions on the same proposal do.
+      const bought = r.transactions.some(x => x.action === 'buy' && x.status === 'confirmed');
+      const status = bought ? 'confirmed' : result.status === 'confirmed' ? 'approval-confirmed' : 'failed';
+      r.status = status; r.version++; r.updatedAt = t;
+      if (result.status !== 'confirmed') r.failure = result.status === 'mismatch' ? 'The transaction does not match the reviewed purchase.' : 'The transaction reverted on-chain.';
+      return proposalView(r, t);
     });
   }
 
@@ -207,17 +330,21 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
   // purchases, at the cost the receipt shows. Collected payouts belong to the wallet in Portfolio and are
   // not attributed to an agent. Unknown values are null with a reason, never zero.
   async function performance(account, id) {
-    const { profile, records } = await load(account, id), svc = service(profile.market.namespace), eventCount = svc.manifest.publication.draft.events.length;
+    const { profile, state } = await load(account, id), svc = service(profile.market.namespace), eventCount = svc.manifest.publication.draft.events.length;
     let resolution = null, resolutionKnown = true;
     try { resolution = await readResolution({ rpc, pool: svc.manifest.pool }); } catch { resolutionKnown = false; }
-    const paper = evaluatePaper(records.filter(r => r.kind === 'paper').map(r => paperFillFromJSON(r.fill, eventCount)), { eventCount, resolution });
+    // From the running totals, so results stay complete after the activity feed is trimmed. Payouts are
+    // computed per claim position, rounding down once per claim.
+    const positions = paperPositions(state.paper, eventCount), paper = evaluatePaper(positions, { eventCount, resolution });
+    paper.fills = state.paper.fills; paper.costBasisAtoms = BigInt(state.paper.costAtoms);
+    if (paper.realized) paper.realized.count = state.paper.fills;
+    paper.missing = paper.missing.filter(m => !m.startsWith('No current sell quote'));
+    if (!resolution && positions.length) paper.missing.unshift('Paper positions have no current sell quote, so their value is unknown.');
     if (!resolutionKnown) paper.missing.push('The pool resolution could not be read just now.');
-    const confirmed = records.filter(r => r.kind === 'proposal' && r.status === 'confirmed');
-    const buys = confirmed.flatMap(r => r.transactions.filter(t => t.action === 'buy' && t.status === 'confirmed'));
-    const known = buys.filter(t => t.paidAtoms !== null);
-    const live = { mode: 'live', confirmedPurchases: buys.length, costBasisAtoms: known.length === buys.length ? known.reduce((s, t) => s + BigInt(t.paidAtoms), 0n).toString() : null,
+    const l = state.live;
+    const live = { mode: 'live', confirmedPurchases: l.confirmedPurchases, costBasisAtoms: l.unknownCost ? null : l.costAtoms,
       realizedPnlAtoms: null, collectedPayoutAtoms: null,
-      missing: [...(known.length !== buys.length ? ['Some purchase costs could not be read from their receipts.'] : []),
+      missing: [...(l.unknownCost ? ['Some purchase costs could not be read from their receipts.'] : []),
         'Collected payouts and realized results are shown per wallet in Portfolio and are not attributed to this agent.'] };
     const s = v => (v === null || v === undefined ? null : v.toString());
     return { schema: 'flurbo.agent-performance.v1', paper: { ...paper, costBasisAtoms: s(paper.costBasisAtoms),
@@ -248,7 +375,7 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
 
   const routes = async ({ method, path, input, login, origin }) => {
     const account = login.address.toLowerCase(), parts = path.split('/').slice(3); // ['/', 'api', 'agents', ...]
-    if (method === 'GET' && parts.length === 0) return { schema: 'flurbo.agents.v1', durable: store.durable, agents: await store.list(account) };
+    if (method === 'GET' && parts.length === 0) return { schema: 'flurbo.agents.v1', durable: store.durable, agents: await store.list(account), archived: await store.listArchived(account) };
     if (method === 'POST' && parts.length === 0) {
       keysExactly(input, ['name', 'namespace', 'mode', 'config'], ['name', 'namespace', 'mode']);
       const svc = service(input.namespace), base = profileFrom(input);
@@ -260,17 +387,20 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
     if (method === 'POST' && parts.length === 1 && parts[0] === 'quote') return quote(input);
     const id = parts[0];
     if (method === 'GET' && parts.length === 1) {
-      const { profile, records } = await load(account, id);
-      return { profile, records: records.map(r => (r.kind === 'proposal' ? proposalView(r, now()) : r)) };
+      const { profile, state } = await load(account, id);
+      return { profile, records: recordsView(state, now()) };
     }
     if (method !== 'POST') fail(405, 'Method not allowed.');
     if (parts.length === 2 && parts[1] === 'update') {
       keysExactly(input, ['name', 'mode', 'status', 'config'], []);
-      const updated = await store.update(account, id, async current => ({ ...current, ...profileFrom(input, current),
+      const updated = await store.update(account, id, async current => (requireActive(current), { ...current, ...profileFrom(input, current),
         config: input.config ? configFromInput(input.config, 100_000_000n) : current.config, updatedAt: now() }));
       return updated ?? fail(404, 'Agent not found.');
     }
-    if (parts.length === 2 && parts[1] === 'delete') { keysExactly(input, []); return (await store.remove(account, id)) ? { deleted: true } : fail(404, 'Agent not found.'); }
+    if (parts.length === 2 && parts[1] === 'delete') {
+      keysExactly(input, []);
+      return (await store.archive(account, id, now())) ? { deleted: true, archived: true } : fail(404, 'Agent not found.');
+    }
     if (parts.length === 2 && parts[1] === 'evaluate') return evaluate(account, id, input);
     if (parts.length === 2 && parts[1] === 'performance') { keysExactly(input, []); return performance(account, id); }
     if (parts.length === 2 && parts[1] === 'paper') return paper(account, id, input);
@@ -286,7 +416,7 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
       try { return { status: 200, body: await routes(request) }; }
       catch (e) {
         if (e instanceof HttpError) return { status: e.status, body: { error: e.message, ...(e.code ? { code: e.code } : {}) } };
-        if (e?.status === 409) return { status: 409, body: { error: e.message } };
+        if (e?.status === 409) return { status: 409, body: { error: e.message, code: e.code ?? 'BUSY' } };
         return { status: 503, body: { error: 'The agent service is temporarily unavailable. Nothing was traded.' } };
       }
     },

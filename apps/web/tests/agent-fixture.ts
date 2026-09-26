@@ -9,13 +9,24 @@ export const multicall=parseAbi(['function aggregate3((address target,bool allow
 
 // Fake Upstash: the scripts the agent store sends, and nothing else.
 export function fakeRedis(){
-  const data=new Map<string,string>();
+  const data=new Map<string,string>(),ttl=new Map<string,number>();
   const command=async(op:string,...a:any[])=>{
     if(op==='GET')return data.get(a[0])??null;
     if(op==='SET'){if(a.includes('NX')&&data.has(a[0]))return null;data.set(a[0],a[1]);return 'OK';}
     if(op==='DEL'){return data.delete(a[0])?1:0;}
+    if(op==='MGET')return a.map(key=>data.get(key)??null);
+    if(op==='EVAL'&&a[0].includes('ARGV[3]')){
+      // The agent state save script: revision check, attribution claims, then the writes.
+      const n=Number(a[1]),keys=a.slice(2,2+n),argv=a.slice(2+n),[key,rev]=keys,claims=keys.slice(2).map((k:string,i:number)=>({k,value:argv[3+2*i],mode:argv[4+2*i]}));
+      if((data.get(rev)??'0')!==argv[0])return 0;
+      if(claims.some((c:any)=>data.has(c.k)&&data.get(c.k)!==c.value&&c.mode==='claim'))return -1;
+      for(const c of claims){if(c.mode==='release'){if(data.get(c.k)===c.value)data.delete(c.k);}else if(!data.has(c.k))data.set(c.k,c.value);}
+      data.set(key,argv[1]);data.set(rev,argv[2]);return 1;
+    }
     if(op==='EVAL'&&a[0].includes("redis.call('DEL'")){const [,,key,token]=a;if(data.get(key)===token){data.delete(key);return 1;}return 0;}
-    if(op==='EVAL'&&a[0].includes('INCR')){const key=a[2],n=Number(data.get(key)??0)+1;data.set(key,String(n));return n;}
+    if(op==='EVAL'&&a[0].includes('INCR')){const key=a[2],n=Number(data.get(key)??0)+1;data.set(key,String(n));if(n===1)ttl.set(key,Number(a[3]));return n;}
+    if(op==='TTL')return data.has(a[0])?ttl.get(a[0])??-1:-2;
+    if(op==='EXISTS')return data.has(a[0])?1:0;
     throw Error('Unexpected command '+op);
   };
   return {data,command};

@@ -7,7 +7,7 @@ import { appFetch } from './platform-fetch.ts';
 export const agentClient = createClient({ transport: browserTransport({ fetch: appFetch as never }) });
 export { FlurboError, frechetBounds };
 
-export type ProfileJSON = { id: string; name: string; mode: 'paper' | 'approval'; status: 'active' | 'paused'; strategy: { id: string; version: string };
+export type ProfileJSON = { id: string; name: string; mode: 'paper' | 'approval'; status: 'active' | 'paused' | 'archived'; strategy: { id: string; version: string };
   market: { namespace: string; pool: string; title: string }; config: Record<string, string | number | boolean>; createdAt: number; updatedAt: number };
 export type ReviewJSON = { schema: string; action: string; amountAtoms: string; expiresAt: number; maximumFeeWei: string; requested: Record<string, unknown>;
   transaction: { from: `0x${string}`; to: `0x${string}`; data: `0x${string}`; value: `0x${string}`; chainId: `0x${string}` }; snapshot: { blockNumber: string; blockHash: string; timestamp: number } };

@@ -4,7 +4,7 @@ import { useAuth } from '../auth/context';
 import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
 import { watchTradingWallet, type TradingConnection } from '../auth/trading-session';
 import { linkedWallets } from '../wallet-links';
-import { submitPilot, checkPilotPending, readPilotPending, pendingKeyFor, validatePilotReview, type PilotPending, type PilotNamespace, type PilotReview } from '../pilot';
+import { submitPilot, readPilotPending, pendingKeyFor, validatePilotReview, type PilotPending, type PilotNamespace, type PilotReview } from '../pilot';
 import { rememberConfirmedClaim } from '../pilot-claims';
 import { describeClaim, amount } from '../portfolio';
 import { agentClient, buildForecast, frechetBounds, percentToPpm, message, type ProfileJSON, type RecordJSON, type ReviewJSON, type EvidenceInput } from '../agents-client';
@@ -21,9 +21,25 @@ const REASONS: Record<string, string> = {
   edge_below_threshold: 'No claim clears the minimum edge after cost and slippage.', cross_pool: 'The forecast belongs to a different pool.',
 };
 const STATUS: Record<string, string> = {
-  'awaiting-approval': 'Awaiting your approval in MetaMask', submitted: 'Submitted, waiting for confirmation', 'approval-confirmed': 'Token approval confirmed. Purchase not sent yet.',
-  confirmed: 'Purchase confirmed on-chain', failed: 'Failed', rejected: 'Rejected in MetaMask', expired: 'Expired before approval',
+  preparing: 'Preparing the transaction review', 'awaiting-approval': 'Awaiting your approval in MetaMask', submitted: 'Submitted, waiting for confirmation',
+  'approval-confirmed': 'Token approval confirmed. Purchase not sent yet.', confirmed: 'Purchase confirmed on-chain', failed: 'Failed',
+  rejected: 'Rejected in MetaMask or dismissed', expired: 'Review expired before a transaction was recorded', 'preparation-failed': 'Could not be prepared',
+  'preparation-expired': 'Preparation timed out',
 };
+// Statuses that keep a decision from getting another proposal (the server enforces the same rule).
+const BLOCKING = ['preparing', 'awaiting-approval', 'expired', 'submitted', 'approval-confirmed', 'confirmed'];
+const OPEN = ['preparing', 'awaiting-approval', 'expired', 'submitted', 'approval-confirmed'];
+const short = (hash: string) => `${hash.slice(0, 10)}...${hash.slice(-6)}`;
+const TX_FIELDS = ['from', 'to', 'data', 'chainId', 'value'] as const;
+const sameTransaction = (a: any, b: any) => !!a && !!b && TX_FIELDS.every(f => typeof a[f] === 'string' && typeof b[f] === 'string' && a[f].toLowerCase() === b[f].toLowerCase());
+// A locally saved MetaMask transaction belongs to a proposal only for the same Flurbo account, wallet,
+// chain and pool, and one of the exact transactions the proposal's reviews carried.
+function belongsTo(r: RecordJSON, saved: PilotPending, login: string, pool: string) {
+  const tx = saved.review.transaction;
+  return r.kind === 'proposal' && !!login && saved.login.toLowerCase() === login.toLowerCase() && r.account === login.toLowerCase()
+    && r.owner === tx.from.toLowerCase() && tx.chainId === '0x279f' && saved.review.manifest.pool.toLowerCase() === pool.toLowerCase()
+    && [r.review?.transaction, ...(r.reviewedTransactions ?? []), ...(r.transactions ?? []).map((t: any) => t.review?.transaction)].some(x => sameTransaction(x, tx));
+}
 
 export default function Agents() {
   const [match, params] = useRoute('/agents/:id');
@@ -35,11 +51,11 @@ export default function Agents() {
 function AgentList() {
   const [agents, setAgents] = useState<ProfileJSON[] | null>(null), [directory, setDirectory] = useState<{ namespace: string; label: string }[]>([]);
   const [name, setName] = useState(''), [namespace, setNamespace] = useState(''), [mode, setMode] = useState<'paper' | 'approval'>('paper');
-  const [error, setError] = useState(''), [busy, setBusy] = useState(false), [durable, setDurable] = useState(true);
+  const [error, setError] = useState(''), [busy, setBusy] = useState(false), [durable, setDurable] = useState(true), [archived, setArchived] = useState<ProfileJSON[]>([]);
   const [, navigate] = useLocation();
   useEffect(() => {
     const c = new AbortController();
-    void agentClient.agents.list(c.signal).then((r: any) => { setAgents(r.agents); setDurable(r.durable); }).catch(e => { if (!c.signal.aborted) setError(message(e)); });
+    void agentClient.agents.list(c.signal).then((r: any) => { setAgents(r.agents); setArchived(r.archived ?? []); setDurable(r.durable); }).catch(e => { if (!c.signal.aborted) setError(message(e)); });
     void agentClient.directory(c.signal).then(d => { setDirectory(d); setNamespace(v => v || d[0]?.namespace || ''); }).catch(() => {});
     return () => c.abort();
   }, []);
@@ -62,6 +78,9 @@ function AgentList() {
         {agents === null ? <p role="status">Loading agents...</p> : agents.length === 0 ? <p>No agents yet. Create one to start.</p> :
           <ul>{agents.map(a => <li key={a.id}><Link href={`/agents/${a.id}`}><strong>{a.name}</strong><span>{a.market.title || a.market.namespace}</span>
             <span className="agents-tags"><span>{a.mode === 'paper' ? 'Paper only' : 'Proposes for approval'}</span><span>{a.status === 'active' ? 'Active' : 'Paused'}</span></span></Link></li>)}</ul>}
+        {archived.length > 0 && <details className="agents-archived"><summary>Archived agents ({archived.length})</summary>
+          <p className="agents-fine">Kept so a transaction already sent from one of their proposals can still be recorded and verified.</p>
+          <ul>{archived.map(a => <li key={a.id}><Link href={`/agents/${a.id}`}><strong>{a.name}</strong><span>{a.market.title || a.market.namespace}</span></Link></li>)}</ul></details>}
       </div>
       <form className="agents-card" onSubmit={create}>
         <h2>Create an agent</h2>
@@ -93,34 +112,35 @@ function AgentDetail({ id }: { id: string }) {
   if (error && !profile) return <><p className="market-error" role="alert">{error}</p><Link href="/agents" className="text-link">Back to agents</Link></>;
   if (!profile || !market) return <p role="status">Loading agent...</p>;
   const questions = market.events.map(e => e.question);
-  const latest = records.find(r => r.kind === 'decision');
+  const latest = records.find(r => r.kind === 'decision'), isArchived = profile.status === 'archived';
   return <>
     <nav className="agents-back"><Link href="/agents" className="text-link">All agents</Link></nav>
     <header className="agents-profile">
-      <div><span className="eyebrow">{profile.mode === 'paper' ? 'Paper only' : 'Proposes for your approval'} · {profile.status === 'active' ? 'Active' : 'Paused'}</span>
+      <div><span className="eyebrow">{profile.mode === 'paper' ? 'Paper only' : 'Proposes for your approval'} · {isArchived ? 'Archived' : profile.status === 'active' ? 'Active' : 'Paused'}</span>
         <h1>{profile.name}</h1><p>{market.title}. Trading {market.open ? `closes ${when(market.closesAt)}` : 'is closed'}.</p></div>
-      <div className="agents-actions">
+      {!isArchived && <div className="agents-actions">
         <button className="button button-outline" disabled={busy} onClick={() => act(async () => { setProfile(await agentClient.agents.update(id, { status: profile.status === 'active' ? 'paused' : 'active' }) as ProfileJSON); })}>{profile.status === 'active' ? 'Pause' : 'Resume'}</button>
         <button className="button button-outline" disabled={busy} onClick={() => act(async () => { setProfile(await agentClient.agents.update(id, { mode: profile.mode === 'paper' ? 'approval' : 'paper' }) as ProfileJSON); })}>{profile.mode === 'paper' ? 'Allow proposals' : 'Paper only'}</button>
-        {deleting ? <><span className="agents-fine">Delete this agent and its records? On-chain trades are unaffected.</span>
+        {deleting ? <><span className="agents-fine">Delete this agent? It stops evaluating and proposing, and its activity is cleared. Its proposals and transaction records are kept, so a transaction already sent can still be recorded and verified. On-chain trades are unaffected.</span>
           <button className="button button-dark" disabled={busy} onClick={() => act(async () => { await agentClient.agents.remove(id); navigate('/agents'); })}>Confirm delete</button>
           <button className="button button-outline" disabled={busy} onClick={() => setDeleting(false)}>Keep</button></>
           : <button className="button button-outline" disabled={busy} onClick={() => setDeleting(true)}>Delete</button>}
-      </div>
+      </div>}
     </header>
-    <Settings profile={profile}/>
+    {isArchived && <p className="agents-note" role="status">This agent is archived. It no longer evaluates or proposes. Transactions sent from its proposals can still be recorded and checked below.</p>}
+    {!isArchived && <Settings profile={profile}/>}
     {error && <p className="market-error" role="alert">{error}</p>}
     {notice && <p className="agents-note" role="status">{notice}</p>}
-    <ForecastForm market={market} disabled={busy || profile.status !== 'active'} onSubmit={forecast => act(async () => {
+    {!isArchived && <ForecastForm market={market} disabled={busy || profile.status !== 'active'} onSubmit={forecast => act(async () => {
       setNotice('Evaluating with current pool quotes...');
       const record = await agentClient.agents.evaluate(id, { forecast }) as RecordJSON;
       setRecords(r => [record, ...r]); setNotice('');
-    })}/>
-    {latest && <DecisionCard record={latest} questions={questions} market={market} profile={profile} busy={busy}
-      hasLiveProposal={records.some(r => r.kind === 'proposal' && r.decisionId === latest.id && ['awaiting-approval', 'submitted', 'approval-confirmed', 'confirmed'].includes(r.status))}
+    })}/>}
+    {latest && !isArchived && <DecisionCard record={latest} questions={questions} market={market} profile={profile} busy={busy}
+      hasLiveProposal={records.some(r => r.kind === 'proposal' && r.decisionId === latest.id && BLOCKING.includes(r.status))}
       paper={() => act(async () => { const r = await agentClient.agents.paper(id, latest.id) as RecordJSON; setRecords(x => [r, ...x]); setNotice('Paper trade recorded. Nothing was sent on-chain.'); })}
       proposalAdded={r => setRecords(x => [r, ...x])}/>}
-    <Approvals id={id} profile={profile} records={records} setRecords={setRecords} questions={questions} login={auth.address ?? ''}/>
+    <Approvals id={id} profile={profile} records={records} setRecords={setRecords} questions={questions} login={auth.address ?? ''} reload={() => load()}/>
     <section className="agents-card">
       <div className="agents-row"><h2>Results</h2><button className="button button-outline" disabled={busy} onClick={() => act(async () => { setPerformance(await agentClient.agents.performance(id)); })}>Refresh results</button></div>
       {performance ? <Performance data={performance}/> : <p className="agents-fine">Load results to see paper outcomes and confirmed agent purchases.</p>}
@@ -238,12 +258,14 @@ function LinkedWalletSelect({ value, onChange }: { value: string; onChange: (v: 
 }
 
 // User-approved execution through the existing review, submission and recovery flow. The agent never signs.
-function Approvals({ id, profile, records, setRecords, questions, login }: { id: string; profile: ProfileJSON; records: RecordJSON[]; setRecords: (f: (r: RecordJSON[]) => RecordJSON[]) => void; questions: string[]; login: string }) {
+// A hash from MetaMask is kept in this browser until the server has durably recorded it against the
+// matching proposal and resolved it, so a failed request or a reload never loses a sent transaction.
+function Approvals({ id, profile, records, setRecords, questions, login, reload }: { id: string; profile: ProfileJSON; records: RecordJSON[];
+  setRecords: (f: (r: RecordJSON[]) => RecordJSON[]) => void; questions: string[]; login: string; reload: () => Promise<void> }) {
   const namespace = profile.market.namespace as PilotNamespace;
   const [wallets, setWallets] = useState<BrowserWallet[]>([]), [connection, setConnection] = useState<TradingConnection>({ owner: '', status: 'checking' });
   const [pending, setPending] = useState<PilotPending | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [hash, setHash] = useState('');
-  const provider = useRef<BrowserWallet['provider'] | null>(null), live = useRef(true);
-  const open = records.filter(r => r.kind === 'proposal' && ['awaiting-approval', 'submitted', 'approval-confirmed'].includes(r.status));
+  const provider = useRef<BrowserWallet['provider'] | null>(null), live = useRef(true), resumed = useRef(new Set<string>());
   const replace = (r: RecordJSON) => setRecords(list => list.map(x => (x.id === r.id ? r : x)));
   const save = (value: PilotPending | null) => { if (value) localStorage.setItem(pendingKeyFor(namespace), JSON.stringify(value)); else localStorage.removeItem(pendingKeyFor(namespace)); setPending(value); };
   useEffect(() => { live.current = true; const stop = discoverWallets(w => setWallets(old => (old.some(x => x.provider === w.provider) ? old : [...old, w])));
@@ -253,9 +275,42 @@ function Approvals({ id, profile, records, setRecords, questions, login }: { id:
   // discards the connection and every prepared review must be checked against it again.
   useEffect(() => { const p = wallets[0]?.provider; if (!p || !login) { setConnection({ owner: '', status: 'disconnected' }); return; }
     return watchTradingWallet({ provider: p, account: login, links: linkedWallets, publish: value => { if (!live.current) return; provider.current = value.owner ? p : null; setConnection(value); } }); }, [wallets[0]?.provider, login]);
-  if (!open.length && !pending) return null;
-  const tracked = pending && open.find(r => r.review.transaction.data === pending.review.transaction.data && r.owner === pending.review.transaction.from.toLowerCase());
+
+  // Reconcile the local record with this agent's proposals.
+  const mine = pending ? records.find(r => belongsTo(r, pending, login, profile.market.pool)) : undefined;
+  const registered = mine && pending?.hash ? mine.transactions.find((t: any) => t.hash === pending.hash) : undefined;
+  const other = mine?.transactions.find((t: any) => t.status === 'submitted' && t.hash !== pending?.hash);
+  // Expiry, dismissal or archiving does not prove a review was never sent, so the server accepts the hash
+  // for any review the proposal issued; only another tracked transaction is a conflict.
+  const recovery = !pending ? 'none' : !mine ? 'elsewhere' : !pending.hash ? 'no-hash' : registered ? (registered.status === 'submitted' ? 'tracked' : 'resolved')
+    : other ? 'conflict' : 'unregistered';
+  const archived = profile.status === 'archived';
+  const open = records.filter(r => r.kind === 'proposal' && (OPEN.includes(r.status) || r.id === mine?.id));
+
   async function run(fn: () => Promise<void>) { setBusy(true); setError(''); try { await fn(); } catch (e) { setError(message(e)); } finally { if (live.current) setBusy(false); } }
+  // Idempotent: the server accepts the same hash for the same reviewed transaction again.
+  async function register(record: RecordJSON, saved: PilotPending) {
+    try { replace(await agentClient.agents.track(id, record.id, { action: 'submitted', hash: saved.hash, transaction: saved.review.transaction }) as RecordJSON); }
+    catch (e) {
+      await reload().catch(() => {});
+      throw new Error(`MetaMask sent this transaction (${short(saved.hash!)}), but the agent could not record it yet: ${message(e)} Do not send it again. Use Resume tracking.`);
+    }
+  }
+  // Forget the local record only once the server holds this hash and has resolved it.
+  useEffect(() => {
+    if (!pending) return;
+    if (recovery === 'resolved') {
+      const current = localStorage.getItem(pendingKeyFor(namespace));
+      if (current !== JSON.stringify(pending)) return;
+      if (registered.status === 'confirmed') rememberConfirmedClaim(namespace, pending);
+      save(null);
+    } else if (recovery === 'unregistered' && !busy && !resumed.current.has(pending.hash!)) {
+      resumed.current.add(pending.hash!);
+      void run(() => register(mine!, pending));
+    }
+  }, [recovery, pending?.hash, mine?.id, registered?.status]);
+
+  if (!open.length && !pending) return null;
   async function approve(record: RecordJSON) {
     if (connection.owner !== record.owner) throw new Error('Select the MetaMask wallet this proposal was prepared for. Wallet changes need a new review.');
     if (!provider.current || !navigator.locks) throw new Error('MetaMask and Web Locks are required.');
@@ -264,16 +319,13 @@ function Approvals({ id, profile, records, setRecords, questions, login }: { id:
       if (!lock || readPilotPending(namespace)) throw new Error('Another transaction for this market is being tracked. Finish it first.');
       try { await submitPilot(provider.current as never, review, login, save, () => live.current && connection.owner === record.owner); }
       catch (e) { if (message(e) === 'Wallet request rejected.') replace(await agentClient.agents.track(id, record.id, { action: 'rejected' }) as RecordJSON); throw e; }
-      const saved = readPilotPending(namespace);
-      if (saved?.hash) replace(await agentClient.agents.track(id, record.id, { action: 'submitted', hash: saved.hash }) as RecordJSON);
     });
+    const saved = readPilotPending(namespace);
+    if (saved?.hash) { resumed.current.add(saved.hash); await register(record, saved); }
   }
   async function check(record: RecordJSON) {
     const saved = readPilotPending(namespace);
-    if (saved?.hash && saved.review.transaction.data === record.review.transaction.data) {
-      const result = await checkPilotPending(saved, namespace);
-      if (result === 'confirmed' || result === 'reverted') { if (result === 'confirmed') rememberConfirmedClaim(namespace, saved); save(null); }
-    }
+    if (saved?.hash && belongsTo(record, saved, login, profile.market.pool) && !record.transactions.some((t: any) => t.hash === saved.hash)) await register(record, saved);
     const updated = await agentClient.agents.track(id, record.id, { action: 'check' }) as RecordJSON & { check?: string };
     replace(updated);
     if (updated.check) throw new Error(updated.check === 'unknown' ? 'The network has not seen this transaction yet.' : 'Waiting for confirmation.');
@@ -281,19 +333,25 @@ function Approvals({ id, profile, records, setRecords, questions, login }: { id:
   return <section className="agents-card" aria-label="Awaiting approval">
     <h2>Approvals</h2>
     <p className="agents-fine">MetaMask: {connection.status === 'connected' ? `connected with ${connection.owner.slice(0, 8)}...` : connection.status === 'unlinked' ? 'the selected wallet is not linked to this account' : connection.status === 'checking' ? 'checking...' : 'not connected'}. Approving a token allowance is not a purchase, and a transaction hash is not a confirmation.</p>
-    {pending && !tracked && <p className="agents-note" role="status">A transaction for this market is being tracked elsewhere. Finish it on the market page before approving another.</p>}
-    {pending && tracked && !pending.hash && <div className="agents-attach"><p>MetaMask did not report the outcome. Do not approve again. Paste the transaction hash from MetaMask activity.</p>
-      <input value={hash} onChange={e => setHash(e.target.value.trim())} placeholder="0x..."/>
-      <button className="button button-outline" disabled={busy || !/^0x[0-9a-fA-F]{64}$/.test(hash)} onClick={() => run(async () => { save({ ...pending, hash: hash.toLowerCase() as `0x${string}` });
-        replace(await agentClient.agents.track(id, tracked.id, { action: 'submitted', hash: hash.toLowerCase() }) as RecordJSON); })}>Track this hash</button></div>}
-    <ul className="agents-proposals">{open.map(r => { const review = r.review as ReviewJSON; return <li key={r.id}>
+    {recovery === 'elsewhere' && <p className="agents-note" role="status">A transaction for this market is being tracked elsewhere: on the market page, by another agent, or by an archived agent. Finish it there before approving another.</p>}
+    {recovery === 'no-hash' && mine && <div className="agents-attach"><p>MetaMask did not report the outcome. Do not approve again. Paste the transaction hash from MetaMask activity.</p>
+      <input aria-label="Transaction hash" value={hash} onChange={e => setHash(e.target.value.trim())} placeholder="0x..."/>
+      <button className="button button-outline" disabled={busy || !/^0x[0-9a-fA-F]{64}$/.test(hash)} onClick={() => run(async () => { const saved = { ...pending!, hash: hash.toLowerCase() as `0x${string}` };
+        save(saved); resumed.current.add(saved.hash); await register(mine, saved); })}>Track this hash</button></div>}
+    {recovery === 'unregistered' && mine && <div className="agents-attach" role="status"><p>MetaMask sent {short(pending!.hash!)} for this proposal, but the agent has not recorded it yet. Do not send it again.</p>
+      <button className="button button-outline" disabled={busy} onClick={() => run(() => register(mine, pending!))}>Resume tracking</button></div>}
+    {recovery === 'conflict' && mine && <div className="agents-attach" role="alert"><p>This browser sent {short(pending!.hash!)}, but the proposal already tracks {short(other.hash)}. Both may have been sent. Check that one first and do not send again; this hash can be recorded after it resolves.</p>
+      <button className="button button-outline" disabled={busy} onClick={() => save(null)}>I checked wallet activity. Forget this local record</button></div>}
+    <ul className="agents-proposals">{open.map(r => { const review = r.review as ReviewJSON | null; const blocked = busy || !!pending; return <li key={r.id}>
       <strong>{describeClaim(r.claim.scope, Number(r.claim.mask), questions)}</strong>
       <span>{STATUS[r.status] ?? r.status}</span>
-      <span className="agents-fine">{review.action === 'approve' ? `Step 1: approve exactly ${amount(review.amountAtoms)} test AUSD for the pool.` : `Buy ${amount(r.quantityAtoms)} share(s), paying at most ${amount(review.amountAtoms)} test AUSD.`} Wallet {r.owner.slice(0, 8)}...{r.owner.slice(-6)}. Review valid until {when(review.expiresAt)}.</span>
+      {review && <span className="agents-fine">{review.action === 'approve' ? `Step 1: approve exactly ${amount(review.amountAtoms)} test AUSD for the pool.` : `Buy ${amount(r.quantityAtoms)} share(s), paying at most ${amount(review.amountAtoms)} test AUSD.`} Wallet {r.owner.slice(0, 8)}...{r.owner.slice(-6)}. Review valid until {when(review.expiresAt)}.</span>}
+      {r.transactions?.length > 0 && <span className="agents-fine">Tracked transaction {short(r.transactions.at(-1).hash)}.</span>}
       <div className="agents-actions">
-        {r.status === 'awaiting-approval' && <button className="button button-dark" disabled={busy || !!pending} onClick={() => run(() => approve(r))}>{review.action === 'approve' ? 'Approve allowance in MetaMask' : 'Confirm purchase in MetaMask'}</button>}
+        {!archived && r.status === 'awaiting-approval' && <button className="button button-dark" disabled={blocked} onClick={() => run(() => approve(r))}>{review?.action === 'approve' ? 'Approve allowance in MetaMask' : 'Confirm purchase in MetaMask'}</button>}
         {r.status === 'submitted' && <button className="button button-outline" disabled={busy} onClick={() => run(() => check(r))}>Check confirmation</button>}
-        {['approval-confirmed', 'awaiting-approval'].includes(r.status) && <button className="button button-outline" disabled={busy || !!pending} onClick={() => run(async () => replace(await agentClient.agents.track(id, r.id, { action: 'refresh' }) as RecordJSON))}>{r.status === 'approval-confirmed' ? 'Prepare the purchase' : 'Refresh review'}</button>}
+        {!archived && ['approval-confirmed', 'awaiting-approval', 'expired'].includes(r.status) && <button className="button button-outline" disabled={blocked} onClick={() => run(async () => replace(await agentClient.agents.track(id, r.id, { action: 'refresh' }) as RecordJSON))}>{r.status === 'approval-confirmed' ? 'Prepare the purchase' : 'Refresh review'}</button>}
+        {!archived && ['approval-confirmed', 'expired'].includes(r.status) && <button className="button button-outline" disabled={blocked} onClick={() => run(async () => replace(await agentClient.agents.track(id, r.id, { action: 'rejected' }) as RecordJSON))}>Dismiss</button>}
       </div>
     </li>; })}</ul>
     {error && <p className="market-error" role="alert">{error}</p>}

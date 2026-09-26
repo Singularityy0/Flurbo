@@ -29,8 +29,14 @@ test('agents persist per account across restarts and cannot be read or changed b
   // Storage keys never contain the raw account address.
   assert.ok([...s.redis.data.keys()].every(k=>!k.includes(alice.slice(2))));
   assert.equal((await s.call(alice,'POST',`/api/agents/${id}/update`,{status:'paused',name:'Release watcher two'})).body.status,'paused');
+  // Deleting archives: hidden from the list, refused for new work, still readable for recovery.
   assert.equal((await s.call(alice,'POST',`/api/agents/${id}/delete`,{})).body.deleted,true);
-  assert.equal((await s.call(alice,'GET',`/api/agents/${id}`)).status,404);
+  const listed=(await s.call(alice,'GET','/api/agents')).body;
+  assert.deepEqual(listed.agents,[]);assert.deepEqual(listed.archived.map((a:any)=>a.id),[id]);
+  assert.equal((await s.call(alice,'GET',`/api/agents/${id}`)).body.profile.status,'archived');
+  assert.equal((await s.call(alice,'POST',`/api/agents/${id}/update`,{status:'active'})).body.code,'ARCHIVED');
+  assert.equal((await s.call(alice,'POST',`/api/agents/${id}/delete`,{})).status,404);
+  assert.equal((await s.call(bob,'GET',`/api/agents/${id}`)).status,404);
 });
 
 test('profile input is validated and ownership never comes from the request',async()=>{
@@ -113,10 +119,11 @@ test('proposals need approval mode and a linked wallet, preserve the claim, and 
   assert.equal(proposal.status,'awaiting-approval');assert.equal(proposal.review.action,'approve');
   assert.ok(BigInt(proposal.review.amountAtoms)<=BigInt(wanted.worstCostAtoms));
   const path=`/api/agents/${id}/proposals/${proposal.id}`;
-  assert.equal((await s.call(alice,'POST',path,{action:'submitted',hash:'0xnot-a-hash'})).status,400);
+  assert.equal((await s.call(alice,'POST',path,{action:'submitted',hash:'0xnot-a-hash',transaction:proposal.review.transaction})).status,400);
   const approvalHash='0x'+'a1'.repeat(32);
-  assert.equal((await s.call(alice,'POST',path,{action:'submitted',hash:approvalHash})).body.status,'submitted');
-  assert.equal((await s.call(alice,'POST',path,{action:'submitted',hash:'0x'+'a2'.repeat(32)})).status,409,'one tracked transaction at a time');
+  assert.equal((await s.call(alice,'POST',path,{action:'submitted',hash:approvalHash,transaction:proposal.review.transaction})).body.status,'submitted');
+  assert.equal((await s.call(alice,'POST',path,{action:'submitted',hash:'0x'+'a2'.repeat(32),transaction:proposal.review.transaction})).status,409,'one tracked transaction at a time');
+  assert.equal((await s.call(alice,'POST',path,{action:'submitted',hash:approvalHash})).status,400,'the sent transaction is always named');
   assert.equal((await s.call(alice,'POST',path,{action:'check'})).body.check,'unknown','a hash alone is not execution');
   s.mine(proposal.review.transaction,approvalHash);
   const approved=(await s.call(alice,'POST',path,{action:'check'})).body;
@@ -129,7 +136,7 @@ test('proposals need approval mode and a linked wallet, preserve the claim, and 
   assert.deepEqual([args[0],args[1].toString(),args[2].toString()],[wanted.claim.scope,wanted.claim.mask,wanted.quantityAtoms]);
   assert.equal(args[3].toString(),buy.review.amountAtoms);
   const buyHash='0x'+'b1'.repeat(32);
-  await s.call(alice,'POST',path,{action:'submitted',hash:buyHash});
+  await s.call(alice,'POST',path,{action:'submitted',hash:buyHash,transaction:buy.review.transaction});
   const traded={address:pool,topics:encodeEventTopics({abi:pilotPoolAbi,eventName:'Traded',args:{trader:owner,scope:wanted.claim.scope,mask:BigInt(wanted.claim.mask)}}),
     data:encodeAbiParameters([{type:'bool'},{type:'uint128'},{type:'uint128'}],[true,BigInt(wanted.quantityAtoms),250_000n])};
   s.mine(buy.review.transaction,buyHash,{logs:[traded]});
@@ -147,14 +154,14 @@ test('a mismatched or reverted transaction fails the proposal; rejection and exp
   const decision=(await s.call(alice,'POST',`/api/agents/${id}/evaluate`,{forecast:forecast(pool)})).body;
   const first=(await s.call(alice,'POST',`/api/agents/${id}/proposal`,{decisionId:decision.id,owner})).body;
   const path=`/api/agents/${id}/proposals/${first.id}`;
-  await s.call(alice,'POST',path,{action:'submitted',hash:'0x'+'c1'.repeat(32)});
+  await s.call(alice,'POST',path,{action:'submitted',hash:'0x'+'c1'.repeat(32),transaction:first.review.transaction});
   s.mine({...first.review.transaction,data:first.review.transaction.data.slice(0,-2)+'00'},'0x'+'c1'.repeat(32));
   const mismatch=(await s.call(alice,'POST',path,{action:'check'})).body;
   assert.equal(mismatch.status,'failed');assert.match(mismatch.failure,/does not match/);
   const second=(await s.call(alice,'POST',`/api/agents/${id}/proposal`,{decisionId:decision.id,owner})).body;
   const duplicate=await s.call(alice,'POST',`/api/agents/${id}/proposal`,{decisionId:decision.id,owner});
   assert.equal(duplicate.status,409);assert.equal(duplicate.body.code,'PROPOSAL_EXISTS','one decision never yields two live proposals');
-  await s.call(alice,'POST',`/api/agents/${id}/proposals/${second.id}`,{action:'submitted',hash:'0x'+'c2'.repeat(32)});
+  await s.call(alice,'POST',`/api/agents/${id}/proposals/${second.id}`,{action:'submitted',hash:'0x'+'c2'.repeat(32),transaction:second.review.transaction});
   s.mine(second.review.transaction,'0x'+'c2'.repeat(32),{status:'0x0'});
   assert.equal((await s.call(alice,'POST',`/api/agents/${id}/proposals/${second.id}`,{action:'check'})).body.status,'failed');
   const third=(await s.call(alice,'POST',`/api/agents/${id}/proposal`,{decisionId:decision.id,owner})).body;

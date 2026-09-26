@@ -9,11 +9,8 @@ import {owner,hash,code} from './pilot-fixture.ts';
 
 // End to end: the real agent API and strategy run in-process over the pilot fixture; the browser drives the
 // real UI with a fake MetaMask. Nothing reaches a network, and every MetaMask send is counted.
-test('agent flow: create, forecast, paper trade, then user-approved purchase with rejection, wallet switch and reload recovery',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
-  const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
-  const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
-  const at=Math.floor(Date.now()/1000),s=setup({at}),pool=s.f.manifest.pool,errors:string[]=[];
-  try{
+async function harness(browser:any,{failTracking=0}={}){
+  const at=Math.floor(Date.now()/1000),s=setup({at}),pool=s.f.manifest.pool,errors:string[]=[],tracked:number[]=[];let failures=failTracking;
     const page=await browser.newPage({viewport:{width:1280,height:1000}});
     page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.addInitScript(({owner,hash,code}:any)=>{
@@ -48,29 +45,32 @@ test('agent flow: create, forecast, paper trade, then user-approved purchase wit
       if(path==='/api/account/wallets')return route.fulfill({json:{account:alice,wallets:[owner]}});
       if(path==='/api/pilot/markets')return route.fulfill({json:await s.f.service.markets()});
       if(path==='/api/agents'||path.startsWith('/api/agents/')){
-        const result=await s.api.handle({method,path,input:method==='POST'?route.request().postDataJSON():undefined,login:{address:alice,method:'passkey'},origin});
-        return route.fulfill({status:result.status,json:result.body});
-      }
-      if(path==='/api/pilot/rpc'){
-        // The chain includes the saved transaction; the server-side verifier sees the same mined transaction.
-        const input=route.request().postDataJSON(),saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('flurbo.pilot.pending.v1')||'null'));
-        if(input.method==='eth_getTransactionReceipt'){
-          const buy=saved.review.action==='buy',args=buy?decodeFunctionData({abi:pilotPoolAbi,data:saved.review.transaction.data}).args as any[]:null;
-          const logs=buy?[{address:pool,topics:encodeEventTopics({abi:pilotPoolAbi,eventName:'Traded',args:{trader:owner,scope:args![0],mask:args![1]}}),
-            data:encodeAbiParameters([{type:'bool'},{type:'uint128'},{type:'uint128'}],[true,args![2],250_000n])}]:[];
-          s.mine(saved.review.transaction,saved.hash,{logs});
-          if(saved.review.action==='approve')s.f.options.allowance=10n**12n;
-          return route.fulfill({json:{result:{transactionHash:saved.hash,blockNumber:'0x64',blockHash:hash,status:'0x1'}}});
+        const input=method==='POST'?route.request().postDataJSON():undefined;
+        if(input?.action==='submitted'){tracked.push(Date.now());if(failures>0){failures--;return route.fulfill({status:503,json:{error:'The agent service is temporarily unavailable. Nothing was traded.'}});}}
+        if(input?.action==='check'){
+          // The chain includes the transaction MetaMask sent; the server-side verifier reads it from there.
+          const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('flurbo.pilot.pending.v1')||'null'));
+          if(saved?.hash){
+            const buy=saved.review.action==='buy',args=buy?decodeFunctionData({abi:pilotPoolAbi,data:saved.review.transaction.data}).args as any[]:null;
+            const logs=buy?[{address:pool,topics:encodeEventTopics({abi:pilotPoolAbi,eventName:'Traded',args:{trader:owner,scope:args![0],mask:args![1]}}),
+              data:encodeAbiParameters([{type:'bool'},{type:'uint128'},{type:'uint128'}],[true,args![2],250_000n])}]:[];
+            s.mine(saved.review.transaction,saved.hash,{logs});
+            if(saved.review.action==='approve')s.f.options.allowance=10n**12n;
+          }
         }
-        if(input.method==='eth_getTransactionByHash')return route.fulfill({json:{result:{...saved.review.transaction,hash:saved.hash,chainId:'0x279f',blockNumber:'0x64',blockHash:hash,input:saved.review.transaction.data,nonce:saved.nonce}}});
-        return route.fulfill({json:{result:input.method==='eth_chainId'?'0x279f':{hash,number:'0x65'}}});
+        const result=await s.api.handle({method,path,input,login:{address:alice,method:'passkey'},origin});
+        return route.fulfill({status:result.status,json:result.body});
       }
       if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Fixture unavailable'}});
       const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
-    const sends=()=>page.evaluate(()=>Number(sessionStorage.getItem('sends')||0));
+  const sends=()=>page.evaluate(()=>Number(sessionStorage.getItem('sends')||0));
+  const saved=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('flurbo.pilot.pending.v1')||'null'));
+  return {s,page,errors,sends,saved,tracked,pool};
+}
 
+async function createAgentAndDecide(page:any){
     // Create an agent that may propose trades for approval.
     await page.goto(origin+'/agents');
     await page.getByRole('heading',{name:'Create an agent'}).waitFor();
@@ -97,6 +97,18 @@ test('agent flow: create, forecast, paper trade, then user-approved purchase wit
     await decision.getByRole('heading',{name:'Proposed purchase'}).waitFor();
     await decision.getByText('(a finite-size cost, not a probability)',{exact:false}).waitFor();
     await decision.getByText('VOID events pay a fraction under the published rules.',{exact:false}).waitFor();
+    return decision;
+}
+
+const browserTest=(name:string,fn:(browser:any)=>Promise<void>)=>test(name,{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+  const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
+  const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
+  try{await fn(browser);}finally{await browser.close();}
+});
+
+browserTest('agent flow: create, forecast, paper trade, then user-approved purchase with rejection, wallet switch and reload recovery',async browser=>{
+    const {page,errors,sends}=await harness(browser);
+    const decision=await createAgentAndDecide(page);
 
     // Paper trade: clearly simulated, never on-chain.
     await decision.getByRole('button',{name:'Record paper trade'}).click();
@@ -151,5 +163,72 @@ test('agent flow: create, forecast, paper trade, then user-approved purchase wit
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'no horizontal scroll on a phone');
     assert.deepEqual(errors,[]);
-  }finally{await browser.close();}
+});
+
+browserTest('a purchase sent from MetaMask whose tracking request failed is recovered after reload and never sent twice',async browser=>{
+  const {s,page,errors,sends,saved,tracked}=await harness(browser,{failTracking:1});
+  s.f.options.allowance=10n**12n; // allowance already granted, so the first review is the purchase itself
+  const decision=await createAgentAndDecide(page);
+  await decision.getByRole('button',{name:'Prepare for MetaMask approval'}).click();
+  const approvals=page.getByRole('region',{name:'Awaiting approval'});
+  await approvals.getByText('connected with',{exact:false}).waitFor();
+  await approvals.getByRole('button',{name:'Confirm purchase in MetaMask'}).click();
+  // MetaMask returned a hash; recording it on the server failed.
+  await approvals.getByRole('alert').filter({hasText:'Do not send it again'}).waitFor();
+  assert.equal(await sends(),1);
+  const local=await saved();
+  assert.match(local.hash,/^0x[0-9a-f]{64}$/,'the hash is kept locally until the server records it');
+  const [agentId,proposal]=await (async()=>{const id=page.url().split('/').pop();const r=(await s.api.handle({method:'GET',path:'/api/agents/'+id,login:{address:alice,method:'passkey'},origin})).body.records.find((x:any)=>x.kind==='proposal');return [id,r];})();
+  assert.equal(proposal.status,'awaiting-approval');assert.equal(proposal.transactions.length,0,'the server did not record the hash yet');
+  assert.equal(await approvals.getByRole('button',{name:'Confirm purchase in MetaMask'}).isDisabled(),true,'a second send is blocked while the hash is unrecorded');
+  await approvals.getByRole('button',{name:'Resume tracking'}).waitFor();
+
+  // Reload: the saved hash is matched to this proposal and recorded without asking MetaMask again.
+  await page.reload();
+  const reloaded=page.getByRole('region',{name:'Awaiting approval'});
+  await reloaded.getByText('Submitted, waiting for confirmation').waitFor();
+  assert.equal(tracked.length,2,'one failed and one successful registration');
+  assert.equal((await saved()).hash,local.hash,'still kept locally until the transaction is resolved');
+  await reloaded.getByRole('button',{name:'Check confirmation'}).click();
+  await page.getByText('Purchase confirmed on-chain',{exact:false}).first().waitFor();
+  await page.waitForFunction(()=>localStorage.getItem('flurbo.pilot.pending.v1')===null);
+  const after=(await s.api.handle({method:'GET',path:'/api/agents/'+agentId,login:{address:alice,method:'passkey'},origin})).body.records.find((x:any)=>x.id===proposal.id);
+  assert.equal(after.status,'confirmed');assert.deepEqual(after.transactions.map((t:any)=>t.hash),[local.hash]);
+  assert.equal(await sends(),1,'exactly one purchase was sent');
+  const perf=(await s.api.handle({method:'POST',path:`/api/agents/${agentId}/performance`,input:{},login:{address:alice,method:'passkey'},origin})).body;
+  assert.equal(perf.live.confirmedPurchases,1);
+  assert.deepEqual(errors,[]);
+});
+
+browserTest('a sent purchase is recovered from an archived agent after its review expired, without a second send',async browser=>{
+  const {s,page,errors,sends,saved}=await harness(browser,{failTracking:1});
+  s.f.options.allowance=10n**12n;
+  const decision=await createAgentAndDecide(page);
+  await decision.getByRole('button',{name:'Prepare for MetaMask approval'}).click();
+  const approvals=page.getByRole('region',{name:'Awaiting approval'});
+  await approvals.getByText('connected with',{exact:false}).waitFor();
+  await approvals.getByRole('button',{name:'Confirm purchase in MetaMask'}).click();
+  await approvals.getByRole('alert').filter({hasText:'Do not send it again'}).waitFor();
+  const local=await saved(),agentUrl=page.url();
+  assert.equal(await sends(),1);
+  // Two days pass on the server (the review expired), then the agent is deleted before recovery.
+  s.advance(2*86_400);
+  await page.getByRole('button',{name:'Delete'}).click();
+  await page.getByRole('button',{name:'Confirm delete'}).click();
+  await page.waitForURL(/\/agents$/);
+  await page.getByText('Archived agents (1)').click();
+  await page.getByRole('link',{name:/Release relationship agent/}).click();
+  await page.waitForURL(agentUrl);
+  await page.getByText('This agent is archived.',{exact:false}).waitFor();
+  const recovered=page.getByRole('region',{name:'Awaiting approval'});
+  await recovered.getByText('Submitted, waiting for confirmation').waitFor();
+  assert.equal(await recovered.getByRole('button',{name:/in MetaMask/}).count(),0,'an archived agent offers nothing to send');
+  await recovered.getByRole('button',{name:'Check confirmation'}).click();
+  await page.getByText('Purchase confirmed on-chain',{exact:false}).first().waitFor();
+  await page.waitForFunction(()=>localStorage.getItem('flurbo.pilot.pending.v1')===null);
+  assert.equal(await sends(),1,'recovery never resends');
+  const id=agentUrl.split('/').pop();
+  const after=(await s.api.handle({method:'GET',path:'/api/agents/'+id,login:{address:alice,method:'passkey'},origin})).body.records.find((x:any)=>x.kind==='proposal');
+  assert.deepEqual(after.transactions.map((t:any)=>t.hash),[local.hash]);assert.equal(after.status,'confirmed');
+  assert.deepEqual(errors,[]);
 });

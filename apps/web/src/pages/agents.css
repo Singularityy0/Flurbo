@@ -36,3 +36,4 @@
 .agents-page :is(button,input,select,textarea,a,summary):focus-visible{outline:2px solid var(--forest);outline-offset:3px}
 @media(max-width:820px){.agents-grid,.agents-performance{grid-template-columns:1fr}.agents-compare{grid-template-columns:1fr}}
 @media(max-width:560px){.agents-card{padding:18px}.agents-pair,.agents-settings dl,.agents-terms,.agents-performance dl{grid-template-columns:1fr}.agents-activity li{grid-template-columns:1fr}}
+.agents-archived{margin-top:18px}.agents-archived summary{cursor:pointer;font-size:14px}.agents-archived ul{margin-top:10px}
