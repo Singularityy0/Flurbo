@@ -4,6 +4,7 @@ import {Link} from 'wouter';
 import {useAuth} from '../auth/context';
 import './home.css';
 import VisitorStatus from './VisitorStatus';
+import {usePreviewAccess} from '../auth/preview-access';
 
 function ConnectionExample(){
   const [answer,setAnswer]=useState<'all'|'yes'|'no'>('all');
@@ -22,21 +23,23 @@ function ConnectionExample(){
 
 export default function Home(){
   const {state}=useAuth();
-  const destination=state.address?'/access':'/signup';
+  const {access}=usePreviewAccess();
+  const destination=access?.approved?'/markets':state.address?'/access':'/signup';
+  const action=access?.approved?'Explore markets':state.address?'Your access':'Get early access';
   return <main id="main" tabIndex={-1} className="home-current">
     <section className="home-hero">
       <div className="home-hero-copy"><span className="home-pill"><i/>Invite-based preview · Monad</span>
         <h1>A view worth<br/><em>combining.</em></h1>
-        <p>A prediction market for individual views and connected ideas. Explore how related events are priced together.</p>
-        <div className="home-actions"><Link href={destination} className="button button-dark">{state.address?'Your access':'Get early access'}<ArrowUpRight size={18}/></Link><a className="text-link" href="#the-idea">See the connection <ArrowRight size={16}/></a></div>
+        <p>Make predictions on individual events or how they happen together. Explore connected ideas, with one price for your combination.</p>
+        <div className="home-actions"><Link href={destination} className="button button-dark">{action}<ArrowUpRight size={18}/></Link><a className="text-link" href="#the-idea">See the connection <ArrowRight size={16}/></a></div>
         <span className="home-hero-note">Monad testnet preview · Test assets only</span>
-        <VisitorStatus/>
+        <VisitorStatus access={access}/>
       </div><ConnectionExample/>
     </section>
     <section className="home-feature-strip" aria-label="Flurbo features"><span><Layers size={18}/> Individual & combined predictions</span><span><ScanLine size={18}/> Read-only What-if exploration</span><span><Wallet size={18}/> One account, all your shares</span></section>
     <section className="home-idea" id="the-idea"><div><span className="eyebrow">One shared market</span><h2>Look beyond<br/><em>one question.</em></h2></div><div><p>Flurbo brings individual and combined predictions into one shared market, letting you see how the market prices relationships between events.</p><p className="home-muted">Buy a single answer, combine outcomes with “all” or “any,” or explore a What-if without placing a trade. Connected pricing adds context. It does not guarantee accuracy.</p><Link href="/docs" className="text-link">Read the guide <ArrowUpRight size={16}/></Link></div></section>
     <section className="home-capabilities"><article><span className="home-feature-number">01 / Predict</span><h3>Your view.<br/>Your combination.</h3><p>Choose Yes or No. Combine up to three supported events from the same pool into one position, with a price and payout rule you can inspect before buying.</p><div className="home-mini-claim"><span>Upgrade goes live <b>Yes</b></span><i>AND</i><span>Exchange supports it <b>Yes</b></span><small>Illustration · pays only when both answers are Yes</small></div></article><article><span className="home-feature-number">02 / Explore</span><h3>Ask a better<br/>“What if?”</h3><p>Compare the chance of two answers together with an independence baseline. Explore conditional probabilities and how a simulated trade changes them.</p><a className="text-link" href="#main">Try the example above <ArrowUpRight size={16}/></a></article><article><span className="home-feature-number">03 / Follow</span><h3>From prediction<br/>to outcome.</h3><p>Each market has its own page, price observations, source rules and settlement timeline. Your portfolio brings shares from your linked trading wallets together.</p><Link href="/portfolio" className="text-link">Your portfolio <ArrowUpRight size={16}/></Link></article></section>
-    <section className="home-start" id="how-it-works"><div className="home-section-heading"><div><span className="eyebrow">A simple place to start</span><h2>From invitation to <em>prediction.</em></h2></div><Link href={destination} className="button button-dark">{state.address?'Your access':'Create an account'}<ArrowUpRight size={16}/></Link></div><ol><li><span>01</span><h3>Create your account</h3><p>Create a Mera passkey account and request access when applications open. Approval belongs to your account.</p></li><li><span>02</span><h3>Connect & fund MetaMask</h3><p>Once approved, connect MetaMask and get test AUSD and test MON. Your trading wallet signs every transaction.</p></li><li><span>03</span><h3>Pick your prediction</h3><p>Choose an answer, review the cost and confirm in MetaMask. Follow your shares in Portfolio.</p></li></ol></section>
+    <section className="home-start" id="how-it-works"><div className="home-section-heading"><div><span className="eyebrow">A simple place to start</span><h2>From invitation to <em>prediction.</em></h2></div><Link href={destination} className="button button-dark">{action}<ArrowUpRight size={16}/></Link></div><ol><li><span>01</span><h3>Create your account</h3><p>Create a Mera passkey account and request access when applications open. Approval belongs to your account.</p></li><li><span>02</span><h3>Connect & fund MetaMask</h3><p>Once approved, connect MetaMask and get test AUSD and test MON. Your trading wallet signs every transaction.</p></li><li><span>03</span><h3>Pick your prediction</h3><p>Choose an answer, review the cost and confirm in MetaMask. Follow your shares in Portfolio.</p></li></ol></section>
     <section className="home-faq" id="faq"><div><span className="eyebrow">Before you begin</span><h2>A few things,<br/><em>made clear.</em></h2></div><div>{[
       ['How do I get access?','Create a Mera passkey account. When applications are open, use Request access on your account page and include your public Mera address. Approval is manual; signing up does not automatically grant access.'],
       ['Which assets does this preview use?','Test AUSD and test MON on Monad testnet only. Questions can concern real events or clearly labelled scripted practice scenarios. Check the source and rules on each market.'],
@@ -46,7 +49,7 @@ export default function Home(){
       ['What can other people see?','Transactions and wallet positions are visible on-chain.'],
       ['Can I use more than one MetaMask wallet?','Yes. Link each trading wallet to your Mera account with a signature. Your portfolio shows their shares together. Funds and positions stay in the MetaMask wallet that owns them; use that wallet to sell or collect payouts.']
     ].map(([q,a])=><details key={q}><summary>{q}<span aria-hidden="true">+</span></summary><p>{a}</p></details>)}</div></section>
-    <section className="home-final"><span className="eyebrow">Separate ideas. Connected possibilities.</span><h2>Put your view<br/><em>to the test.</em></h2><Link href={destination} className="button button-dark">{state.address?'Your access':'Get early access'}<ArrowUpRight size={18}/></Link><p>Monad testnet · Test assets only</p></section>
+    <section className="home-final"><span className="eyebrow">Separate ideas. Connected possibilities.</span><h2>Put your view<br/><em>to the test.</em></h2><Link href={destination} className="button button-dark">{action}<ArrowUpRight size={18}/></Link><p>Monad testnet · Test assets only</p></section>
     <footer className="home-footer"><span className="logo">flurbo<span className="logo-dot"/></span><span>One pool. More possibilities.</span><a href="#faq">Questions? Start here ↗</a></footer>
   </main>;
 }

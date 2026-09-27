@@ -14,6 +14,7 @@ import {useTestingAccess} from './auth/testing-access';
 import {usePreviewAccess} from './auth/preview-access';
 import AccessPage from './pages/AccessPage';
 import Agents from './pages/Agents';
+import './ux.css';
 
 export const brand = "flurbo";
 
@@ -65,10 +66,10 @@ function Header() {
           onClick={(event) => {
             if ((event.target as HTMLElement).closest("a")) setOpen(false);
           }}>
-          {state.address ? <><Link href="/markets">Markets</Link><Link href="/agents">Agents</Link><Link href="/portfolio">Portfolio</Link><Link href="/access">Your account</Link></> : <><a href="/#how-it-works">How it works</a><a href="/#the-idea">The idea</a></>}
+          {state.restoring ? <span role="status" className="nav-loading">Loading your account...</span> : state.address ? <><Link href="/markets">Markets</Link><Link href="/agents">Agents</Link><Link href="/portfolio">Portfolio</Link><Link href="/access">Your account</Link></> : <><a href="/#how-it-works">How it works</a><a href="/#the-idea">The idea</a></>}
           <Link href="/docs" aria-current={location === '/docs' ? 'page' : undefined}>Docs</Link>
           <span className="nav-rule" aria-hidden="true" />
-          {state.address ? (isHome ? <Link href="/markets" className="nav-cta">Explore markets <ArrowUpRight size={15} strokeWidth={1.8} /></Link> : <Link href="/" className="nav-login">About Flurbo</Link>) : <>
+          {state.restoring ? null : state.address ? (isHome ? <Link href="/markets" className="nav-cta">Explore markets <ArrowUpRight size={15} strokeWidth={1.8} /></Link> : <Link href="/" className="nav-login">About Flurbo</Link>) : <>
             <Link href="/login" className="nav-login">Sign in</Link>
             <Link href="/signup" className="nav-cta">Get early access <ArrowUpRight size={15} strokeWidth={1.8} /></Link>
           </>}

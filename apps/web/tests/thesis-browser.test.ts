@@ -29,6 +29,7 @@ test('thesis browser: visible rules before quotes, private forecast, one bounded
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600_000}}});
       if(path==='/api/rehearsal/status')return route.fulfill({json:{...await f.service.status(),resolved:closed}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:owner,wallets:[]}});
+      if(path==='/api/account/portfolio-sources')return route.fulfill({json:{account:owner,wallets:[],agentWallets:[]}});
       if(path==='/api/rehearsal/markets')return route.fulfill({json:await f.service.markets()});
       if(['/api/network','/api/rehearsal/price-history'].includes(path))return route.fulfill({status:503,json:{error:'Offline fixture'}});
       if(path==='/api/rehearsal/thesis'){
@@ -41,6 +42,7 @@ test('thesis browser: visible rules before quotes, private forecast, one bounded
       const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
+    await page.clock.install();await page.clock.pauseAt(new Date());
     await page.goto('https://flurbo.singu.online/markets/rehearsal/0/thesis');
     const compare=page.getByRole('button',{name:'Compare with pool',exact:true}),review=page.getByRole('button',{name:'Review this prediction'});
     await compare.waitFor();assert.equal(requests.length,0);
@@ -52,10 +54,14 @@ test('thesis browser: visible rules before quotes, private forecast, one bounded
     }
     assert.equal(requests.length,0);assert.equal(await review.isDisabled(),true);
     assert.equal(await page.locator('.thesis-candidate').getByText('Not loaded',{exact:true}).count(),8);
+    await page.clock.runFor(500);
+    await page.getByRole('button',{name:'Refresh comparison',exact:true}).waitFor();
+    assert.equal(requests.length,1,'one automatic baseline, without submitting personal beliefs');
+    assert.equal(await page.getByRole('button',{name:'Start from pool estimates'}).isEnabled(),true);
     if(process.env.FLURBO_TEST_SCREENSHOT)await page.screenshot({path:process.env.FLURBO_TEST_SCREENSHOT.replace('.png','-initial.png'),fullPage:true});
     await page.getByLabel('Chance B is Yes, if A is Yes',{exact:true}).fill('80');
     // A failed price request must not hide the choices or enable a trade.
-    fail=true;await compare.click();await page.getByRole('alert').waitFor();
+    fail=true;await page.getByRole('button',{name:'Refresh comparison',exact:true}).click();await page.getByRole('alert').waitFor();
     assert.equal(await page.locator('.thesis-candidate').count(),4);assert.equal(await review.isDisabled(),true);
     await page.locator('.thesis-candidate').filter({has:page.getByRole('heading',{name:'At least one (OR)',exact:true})}).click();
     assert.ok((await page.locator('.thesis-warning').innerText()).includes('including when both match'));
@@ -65,7 +71,8 @@ test('thesis browser: visible rules before quotes, private forecast, one bounded
     await page.getByLabel('Chance A is Yes',{exact:true}).fill('30');
     await page.getByLabel('Chance B is Yes, if A is No',{exact:true}).fill('20');
     assert.deepEqual(await page.locator('.thesis-distribution strong').allTextContents(),['56.0%','6.0%','14.0%','24.0%']);
-    assert.equal(await review.isEnabled(),true);assert.equal(requests.length,2);
+    assert.equal(await review.isEnabled(),true);assert.equal(requests.length,3);
+    await page.clock.runFor(600);assert.equal(requests.length,3,'personal forecasts do not fetch or leave a delayed duplicate comparison');
     await page.getByText('Add a reasoning note',{exact:true}).click();await page.getByLabel('Why do you expect this connection?').fill('This private forecast must never leave the page.');
     await page.getByText('If an answer becomes VOID',{exact:true}).click();
     assert.ok((await page.locator('.thesis-void').innerText()).includes('0.25'));
@@ -102,7 +109,7 @@ test('thesis browser: visible rules before quotes, private forecast, one bounded
     await page.getByLabel('Question B',{exact:true}).selectOption('2');assert.equal(await page.getByLabel('Chance A is Yes',{exact:true}).inputValue(),'');
     await compare.click();await page.getByRole('button',{name:'Refresh comparison',exact:true}).waitFor();
     await page.getByRole('button',{name:'Start from pool estimates'}).click();
-    await page.clock.install();await page.clock.fastForward(61_000);await page.getByText(/This comparison has expired/).waitFor();assert.equal(await review.isDisabled(),true);
+    await page.clock.setSystemTime(new Date(Date.now()+65_000));await page.clock.runFor(1001);await page.getByText(/This comparison has expired/).waitFor();assert.equal(await review.isDisabled(),true);
     await page.clock.setSystemTime(new Date());closed=true;await page.goto('https://flurbo.singu.online/markets/rehearsal/0/thesis');await compare.click();await page.getByRole('button',{name:'Refresh comparison',exact:true}).waitFor();
     await page.getByRole('button',{name:'Start from pool estimates'}).click();assert.equal(await review.isDisabled(),true);
     assert.deepEqual(errors,[]);
