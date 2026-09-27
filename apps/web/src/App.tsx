@@ -10,7 +10,6 @@ import Workspace from './pages/Workspace';
 import Markets from './pages/Markets';
 import EvidenceReview from './pages/EvidenceReview';
 import FundingPage from './pages/FundingPage';
-import {useTestingAccess} from './auth/testing-access';
 import {usePreviewAccess} from './auth/preview-access';
 import AccessPage from './pages/AccessPage';
 import Agents from './pages/Agents';
@@ -102,7 +101,7 @@ function AuthShell({ mode }: { mode: "login" | "signup" | "account" }) {
 
 function AccountRoute() {
   const preview = usePreviewAccess();
-  const testingAccess = useTestingAccess();
+  const testingAccess = preview.access?.testingTools===true;
   const [location] = useLocation();
   const { controller, state } = useAuth();
   const [, navigate] = useLocation();

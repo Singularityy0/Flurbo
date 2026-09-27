@@ -14,26 +14,34 @@ async function request(action:string,input?:object,signal?:AbortSignal):Promise<
   return result;
 }
 
-export function AccessApplication({refresh}:{refresh():void}){
+export function AccessApplication({refresh,checking}:{refresh():Promise<void>;checking:boolean}){
   const [application,setApplication]=useState<Application|null>(null),[loading,setLoading]=useState(true);
+  const [loaded,setLoaded]=useState(false);
   const [email,setEmail]=useState(''),[code,setCode]=useState(''),[accepted,setAccepted]=useState(false);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [editing,setEditing]=useState(false),[withdrawing,setWithdrawing]=useState(false);
   useEffect(()=>{const abort=new AbortController();request('',undefined,abort.signal).then(v=>{
-    if(abort.signal.aborted)return;setApplication(v.application||null);setEmail(v.application?.email||'');setLoading(false);
+    if(abort.signal.aborted)return;setApplication(v.application||null);setEmail(v.application?.email||'');setLoaded(true);setLoading(false);
   }).catch(e=>{if(!abort.signal.aborted){setError(e.message);setLoading(false);}});return()=>abort.abort();},[]);
   async function act(action:string,input:object){
     if(busy)return;setBusy(true);setError('');setNotice('');
     try{const v=await request(action,input);setApplication(v.application||null);setEditing(false);setWithdrawing(false);setCode('');
       setNotice(v.message||(action==='verify'?'Email verified. Your request is ready for review.':action==='withdraw'?'Application withdrawn. Your contact email has been removed.':action==='submit'?'Check your inbox for a six-digit verification code.':''));
-      if(action==='verify')refresh();
+      if(action==='verify')await refresh();
     }catch(e){setError(e instanceof Error?e.message:'Please try again.');}finally{setBusy(false);}
+  }
+  async function checkStatus(){
+    if(busy||checking)return;setBusy(true);setError('');setNotice('');
+    try{const v=await request('');setApplication(v.application||null);setLoaded(true);
+      if(!loaded)setEmail(v.application?.email||'');
+      await refresh();
+    }catch(e){setError(e instanceof Error?e.message:'Try again.');}finally{setBusy(false);}
   }
   if(loading)return <p role="status">Loading your application…</p>;
   const state=application?.state;
   const canApply=!application||state==='withdrawn'||editing;
   return <section className="application-form" aria-label="Your access application" aria-busy={busy}>
-    {canApply?<form onSubmit={e=>{e.preventDefault();void act('submit',{email,noticeAccepted:accepted});}}>
+    {!loaded?<div><h2>Your application couldn’t be loaded.</h2><p>Retry to check your saved status before making another request.</p></div>:canApply?<form onSubmit={e=>{e.preventDefault();void act('submit',{email,noticeAccepted:accepted});}}>
       <h2>Request your invitation.</h2><p>Leave your email. We’ll let you know when your account is approved.</p>
       <label htmlFor="application-email">Email address</label>
       <input id="application-email" type="email" autoComplete="email" maxLength={254} required value={email} onChange={e=>setEmail(e.target.value)} disabled={busy}/>
@@ -48,11 +56,11 @@ export function AccessApplication({refresh}:{refresh():void}){
       <div className="access-actions"><button type="button" className="text-link" disabled={busy} onClick={()=>void act('submit',{email:application.email,noticeAccepted:true})}>Send a new code</button><button type="button" className="text-link" disabled={busy} onClick={()=>setEditing(true)}>Change email</button></div>
       <small>Allow one minute between codes. Check your spam folder too. Verification does not grant access.</small>
     </form>:<div role="status"><h2>{state==='pending'?'Your request is received.':state==='approved'?'Your invitation is ready.':state==='revoked'?'Access is no longer active.':'Not selected for this round.'}</h2>
-      <p>{state==='pending'?'Your email is verified. We’ll email you when your account is approved.':state==='approved'?'Select Check access to open your approved account.':'Your application has been reviewed. You can return here to check its status.'}</p>
+      <p>{state==='pending'?'Your email is verified. We’ll email you when your account is approved.':state==='approved'?'Select Check application status to open your approved account.':'Your application has been reviewed. You can return here to check its status.'}</p>
       {state==='pending'&&<button className="text-link" disabled={busy} onClick={()=>setEditing(true)}>Change email</button>}
     </div>}
     {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
-    <button className="text-link" disabled={busy} onClick={async()=>{setBusy(true);setError('');try{const v=await request('');setApplication(v.application||null);refresh();}catch(e){setError(e instanceof Error?e.message:'Try again.');}finally{setBusy(false);}}}>Check application status</button>
+    <button className="text-link" disabled={busy||checking} onClick={()=>void checkStatus()}>{busy||checking?'Checking…':'Check application status'}</button>
     {application&&state!=='withdrawn'&&state!=='approved'&&<details className="application-withdraw"><summary>Withdraw application</summary><p>This removes your application email. Your passkey and wallet holdings stay unchanged.</p><label className="application-consent"><input type="checkbox" checked={withdrawing} onChange={e=>setWithdrawing(e.target.checked)}/>Remove my contact email</label><button className="button button-outline" disabled={busy||!withdrawing} onClick={()=>void act('withdraw',{})}>Withdraw request</button></details>}
   </section>;
 }

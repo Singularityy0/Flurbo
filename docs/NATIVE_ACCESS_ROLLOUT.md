@@ -87,6 +87,14 @@ The existing agent credential test was corrected to extract the full base64url s
 
 ## Hosted acceptance after user deployment
 
+### Access-page stability fix
+
+Access refreshes preserve the mounted application form and unfinished inputs. The route uses one access request for both preview and operator permissions, and concurrent refreshes share an in-flight request. Checks are user-triggered, apart from initial loading and explicit API access-denied events; there is no polling loop.
+
+A failed access read is unknown status, not evidence that applications are closed. A failed initial application read shows a retry state, not an empty application form. Previously loaded application details remain visible on refresh failure. Permissions fail closed on errors and explicit denials; cached form state never authorizes API access. Changing accounts clears the previous account's displayed data.
+
+No new Render variables, SQL migration or database reset is needed for this frontend fix. Build/typecheck and browser fixtures cover delayed refreshes, service failure, retained edits, recovery, approval, revocation and account switching. The exact cause of a hosted failed request still requires the corresponding server logs; the UI bug alone does not identify a provider outage.
+
 1. Open landing/docs signed out. Confirm Request access leads through sign-in and protected APIs remain inaccessible.
 2. With an unapproved test account, submit an email you control, receive a code and verify it. Reload to confirm pending status.
 3. Confirm the application is stored under that account in the separate Supabase project, without a plaintext verification code.
