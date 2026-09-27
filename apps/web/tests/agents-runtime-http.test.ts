@@ -22,6 +22,10 @@ test('runtime routes over HTTP: bearer only, no cookies, no query strings, no br
   });
   const browser={origin,cookie:'flurbo_session=approved'};
   try{
+    assert.equal((await request('/api/account/portfolio-sources')).status,401);
+    assert.equal((await request('/api/account/portfolio-sources',{headers:{origin,cookie:'flurbo_session=pending'}})).status,403);
+    assert.deepEqual((await request('/api/account/portfolio-sources',{headers:browser})).data,{account:alice,wallets:[],agentWallets:[],agentExecutions:[]});
+    assert.equal((await request('/api/account/portfolio-sources?account='+bob,{headers:browser})).status,400);
     // Issuing needs the signed-in, approved browser session like every account route.
     const agent=(await request('/api/agents',{headers:browser,body:{kind:'runtime',name:'Hosted runtime',markets:['pilot']}})).data;
     assert.ok(agent.id,JSON.stringify(agent));

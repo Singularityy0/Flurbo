@@ -17,7 +17,7 @@ test('one Mera portfolio sums wallets, loads beyond thirty claims, and recovers 
       const url=new URL(route.request().url()),path=url.pathname;
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
-      if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner,second]}});
+      if((path==='/api/account/wallets'||path==='/api/account/portfolio-sources'))return route.fulfill({json:{account:login,wallets:[owner,second]}});
       if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'Practice markets',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
       if(path==='/api/rehearsal/account')return route.fulfill({json:{...await fixture.service.account(url.searchParams.get('wallet')),claimScopes:[3,5,6,7,9,10,11,12,13,14]}});
       if(path==='/api/rehearsal/history'){scans++;return route.fulfill({json:{complete:true,logs:[]}});}

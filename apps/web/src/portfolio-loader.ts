@@ -3,12 +3,13 @@ import {portfolioClaims,rememberedClaims,type ClaimHint} from './pilot-claims';
 import {type AccountHolding,accountOwners} from './account-holdings';
 import type {MarketGroup} from './market-directory';
 import type {ActivityLog} from './portfolio-performance';
+import type {AgentExecution} from './portfolio-sources';
 
 export type HistoryRead={complete:boolean;through?:number;target?:number;logs:ActivityLog[]};
 export type PoolRead={group:MarketGroup;manifest?:PilotState['manifest'];owners:Record<string,AccountHolding[]>;blocks:Record<string,string>;holdingsComplete:boolean;history?:HistoryRead;payouts?:HistoryRead;payoutError?:boolean;error?:string;historyError?:boolean};
 export type PortfolioRequest=<T>(path:string,input:unknown,namespace:PilotNamespace,signal:AbortSignal)=>Promise<T>;
 type AccountRead=Pick<PilotState,'manifest'|'snapshot'>&{claimScopes?:number[]};
-export async function loadPortfolio({groups,account,wallets,signal,publish,request=pilotRequest,historyOnly=false,previous={}}:{groups:MarketGroup[];account:string;wallets:string[];signal:AbortSignal;publish:(namespace:string,value:PoolRead)=>void;request?:PortfolioRequest;historyOnly?:boolean;previous?:Record<string,PoolRead>}){
+export async function loadPortfolio({groups,account,wallets,signal,publish,request=pilotRequest,historyOnly=false,previous={},agentExecutions=[]}:{groups:MarketGroup[];account:string;wallets:string[];signal:AbortSignal;publish:(namespace:string,value:PoolRead)=>void;request?:PortfolioRequest;historyOnly?:boolean;previous?:Record<string,PoolRead>;agentExecutions?:AgentExecution[]}){
   const owners=accountOwners(account,wallets),queue=[...groups],data:Record<string,PoolRead>={};
   const send=(value:PoolRead)=>{data[value.group.namespace]=value;if(!signal.aborted)publish(value.group.namespace,{...value,owners:{...value.owners},blocks:{...value.blocks}});};
   const call=<T,>(group:MarketGroup,path:string,input?:unknown)=>request<T>(path,input,group.namespace,AbortSignal.any([signal,AbortSignal.timeout(45000)]));
@@ -38,7 +39,7 @@ export async function loadPortfolio({groups,account,wallets,signal,publish,reque
         let failed=false;
         for(const owner of owners){
           if(signal.aborted)return;
-          try{await balances(value,portfolioClaims(count,meta.claimScopes||[],rememberedClaims(group.namespace,group.pool,owner,count),[]),owner);}
+          try{await balances(value,portfolioClaims(count,meta.claimScopes||[],[...rememberedClaims(group.namespace,group.pool,owner,count),...agentExecutions.filter(e=>e.pool===group.pool&&e.owner===owner).map(e=>({scope:e.scope,mask:e.mask}))],[]),owner);}
           catch{failed=true;value.error='Some shares could not be refreshed. The totals below are incomplete.';send(value);}
         }
         value.holdingsComplete=!failed;send(value);

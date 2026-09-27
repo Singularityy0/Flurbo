@@ -3,6 +3,7 @@ import { pilotCall } from '../../shared/pilot.mjs';
 import { agentStore, memoryBackend, redisBackend, addPaperFill, addConfirmedPurchase, compactReview, transactionDigest, ownsPurchase, VERIFIED, AGENT_LIMITS } from './agent-store.mjs';
 import { quoteClaims, verifyReceipt, readResolution } from './agent-market.mjs';
 import { runtimeApi, defaultRuntimePolicy, policyView, connection } from './runtime-api.mjs';
+import {agentPortfolio} from './portfolio.mjs';
 import { RuntimeError } from './credentials.mjs';
 import { STRATEGY, DEFAULT_CONFIG, SCHEMAS, FlurboError, assertConfig, candidateClaims, decide, claimKey, parseMarket, parseForecast, parseQuoteResult,
   parsePairAnalytics, parseClaimImplied, decisionToJSON, decisionFromJSON, recordPaperFill, paperFillToJSON, paperFillFromJSON, evaluatePaper, forecastToJSON, FILL_MODEL,
@@ -462,6 +463,7 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
     // Headless runtime API: bearer credentials only (see runtime-api.mjs).
     runtime: runtime.handle,
     isAgentWallet: async wallet => !!(await store.agentWallet(wallet)),
+    portfolio: (account,origin)=>agentPortfolio({store,links,account,origin,serviceFor}),
     // Returns {status, body}. Unexpected failures are reported without internal detail.
     async handle(request) {
       try { return { status: 200, body: await routes(request) }; }

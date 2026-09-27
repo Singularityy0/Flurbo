@@ -111,6 +111,15 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
         if (!isTestingOperator(login, testingOperatorAccount)) return send(res, 403, {error:'Testing tools are restricted to the operator.'});
       }
+      if(url.pathname==='/api/account/portfolio-sources'){
+        const login=await store.read(sid,origin);
+        if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
+        if(req.method!=='GET'||url.search)return send(res,400,{error:'Unexpected portfolio request.'});
+        if(hosted&&!store.command||!agents)return send(res,503,{error:'Account portfolio sources are unavailable.'});
+        const manual=await links.list(login.address,origin);
+        const agent=await agents.portfolio(login.address,origin);
+        return send(res,200,{account:manual.account,wallets:manual.wallets,agentWallets:agent.wallets,agentExecutions:agent.executions});
+      }
       if (url.pathname.startsWith('/api/account/wallets')) {
         const login=await store.read(sid,origin);
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});

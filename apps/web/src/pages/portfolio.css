@@ -140,3 +140,6 @@
  .portfolio-tabs { gap:0; justify-content:space-between; }
  .portfolio-tabs button { font-size:12px; padding:16px 0; }
 }
+
+.portfolio-table td:first-child a.portfolio-agent-label { display:block; width:fit-content; margin-top:6px; font-size:11px; line-height:1.5; font-weight:400; color:var(--ink-soft); text-decoration:none; }
+.portfolio-agent-label:hover { text-decoration:underline !important; }
