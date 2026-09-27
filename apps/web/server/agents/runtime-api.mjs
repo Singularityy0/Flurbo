@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { assessSemantics } from '../semantic-validation.mjs';
 import { verifyMessage, encodeFunctionData, decodeFunctionResult } from 'viem';
 import { pilotCash, pilotCashAbi, validClaim } from '../../shared/pilot.mjs';
 import { quoteClaims, readResolution } from './agent-market.mjs';
@@ -168,7 +169,7 @@ export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, 
   };
 
   // Runtime side (bearer credential).
-  const SCOPE_OF = { session: null, deployments: 'markets:read', market: 'markets:read', quote: 'markets:read', claimAnalytics: 'markets:read', pairAnalytics: 'markets:read',
+  const SCOPE_OF = { session: null, deployments: 'markets:read', market: 'markets:read', semantics: 'markets:read', quote: 'markets:read', claimAnalytics: 'markets:read', pairAnalytics: 'markets:read',
     wallet: 'wallet:read', policy: 'runtime:report', heartbeat: 'runtime:report', decisions: 'runtime:report', reportExecution: 'executions:report', execution: 'executions:report' };
   const ARCHIVED_ALLOWED = ['session', 'reportExecution', 'execution'];
   function route(method, parts) {
@@ -181,6 +182,7 @@ export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, 
     if (method === 'POST' && parts.length === 1 && a === 'executions') return ['reportExecution'];
     if (method === 'GET' && parts.length === 2 && a === 'executions') return ['execution', b];
     if (a === 'markets' && parts.length === 2 && method === 'GET') return ['market', b];
+    if (a === 'markets' && parts.length === 3 && method === 'POST' && c === 'validate-trade') return ['semantics', b];
     if (a === 'markets' && parts.length === 3 && method === 'POST' && ['quote', 'claim-analytics', 'pair-analytics', 'wallet'].includes(c))
       return [{ quote: 'quote', 'claim-analytics': 'claimAnalytics', 'pair-analytics': 'pairAnalytics', wallet: 'wallet' }[c], b];
     return null;
@@ -217,6 +219,11 @@ export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, 
   const allowedMarket = (profile, namespace) => { if (!profile.markets.includes(namespace)) fail(404, 'NOT_FOUND', 'That market is not enabled for this agent.'); return service(namespace); };
 
   const routes = {
+    semantics: ({ profile, param, input }) => {
+      const svc = allowedMarket(profile, param);
+      try { return assessSemantics(svc.manifest, input); }
+      catch (e) { if (e.status === 400) fail(400, 'INVALID_INPUT', e.message); throw e; }
+    },
     session: ({ record, profile }) => ({ schema: 'flurbo.agent-runtime-session.v1', protocol: PROTOCOL_VERSION, agentId: profile.id, agentName: profile.name, status: profile.status,
       credential: { credentialId: record.credentialId, scopes: record.scopes, expiresAt: record.expiresAt }, wallet: profile.wallet, markets: profile.markets, serverTime: now() }),
     deployments: ({ profile }) => ({ schema: 'flurbo.agent-deployments.v1', deployments: profile.markets.map(ns => serviceFor(ns) && deploymentOf(ns, serviceFor(ns))).filter(Boolean) }),

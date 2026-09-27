@@ -160,6 +160,13 @@ Planned Executor::plan(const Deployment& d, const Intent& intent, const std::str
   });
 }
 
+std::string Executor::semantic_check(const Deployment& d, const Claim& c, i128 quantity) {
+  std::string reason = "SEMANTICS_UNAVAILABLE";
+  try { if (client_) reason = semantic_error(client_->validate_trade(d.namespace_, c.scope, c.mask, to_string(quantity)), d, c.scope, c.mask, to_string(quantity), controls_->now()); } catch (...) {}
+  if (!reason.empty()) { Value detail = Value::object(); detail.set("namespace", d.namespace_); controls_->log(reason, detail); }
+  return reason;
+}
+
 std::optional<Value> Executor::sign(const std::string& entry_id, const Deployment& d) {
   return journal_->locked([&](Value& j) -> std::optional<Value> {
     std::optional<uint64_t> highest;
@@ -173,6 +180,11 @@ std::optional<Value> Executor::sign(const std::string& entry_id, const Deploymen
       e->set("finalAt", controls_->now());
       e->set("note", "not signed: " + reason);
       return std::nullopt;
+    }
+    if (e->str("action") == "buy") {
+      auto intent = intent_of(*e);
+      auto collision = semantic_check(d, intent.claim, intent.quantity_atoms);
+      if (!collision.empty()) { e->set("status", "abandoned"); e->set("finalAt", controls_->now()); e->set("note", collision); return std::nullopt; }
     }
     validate_transaction({CHAIN_ID, wallet, e->str("to"), e->str("data"), 0}, intent_of(*e), d, wallet);
     uint64_t pending = chain_->nonce(wallet, "pending");
@@ -391,6 +403,8 @@ Outcome Executor::execute(const ExecutionRequest& c) {
   if (c.action == "redeem") return run(d, Intent::redeem(c.claim, c.quantity_atoms), c.decision_id, std::nullopt, 0);
   if (c.action == "sell")
     return run(d, Intent::sell(c.claim, c.quantity_atoms, sell_minimum(c.quote_atoms, c.slippage_bps), deadline_for(c.quote_block)), c.decision_id, c.quote_block, slippage);
+  auto semantic = semantic_check(d, c.claim, c.quantity_atoms);
+  if (!semantic.empty()) return {"blocked", semantic, {}, "", "", std::nullopt};
   i128 limit = buy_limit(c.quote_atoms, c.slippage_bps);
   Block quote_block = c.quote_block;
   for (const auto& e : journal_->entries())

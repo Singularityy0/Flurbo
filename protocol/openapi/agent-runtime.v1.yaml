@@ -171,6 +171,26 @@ paths:
                 quantityAtoms: { $ref: "#/components/schemas/Atoms" }
       responses:
         "200": { description: "{status: ok, quote} or {status: unavailable, reason, detail}" }
+          default: { $ref: "#/components/responses/Error" }
+  /markets/{namespace}/validate-trade:
+    post:
+      summary: Outcome compatibility under configured predicates (scope markets:read)
+      description: Returns a claim-bound assessment, not a quote or permission to sign. Unknown combinations make updated agents abstain. See specs/semantics.md.
+      parameters: [{ $ref: "#/components/parameters/protocol" }, { $ref: "#/components/parameters/namespace" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scope, mask, quantityAtoms]
+              properties:
+                scope: { type: integer, minimum: 1, maximum: 15 }
+                mask: { type: string }
+                quantityAtoms: { $ref: "#/components/schemas/Atoms" }
+      responses:
+        "200": { description: "flurbo.semantic-assessment.v1 with status collision, unknown or no_declared_collision, exact bindings, matrix and separate ordinary/VOID payout bounds. Expires in 60 seconds." }
         default: { $ref: "#/components/responses/Error" }
   /markets/{namespace}/claim-analytics:
     post:

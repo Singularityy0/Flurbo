@@ -278,6 +278,16 @@ class AgentRunner:
                 candidate = {"claim": {"scope": p["scope"], "mask": str(p["mask"])}, "quantityAtoms": str(p["quantityAtoms"]), "quoteAtoms": str(p["quoteAtoms"]),
                              "slippageBps": p["slippageBps"], "edgeAtoms": None if p.get("edgeAtoms") is None else str(p["edgeAtoms"]), "edgeBps": p.get("edgeBps"), "quoteBlock": str(head["number"])}
                 if self.config["mode"] == "paper":
+                    from ..semantics import semantic_error
+                    reason = 'SEMANTICS_UNAVAILABLE'
+                    try:
+                        reason = semantic_error(self.client.validate_trade(d['namespace'], candidate['claim'], p['quantityAtoms']), d, candidate['claim'], p['quantityAtoms'], self.now())
+                    except Exception:
+                        pass
+                    if reason:
+                        self.log(reason, {'namespace': d['namespace']})
+                        self._report_decision({**base, 'outcome':'abstain', 'reasons':[reason], 'provenance':provenance, 'forecast':found['forecast'], 'candidate':candidate, 'summary':'The purchase did not pass outcome compatibility checks.'})
+                        continue
                     r = self.paper.fill({"decisionId": decision_id, "namespace": d["namespace"], "claim": candidate["claim"], "quantityAtoms": candidate["quantityAtoms"],
                                          "costAtoms": candidate["quoteAtoms"], "snapshotBlock": candidate["quoteBlock"], "filledAt": self.now()})
                     self.log("paper_trade" if r["ok"] else "paper_skipped", {"namespace": d["namespace"], "claim": candidate["claim"], **({} if r["ok"] else {"reason": r["reason"]})})

@@ -571,6 +571,13 @@ impl AgentRunner {
         let candidate = json!({"claim": claim, "quantityAtoms": p.quantity_atoms.to_string(), "quoteAtoms": p.quote_atoms.to_string(), "slippageBps": p.slippage_bps as i64,
             "edgeAtoms": p.edge_atoms.map(|e| e.to_string()), "edgeBps": p.edge_bps.map(|e| e as i64), "quoteBlock": head.number.to_string()});
         if self.config.mode == "paper" {
+            let reason=self.client.as_ref().and_then(|c|c.validate_trade(&d.namespace,p.scope,p.mask,&p.quantity_atoms.to_string()).ok())
+                .map(|r|crate::semantics::semantic_error(&r,d,p.scope,p.mask,&p.quantity_atoms.to_string(),self.now())).unwrap_or(Some("SEMANTICS_UNAVAILABLE"));
+            if let Some(reason)=reason {
+                self.log(reason,json!({"namespace":d.namespace}));
+                self.report_decision(with(json!({"outcome":"abstain","reasons":[reason],"provenance":provenance,"forecast":forecast_doc,"candidate":candidate,"summary":"The purchase did not pass outcome compatibility checks."})));
+                return Ok(());
+            }
             let record = json!({"decisionId": decision_id, "namespace": d.namespace, "claim": claim, "quantityAtoms": p.quantity_atoms.to_string(),
                 "costAtoms": p.quote_atoms.to_string(), "snapshotBlock": head.number.to_string(), "filledAt": self.now()});
             let r = self.paper.fill(&self.journal, record)?;

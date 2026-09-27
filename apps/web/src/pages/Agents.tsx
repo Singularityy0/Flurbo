@@ -332,7 +332,7 @@ function Approvals({ id, profile, records, setRecords, questions, login, reload 
     const review = record.review as PilotReview; validatePilotReview(review);
     await navigator.locks.request('flurbo-pilot-submit', { ifAvailable: true }, async lock => {
       if (!lock || readPilotPending(namespace)) throw new Error('Another transaction for this market is being tracked. Finish it first.');
-      try { await submitPilot(provider.current as never, review, login, save, () => live.current && connection.owner === record.owner); }
+      try { await submitPilot(provider.current as never, review, login, save, () => live.current && connection.owner === record.owner, {namespace}); }
       catch (e) { if (message(e) === 'Wallet request rejected.') replace(await agentClient.agents.track(id, record.id, { action: 'rejected' }) as RecordJSON); throw e; }
     });
     const saved = readPilotPending(namespace);

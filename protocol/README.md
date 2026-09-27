@@ -9,6 +9,7 @@ One specification shared by the TypeScript, Python, Rust and C++ SDKs. An SDK co
 | [specs/contracts.md](specs/contracts.md) | Contract ABI subset, deployment compatibility, service limits |
 | [specs/auth.md](specs/auth.md) | Agent credentials and agent wallet association |
 | [specs/transactions.md](specs/transactions.md) | Transaction lifecycle, journal, policies and recovery |
+| [specs/semantics.md](specs/semantics.md) | Pre-trade outcome compatibility, operator metadata, manual exceptions and agent abstention |
 | [specs/research.md](specs/research.md) | Retrieval, model output and its validation |
 | [openapi/agent-runtime.v1.yaml](openapi/agent-runtime.v1.yaml) | Hosted headless API |
 | [schemas/](schemas) | JSON Schemas for payloads, errors and the journal |

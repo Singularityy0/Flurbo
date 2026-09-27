@@ -74,9 +74,10 @@ test('pilot RPC accepts only public testnet read endpoints and validates respons
   await assert.rejects(pilotRpc('https://testnet-rpc.monad.xyz',async()=>Response.json({jsonrpc:'2.0',id:99,result:'0x279f'}))('eth_chainId',[]));
 });
 
-test('pilot review validates caller intent and saves tracking before sending, including numeric wallet nonces',async()=>{
+test('pilot review validates caller intent and saves tracking before sending, including numeric wallet nonces',async(t)=>{
   const f=pilotFixture(); f.options.allowance=1_000_000n;
   const review=await f.service.prepare({owner,action:'buy',scope:3,mask:'8',quantity:'1000000',slippageBps:50});
+  t.mock.method(globalThis,'fetch',async()=>Response.json(review.semanticAssessment));
   let saved:any=null,sends=0;
   const provider={request:async({method,params=[]}:any)=>{
     if(method==='eth_accounts')return [owner];

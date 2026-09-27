@@ -4,6 +4,9 @@ import {verifyTypedData} from 'viem';
 import { appFetch as fetch } from './platform-fetch.ts';
 import { pilotCall, type PilotManifest } from '../shared/pilot.mjs';
 import type { AuthController } from './auth/controller';
+import { semanticError } from '../../../packages/sdk/src/semantics.ts';
+export const semanticAcknowledgment = 'I understand this has no ordinary winning outcome';
+export type SemanticAssessment = { rulesDigest:string; status:string; coverage:string; notice:string; ordinaryMaximumPayoutAtoms:string; maximumVoidPayoutAtoms:string };
 
 export type Provider={request(input:{method:string;params?:unknown[]}):Promise<unknown>;on?(event:string,fn:()=>void):void;removeListener?(event:string,fn:()=>void):void};
 export type PilotState={manifest:PilotManifest;snapshot:{blockNumber:string;blockHash:string;timestamp:number};
@@ -14,7 +17,7 @@ export type HoldingWitness={holder:string;scope:number;mask:string;wrapped:boole
 export type HolderAuthorization=HoldingWitness&{accountCommitment:Hex;challenger:string;nonce:string;deadline:string};
 export type PilotInput={owner:string;action:string;event?:number;outcome?:number;evidenceHash?:string;evidenceURI?:string;scope?:number;mask?:string;quantity?:string;slippageBps?:number;stake?:HoldingWitness;authorization?:HolderAuthorization;signature?:Hex};
 export type PilotReview={schema:string;manifest:PilotManifest;snapshot:PilotState['snapshot'];expiresAt:number;action:string;requested:PilotInput;title:string;amountAtoms:string;minimumReceivedAtoms?:string;
-  gasLimit:string;gasPrice:string;maximumFeeWei:string;
+  gasLimit:string;gasPrice:string;maximumFeeWei:string;semanticAssessment?:SemanticAssessment|null;quotedCostAtoms?:string|null;
   transaction:{from:Hex;to:Hex;data:Hex;value:Hex;chainId:Hex};notice:string};
 export type PilotPending={review:PilotReview;nonce:Hex;hash:Hex|null;started:number;login:string};
 export const pilotPendingKey='flurbo.pilot.pending.v1';
@@ -110,7 +113,20 @@ async function walletIdentity(p:Provider,r:PilotReview) {
   if(anchor?.hash?.toLowerCase()!==r.manifest.verifiedBlockHash) throw new Error('Wallet network does not match this public deployment.');
 }
 
-export async function submitPilot(p:Provider,r:PilotReview,login:string,save:(value:PilotPending|null)=>void,current:()=>boolean) {
+export async function validatePurchaseSemantics(r:PilotReview, namespace:PilotNamespace, acknowledgment?:{rulesDigest:string;phrase:string}) {
+  if(r.requested.action!=='buy')return;
+  const wanted=r.requested;
+  const result=await pilotRequest('validate-trade',{scope:wanted.scope,mask:wanted.mask,quantityAtoms:wanted.quantity},namespace);
+  const reason=semanticError(result,{pool:r.manifest.pool,rulesHash:r.manifest.rulesHash,eventCount:r.manifest.publication.draft.events.length,scope:wanted.scope!,mask:wanted.mask!,quantityAtoms:wanted.quantity!},Math.floor(Date.now()/1000),false);
+  if(reason==='SEMANTIC_COLLISION'){
+    const checked=result as SemanticAssessment;
+    if(r.semanticAssessment?.status!=='collision'||acknowledgment?.rulesDigest!==checked.rulesDigest||r.semanticAssessment.rulesDigest!==checked.rulesDigest||acknowledgment.phrase!==semanticAcknowledgment)
+      throw Error('These outcomes cannot win together under the configured rules. Review the payout warning before continuing.');
+  }else if(reason)throw Error('The outcome compatibility check is unavailable. Retry before confirming in your wallet.');
+  if(r.semanticAssessment&&r.semanticAssessment.rulesDigest!==(result as SemanticAssessment).rulesDigest)throw Error('The outcome rules changed. Review this purchase again.');
+}
+
+export async function submitPilot(p:Provider,r:PilotReview,login:string,save:(value:PilotPending|null)=>void,current:()=>boolean,options:{namespace?:PilotNamespace;acknowledgment?:{rulesDigest:string;phrase:string}}={}) {
   validatePilotReview(r); await walletIdentity(p,r);
   if(r.requested.action==='dispute'&&r.manifest.challengePolicy&&!await verifyTypedData({...eligibilityTypedData(r.manifest.resolver,r.requested,r.requested.authorization),address:r.manifest.challengePolicy.authority as Hex,signature:r.requested.signature!}))throw Error('Invalid challenge eligibility signature.');
   for(const to of [r.manifest.pool,r.manifest.resolver]) {
@@ -127,6 +143,7 @@ export async function submitPilot(p:Provider,r:PilotReview,login:string,save:(va
   if(rpcInteger(await p.request({method:'eth_getBalance',params:[r.transaction.from,'latest']}))<gas*gasPrice) throw new Error('Fund this wallet with test MON for fees');
   const nonce=hex(rpcInteger(await p.request({method:'eth_getTransactionCount',params:[r.transaction.from,'pending']})));
   await walletIdentity(p,r); validatePilotReview(r);
+  await validatePurchaseSemantics(r,options.namespace||'pilot',options.acknowledgment);
   if(!current()) throw new Error('Account or review changed. Review again.');
   const pending:PilotPending={review:r,nonce,hash:null,started:Date.now(),login};
   save(pending);

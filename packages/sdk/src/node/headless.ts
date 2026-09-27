@@ -50,6 +50,7 @@ export function runtimeClient(options: { baseUrl: string; token: string; fetch?:
       return r.deployments.map(parseDeployment);
     },
     market: (namespace: string) => call<any>('GET', `/markets/${encodeURIComponent(namespace)}`),
+    validateTrade: (namespace: string, input: { scope: number; mask: string; quantityAtoms: string }) => call<any>('POST', `/markets/${encodeURIComponent(namespace)}/validate-trade`, input),
     quote: (namespace: string, input: { side: 'buy' | 'sell'; scope: number; mask: string; quantityAtoms: string }) => call<any>('POST', `/markets/${encodeURIComponent(namespace)}/quote`, input),
     pairAnalytics: (namespace: string, a: number, b: number) => call<any>('POST', `/markets/${encodeURIComponent(namespace)}/pair-analytics`, { a, b }),
     claimAnalytics: (namespace: string, scope: number, mask: string) => call<any>('POST', `/markets/${encodeURIComponent(namespace)}/claim-analytics`, { scope, mask }),

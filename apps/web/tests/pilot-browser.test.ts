@@ -1,3 +1,5 @@
+import {assessSemantics} from '../server/semantic-validation.mjs';
+import {semanticAcknowledgment} from '../src/pilot.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -9,6 +11,10 @@ for(const namespace of ['pilot','rehearsal'] as const) test(namespace+' flow kee
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const loginAddress='0x'+'99'.repeat(20);
   const f=pilotFixture();
+  let conflict=false;
+  const semanticRules=()=>conflict?[{pool:f.manifest.pool,rulesHash:f.manifest.rulesHash,predicates:[
+    {event:0,observation:'test:close',operator:'gte',value:'3000',sourceRule:'Fixture closing observation.'},
+    {event:1,observation:'test:close',operator:'lt',value:'2500',sourceRule:'Fixture closing observation.'}]}]:[];
   f.manifest.publication.reviewerControl='single-operator';
   if(namespace==='rehearsal'){f.manifest.publication.mode='rehearsal';f.manifest.publication.draft.title='Public rehearsal: scripted settlement checks';}
   let login=true,reads=0;const errors:string[]=[];
@@ -40,7 +46,12 @@ for(const namespace of ['pilot','rehearsal'] as const) test(namespace+' flow kee
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:true}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:login?{address:loginAddress,method:'passkey',expiresAt:Date.now()+3600_000}:null}});
       if(path==='/api/'+namespace+'/status'){reads++;return route.fulfill({json:await f.service.status(url.searchParams.get('wallet')||undefined)});}
-      if(path==='/api/'+namespace+'/prepare')return route.fulfill({json:await f.service.prepare(route.request().postDataJSON())});
+      if(path==='/api/'+namespace+'/validate-trade')return route.fulfill({json:assessSemantics(f.manifest,route.request().postDataJSON(),semanticRules())});
+      if(path==='/api/'+namespace+'/prepare'){
+        const input=route.request().postDataJSON(),review=await f.service.prepare(input);
+        if(input.action==='buy')review.semanticAssessment=assessSemantics(f.manifest,{scope:input.scope,mask:input.mask,quantityAtoms:input.quantity},semanticRules());
+        return route.fulfill({json:review});
+      }
       if(path==='/api/'+namespace+'/position')return route.fulfill({json:{quantity:'1000000',payoutAtoms:null}});
       if(path==='/api/'+namespace+'/rpc'){
         const request=route.request().postDataJSON();
@@ -84,6 +95,15 @@ for(const namespace of ['pilot','rehearsal'] as const) test(namespace+' flow kee
     await page.getByText('Exact transaction confirmed. Balances refreshed.',{exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
     await page.getByText('1 shares held. Settlement pending.',{exact:true}).waitFor();
+    conflict=true;
+    await page.getByRole('group',{name:'Events',exact:true}).getByRole('checkbox').nth(1).check();
+    await page.getByRole('button',{name:'Review buy',exact:true}).click();
+    await page.getByRole('heading',{name:'These outcomes cannot win together',exact:true}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Confirm in wallet',exact:true}).isDisabled(),true);
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
+    await page.getByLabel(semanticAcknowledgment,{exact:true}).fill(semanticAcknowledgment);
+    assert.equal(await page.getByRole('button',{name:'Confirm in wallet',exact:true}).isDisabled(),false);
+    await page.getByRole('button',{name:'Cancel review',exact:true}).click();
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     if(process.env.FLURBO_TEST_SCREENSHOT)await page.screenshot({path:process.env.FLURBO_TEST_SCREENSHOT.replace('.png','-mobile.png'),fullPage:true});

@@ -93,6 +93,10 @@ export async function startLocalStack(o: { rpcPort?: number; apiPort?: number; c
   mkdirSync(dir, { recursive: true }); writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 
   // The real Flurbo API against this deployment, with in-memory sessions and no invite gate.
+  // Test-only independent Boolean fixtures, not metadata for any public deployment.
+  const previousSemanticRules=process.env.FLURBO_SEMANTIC_RULES_JSON;
+  process.env.FLURBO_SEMANTIC_RULES_JSON=JSON.stringify({schema:'flurbo.semantic-rules.v1',markets:[{pool:manifest.pool,rulesHash:manifest.rulesHash,
+    predicates:manifest.publication.draft.events.map((_:unknown,event:number)=>({event,observation:`local-fixture:${event}`,operator:'gte',value:'1',sourceRule:'Local synthetic fixture: a separate Boolean observation for each test event.'}))}]});
   const { localApi } = await import(pathOf('apps/web/server/local-api.mjs'));
   const { pilotService, pilotRpc } = await import(pathOf('apps/web/server/pilot.mjs'));
   const { claimAnalytics } = await import(pathOf('apps/web/server/claim-analytics.mjs'));
@@ -129,7 +133,9 @@ export async function startLocalStack(o: { rpcPort?: number; apiPort?: number; c
     },
     api,
     async mineUntil(timestamp) { await rpc('evm_setNextBlockTimestamp', ['0x' + timestamp.toString(16)]); await rpc('evm_mine', []); },
-    async stop() { await new Promise<void>(r => { server.closeAllConnections(); server.close(() => r()); }); anvil.kill(); },
+    async stop() { await new Promise<void>(r => { server.closeAllConnections(); server.close(() => r()); }); anvil.kill();
+      if(previousSemanticRules===undefined)delete process.env.FLURBO_SEMANTIC_RULES_JSON;else process.env.FLURBO_SEMANTIC_RULES_JSON=previousSemanticRules;
+    },
   };
 }
 const pathOf = (p: string) => new URL(`file:///${join(repo, p).replace(/\\/g, '/')}`).href;

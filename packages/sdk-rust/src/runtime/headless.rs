@@ -104,6 +104,10 @@ impl RuntimeClient {
         self.call("GET", &format!("/markets/{}", segment(namespace)), None)
     }
 
+    pub fn validate_trade(&self, namespace: &str, scope: u32, mask: u32, quantity: &str) -> Result<Value> {
+        self.call("POST", &format!("/markets/{}/validate-trade", segment(namespace)), Some(json!({"scope":scope,"mask":mask.to_string(),"quantityAtoms":quantity})))
+    }
+
     pub fn pair_analytics(&self, namespace: &str, a: u32, b: u32) -> Result<Value> {
         self.call("POST", &format!("/markets/{}/pair-analytics", segment(namespace)), Some(json!({"a": a, "b": b})))
     }

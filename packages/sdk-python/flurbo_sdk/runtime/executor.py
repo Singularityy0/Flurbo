@@ -16,6 +16,7 @@ from ..transaction import build_transaction, validate_transaction
 from .headless import RuntimeApiError
 from .journal import FileJournal, is_final, owner, policy_entries
 from .signer import transaction_hash
+from ..semantics import semantic_error
 
 MAX_GAS = 15_000_000
 
@@ -45,6 +46,17 @@ class Executor:
         self.log = log or (lambda event, detail=None: None)
         self.on_stop = on_stop
         self.wallet = signer.address
+
+    def semantic_check(self, deployment, claim, quantity):
+        reason = 'SEMANTICS_UNAVAILABLE'
+        try:
+            if self.client:
+                reason = semantic_error(self.client.validate_trade(deployment['namespace'], claim, quantity), deployment, claim, quantity, self.now())
+        except Exception:
+            pass
+        if reason:
+            self.log(reason, {'namespace': deployment['namespace'], 'scope': claim['scope'], 'mask': str(claim['mask'])})
+        return reason
 
     # Everything up to and including the policy check and reservation.
     def plan(self, deployment: dict, intent: dict, decision_id: str, quote_block: dict | None, slippage_bps: int):
@@ -116,6 +128,11 @@ class Executor:
             if not allowed:
                 e.update({"status": "abandoned", "finalAt": self.now(), "note": f"not signed: {reason}"})
                 return None
+            if e['action'] == 'buy':
+                reason = self.semantic_check(deployment, e['claim'], e['quantityAtoms'])
+                if reason:
+                    e.update({'status': 'abandoned', 'finalAt': self.now(), 'note': reason})
+                    return None
             validate_transaction({"chainId": 10143, "from": self.wallet, "to": e["to"], "data": e["data"], "value": 0}, _intent_of(e), deployment, self.wallet)
             highest = max([-1] + [x["nonce"] for x in j["entries"] if not is_final(x) and x["nonce"] is not None])
             nonce = max(self.chain.nonce(self.wallet, "pending"), highest + 1)
@@ -261,6 +278,9 @@ class Executor:
         if c["action"] == "sell":
             return self._run(d, {"action": "sell", "claim": c["claim"], "quantityAtoms": c["quantityAtoms"], "limitAtoms": sell_minimum(c["quoteAtoms"], c["slippageBps"]),
                                  "deadline": deadline_for(c["quoteBlock"])}, c["decisionId"], c["quoteBlock"], c["slippageBps"])
+        reason = self.semantic_check(d, c["claim"], c["quantityAtoms"])
+        if reason:
+            return {"status": "blocked", "reason": reason}
         limit, quote_block = buy_limit(c["quoteAtoms"], c["slippageBps"]), c["quoteBlock"]
         if any(e["action"] == "approve" and e["pool"] == d["pool"] and not is_final(e) for e in self.journal.read()["entries"]):
             return {"status": "approval_pending", "detail": "An approval for this pool is still being confirmed."}

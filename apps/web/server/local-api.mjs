@@ -11,6 +11,7 @@ import {validateThesisInput} from '../shared/thesis.mjs';
 import {agentApi} from './agents/agent-api.mjs';
 import {agentWalletKey} from './agents/agent-store.mjs';
 import {agentRpc} from './agents/agent-market.mjs';
+import {assessSemantics} from './semantic-validation.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
@@ -179,6 +180,10 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           return send(res,200,await pilot.status(url.searchParams.get('wallet')||undefined));
         }
         if(url.search) return send(res,400,{error:'Unexpected pilot query'});
+        if(req.method==='POST' && url.pathname==='/api/pilot/validate-trade') {
+          try { return send(res,200,assessSemantics(pilot.manifest,await body(req))); }
+          catch(e) { return send(res,e.status===400?400:503,{code:e.status===400?'INVALID_INPUT':'SEMANTICS_UNAVAILABLE',error:e.status===400?e.message:'The semantic check is unavailable. Retry before trading.'}); }
+        }
         if(req.method==='GET' && url.pathname==='/api/pilot/price-history') {
           if(!store.command)return send(res,503,{error:'Price history storage is unavailable.'});
           try{

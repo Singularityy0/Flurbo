@@ -33,6 +33,17 @@ test('runtime routes over HTTP: bearer only, no cookies, no query strings, no br
     const issued=(await request(`/api/agents/${agent.id}/credentials`,{headers:browser,body:{scopes:['markets:read','runtime:report']}})).data;
     assert.match(issued.token,/^fla1_/);
     const bearer={authorization:'Bearer '+issued.token,'flurbo-agent-protocol':'1'};
+    const claim={scope:3,mask:'8',quantityAtoms:'1000000'};
+    assert.equal((await request('/api/pilot/validate-trade',{body:claim,headers:{origin}})).status,401);
+    assert.equal((await request('/api/pilot/validate-trade',{body:claim,headers:{origin,cookie:'flurbo_session=pending'}})).status,403);
+    assert.equal((await request('/api/pilot/validate-trade',{body:claim,headers:{cookie:'flurbo_session=approved'}})).status,403);
+    const manual=await request('/api/pilot/validate-trade',{body:claim,headers:browser});
+    assert.equal(manual.status,200,JSON.stringify(manual.data));assert.equal(manual.data.status,'unknown');
+    const assessment=await request('/api/agent-runtime/v1/markets/pilot/validate-trade',{body:claim,headers:bearer});
+    assert.equal(assessment.status,200,JSON.stringify(assessment.data));assert.deepEqual(assessment.data.matrix,manual.data.matrix);
+    assert.equal((await request('/api/agent-runtime/v1/markets/rehearsal/validate-trade',{body:claim,headers:bearer})).status,404);
+    assert.equal((await request('/api/agent-runtime/v1/markets/pilot/validate-trade',{body:{...claim,predicates:[]},headers:bearer})).status,400);
+    assert.equal((await request('/api/agent-runtime/v1/markets/pilot/validate-trade',{body:claim,headers:{...bearer,'sec-fetch-site':'same-origin'}})).status,403);
     // Headless: no Origin header, POST allowed without the browser same-origin rule.
     const session=await request('/api/agent-runtime/v1/session',{headers:bearer});
     assert.equal(session.status,200,JSON.stringify(session.data));assert.equal(session.data.agentId,agent.id);

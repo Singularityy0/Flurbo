@@ -22,3 +22,4 @@ export { validateModelOutput, forecastFromModel, buildResearchPrompt, MODEL_SCHE
 export { PROTOCOL_VERSION, PROTOCOL_HEADER, RUNTIME_API_BASE, DEPLOYMENT_INTERFACE, COLLATERAL, COLLATERAL_DECIMALS, SERVICE_LIMITS, SCOPES, ERROR_CODES, STOP_CODES,
   parseDeployment, buyLimit, sellMinimum, type Deployment, type Scope, type RuntimeErrorCode } from './protocol.ts';
 export { buildTransaction, validateTransaction, type Intent, type TransactionRequest } from './transaction.ts';
+export { semanticError, type SemanticExpectation } from './semantics.ts';

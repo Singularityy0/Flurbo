@@ -9,6 +9,7 @@ import { FileJournal, isFinal, policyEntries, type JournalEntry, type JournalFil
 import { transactionHash, type Signer } from './signer.ts';
 import type { ChainReader, Block } from './chain.ts';
 import { RuntimeApiError, type RuntimeClient } from './headless.ts';
+import { semanticError } from '../semantics.ts';
 
 // Live execution (protocol/specs/transactions.md). The order matters for crash safety:
 //   plan under the lock (policy check and spend reservation in one step)
@@ -40,6 +41,12 @@ const reportIntent = (e: JournalEntry) => e.action === 'approve'
 export function executor(o: ExecutorOptions) {
   const now = o.now ?? (() => Math.floor(Date.now() / 1000)), log = o.log ?? (() => {});
   const wallet = o.signer.address, sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  async function semanticCheck(d: Deployment, scope: number, mask: string, quantityAtoms: string) {
+    let reason: string | null = 'SEMANTICS_UNAVAILABLE';
+    try { if (o.client) reason = semanticError(await o.client.validateTrade(d.namespace,{scope,mask,quantityAtoms}),{...d,scope,mask,quantityAtoms},now()); } catch {}
+    if (reason) log(reason, {namespace:d.namespace,scope,mask});
+    return reason;
+  }
 
   function intentOf(e: JournalEntry): Intent {
     if (e.action === 'approve') return { action: 'approve', amountAtoms: BigInt(e.limitAtoms) };
@@ -102,6 +109,10 @@ export function executor(o: ExecutorOptions) {
       if (!e || e.status !== 'planned') return null;
       const permission = o.liveAllowed();
       if (!permission.allowed) { Object.assign(e, { status: 'abandoned', finalAt: now(), note: `not signed: ${permission.reason}` }); return null; }
+      if (e.action === 'buy') {
+        const reason = await semanticCheck(deployment,e.claim!.scope,e.claim!.mask,e.quantityAtoms);
+        if (reason) { Object.assign(e,{status:'abandoned',finalAt:now(),note:reason}); return null; }
+      }
       validateTransaction({ chainId: 10143, from: wallet, to: e.to, data: e.data, value: 0n }, intentOf(e), deployment, wallet);
       const highest = Math.max(-1, ...j.entries.filter(x => !isFinal(x) && x.nonce !== null).map(x => x.nonce!));
       const nonce = Math.max(await o.chain.nonce(wallet, 'pending'), highest + 1);
@@ -216,6 +227,8 @@ export function executor(o: ExecutorOptions) {
     const d = c.deployment, deadlineFor = (b: Block) => Math.min(b.timestamp + 300, d.closesAt - 1);
     if (c.action === 'redeem') return run(d, { action: 'redeem', claim: c.claim, quantityAtoms: c.quantityAtoms }, c.decisionId, null, 0);
     if (c.action === 'sell') return run(d, { action: 'sell', claim: c.claim, quantityAtoms: c.quantityAtoms, limitAtoms: sellMinimum(c.quoteAtoms, c.slippageBps), deadline: deadlineFor(c.quoteBlock) }, c.decisionId, c.quoteBlock, c.slippageBps);
+    const semantic = await semanticCheck(d,c.claim.scope,c.claim.mask.toString(),c.quantityAtoms.toString());
+    if (semantic) return {status:'blocked',reason:semantic};
     let limit = buyLimit(c.quoteAtoms, c.slippageBps), quoteBlock = c.quoteBlock;
     if (o.journal.read().entries.some(e => e.action === 'approve' && e.pool === d.pool && !isFinal(e))) return { status: 'approval_pending', detail: 'An approval for this pool is still being confirmed.' };
     // Every limit that does not depend on gas is checked before an approval is sent, so a purchase the
