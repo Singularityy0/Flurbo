@@ -45,6 +45,7 @@ std::string join_url(const std::string& base, const std::string& location);
 std::string url_segment(const std::string& s);
 // Throws Error("timeout") or Error("network") with a safe message; never follows redirects.
 HttpResponse http_request(const HttpRequest& request);
+HttpResponse capacity_http_request(const HttpRequest& request, bool rpc = false);
 
 namespace net {  // minimal sockets, for the local test servers
 int listen_local(int& port);

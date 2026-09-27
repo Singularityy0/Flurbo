@@ -1,3 +1,5 @@
+import {requestLimits,CapacityError,expensivePath} from './request-limits.mjs';
+import {rpcFetch} from './rpc-capacity.mjs';
 import { SessionStore, cookieValue, LOGIN_MS, digest } from './session.mjs';
 import { TESTNET } from './network.mjs';
 import { learningDeployment } from '../shared/learning-contracts.mjs';
@@ -32,8 +34,8 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
     serviceFor:namespace=>namespace==='pilot'?publishedPilot:namespace==='rehearsal'?rehearsal:practiceCollections?.services.get(namespace)||null});}catch{return null;}})();
   const assistant=publishedPilot&&store.command?evidenceAssistant({manifest:publishedPilot.manifest,command:store.command,...evidenceOptions}):null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
-  // A bounded global limit avoids trusting spoofable forwarded IP headers.
-  let minute = 0, requests = 0;
+  // Anonymous/public traffic never consumes authenticated account capacity.
+  const limits=requestLimits({command:store.command});
   const send = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(body)); };
   const cookie = (name, value, age) => `${name}=${value}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=${age}${hosted ? '; Secure' : ''}`;
   const toolsCookie = (session, sid) => cookie('flurbo_tools', isTestingOperator(session, testingOperatorAccount) ? sid : '', isTestingOperator(session, testingOperatorAccount) ? Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000)) : 0).replace('Path=/api;', 'Path=/;');
@@ -51,6 +53,8 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
     // routes, so the browser same-origin rules below do not apply; browsers are refused instead.
     if (req.url.startsWith('/api/agent-runtime/')) {
       try {
+        limits.localTake('runtime-ingress:'+digest(req.headers.authorization||'anonymous'),180);
+        limits.localTake('runtime-ingress',3600);
         const url = new URL(req.url, 'http://runtime.invalid');
         if (url.search) return send(res, 400, { code:'INVALID_INPUT', error:'Query parameters are not accepted. Send credentials only in the Authorization header.' });
         if (!agents) return send(res, 503, { code:'UNAVAILABLE', error:'Agents are unavailable on this server.' });
@@ -63,20 +67,33 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         const result = await agents.runtime({ method:req.method, path:url.pathname, headers:req.headers, body:text, hosted });
         if (result.retryAfter) res.setHeader('Retry-After', String(result.retryAfter));
         return send(res, result.status, result.body);
-      } catch { return send(res, 503, { code:'UNAVAILABLE', error:'The agent service is temporarily unavailable.', retryable:true }); }
+      } catch(e) { if(e instanceof CapacityError){res.setHeader('Retry-After',String(e.retryAfter));return send(res,429,{code:e.code,error:e.message,retryable:true});} return send(res, 503, { code:'UNAVAILABLE', error:'The agent service is temporarily unavailable.', retryable:true }); }
     }
     const origin = publicOrigin || `http://${host}`;
     if ((req.headers.origin && req.headers.origin !== origin) || (req.method !== 'GET' && req.headers.origin !== origin) || req.headers['sec-fetch-site'] === 'cross-site') return send(res, 403, { error: 'Same-origin request required' });
     const url = new URL(req.url, origin), sid = cookieValue(req.headers.cookie, 'flurbo_session');
+    let loginPromise;
+    const getLogin=()=>loginPromise??=store.read(sid,origin);
     try {
       if (hosted) {
-        const current = Math.floor(Date.now() / 60_000);
-        if (current !== minute) { minute = current; requests = 0; }
-        if (++requests > 600) { res.setHeader('Retry-After', '60'); return send(res, 429, { error: 'Service busy. Retry shortly.' }); }
+        const publicRead=req.method==='GET'&&url.pathname==='/api/preview';
+        limits.localTake('browser-ingress:'+(publicRead?'public:':'app:')+digest(sid||'anonymous'),600);
+        if(publicRead)limits.localTake('public-preview',600);
+        else {
+          const authenticated=await getLogin();
+          if(authenticated?.method==='passkey'){
+            await limits.take('browser-account:'+authenticated.address.toLowerCase(),240);
+            if(expensivePath(url.pathname))await limits.take('browser-expensive:'+authenticated.address.toLowerCase(),90);
+            await limits.take('browser-authenticated-service',1200);
+          } else {
+            limits.localTake('anonymous',300);
+            await limits.take('browser-anonymous',300);
+          }
+        }
       }
       if (req.method === 'GET' && url.pathname === '/api/preview') return send(res,200,{inviteOnly:!!previewAccess,applicationUrl:previewAccess?.applicationUrl||null});
       if (url.pathname === '/api/account/access' && req.method === 'GET') {
-        const login = await store.read(sid, origin);
+        const login = await getLogin();
         if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
         res.setHeader('Set-Cookie', toolsCookie(login, sid));
         return send(res, 200, {testingTools:isTestingOperator(login, testingOperatorAccount),approved:!previewAccess||previewAccess.allows(login)||isTestingOperator(login,testingOperatorAccount),applicationUrl:previewAccess?.applicationUrl||null});
@@ -85,13 +102,13 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
       // Published evidence stays readable by counterparties during settlement.
       const publicEvidence=req.method==='GET'&&!url.search&&/^\/api\/(pilot|rehearsal|practice-[0-9a-f]{40})\/evidence\/0x[0-9a-f]{64}$/.test(url.pathname);
       if(previewAccess&&!url.pathname.startsWith('/api/auth/')&&!publicEvidence){
-        const login=await store.read(sid,origin);
+        const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
         if(!previewAccess.allows(login)&&!isTestingOperator(login,testingOperatorAccount))return send(res,403,{code:'INVITE_REQUIRED',error:'Testnet access has not been approved for this Mera account.'});
       }
       // Agent routes sit behind the same session and invite checks as every application route.
       if(url.pathname==='/api/agents'||url.pathname.startsWith('/api/agents/')){
-        const login=await store.read(sid,origin);
+        const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
         if(!agents)return send(res,503,{error:'Agents are unavailable on this server.'});
         if(url.search||!['GET','POST'].includes(req.method))return send(res,400,{error:'Unexpected agent request.'});
@@ -100,19 +117,19 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
       }
       if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? {...TESTNET, faucet:testFaucet || TESTNET.faucet, flurboFaucet:!!testFaucet} : { environment: 'local_fork', chain_id: 10143 });
       if(url.pathname==='/api/market-directory'&&req.method==='GET'&&!url.search){
-        const login=await store.read(sid,origin);
+        const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
         const entries=[...(practiceCollections?.catalog?.collections||[])];
         if(publishedPilot&&!entries.some(row=>row.pool===publishedPilot.manifest.pool))entries.push({namespace:'pilot',label:'Release milestones',pool:publishedPilot.manifest.pool,closesAt:publishedPilot.manifest.publication.draft.closesAt});
         return send(res,200,{schema:'flurbo.market-directory.v1',markets:entries});
       }
       if (url.pathname === '/api/evidence-beta' || url.pathname.startsWith('/api/learning/') || ['/api/kuru','/api/kuru-scan'].includes(url.pathname)) {
-        const login = await store.read(sid, origin);
+        const login = await getLogin();
         if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
         if (!isTestingOperator(login, testingOperatorAccount)) return send(res, 403, {error:'Testing tools are restricted to the operator.'});
       }
       if(url.pathname==='/api/account/portfolio-sources'){
-        const login=await store.read(sid,origin);
+        const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
         if(req.method!=='GET'||url.search)return send(res,400,{error:'Unexpected portfolio request.'});
         if(hosted&&!store.command||!agents)return send(res,503,{error:'Account portfolio sources are unavailable.'});
@@ -121,7 +138,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         return send(res,200,{account:manual.account,wallets:manual.wallets,agentWallets:agent.wallets,agentExecutions:agent.executions});
       }
       if (url.pathname.startsWith('/api/account/wallets')) {
-        const login=await store.read(sid,origin);
+        const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
         if(hosted&&!store.command)return send(res,503,{error:'Account wallet storage is unavailable.'});
         if(url.search)return send(res,400,{error:'Unexpected wallet query.'});
@@ -138,7 +155,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         return send(res,400,{error:'Invalid wallet linking request.'});
       }
       if(url.pathname==='/api/evidence-beta'){
-        const login=await store.read(sid,origin);
+        const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey'});
         if(!assistant)return send(res,503,{error:'Evidence beta needs the configured real-event pilot and durable storage'});
         const env=evidenceOptions.env||process.env;
@@ -153,7 +170,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         return send(res,200,await assistant.review(input.eventId,input.useAI));
       }
       if(url.pathname==='/api/practice-collections'){
-        const login=await store.read(sid,origin);
+        const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey'});
         if(req.method!=='GET'||url.search)return send(res,400,{error:'Collection listing accepts a GET without parameters'});
         if(!practiceCollections)return send(res,503,{error:'Practice collections are unavailable'});
@@ -170,7 +187,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           const content=await evidence.get(evidenceHash);
           res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'public, max-age=31536000, immutable'}); res.end(content); return;
         }
-        const login=await store.read(sid,origin);
+        const login=await getLogin();
         if(!login || login.method!=='passkey') return send(res,401,{error:'Sign in with your Flurbo passkey'});
         if(!pilot) return send(res,503,{error:isRehearsal?'The separate rehearsal is not deployed and configured yet. The real-event market remains unchanged.':'The real-event pilot is not published yet. Reviewer identities, final event rules and a verified deployment are required.'});
         if(req.method==='GET' && ['/api/pilot/status','/api/pilot/account'].includes(url.pathname)) {
@@ -280,7 +297,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           const input=await body(req);
           if(!input || !Array.isArray(input.params) || !['eth_chainId','eth_getBlockByNumber','eth_getCode','eth_call','eth_estimateGas','eth_gasPrice','eth_getTransactionCount','eth_getTransactionReceipt','eth_getTransactionByHash','eth_getBalance','eth_sendRawTransaction'].includes(input.method)) return send(res,400,{error:'Unsupported pilot RPC'});
           if(input.method==='eth_sendRawTransaction') return send(res,403,{error:'Mera is account-only. Send transactions through MetaMask.'});
-          const upstream=await fetch(rpcUrl,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:input.method,params:input.params}),signal:AbortSignal.timeout(20_000)});
+          const upstream=await rpcFetch(fetch,rpcUrl,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:input.method,params:input.params}),signal:AbortSignal.timeout(20_000)});
           const result=await upstream.json();
           if(!upstream.ok || result.error) return send(res,400,{error:'Monad rejected the pilot request. Check tracking before retrying.'});
           return send(res,200,{result:result.result});
@@ -288,7 +305,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         return send(res,404,{error:'Unknown pilot endpoint'});
       }
       if (['/api/learning/pool', '/api/learning/proposal'].includes(url.pathname)) {
-        const session = await store.read(sid, origin);
+        const session = await getLogin();
         if (!session || session.method !== 'passkey') return send(res, 401, { error: 'Sign in with your Flurbo passkey' });
         if (url.search) return send(res, 400, { error: 'Learning review accepts no query inputs' });
         const operator = Boolean(learningOperatorAccount && session.address === learningOperatorAccount);
@@ -306,14 +323,14 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
       }
       if (url.pathname === '/api/learning/comparison') {
         if (req.method !== 'GET') return send(res, 405, { error: 'Comparison is read-only' });
-        if (!await store.read(sid, origin)) return send(res, 401, { error: 'Sign in to view the comparison' });
+        if (!await getLogin()) return send(res, 401, { error: 'Sign in to view the comparison' });
         if (url.search) return send(res, 400, { error: 'This comparison accepts no inputs' });
         const learningReport = getLearningReport();
         return learningReport ? send(res, 200, learningReport) : send(res, 503, { error: 'Rust comparison is unavailable on this server. Trading is separate.' });
       }
       if (hosted && url.pathname === '/api/local-wallet-setup') return send(res, 404, { error: 'Local funding is not available on public Monad testnet' });
       if (url.pathname.startsWith('/api/auth/')) {
-        if (req.method === 'GET' && url.pathname === '/api/auth/session') { const session = await store.read(sid, origin); res.setHeader('Set-Cookie', toolsCookie(session, sid)); return send(res, 200, {session}); }
+        if (req.method === 'GET' && url.pathname === '/api/auth/session') { const session = await getLogin(); res.setHeader('Set-Cookie', toolsCookie(session, sid)); return send(res, 200, {session}); }
         if (req.method !== 'POST') return send(res, 405, { error: 'Method unavailable' });
         if (url.pathname === '/api/auth/challenge') {
           const input = await body(req);
@@ -343,9 +360,9 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (market === 'learning' && (!hosted || !learningDashboardUrl)) return send(res, 503, { error: 'Learning market unavailable' });
         const allowed = ['eth_chainId', 'eth_getBlockByNumber', 'eth_call', 'eth_estimateGas', 'eth_gasPrice', 'eth_getTransactionCount', 'eth_getTransactionReceipt', 'eth_getTransactionByHash', 'eth_getBalance', 'eth_sendRawTransaction'];
         if (!allowed.includes(input.method) || !Array.isArray(input.params)) return send(res, 400, { error: 'Unsupported RPC method' });
-        if ((hosted || input.method === 'eth_sendRawTransaction') && !await store.read(sid, origin)) return send(res, 401, { error: 'Sign in before using the account RPC' });
+        if ((hosted || input.method === 'eth_sendRawTransaction') && !await getLogin()) return send(res, 401, { error: 'Sign in before using the account RPC' });
         if (input.method === 'eth_sendRawTransaction') return send(res,403,{error:'Mera is account-only. Send transactions through MetaMask.'});
-        const upstream = await fetch(rpcUrl, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: input.method, params: input.params }), signal: AbortSignal.timeout(20_000) });
+        const upstream = await rpcFetch(fetch,rpcUrl, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: input.method, params: input.params }), signal: AbortSignal.timeout(20_000) });
         const result = await upstream.json();
         if (!upstream.ok || result.error) return send(res, 400, { error: 'Monad rejected the request. Check transaction status before retrying.' });
         return send(res, 200, { result: result.result });
@@ -355,12 +372,12 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
       const readPath = learningRoute ? url.pathname.replace('/api/markets/learning/', '/api/') : url.pathname;
       if (readPath.startsWith('/api/kuru')) {
         if (learningRoute) return send(res, 404, { error: 'Kuru is only available for the original pool' });
-        if (!await store.read(sid, origin)) return send(res, 401, { error: 'Sign in to use Kuru' });
+        if (!await getLogin()) return send(res, 401, { error: 'Sign in to use Kuru' });
       }
-      if (readPath === '/api/portfolio' && !await store.read(sid, origin)) return send(res, 401, { error: 'Sign in to view your portfolio' });
+      if (readPath === '/api/portfolio' && !await getLogin()) return send(res, 401, { error: 'Sign in to view your portfolio' });
       if (learningRoute) {
         if (!hosted || !learningDashboardUrl) return send(res, 503, { error: 'Learning market unavailable' });
-        if (!await store.read(sid, origin)) return send(res, 401, { error: 'Sign in to trade on the learning market' });
+        if (!await getLogin()) return send(res, 401, { error: 'Sign in to trade on the learning market' });
       }
       const funding = !hosted && req.method === 'POST' && url.pathname === '/api/local-wallet-setup';
       if (!(req.method === 'GET' && readRoutes.includes(readPath)) && !funding) return send(res, 404, { error: 'Unknown workspace endpoint' });
@@ -373,6 +390,6 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           (result.environment !== 'public_testnet' || result.chain_id !== 10143 || learningRoute &&
             (result.market_id !== 'learning' || result.contracts?.pool !== learningDeployment.pool || result.contracts?.cash !== TESTNET.cash))) return send(res, 503, { error: 'Public testnet deployment verification required' });
       return send(res, upstream.status, result);
-    } catch { return send(res, 503, { error: 'Service unavailable or request rejected. Refresh before retrying. No automatic transaction retry is performed.' }); }
+    } catch(e) { if(e instanceof CapacityError){res.setHeader('Retry-After',String(e.retryAfter));return send(res,429,{code:e.code,error:e.message});} return send(res, 503, { error: 'Service unavailable or request rejected. Refresh before retrying. No automatic transaction retry is performed.' }); }
   };
 }

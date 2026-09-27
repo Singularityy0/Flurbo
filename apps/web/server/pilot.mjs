@@ -1,3 +1,4 @@
+import {rpcFetch} from './rpc-capacity.mjs';
 import { decodeFunctionResult, encodeFunctionData, keccak256, stringToHex, parseAbi } from 'viem';
 import { pilotCash, pilotCashAbi, pilotPoolAbi, resolverAbi, pilotCall, evidenceURI, validClaim } from '../shared/pilot.mjs';
 import {holderResolverAbi,dependsOnEvent,challengeCandidates} from '../shared/holder-challenge.mjs';
@@ -18,7 +19,7 @@ export function pilotRpc(endpoint,request=fetch,{allowLocal=false}={}) {
   const rpc=async(method,params=[])=>{
     if(!['eth_chainId','eth_getBlockByNumber','eth_getCode','eth_call','eth_estimateGas','eth_gasPrice','eth_getLogs'].includes(method))throw new Error('Pilot service is read-only');
     const callId=++id;
-    const response=await request(endpoint,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:callId,method,params}),signal:AbortSignal.timeout(15_000)});
+    const response=await rpcFetch(request,endpoint,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:callId,method,params}),signal:AbortSignal.timeout(15_000)});
     if(!response.ok && ![400,413].includes(response.status))throw new Error('Pilot RPC unavailable');
     const chunks=[];let size=0;
     for await(const chunk of response.body){size+=chunk.length;if(size>1_000_000)throw new Error('Pilot RPC response too large');chunks.push(chunk);}
@@ -104,11 +105,22 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
   }
   // One verified snapshot for the browse page. Prices are one-share buy costs,
   // never promises of execution or wallet approvals.
-  async function markets() {
+  let marketRead=null;
+  function markets() {
+    if(marketRead)return marketRead;
+    marketRead=readMarkets().finally(()=>{marketRead=null;});
+    return marketRead;
+  }
+  async function readMarkets() {
     const s=await snapshot(),tag=tagFor(s);
     const resolved=await read(manifest.pool,pilotPoolAbi,'resolved',[],tag);
     const open=s.timestamp<manifest.publication.draft.closesAt && !resolved;
-    const prices=await Promise.all(manifest.publication.draft.events.map(async(_,event)=>({event,
+    const events=manifest.publication.draft.events;
+    let prices;
+    if(open&&rpc.readBatch){
+      const values=await rpc.readBatch(events.flatMap((_,event)=>[2n,1n].map(mask=>({to:manifest.pool,abi:pilotPoolAbi,fn:'quoteBuy',args:[2**event,mask,1_000_000n]}))),tag);
+      prices=events.map((_,event)=>({event,yes:values[event*2],no:values[event*2+1]}));
+    }else prices=await Promise.all(events.map(async(_,event)=>({event,
       yes:open?await read(manifest.pool,pilotPoolAbi,'quoteBuy',[2**event,2n,1_000_000n],tag):null,
       no:open?await read(manifest.pool,pilotPoolAbi,'quoteBuy',[2**event,1n,1_000_000n],tag):null})));
     await stable(s);return json({manifest,snapshot:s,open,resolved,prices});

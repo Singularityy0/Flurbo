@@ -187,6 +187,21 @@ TEST(research_budgets) {
   CHECK_EQ(none.research("0x", "t", events, {}, 0).reason, std::string("provider_not_configured"));
 }
 
+TEST(transport_budget_counts_across_requests) {
+  Server ok([](const std::string&, int) -> std::tuple<int, Headers, std::string> {return {200,{},"{}"};});
+  HttpRequest request{"GET",ok.url,{},"",1000};
+  for(int i=0;i<100;i++)CHECK_EQ(capacity_http_request(request).status,200);
+  CHECK(message_of([&]{capacity_http_request(request);}).find("cooldown")!=std::string::npos);
+  CHECK_EQ(ok.calls().size(),size_t{100});
+}
+
+TEST(transport_cooldown_blocks_another_request) {
+  Server limited([](const std::string&, int) -> std::tuple<int, Headers, std::string> { return {429, {{"Retry-After", "60"}}, "{}"}; });
+  HttpRequest request{"GET", limited.url, {}, "", 1000};
+  CHECK_EQ(capacity_http_request(request).status,429);
+  CHECK(message_of([&] {capacity_http_request(request);}).find("cooldown")!=std::string::npos);
+}
+
 TEST(headless_credential_only_in_header) {
   CHECK_THROWS(RuntimeClient("https://x.example", "not-a-token"));
   CHECK_THROWS(RuntimeClient("http://x.example", TOKEN));

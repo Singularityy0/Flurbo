@@ -66,6 +66,7 @@ impl RuntimeClient {
 
     fn call(&self, method: &str, path: &str, body: Option<Value>) -> Result<Value> {
         let url = format!("{}{}{}", self.origin, RUNTIME_API_BASE, path);
+        let _permit = super::capacity::permit(&url)?;
         let request = self.agent.request(method, &url).set("Authorization", &format!("Bearer {}", self.token)).set(PROTOCOL_HEADER, PROTOCOL_VERSION);
         let response = match body {
             Some(b) => request.set("Content-Type", "application/json").send_string(&b.to_string()),
@@ -80,6 +81,7 @@ impl RuntimeClient {
                 serde_json::from_str(&text).map_err(|_| api_error("NETWORK", "The Flurbo API could not be reached.", None))
             }
             Err(ureq::Error::Status(status, r)) => {
+                if status==429 {super::capacity::cooldown(&url,r.header("Retry-After"));}
                 let parsed: Value = r.into_string().ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Value::Null);
                 let code = parsed.get("code").and_then(Value::as_str).unwrap_or("UNAVAILABLE");
                 let message = parsed.get("error").and_then(Value::as_str).filter(|m| m.len() < 300).unwrap_or("The Flurbo API refused the request.");

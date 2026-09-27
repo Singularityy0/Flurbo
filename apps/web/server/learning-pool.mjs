@@ -1,3 +1,4 @@
+import {rpcFetch} from './rpc-capacity.mjs';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -63,7 +64,7 @@ export function learningRpc(url, fetcher = fetch) {
         if (!['eth_chainId', 'eth_getBlockByNumber', 'eth_getCode', 'eth_call'].includes(method)) throw new Error('Read-only learning RPC');
         return { jsonrpc: '2.0', id: ++id, method, params };
       });
-      const response = await fetcher(url, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' },
+      const response = await rpcFetch(fetcher,url, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(batch), signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(12_000)]) : AbortSignal.timeout(12_000) });
       if (!response.ok) throw new Error('Learning RPC unavailable');
       const chunks = []; let size = 0;

@@ -10,3 +10,5 @@ pub mod journal;
 pub mod research;
 pub mod rpc;
 pub mod runner;
+
+pub mod capacity;

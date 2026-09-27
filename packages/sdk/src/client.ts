@@ -1,3 +1,4 @@
+import {retryAfterMs} from './request-scheduler.ts';
 import { FlurboError, type FlurboErrorCode } from './errors.ts';
 import { type Claim, claimToJSON } from './claims.ts';
 import { type ClaimImplied, type DirectoryEntry, type Market, type Namespace, type PairImplied, type QuoteResult, isNamespace, parseClaimImplied, parseDirectory, parseMarket, parsePairAnalytics, parseQuoteResult } from './market.ts';
@@ -10,12 +11,18 @@ export type HttpResponse = { status: number; body: unknown; retryAfter: string |
 export type Transport = { kind: 'live' | 'fixture'; send(request: HttpRequest): Promise<HttpResponse> };
 
 export type ClientOptions = { transport: Transport; timeoutMs?: number; readRetries?: number; sleep?: (ms: number) => Promise<void> };
-const defaultSleep = (ms: number) => new Promise<void>(resolve => { setTimeout(resolve, ms); });
+const defaultSleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+  const end = Date.now() + ms;
+  let timer: ReturnType<typeof setTimeout>;
+  const abort = () => { clearTimeout(timer); reject(new FlurboError('aborted', 'The request was cancelled.')); };
+  const tick = () => { const left=end-Date.now(); if(left<=0){signal?.removeEventListener('abort',abort);resolve();}else timer=setTimeout(tick,Math.min(left,60_000)); };
+  if(signal?.aborted){abort();return;} signal?.addEventListener('abort',abort,{once:true}); tick();
+});
 
 function errorFor(status: number, body: unknown, retryAfter: string | null): FlurboError {
   const b = (body && typeof body === 'object' ? body : {}) as { error?: unknown; code?: unknown };
   const message = typeof b.error === 'string' && b.error.length < 300 ? b.error : 'The request was rejected.';
-  const retry = retryAfter && /^[0-9]{1,4}$/.test(retryAfter) ? Number(retryAfter) : null;
+  const retry = retryAfter ? Math.ceil(retryAfterMs(retryAfter) / 1000) : null;
   const code: FlurboErrorCode = status === 401 ? 'unauthenticated' : status === 403 ? (b.code === 'INVITE_REQUIRED' ? 'invite_required' : 'forbidden')
     : status === 404 ? 'not_found' : status === 409 ? 'conflict' : status === 429 ? 'rate_limited' : status === 400 ? 'invalid_input'
     : status >= 500 ? 'unavailable' : 'invalid_response';
@@ -23,7 +30,7 @@ function errorFor(status: number, body: unknown, retryAfter: string | null): Flu
 }
 
 export function createClient(options: ClientOptions) {
-  const { transport } = options, timeoutMs = options.timeoutMs ?? 20_000, readRetries = Math.min(Math.max(options.readRetries ?? 2, 0), 4), sleep = options.sleep ?? defaultSleep;
+  const { transport } = options, timeoutMs = options.timeoutMs ?? 20_000, readRetries = Math.min(Math.max(options.readRetries ?? 2, 0), 4);
 
   // One attempt. Timeouts and caller cancellation surface as typed errors.
   async function once(method: 'GET' | 'POST', path: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
@@ -47,8 +54,8 @@ export function createClient(options: ClientOptions) {
       catch (error) {
         const e = error as FlurboError, retryable = ['unavailable', 'rate_limited', 'network', 'timeout'].includes(e.code);
         if (!retryable || attempt >= readRetries || signal?.aborted) throw error;
-        const wait = e.retryAfterSeconds !== null ? Math.min(e.retryAfterSeconds * 1000, 10_000) : 250 * 2 ** attempt;
-        await sleep(wait);
+        const wait = e.retryAfterSeconds !== null ? e.retryAfterSeconds * 1000 : 250 * 2 ** attempt + Math.floor(Math.random() * 150);
+        if(options.sleep)await options.sleep(wait);else await defaultSleep(wait,signal);
       }
     }
   }

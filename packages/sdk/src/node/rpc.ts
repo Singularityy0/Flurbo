@@ -1,3 +1,4 @@
+import {scheduledRpcFetch} from '../request-scheduler.ts';
 import { FlurboError } from '../errors.ts';
 
 // JSON-RPC over HTTP to the operator's own chain endpoint. Provider error text can contain endpoint
@@ -18,7 +19,7 @@ export function jsonRpc(url: string, options: RpcOptions = {}): Rpc {
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new FlurboError('invalid_input', 'The RPC URL must use HTTP or HTTPS.');
   if (parsed.protocol === 'http:' && !['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname)) throw new FlurboError('invalid_input', 'Plain HTTP is only allowed for a local chain.');
-  const request = options.fetch ?? fetch, timeoutMs = options.timeoutMs ?? 15_000;
+  const request = options.fetch ?? scheduledRpcFetch, timeoutMs = options.timeoutMs ?? 15_000;
   let id = 0;
   return async (method, params = []) => {
     const callId = ++id;

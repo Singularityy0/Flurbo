@@ -33,7 +33,7 @@ test('reads retry a bounded number of times and honour Retry-After; mutations ne
   const waits: number[] = [], sleep = async (ms: number) => { waits.push(ms); };
   const ok = scripted([{ status: 503 }, { status: 429, retryAfter: '3' }, { status: 200, body: directory }]);
   assert.deepEqual(await createClient({ transport: ok.transport, sleep }).directory(), []);
-  assert.equal(ok.calls.length, 3); assert.deepEqual(waits, [250, 3000]);
+  assert.equal(ok.calls.length, 3); assert.ok(waits[0] >= 250 && waits[0] < 400); assert.equal(waits[1], 3000);
   const exhausted = scripted([{ status: 503 }, { status: 503 }, { status: 503 }, { status: 503 }]);
   assert.equal(await code(() => createClient({ transport: exhausted.transport, sleep: noSleep }).directory()), 'unavailable');
   assert.equal(exhausted.calls.length, 3);

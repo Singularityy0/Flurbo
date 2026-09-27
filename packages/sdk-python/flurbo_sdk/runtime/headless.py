@@ -1,3 +1,4 @@
+from .capacity import permit, cooldown
 """Headless transport for the Flurbo agent runtime API. The credential is sent only in the Authorization
 header, never in a URL, and never included in errors or logs."""
 import json
@@ -42,9 +43,10 @@ class RuntimeClient:
             data = json.dumps(body).encode()
         request = urllib.request.Request(urljoin(self._base, RUNTIME_API_BASE + path), data=data, headers=headers, method=method)
         try:
-            with self._open(request, timeout=self._timeout) as response:
+            with permit(request.full_url), self._open(request, timeout=self._timeout) as response:
                 return json.loads(response.read() or b"null")
         except urllib.error.HTTPError as e:
+            if e.code == 429: cooldown(request.full_url, e.headers.get("Retry-After") if e.headers else None)
             try:
                 parsed = json.loads(e.read())
             except Exception:
@@ -55,6 +57,8 @@ class RuntimeClient:
             message = parsed.get("error") if isinstance(parsed, dict) and isinstance(parsed.get("error"), str) and len(parsed["error"]) < 300 else "The Flurbo API refused the request."
             retry = e.headers.get("Retry-After") if e.headers else None
             raise RuntimeApiError(code, message, e.code, int(retry) if retry and retry.isdigit() else None) from None
+        except FlurboError:
+            raise
         except Exception:
             raise RuntimeApiError("NETWORK", "The Flurbo API could not be reached.", None) from None
 

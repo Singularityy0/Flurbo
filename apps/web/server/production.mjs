@@ -1,3 +1,4 @@
+import {installRpcCapacity} from './rpc-capacity.mjs';
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
@@ -76,6 +77,7 @@ async function main() {
   config.androidAssetLinks = androidAssetLinks();
   const store = new RedisSessionStore(redisCommand());
   await store.command('PING');
+  installRpcCapacity({command:store.command});
   config.pilotEvidence = pilotEvidence(store.command, config.origin);
   config.pilot = await configurePilot({rpcUrl:config.rpcUrl,command:store.command});
   config.rehearsal = await configureRehearsal({rpcUrl:config.rpcUrl,command:store.command});
