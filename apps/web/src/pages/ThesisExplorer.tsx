@@ -6,7 +6,7 @@ import {pilotRequest,type PilotNamespace,type PilotState} from '../pilot';
 import {marketHref} from '../market-detail';
 import {marketQuestion} from '../showcase-copy';
 import {saveCheckout} from '../checkout';
-import {percentageBps,thesisDistribution,thesisProbability,thesisPayout,thesisQuantity,THESIS_DENOMINATOR,type ThesisInput} from '../../shared/thesis.mjs';
+import {percentageBps,thesisCandidates,thesisDistribution,thesisProbability,thesisPayout,thesisQuantity,THESIS_DENOMINATOR,type ThesisInput} from '../../shared/thesis.mjs';
 import {validateThesisSnapshot,poolPercent,beliefPercent,type ThesisSnapshot,type ThesisRow} from '../thesis';
 import './thesis.css';
 
@@ -35,7 +35,9 @@ export default function ThesisExplorer({namespace,event}:{namespace:PilotNamespa
   const amount=thesisQuantity(quantity),bps=forecast.map(percentageBps);
   const distribution=bps.every(p=>p!==null)?thesisDistribution(bps[0]!,bps[1]!,bps[2]!):null;
   const fresh=!!data&&now<data.expiresAt,closed=!!data?.closed||!!state?.resolved||!!manifest&&now>=manifest.publication.draft.closesAt;
-  const row=data?.candidates.find(c=>c.id===selected),cost=row?.costAtoms!=null?BigInt(row.costAtoms):null;
+  // Payoff rules are local definitions; only market estimates and executable quotes need a response.
+  const candidates:ThesisRow[]=data?.candidates??(events?.[a]&&events?.[b]&&a!==b?thesisCandidates(events.length,a,b,yesA,yesB).map(c=>({...c,probability:null,costAtoms:null,maxSpendAtoms:null,reason:null})):[]);
+  const row=candidates.find(c=>c.id===selected),cost=row?.costAtoms!=null?BigInt(row.costAtoms):null;
   async function compare(){
     if(!manifest||amount===null||a===b)return;
     controller.current?.abort();const c=new AbortController();controller.current=c;const version=++generation.current;
@@ -82,16 +84,14 @@ export default function ThesisExplorer({namespace,event}:{namespace:PilotNamespa
         {amount===null&&<p role="alert">Enter more than 0 and no more than 100 shares, with up to six decimal places. The pool may have a lower limit.</p>}
         <p className="thesis-caption">Equal share counts, not equal budgets. Each winning share pays 1 test AUSD for a binary result. Quotes include price impact; probabilities do not. Pool probabilities are rounded to 0.1 percentage point.</p>
         {error&&<p role="alert">{error}</p>}
-        {data&&<>
-          <p className="thesis-caption" role="status">{closed?'Trading is closed. Pool estimates describe stored pricing state, not final outcomes. Explore without placing a trade.':!fresh?'This comparison has expired. Refresh before reviewing a trade.':`Snapshot at ${new Date(data.snapshot.timestamp*1000).toLocaleTimeString()}. Quotes expire after 60 seconds.`}</p>
-          <p className="thesis-caption">Select a payoff rule below to explore it. AND is selected initially; each option has its own price and winning outcomes.</p>
-          <div className="thesis-candidates">{data.candidates.map(r=>{
+        {data&&<p className="thesis-caption" role="status">{closed?'Trading is closed. Pool estimates describe stored pricing state, not final outcomes. Explore without placing a trade.':!fresh?'This comparison has expired. Refresh before reviewing a trade.':`Snapshot at ${new Date(data.snapshot.timestamp*1000).toLocaleTimeString()}. Quotes expire after 60 seconds.`}</p>}
+          <p className="thesis-caption">Select a payoff rule below to explore it. Choose Individual, AND, OR or Exactly one. Compare with pool to load prices for all four.</p>
+          <div className="thesis-candidates">{candidates.map(r=>{
             const probability=distribution?thesisProbability(distribution,r,events.length,a,b):null;
             const expected=probability!==null&&r.costAtoms!==null&&amount!==null?amount*probability/THESIS_DENOMINATOR-BigInt(r.costAtoms):null;
-            return <button type="button" className="thesis-candidate" key={r.id} aria-pressed={selected===r.id} onClick={()=>setSelected(r.id)}><span className="eyebrow">{r.id==='SINGLE'?`B ${yesB?'Yes':'No'}`:`A ${yesA?'Yes':'No'} / B ${yesB?'Yes':'No'}`}</span><h3>{names[r.id]}</h3><p>{descriptions[r.id]}</p><dl><div><dt>Your chance</dt><dd>{probability===null?'Enter forecast':beliefPercent(probability)}</dd></div><div><dt>Pool chance</dt><dd>{poolPercent(r.probability)}</dd></div><div><dt>Buy quote</dt><dd>{r.costAtoms===null?'Unavailable':cash(r.costAtoms)+' AUSD'}</dd></div>{expected!==null&&<div><dt>Your expected net</dt><dd>{net(expected)} AUSD</dd></div>}</dl>{r.reason&&<small>{r.reason==='quantity_limit'?`Try ${cash(data.maxTradeQuantityAtoms)} shares or fewer.`:r.reason==='market_closed'?'Trading closed.':'No executable quote for this claim and size.'}</small>}<span className="thesis-choice">{selected===r.id?'Selected':'Explore this payoff'}</span></button>;
+            return <button type="button" className="thesis-candidate" key={r.id} aria-pressed={selected===r.id} onClick={()=>setSelected(r.id)}><span className="eyebrow">{r.id==='SINGLE'?`B ${yesB?'Yes':'No'}`:`A ${yesA?'Yes':'No'} / B ${yesB?'Yes':'No'}`}</span><h3>{names[r.id]}</h3><p>{descriptions[r.id]}</p><dl><div><dt>Your chance</dt><dd>{probability===null?'Enter forecast':beliefPercent(probability)}</dd></div><div><dt>Pool chance</dt><dd>{!data?(busy?'Loading...':'Not loaded'):poolPercent(r.probability)}</dd></div><div><dt>Buy quote</dt><dd>{!data?(busy?'Loading...':'Not loaded'):r.costAtoms===null?'Unavailable':cash(r.costAtoms)+' AUSD'}</dd></div>{expected!==null&&<div><dt>Your expected net</dt><dd>{net(expected)} AUSD</dd></div>}</dl>{r.reason&&<small>{r.reason==='quantity_limit'&&data?`Try ${cash(data.maxTradeQuantityAtoms)} shares or fewer.`:r.reason==='market_closed'?'Trading closed.':'No executable quote for this claim and size.'}</small>}<span className="thesis-choice">{selected===r.id?'Selected':'Explore this payoff'}</span></button>;
           })}</div>
           <p className="thesis-caption">Expected net uses your probabilities and this buy quote. It excludes gas and assumes binary outcomes, not VOID. It is not a recommendation or a forecast of profit.</p>
-        </>}
       </section>
       {row&&amount!==null&&<section className="thesis-panel"><div className="thesis-section-head"><div><span className="eyebrow">04 / Know the downside</span><h2>{names[row.id]}: what pays?</h2></div><span>{quantity} shares</span></div><p className="thesis-warning">{downside[row.id]}</p>
         <div className="thesis-table-wrap"><table><caption>Binary outcomes for A: {q(a)} and B: {q(b)}</caption><thead><tr><th>A</th><th>B</th><th>Your chance</th><th>Gross payout</th><th>Net at quote</th></tr></thead><tbody>{outcomes.slice(0,4).map(([x,y],i)=>{const payout=thesisPayout(row,events.length,a,b,x,y,amount);return <tr key={i}><td>{x?'Yes':'No'}</td><td>{y?'Yes':'No'}</td><td>{distribution?beliefPercent(distribution[i]):'Not entered'}</td><td>{cash(payout)}</td><td>{cost===null?'Unavailable':net(payout-cost)}</td></tr>;})}</tbody></table></div>
