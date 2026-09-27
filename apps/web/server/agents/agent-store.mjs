@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 // Agent persistence, isolated by authenticated Mera account. Every key is derived from a hash of the
 // session's account address, so one account cannot name, read or modify another account's agents.
 // The owner is never taken from request input.
-const accountDigest = account => {
+export const accountDigest = account => {
   if (typeof account !== 'string' || !/^0x[0-9a-f]{40}$/.test(account.toLowerCase())) throw new Error('Authenticated account required');
   return createHash('sha256').update(account.toLowerCase()).digest('hex');
 };
@@ -12,7 +12,8 @@ const PREFIX = 'flurbo:agents:v1:';
 // dropped (a review can be sent at any time, so it must stay recoverable); resolved ones beyond the
 // newest `fullProposals` are compacted. Accounting lives in running totals.
 export const AGENT_LIMITS = Object.freeze({ agents: 10, agentsIncludingArchived: 50, decisions: 100, recentPaper: 100, fullProposals: 50,
-  reviewsPerAgent: 200, evaluationsPerHour: 30, lockMs: 10_000, lockAttempts: 40, lockRetryMs: 25, conflictRetries: 3 });
+  reviewsPerAgent: 200, evaluationsPerHour: 30, lockMs: 10_000, lockAttempts: 40, lockRetryMs: 25, conflictRetries: 3,
+  runtimeDecisions: 100, finalExecutions: 500, pendingExecutions: 50, credentialsPerAgent: 5, heartbeats: 5 });
 export const STATE_SCHEMA = 'flurbo.agent-state.v2';
 // Ownership scheme of the stored state. States below it are reconciled (ownership claimed, duplicate
 // purchases uncounted) before they are read or changed.
@@ -30,6 +31,15 @@ const SAVE = `if (redis.call('GET',KEYS[2]) or '0')~=ARGV[1] then return 0 end
 for i=3,#KEYS do local e=redis.call('GET',KEYS[i]) if e and e~=ARGV[i+1] then return -1 end end
 for i=3,#KEYS do redis.call('SET',KEYS[i],ARGV[i+1],'NX') end
 redis.call('SET',KEYS[1],ARGV[2]) redis.call('SET',KEYS[2],ARGV[3]) return 1`;
+// A globally exclusive key (an agent wallet): set it unless another value holds it; release it only if
+// it still holds this value.
+const CLAIM_KEY = "local e=redis.call('GET',KEYS[1]) if e and e~=ARGV[1] then return 0 end redis.call('SET',KEYS[1],ARGV[1]) return 1";
+const RELEASE_KEY = "if redis.call('GET',KEYS[1])==ARGV[1] then redis.call('DEL',KEYS[1]) return 1 end return 0";
+// As CLAIM_KEY, but refused (-1) while KEYS[2] exists: an agent wallet cannot be claimed while the wallet is
+// linked for manual trading, in the same atomic step as the claim.
+const CLAIM_KEY_UNLESS = "if redis.call('EXISTS',KEYS[2])==1 then return -1 end local e=redis.call('GET',KEYS[1]) if e and e~=ARGV[1] then return 0 end redis.call('SET',KEYS[1],ARGV[1]) return 1";
+// Raise a numeric key to ARGV[1] if that is larger (a credential's last use). Never lowers it.
+const RAISE = "local e=tonumber(redis.call('GET',KEYS[1]) or '0') if tonumber(ARGV[1])>e then redis.call('SET',KEYS[1],ARGV[1]) return 1 end return 0";
 
 // Backends expose the same small surface. Redis (Upstash REST) when hosted; memory only for local
 // development and tests, and never when hosted.
@@ -47,6 +57,15 @@ export function redisBackend(command) {
     // 1 saved, 0 revision changed, -1 ownership conflict.
     save: async (key, revKey, expected, value, owned = []) => Number(await command('EVAL', SAVE, 2 + owned.length, key, revKey, ...owned.map(c => c.key),
       expected, JSON.stringify(value), String(Number(expected) + 1), ...owned.map(c => JSON.stringify(c.value)))),
+    claimKey: async (key, value) => Number(await command('EVAL', CLAIM_KEY, 1, key, JSON.stringify(value))) === 1,
+    // 1 claimed, 0 held by another value, -1 refused because `blocker` exists.
+    claimKeyUnless: async (key, value, blocker) => Number(await command('EVAL', CLAIM_KEY_UNLESS, 2, key, blocker, JSON.stringify(value))),
+    // Single-use expiring values (wallet proof challenges).
+    putExpiring: (key, value, seconds) => command('SET', key, JSON.stringify(value), 'EX', seconds),
+    take: async key => { const raw = await command('GETDEL', key); return raw === null ? null : JSON.parse(raw); },
+    releaseKey: async (key, value) => Number(await command('EVAL', RELEASE_KEY, 1, key, JSON.stringify(value))) === 1,
+    many: async keys => (await command('MGET', ...keys)).map(raw => (raw === null ? null : JSON.parse(raw))),
+    raise: async (key, n) => Number(await command('EVAL', RAISE, 1, key, String(n))) === 1,
   };
 }
 export function memoryBackend(now = Date.now) {
@@ -67,11 +86,23 @@ export function memoryBackend(now = Date.now) {
       for (const c of owned) if (live(c.key) === undefined) data.set(c.key, structuredClone(c.value));
       data.set(key, structuredClone(value)); data.set(revKey, String(Number(expected) + 1)); return 1;
     },
+    putExpiring: async (key, value, seconds) => { data.set(key, structuredClone(value)); expiry.set(key, now() + seconds * 1000); },
+    take: async key => { const v = live(key); data.delete(key); expiry.delete(key); return v === undefined ? null : structuredClone(v); },
+    claimKey: async (key, value) => { const e = live(key); if (e !== undefined && JSON.stringify(e) !== JSON.stringify(value)) return false; data.set(key, structuredClone(value)); return true; },
+    claimKeyUnless: async (key, value, blocker) => { if (live(blocker) !== undefined) return -1; const e = live(key); if (e !== undefined && JSON.stringify(e) !== JSON.stringify(value)) return 0; data.set(key, structuredClone(value)); return 1; },
+    releaseKey: async (key, value) => { if (JSON.stringify(live(key)) !== JSON.stringify(value)) return false; data.delete(key); return true; },
+    many: async keys => keys.map(key => { const v = live(key); return v === undefined ? null : structuredClone(v); }),
+    raise: async (key, n) => { if (n <= Number(live(key) ?? 0)) return false; data.set(key, n); return true; },
   };
 }
 
+// Autonomous runtime activity. Decisions are self-reported by the runtime; executions are provisional
+// until verified; totals come from verified executions only.
+export const emptyRuntime = () => ({ heartbeats: [], decisions: [], executions: [],
+  totals: { buys: 0, buyCostAtoms: '0', sells: 0, sellProceedsAtoms: '0', redemptions: 0, redeemedAtoms: '0', approvals: 0, reverted: 0, mismatched: 0, attributedElsewhere: 0 } });
+export const FINAL_EXECUTION = Object.freeze(['confirmed', 'reverted', 'mismatch', 'attributed-elsewhere']);
 export const emptyState = () => ({ schema: STATE_SCHEMA, ownership: OWNERSHIP, decisions: [], proposals: [],
-  paper: { fills: 0, costAtoms: '0', claims: {}, recent: [] }, live: { confirmedPurchases: 0, costAtoms: '0', unknownCost: 0 } });
+  paper: { fills: 0, costAtoms: '0', claims: {}, recent: [] }, live: { confirmedPurchases: 0, costAtoms: '0', unknownCost: 0 }, runtime: emptyRuntime() });
 
 // What recovery needs from a review: the exact transaction and what it was for. Receipt verification
 // uses only the transaction.
@@ -81,6 +112,14 @@ export const transactionDigest = tx => createHash('sha256').update(TX_FIELDS.map
 // Verified ownership of an on-chain transaction, one per chain and hash across all agents and accounts.
 // Only a receipt check that matched the proposal's reviewed transaction writes it.
 export const ownershipKey = (chainId, hash) => `${PREFIX}owner:${chainId}:${hash.toLowerCase()}`;
+// Agent wallets are exclusive across all accounts; credentials are addressed by id alone.
+export const agentWalletKey = wallet => `${PREFIX}agent-wallet:${wallet.toLowerCase()}`;
+export const credentialKey = id => `${PREFIX}credential:${id}`;
+// Last use lives in its own key, written only by an atomic raise. The credential record itself is written
+// only under the owner's account lock (issue, revoke, rotate), so a request that authenticated before a
+// revocation or rotation can never write a stale copy of the record back.
+export const credentialUsedKey = id => `${PREFIX}credential-used:${id}`;
+const withLastUse = (record, used) => (record ? { ...record, lastUsedAt: Math.max(record.lastUsedAt ?? 0, used ?? 0) || null } : null);
 export const VERIFIED = Object.freeze(['confirmed', 'reverted']);
 
 const paperClaimKey = claim => `${claim.chainId}:${claim.pool}:${claim.scope}:${claim.mask}`;
@@ -120,6 +159,7 @@ function reviewsOf(p) {
 // Earlier v2 states kept only a few replaced reviews; bring them up to date.
 function normalize(state) {
   for (const p of state.proposals) { if (!p.reviews) p.reviews = reviewsOf(p); delete p.superseded; }
+  if (!state.runtime) state.runtime = emptyRuntime();
   return state;
 }
 
@@ -145,7 +185,7 @@ export function agentStore(backend, { unresolved = () => true, chainId = 10143 }
   const k = account => {
     const owner = accountDigest(account), base = PREFIX + owner;
     return { owner, index: base + ':index', archived: base + ':archived', lock: base + ':lock', agent: id => `${base}:agent:${id}`, legacy: id => `${base}:records:${id}`,
-      state: id => `${base}:state:${id}`, rev: id => `${base}:rev:${id}`, rate: hour => `${base}:rate:${hour}` };
+      state: id => `${base}:state:${id}`, rev: id => `${base}:rev:${id}`, rate: hour => `${base}:rate:${hour}`, credentials: id => `${base}:credentials:${id}` };
   };
   const validId = id => typeof id === 'string' && /^[0-9a-f-]{36}$/.test(id);
   const conflict = (message, code) => { const e = new Error(message); e.status = 409; e.code = code; return e; };
@@ -173,6 +213,12 @@ export function agentStore(backend, { unresolved = () => true, chainId = 10143 }
   function retain(state) {
     state.decisions = state.decisions.slice(0, AGENT_LIMITS.decisions);
     state.paper.recent = state.paper.recent.slice(0, AGENT_LIMITS.recentPaper);
+    // Runtime feed: self-reported decisions are bounded; executions still being verified are never
+    // dropped; verified ones keep the newest few (their accounting lives in the totals and their
+    // ownership records, so dropping them can never cause a second count).
+    state.runtime.decisions = state.runtime.decisions.slice(0, AGENT_LIMITS.runtimeDecisions);
+    let finals = 0;
+    state.runtime.executions = state.runtime.executions.filter(e => !FINAL_EXECUTION.includes(e.status) || ++finals <= AGENT_LIMITS.finalExecutions);
     let resolved = 0;
     state.proposals = state.proposals.filter(p => {
       if (unresolved(p) || ++resolved <= AGENT_LIMITS.fullProposals) return true;
@@ -238,6 +284,11 @@ export function agentStore(backend, { unresolved = () => true, chainId = 10143 }
       }
     }
   }
+  const credentialOf = async id => {
+    if (!/^[0-9a-f]{16}$/.test(id)) return null;
+    const [record, used] = await backend.many([credentialKey(id), credentialUsedKey(id)]);
+    return withLastUse(record, used);
+  };
   return {
     durable: backend.durable,
     mutate,
@@ -291,7 +342,10 @@ export function agentStore(backend, { unresolved = () => true, chainId = 10143 }
       const archived = await locked(account, async keys => {
         const ids = (await backend.get(keys.index)) ?? [], profile = await backend.get(keys.agent(id));
         if (!ids.includes(id) || !profile) return false;
-        await backend.set(keys.agent(id), { ...profile, status: 'archived', archivedAt: at, updatedAt: at });
+        // Archiving ends the wallet association and frees the wallet; the history stays on the profile.
+        const history = (profile.walletHistory ?? []).map(w => (w.until === null ? { ...w, until: at } : w));
+        if (profile.wallet) await backend.releaseKey(agentWalletKey(profile.wallet), { owner: keys.owner, agentId: id });
+        await backend.set(keys.agent(id), { ...profile, status: 'archived', archivedAt: at, updatedAt: at, wallet: null, walletHistory: history });
         await backend.set(keys.archived, [...((await backend.get(keys.archived)) ?? []), id]);
         await backend.set(keys.index, ids.filter(x => x !== id));
         return true;
@@ -299,9 +353,73 @@ export function agentStore(backend, { unresolved = () => true, chainId = 10143 }
       if (archived) await mutate(account, id, state => { state.decisions = []; state.paper.recent = []; return true; });
       return archived;
     },
+    // Agent credentials. Only the digest of the secret is stored.
+    async issueCredential(account, agentId, record, at) {
+      if (!validId(agentId)) return null;
+      return locked(account, async keys => {
+        const profile = await backend.get(keys.agent(agentId));
+        if (!profile) return null;
+        if (profile.status === 'archived') throw conflict('This agent is archived.', 'AGENT_ARCHIVED');
+        const ids = (await backend.get(keys.credentials(agentId))) ?? [];
+        const records = (await Promise.all(ids.map(id => backend.get(credentialKey(id))))).filter(Boolean);
+        if (records.filter(r => !r.revokedAt && r.expiresAt > at).length >= AGENT_LIMITS.credentialsPerAgent)
+          throw conflict(`An agent can have at most ${AGENT_LIMITS.credentialsPerAgent} active credentials. Revoke one first.`, 'CREDENTIAL_LIMIT');
+        const saved = { ...record, owner: keys.owner, agentId };
+        await backend.set(credentialKey(record.credentialId), saved);
+        await backend.set(keys.credentials(agentId), [...ids, record.credentialId]);
+        return saved;
+      });
+    },
+    async credentials(account, agentId) {
+      if (!validId(agentId)) return [];
+      const keys = k(account), ids = (await backend.get(keys.credentials(agentId))) ?? [];
+      return (await Promise.all(ids.map(credentialOf))).filter(r => r && r.owner === keys.owner && r.agentId === agentId);
+    },
+    credential: credentialOf,
+    async revokeCredential(account, agentId, credentialId, at, change = r => ({ ...r, revokedAt: at })) {
+      if (!validId(agentId) || !/^[0-9a-f]{16}$/.test(credentialId)) return null;
+      return locked(account, async keys => {
+        const record = await backend.get(credentialKey(credentialId));
+        if (!record || record.owner !== keys.owner || record.agentId !== agentId) return null;
+        if (record.revokedAt) return withLastUse(record, await backend.get(credentialUsedKey(credentialId)));
+        const next = change(record);
+        await backend.set(credentialKey(credentialId), next);
+        return withLastUse(next, await backend.get(credentialUsedKey(credentialId)));
+      });
+    },
+    // Best effort; used for display only. Touches only the last-use key, never the credential record.
+    touchCredential: async (credentialId, at) => { if (/^[0-9a-f]{16}$/.test(credentialId)) await backend.raise(credentialUsedKey(credentialId), at); },
+    // Associate a verified wallet with an agent. Exclusive across all accounts; the previous wallet is
+    // released and its association closed at `at`, so earlier executions keep their attribution.
+    // `linkedKey` (Redis only) is the key recording a manual MetaMask link of this wallet; while it exists the
+    // wallet cannot become an agent wallet.
+    async associateWallet(account, agentId, wallet, at, linkedKey = null) {
+      if (!validId(agentId)) return null;
+      wallet = wallet.toLowerCase();
+      return locked(account, async keys => {
+        const profile = await backend.get(keys.agent(agentId));
+        if (!profile) return null;
+        if (profile.status === 'archived') throw conflict('This agent is archived.', 'AGENT_ARCHIVED');
+        if (profile.wallet === wallet) return profile;
+        const claimed = linkedKey ? await backend.claimKeyUnless(agentWalletKey(wallet), { owner: keys.owner, agentId }, linkedKey)
+          : Number(await backend.claimKey(agentWalletKey(wallet), { owner: keys.owner, agentId }));
+        if (claimed === -1) throw conflict('This wallet is linked for manual MetaMask trading. Use a separate wallet for the agent.', 'WALLET_LINKED');
+        if (claimed !== 1) throw conflict('This wallet is already the wallet of another agent.', 'WALLET_IN_USE');
+        if (profile.wallet) await backend.releaseKey(agentWalletKey(profile.wallet), { owner: keys.owner, agentId });
+        const history = [...(profile.walletHistory ?? []).map(w => (w.until === null ? { ...w, until: at } : w)), { address: wallet, from: at, until: null }];
+        const next = { ...profile, wallet, walletHistory: history, updatedAt: at };
+        await backend.set(keys.agent(agentId), next);
+        return next;
+      });
+    },
+    agentWallet: wallet => backend.get(agentWalletKey(wallet)),
+    putChallenge: (id, value, seconds) => backend.putExpiring(PREFIX + 'wallet-challenge:' + id, value, seconds),
+    takeChallenge: id => (/^[A-Za-z0-9_-]{43}$/.test(id) ? backend.take(PREFIX + 'wallet-challenge:' + id) : null),
     async allowEvaluation(account, nowMs = Date.now()) {
       const hour = Math.floor(nowMs / 3_600_000);
       return (await backend.count(k(account).rate(hour), 7200)) <= AGENT_LIMITS.evaluationsPerHour;
     },
+    // Fixed one-minute windows for credential and service-wide runtime limits.
+    count: (key, seconds) => backend.count(PREFIX + 'runtime-rate:' + key, seconds),
   };
 }

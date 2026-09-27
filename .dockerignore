@@ -8,3 +8,6 @@ resources
 **/.env*
 **/*.local
 **/__pycache__
+**/.venv
+packages/sdk-rust/target
+packages/sdk-cpp/build

@@ -1,19 +1,22 @@
 import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { redisCommand } from '../server/redis-session.mjs';
-import { agentStore, redisBackend, ownershipKey } from '../server/agents/agent-store.mjs';
+import { agentStore, redisBackend, ownershipKey, agentWalletKey, credentialKey, credentialUsedKey } from '../server/agents/agent-store.mjs';
 
-// Validates the agent store's Redis operations (SET NX PX locks, the Lua scripts, MGET) against a real
-// Redis-compatible service before hosted rollout. Run it only against a test database or namespace:
+// Validates the agent store's Redis operations (SET NX PX locks, the Lua scripts, MGET, SET EX, GETDEL)
+// against a real Redis-compatible service before hosted rollout: agent state and transaction ownership,
+// agent wallet claims, single-use expiring wallet challenges and credential records. Run it only against a
+// test database or namespace:
 //   FLURBO_AGENT_REDIS_CHECK=1 UPSTASH_REDIS_REST_URL=... UPSTASH_REDIS_REST_TOKEN=... node scripts/check-agent-redis.mjs
 // It writes only keys under flurbo:agents:v1: for a random throwaway account and random transaction
 // hashes, never settlement-monitor, resolution or other keys, and deletes every key it wrote.
 const PREFIX = 'flurbo:agents:v1:';
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 export async function checkAgentRedis(command, log = () => {}) {
   const written = new Set(), results = [];
   const guarded = async (op, ...args) => {
-    const keys = op === 'EVAL' ? args.slice(2, 2 + Number(args[1])) : op === 'MGET' ? args : ['SET', 'GET', 'DEL', 'TTL', 'EXISTS'].includes(op) ? [args[0]] : null;
+    const keys = op === 'EVAL' ? args.slice(2, 2 + Number(args[1])) : op === 'MGET' ? args : ['SET', 'GET', 'DEL', 'TTL', 'EXISTS', 'GETDEL'].includes(op) ? [args[0]] : null;
     if (!keys) throw new Error(`Unexpected command ${op}`);
     for (const key of keys) if (typeof key !== 'string' || !key.startsWith(PREFIX)) throw new Error('Refusing a key outside the agent namespace');
     if (op === 'SET' || op === 'EVAL') keys.forEach(k => written.add(k));
@@ -24,7 +27,8 @@ export async function checkAgentRedis(command, log = () => {}) {
     catch (e) { results.push([name, false]); log(`FAIL ${name}: ${e.message}`); }
   };
   const ok = (value, message) => { if (!value) throw new Error(message); };
-  const account = '0x' + randomBytes(20).toString('hex'), hash = () => '0x' + randomBytes(32).toString('hex');
+  const account = '0x' + randomBytes(20).toString('hex'), other = '0x' + randomBytes(20).toString('hex'), hash = () => '0x' + randomBytes(32).toString('hex');
+  const address = () => '0x' + randomBytes(20).toString('hex'), challengeId = () => randomBytes(32).toString('base64url');
   const backend = redisBackend(guarded), store = agentStore(backend);
   try {
     const base = PREFIX + 'selfcheck:' + randomBytes(8).toString('hex');
@@ -73,12 +77,104 @@ export async function checkAgentRedis(command, log = () => {}) {
       ok(read.profile.status === 'archived' && read.state.proposals[0].id === 'p1', 'archived agent not readable');
       ok((await store.listArchived(account)).length === 1 && (await store.list(account)).length === 0, 'indexes wrong');
     });
+
+    // Agent wallets: exclusive across every account; released only by the holder.
+    await check('wallet claim is exclusive and released only by its holder', async () => {
+      const key = agentWalletKey(address()), a = { owner: 'a', agentId: 'x' }, b = { owner: 'b', agentId: 'y' };
+      ok(await backend.claimKey(key, a) && await backend.claimKey(key, a), 'the holder could not claim again');
+      ok(!await backend.claimKey(key, b), 'another holder claimed a held wallet');
+      ok(!await backend.releaseKey(key, b), 'a non-holder released the wallet');
+      ok(JSON.stringify(await backend.get(key)) === JSON.stringify(a), 'the claim changed');
+      ok(await backend.releaseKey(key, a) && await backend.get(key) === null, 'the holder could not release');
+      ok(await backend.claimKey(key, b), 'a released wallet could not be claimed');
+    });
+    await check('concurrent wallet claims: exactly one wins', async () => {
+      const key = agentWalletKey(address()), holders = Array.from({ length: 8 }, (_, i) => ({ owner: 'o' + i, agentId: 'a' + i }));
+      const won = await Promise.all(holders.map(h => backend.claimKey(key, h)));
+      ok(won.filter(Boolean).length === 1, `${won.filter(Boolean).length} claims won`);
+      ok(JSON.stringify(await backend.get(key)) === JSON.stringify(holders[won.indexOf(true)]), 'the stored holder is not the winner');
+    });
+    await check('wallet claim is refused atomically while the wallet is linked for manual trading', async () => {
+      const key = agentWalletKey(address()), linked = base + ':manual-link', holder = { owner: 'a', agentId: 'x' };
+      await backend.set(linked, 'account');
+      ok(await backend.claimKeyUnless(key, holder, linked) === -1 && await backend.get(key) === null, 'claimed despite the manual link');
+      await backend.del(linked);
+      ok(await backend.claimKeyUnless(key, holder, linked) === 1, 'claim refused without a manual link');
+      ok(await backend.claimKeyUnless(key, { owner: 'b', agentId: 'y' }, linked) === 0, 'a second holder claimed the wallet');
+      const race = agentWalletKey(address()), outcomes = await Promise.all(Array.from({ length: 8 }, (_, i) => backend.claimKeyUnless(race, { owner: 'o' + i, agentId: 'a' + i }, linked)));
+      ok(outcomes.filter(x => x === 1).length === 1 && outcomes.filter(x => x === 0).length === 7, `outcomes ${outcomes}`);
+    });
+    await check('store: two accounts associate one wallet at once; one wins; archiving frees it', async () => {
+      const wallet = address(), mine = await store.create(account, { name: 'Wallet A', kind: 'runtime', status: 'active' });
+      const theirs = await store.create(other, { name: 'Wallet B', kind: 'runtime', status: 'active' });
+      const outcomes = await Promise.allSettled([store.associateWallet(account, mine.id, wallet, 1), store.associateWallet(other, theirs.id, wallet, 1)]);
+      const losers = outcomes.filter(o => o.status === 'rejected');
+      ok(losers.length === 1 && losers[0].reason?.code === 'WALLET_IN_USE', `outcomes ${outcomes.map(o => o.status)}`);
+      const [winner, winnerAccount, loser, loserAccount] = outcomes[0].status === 'fulfilled' ? [mine, account, theirs, other] : [theirs, other, mine, account];
+      ok((await backend.get(agentWalletKey(wallet)))?.agentId === winner.id, 'the wallet key names the wrong agent');
+      ok(await store.archive(winnerAccount, winner.id, 2), 'archive failed');
+      ok(await backend.get(agentWalletKey(wallet)) === null, 'archiving did not free the wallet');
+      ok((await store.associateWallet(loserAccount, loser.id, wallet, 3))?.wallet === wallet, 'the freed wallet could not be associated');
+    });
+    // Wallet proof challenges: expiring, and consumed exactly once.
+    await check('challenge expires and is single use', async () => {
+      const id = challengeId(), key = PREFIX + 'wallet-challenge:' + id;
+      written.add(key);
+      await store.putChallenge(id, { wallet: '0x1' }, 300);
+      const ttl = Number(await guarded('TTL', key)); ok(ttl > 0 && ttl <= 300, `challenge ttl ${ttl}`);
+      ok((await store.takeChallenge(id))?.wallet === '0x1', 'challenge not returned');
+      ok(await store.takeChallenge(id) === null, 'challenge returned twice');
+      const late = challengeId();
+      written.add(PREFIX + 'wallet-challenge:' + late);
+      await store.putChallenge(late, { wallet: '0x2' }, 1);
+      await sleep(2100);
+      ok(await store.takeChallenge(late) === null, 'an expired challenge was returned');
+    });
+    await check('concurrent takes of one challenge: exactly one succeeds', async () => {
+      const id = challengeId();
+      written.add(PREFIX + 'wallet-challenge:' + id);
+      await store.putChallenge(id, { wallet: '0x3' }, 300);
+      const taken = await Promise.all(Array.from({ length: 8 }, () => store.takeChallenge(id)));
+      ok(taken.filter(Boolean).length === 1, `${taken.filter(Boolean).length} takes succeeded`);
+    });
+    // Credentials: the record is written only under the account lock; last use is an atomic raise.
+    const issue = async (agentId, at) => {
+      const credentialId = randomBytes(8).toString('hex');
+      await store.issueCredential(account, agentId, { schema: 'flurbo.agent-credential.v1', credentialId, secretSha256: randomBytes(32).toString('hex'), account,
+        scopes: ['markets:read', 'runtime:report'], label: 'check', createdAt: at, expiresAt: at + 86_400, revokedAt: null, lastUsedAt: null }, at);
+      return credentialId;
+    };
+    await check('credential: a late last-use write never restores a revoked credential', async () => {
+      const agent = await store.create(account, { name: 'Credential check', kind: 'runtime', status: 'active' }), id = await issue(agent.id, 100);
+      const stale = await store.credential(id);  // what a request read before the revocation
+      await store.touchCredential(id, 110);
+      ok((await store.revokeCredential(account, agent.id, id, 120))?.revokedAt === 120, 'revocation failed');
+      await store.touchCredential(stale.credentialId, 115);  // the delayed request records its use late
+      await store.touchCredential(id, 130);
+      const after = await store.credential(id), raw = await backend.get(credentialKey(id));
+      ok(after.revokedAt === 120 && raw.revokedAt === 120, 'revocation was reset');
+      ok(JSON.stringify(raw.scopes) === JSON.stringify(stale.scopes) && raw.expiresAt === stale.expiresAt && raw.secretSha256 === stale.secretSha256, 'scopes, expiry or secret changed');
+      ok(after.lastUsedAt === 130 && Number(await backend.get(credentialUsedKey(id))) === 130, 'last use is not the latest');
+    });
+    await check('credential: concurrent uses around revocation and rotation keep both', async () => {
+      const agent = await store.create(account, { name: 'Credential race', kind: 'runtime', status: 'active' });
+      const revoked = await issue(agent.id, 200), rotated = await issue(agent.id, 200);
+      const uses = id => Array.from({ length: 10 }, (_, i) => store.touchCredential(id, 201 + i));
+      await Promise.all([...uses(revoked), store.revokeCredential(account, agent.id, revoked, 205), ...uses(rotated),
+        store.revokeCredential(account, agent.id, rotated, 205, r => ({ ...r, revokedAt: 205, rotatedTo: 'feedfacefeedface' }))]);
+      await Promise.all([...uses(revoked), ...uses(rotated)]);
+      const a = await backend.get(credentialKey(revoked)), b = await backend.get(credentialKey(rotated));
+      ok(a.revokedAt === 205, 'revocation lost under concurrent use');
+      ok(b.revokedAt === 205 && b.rotatedTo === 'feedfacefeedface', 'rotation lost under concurrent use');
+      ok((await store.credential(revoked)).lastUsedAt === 210 && (await store.credential(rotated)).lastUsedAt === 210, 'last use not the maximum');
+      ok((await store.credentials(account, agent.id)).length === 2, 'credential list wrong');
+    });
   } finally {
     for (const key of written) await command('DEL', key);
-    // Store keys derived from the throwaway account.
     const left = [];
     for (const key of written) if (Number(await command('EXISTS', key))) left.push(key);
-    log(left.length ? `CLEANUP left ${left.length} key(s)` : 'CLEANUP removed all test keys');
+    results.push(['cleanup removes every key the check wrote', left.length === 0]);
+    log(left.length ? `FAIL cleanup left ${left.length} key(s)` : `PASS cleanup removed all ${written.size} test keys`);
   }
   return results;
 }

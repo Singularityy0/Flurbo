@@ -41,7 +41,7 @@ export function respCommand(url:string){
 // collide. Only key positions are rewritten; values and scripts are passed through unchanged.
 export function namespacedRedis(url:string){
   const raw=respCommand(url),ns=`flurbo-test:${randomBytes(6).toString('hex')}:`;
-  const keyPositions=(op:string,a:any[])=>op==='EVAL'?a.slice(2,2+Number(a[1])).map((_,i)=>2+i):op==='MGET'?a.map((_,i)=>i):['GET','SET','DEL','TTL','EXISTS'].includes(op)?[0]:null;
+  const keyPositions=(op:string,a:any[])=>op==='EVAL'?a.slice(2,2+Number(a[1])).map((_,i)=>2+i):op==='MGET'?a.map((_,i)=>i):['GET','SET','DEL','TTL','EXISTS','GETDEL','SMEMBERS'].includes(op)?[0]:null;
   const command=async(op:string,...a:any[])=>{
     const positions=keyPositions(op,a);if(!positions)throw new Error('Unexpected command '+op);
     const args=[...a];for(const i of positions)args[i]=ns+args[i];

@@ -73,10 +73,13 @@ async function harness(browser:any,{failTracking=0}={}){
 async function createAgentAndDecide(page:any){
     // Create an agent that may propose trades for approval.
     await page.goto(origin+'/agents');
-    await page.getByRole('heading',{name:'Create an agent'}).waitFor();
-    await page.getByLabel('Name').fill('Release relationship agent');
-    await page.getByRole('radio',{name:/Propose for approval/}).check();
-    await page.getByRole('button',{name:'Create agent'}).click();
+    // Assisted agents are the secondary workflow; the primary form registers an agent that runs elsewhere.
+    await page.getByRole('heading',{name:'Register an agent'}).waitFor();
+    await page.getByText('Assisted agent: manual forecasts, paper trades and MetaMask approval').click();
+    const assisted=page.locator('details').filter({has:page.getByRole('heading',{name:'Create an assisted agent'})});
+    await assisted.getByLabel('Name').fill('Release relationship agent');
+    await assisted.getByRole('radio',{name:/Propose for approval/}).check();
+    await assisted.getByRole('button',{name:'Create assisted agent'}).click();
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}$/);
     await page.getByRole('heading',{name:'Release relationship agent'}).waitFor();
 

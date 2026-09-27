@@ -9,9 +9,11 @@ const address = value => {
 const uint = value => { if(typeof value!=='string' || !/^(0|[1-9][0-9]{0,30})$/.test(value)) throw new Error('Invalid amount'); return BigInt(value); };
 const json = value => JSON.parse(JSON.stringify(value,(_,v)=>typeof v==='bigint'?v.toString():v));
 
-export function pilotRpc(endpoint,request=fetch) {
+// allowLocal is for local development tooling only (an anvil chain on this machine); hosted configuration never sets it.
+export function pilotRpc(endpoint,request=fetch,{allowLocal=false}={}) {
   const url=new URL(endpoint);
-  if(url.protocol!=='https:'||url.username||url.password||url.hash||url.port||!['testnet-rpc.monad.xyz','monad-testnet.g.alchemy.com'].includes(url.hostname))throw new Error('Public Monad testnet RPC required');
+  const local=allowLocal&&url.protocol==='http:'&&['127.0.0.1','localhost'].includes(url.hostname)&&!url.username&&!url.password;
+  if(!local&&(url.protocol!=='https:'||url.username||url.password||url.hash||url.port||!['testnet-rpc.monad.xyz','monad-testnet.g.alchemy.com'].includes(url.hostname)))throw new Error('Public Monad testnet RPC required');
   let id=0;
   const rpc=async(method,params=[])=>{
     if(!['eth_chainId','eth_getBlockByNumber','eth_getCode','eth_call','eth_estimateGas','eth_gasPrice','eth_getLogs'].includes(method))throw new Error('Pilot service is read-only');

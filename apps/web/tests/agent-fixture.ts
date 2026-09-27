@@ -10,12 +10,28 @@ export const multicall=parseAbi(['function aggregate3((address target,bool allow
 
 // Fake Upstash: the scripts the agent store sends, and nothing else.
 export function fakeRedis(){
-  const data=new Map<string,string>(),ttl=new Map<string,number>();
+  const data=new Map<string,string>(),ttl=new Map<string,number>(),expires=new Map<string,number>(),sets=new Map<string,Set<string>>();
   const command=async(op:string,...a:any[])=>{
+    // SET ... EX n expires on the real clock, as Redis does.
+    for(const [key,at] of expires)if(at<=Date.now()){data.delete(key);expires.delete(key);}
     if(op==='GET')return data.get(a[0])??null;
-    if(op==='SET'){if(a.includes('NX')&&data.has(a[0]))return null;data.set(a[0],a[1]);return 'OK';}
+    if(op==='SET'){if(a.includes('NX')&&data.has(a[0]))return null;data.set(a[0],a[1]);expires.delete(a[0]);const ex=a.indexOf('EX');if(ex>0){expires.set(a[0],Date.now()+Number(a[ex+1])*1000);ttl.set(a[0],Number(a[ex+1]));}return 'OK';}
     if(op==='DEL'){return data.delete(a[0])?1:0;}
+    if(op==='GETDEL'){const v=data.get(a[0])??null;data.delete(a[0]);return v;}
+    if(op==='EVAL'&&a[0].startsWith("local e=redis.call('GET',KEYS[1]) if e and e~=ARGV[1] then return 0 end")){const [,,key,value]=a;if(data.has(key)&&data.get(key)!==value)return 0;data.set(key,value);return 1;}
     if(op==='MGET')return a.map(key=>data.get(key)??null);
+    if(op==='SMEMBERS')return [...(sets.get(a[0])??[])];
+    // Wallet link verification (server/wallet-links.mjs): refused while the agent wallet key (KEYS[3]) exists.
+    if(op==='EVAL'&&a[0].includes('SISMEMBER')){
+      const n=Number(a[1]),[account,owner,reserved]=a.slice(2,2+n),[login,wallet]=a.slice(2+n);
+      if(reserved&&data.has(reserved))return -3;
+      if(data.has(owner)&&data.get(owner)!==login)return -1;
+      const set=sets.get(account)??new Set<string>();if(!set.has(wallet)&&set.size>=20)return -2;
+      data.set(owner,login);set.add(wallet);sets.set(account,set);return 1;
+    }
+    // Agent wallet claim refused while the manual link key (KEYS[2]) exists.
+    if(op==='EVAL'&&a[0].includes("EXISTS',KEYS[2]")){const [,,key,blocker,value]=a;if(data.has(blocker))return -1;if(data.has(key)&&data.get(key)!==value)return 0;data.set(key,value);return 1;}
+    if(op==='EVAL'&&a[0].includes('tonumber')){const [,,key,n]=a;if(Number(n)<=Number(data.get(key)??0))return 0;data.set(key,n);return 1;}
     if(op==='EVAL'&&a[0].includes('ARGV[3]')){
       // The agent state save script: revision check, ownership checks, then the writes.
       const n=Number(a[1]),keys=a.slice(2,2+n),argv=a.slice(2+n),[key,rev]=keys,owned=keys.slice(2).map((k:string,i:number)=>({k,value:argv[3+i]}));
@@ -43,7 +59,7 @@ export function agentRedis():TestRedis{
 }
 
 export function setup({links=[owner],at=now}:{links?:string[];at?:number}={}){
-  const f=pilotFixture(at,3),redis=agentRedis(),txs=new Map<string,any>(),receipts=new Map<string,any>();
+  const f=pilotFixture(at,3),redis=agentRedis(),txs=new Map<string,any>(),receipts=new Map<string,any>(),blocks=new Map<string,any>();
   // Agent RPC: multicall is expanded into the fixture's single reads; receipts come from a local table.
   const rpc=async(method:string,params:any[]=[])=>{
     if(method==='eth_call'&&params[0].to==='0xca11bde05977b3631167028862be2a173976ca11'){
@@ -55,19 +71,26 @@ export function setup({links=[owner],at=now}:{links?:string[];at?:number}={}){
     if(method==='eth_getTransactionByHash')return txs.get(params[0])??null;
     if(method==='eth_getTransactionReceipt')return receipts.get(params[0])??null;
     if(method==='eth_getBlockByNumber'&&params[0]==='latest')return {number:'0x70',hash:'0x'+'44'.repeat(32),timestamp:'0x'+at.toString(16)};
-    if(method==='eth_getBlockByNumber'&&params[0]==='0x69')return {number:'0x69',hash:'0x'+'69'.repeat(32)};
+    if(method==='eth_getBlockByNumber'&&blocks.has(params[0]))return blocks.get(params[0]);
+    if(method==='eth_getBlockByNumber'&&params[0]==='0x69')return {number:'0x69',hash:'0x'+'69'.repeat(32),timestamp:'0x'+at.toString(16)};
+    if(method==='eth_getBalance')return '0xde0b6b3a7640000';
     return f.rpc(method,params);
   };
   let clock=at;
-  const linked={list:async(account:string)=>({account,wallets:links.map(w=>w.toLowerCase())})};
-  const make=()=>agentApi({command:redis.command,hosted:true,serviceFor:(ns:string)=>ns==='pilot'?f.service:null,links:linked,rpc,now:()=>clock});
+  // Linked MetaMask wallets: every account in these tests links the same list.
+  const linked={list:async(account:string)=>({account,wallets:links.map(w=>w.toLowerCase())}),ownerOf:async(wallet:string)=>links.map(w=>w.toLowerCase()).includes(wallet.toLowerCase())?alice:null};
+  const make=(overrides:Record<string,unknown>={})=>agentApi({command:redis.command,hosted:true,serviceFor:(ns:string)=>ns==='pilot'?f.service:null,links:linked,rpc,now:()=>clock,...overrides});
   const api=make();
   const call=async(login:string,method:string,path:string,input?:unknown,which=api)=>which.handle({method,path,input,login:{address:login,method:'passkey'},origin});
-  const mine=(tx:{from:string;to:string;data:string},hash:string,{status='0x1',logs=[] as any[]}={})=>{
-    txs.set(hash,{hash,chainId:'0x279f',from:tx.from,to:tx.to,input:tx.data,value:'0x0',blockHash:'0x'+'69'.repeat(32),blockNumber:'0x69'});
-    receipts.set(hash,{transactionHash:hash,blockHash:'0x'+'69'.repeat(32),blockNumber:'0x69',status,logs});
+  // Mines a transaction. `block` and `timestamp` place it in its own block (below the head at 0x70).
+  const mine=(tx:{from:string;to:string;data:string},hash:string,{status='0x1',logs=[] as any[],block='0x69',timestamp=null as number|null}={})=>{
+    const blockHash=block==='0x69'?'0x'+'69'.repeat(32):'0x'+block.slice(2).padStart(2,'0').repeat(32).slice(0,64);
+    if(block!=='0x69')blocks.set(block,{number:block,hash:blockHash,timestamp:'0x'+(timestamp??clock).toString(16)});
+    txs.set(hash,{hash,chainId:'0x279f',from:tx.from,to:tx.to,input:tx.data,value:'0x0',blockHash,blockNumber:block});
+    receipts.set(hash,{transactionHash:hash,blockHash,blockNumber:block,status,logs,gasUsed:'0x5208',effectiveGasPrice:'0x3b9aca00'});
   };
-  return {f,redis,api,make,call,rpc,mine,txs,advance:(s:number)=>{clock+=s;}};
+  const seen=(tx:{from:string;to:string;data:string},hash:string)=>{txs.set(hash,{hash,chainId:'0x279f',from:tx.from,to:tx.to,input:tx.data,value:'0x0',blockHash:null,blockNumber:null});};
+  return {f,redis,api,make,call,rpc,mine,seen,txs,advance:(s:number)=>{clock+=s;},clock:()=>clock};
 }
 export const forecast=(pool:string,over:Record<string,unknown>={},at=now)=>({schema:'flurbo.agent-forecast.v1',pool,joint:{events:[0,1],statesPpm:['300000','100000','150000','450000']},
   evidence:[{id:'e1',title:'Release candidate tagged',source:'Project release page',url:'https://github.com/ethereum/go-ethereum/releases',observedAt:new Date((at-3600)*1000).toISOString(),note:'Illustrative test note.'}],

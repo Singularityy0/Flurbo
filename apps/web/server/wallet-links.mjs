@@ -4,7 +4,12 @@ import { digest } from './session.mjs';
 
 const address = value => typeof value === 'string' && /^0x[0-9a-f]{40}$/i.test(value);
 const MAX_WALLETS = 20;
-export function walletLinks({ command, now = Date.now } = {}) {
+// The key that records which Flurbo account linked a wallet for manual trading, on one origin.
+export const linkOwnerKey = (origin, wallet) => `flurbo:wallet-links:v1:owner:${digest(origin + ':' + wallet.toLowerCase())}`;
+// Agent wallets can never also be linked for manual trading. `isReserved(wallet)` is checked when a link is
+// requested and again when it is verified; with Redis, `reservedKey(wallet)` names the agent wallet key, and
+// the link is written only if that key does not exist, in the same atomic step.
+export function walletLinks({ command, now = Date.now, isReserved = async () => false, reservedKey = null } = {}) {
   const challenges = new Map(), accounts = new Map(), owners = new Map(), budgets = new Map();
   const key = (kind, value) => `flurbo:wallet-links:v1:${kind}:${digest(value)}`;
   async function list(login, origin) {
@@ -14,6 +19,7 @@ export function walletLinks({ command, now = Date.now } = {}) {
   }
   async function challenge(login, wallet, origin, session) {
     if (!address(wallet) || wallet.toLowerCase() === login) throw Error('Choose a MetaMask trading address, not your Mera account address.');
+    if (await isReserved(wallet.toLowerCase())) throw Error('This MetaMask wallet is an agent wallet. Use a separate wallet for manual trading.');
     wallet = wallet.toLowerCase();
     const rate = key('rate', session + ':' + Math.floor(now()/60000));
     const count = command ? await command('EVAL', "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],120) end; return n", 1, rate) : (budgets.get(rate) || 0) + 1;
@@ -33,8 +39,12 @@ export function walletLinks({ command, now = Date.now } = {}) {
     if (!proof || proof.login !== login || proof.origin !== origin || proof.session !== digest(session) || proof.expires <= now() || !/^0x[0-9a-f]{130}$/i.test(signature || '') ||
       !await verifyMessage({ address: proof.wallet, message: proof.message, signature })) throw Error('Wallet proof rejected. Reconnect and try again.');
     const accountId = origin + ':' + login, walletId = origin + ':' + proof.wallet;
+    const agentWallet = 'This MetaMask wallet is an agent wallet. Use a separate wallet for manual trading.';
+    if (await isReserved(proof.wallet)) throw Error(agentWallet);
     if (command) {
-      const result = await command('EVAL', `local owner=redis.call('GET',KEYS[2]); if owner and owner~=ARGV[1] then return -1 end; if redis.call('SISMEMBER',KEYS[1],ARGV[2])==0 and redis.call('SCARD',KEYS[1])>=${MAX_WALLETS} then return -2 end; redis.call('SET',KEYS[2],ARGV[1]); redis.call('SADD',KEYS[1],ARGV[2]); return 1`, 2, key('account', accountId), key('owner', walletId), login, proof.wallet);
+      const reserved = reservedKey ? reservedKey(proof.wallet) : null;
+      const result = await command('EVAL', `${reserved ? "if redis.call('EXISTS',KEYS[3])==1 then return -3 end; " : ''}local owner=redis.call('GET',KEYS[2]); if owner and owner~=ARGV[1] then return -1 end; if redis.call('SISMEMBER',KEYS[1],ARGV[2])==0 and redis.call('SCARD',KEYS[1])>=${MAX_WALLETS} then return -2 end; redis.call('SET',KEYS[2],ARGV[1]); redis.call('SADD',KEYS[1],ARGV[2]); return 1`, reserved ? 3 : 2, key('account', accountId), key('owner', walletId), ...(reserved ? [reserved] : []), login, proof.wallet);
+      if (result === -3) throw Error(agentWallet);
       if (result === -1) throw Error('This MetaMask wallet is linked to another Flurbo account. Sign in to that account.');
       if (result !== 1) throw Error('This account has reached its 20-wallet limit.');
     } else {
@@ -45,5 +55,12 @@ export function walletLinks({ command, now = Date.now } = {}) {
     }
     return list(login, origin);
   }
-  return { list, challenge, verify };
+  // Which Flurbo account linked this wallet for manual trading, if any.
+  async function ownerOf(wallet, origin) {
+    const walletId = origin + ':' + wallet.toLowerCase();
+    return command ? await command('GET', key('owner', walletId)) : owners.get(walletId) ?? null;
+  }
+  // With Redis, the key an agent wallet claim must find absent (see linkOwnerKey); null without Redis.
+  const ownerKey = (wallet, origin) => (command ? linkOwnerKey(origin, wallet) : null);
+  return { list, challenge, verify, ownerOf, ownerKey };
 }

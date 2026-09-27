@@ -1,4 +1,4 @@
-import { SessionStore, cookieValue, LOGIN_MS } from './session.mjs';
+import { SessionStore, cookieValue, LOGIN_MS, digest } from './session.mjs';
 import { TESTNET } from './network.mjs';
 import { learningDeployment } from '../shared/learning-contracts.mjs';
 import { evidenceAssistant } from './evidence-assistant.mjs';
@@ -9,17 +9,26 @@ import {holderAuthorizer} from './holder-challenge.mjs';
 import {validateClaim} from '../shared/claims.mjs';
 import {validateThesisInput} from '../shared/thesis.mjs';
 import {agentApi} from './agents/agent-api.mjs';
+import {agentWalletKey} from './agents/agent-store.mjs';
 import {agentRpc} from './agents/agent-market.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
   previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {} } = {}) {
   const hosted = publicOrigin !== null;
-  const links = walletLinks({command:store.command});
+  // Agent wallets cannot also be linked for manual MetaMask trading; with Redis the two claims exclude each other atomically.
+  const links = walletLinks({command:store.command,isReserved:wallet=>agents?agents.isAgentWallet(wallet):false,reservedKey:store.command?agentWalletKey:null});
+  // Operator addresses from every configured deployment, plus FLURBO_AGENT_RESERVED_WALLETS, can never be agent wallets.
+  const reservedWallets=new Set((process.env.FLURBO_AGENT_RESERVED_WALLETS||'').split(',').map(x=>x.trim().toLowerCase()).filter(x=>/^0x[0-9a-f]{40}$/.test(x)));
+  for(const svc of [publishedPilot,rehearsal,...(practiceCollections?.services.values()||[])].filter(Boolean)){
+    const m=svc.manifest;
+    for(const a of [m.pool,m.resolver,m.publication?.creator,m.challengePolicy?.authority,...(m.publication?.reviewers||[]).map(r=>r.address)])if(typeof a==='string')reservedWallets.add(a.toLowerCase());
+  }
+  const previewAllows=previewAccess?account=>previewAccess.allows({method:'passkey',address:account})||isTestingOperator({method:'passkey',address:account},testingOperatorAccount):null;
   const authorizeHolder=holderAuthorizer(challengeOptions);
   const priceArchives=new WeakMap();
   // Agents: account-isolated profiles, paper trading and user-approved proposals. Never a signer.
-  const agents=(()=>{try{return agentApi({command:store.command||null,hosted,links,rpc:agentRpc(rpcUrl,{hosted}),
+  const agents=(()=>{try{return agentApi({command:store.command||null,hosted,links,rpc:agentRpc(rpcUrl,{hosted}),previewAllows,reservedWallets,
     serviceFor:namespace=>namespace==='pilot'?publishedPilot:namespace==='rehearsal'?rehearsal:practiceCollections?.services.get(namespace)||null});}catch{return null;}})();
   const assistant=publishedPilot&&store.command?evidenceAssistant({manifest:publishedPilot.manifest,command:store.command,...evidenceOptions}):null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
@@ -38,6 +47,24 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
     if (!req.url?.startsWith('/api/')) return next();
     const host = req.headers.host;
     if (hosted ? host !== new URL(publicOrigin).host : !hosts.includes(host)) return send(res, 403, { error: 'Unsupported application host' });
+    // Headless agent runtimes authenticate with a bearer credential only. Cookies are never read on these
+    // routes, so the browser same-origin rules below do not apply; browsers are refused instead.
+    if (req.url.startsWith('/api/agent-runtime/')) {
+      try {
+        const url = new URL(req.url, 'http://runtime.invalid');
+        if (url.search) return send(res, 400, { code:'INVALID_INPUT', error:'Query parameters are not accepted. Send credentials only in the Authorization header.' });
+        if (!agents) return send(res, 503, { code:'UNAVAILABLE', error:'Agents are unavailable on this server.' });
+        if (!['GET','POST'].includes(req.method)) return send(res, 405, { code:'INVALID_INPUT', error:'Method not allowed.' });
+        let text = '';
+        if (req.method === 'POST') {
+          if (req.headers['content-type'] !== 'application/json') return send(res, 400, { code:'INVALID_INPUT', error:'JSON required.' });
+          for await (const chunk of req) { text += chunk; if (text.length > 64_000) return send(res, 413, { code:'INVALID_INPUT', error:'Request too large.' }); }
+        }
+        const result = await agents.runtime({ method:req.method, path:url.pathname, headers:req.headers, body:text, hosted });
+        if (result.retryAfter) res.setHeader('Retry-After', String(result.retryAfter));
+        return send(res, result.status, result.body);
+      } catch { return send(res, 503, { code:'UNAVAILABLE', error:'The agent service is temporarily unavailable.', retryable:true }); }
+    }
     const origin = publicOrigin || `http://${host}`;
     if ((req.headers.origin && req.headers.origin !== origin) || (req.method !== 'GET' && req.headers.origin !== origin) || req.headers['sec-fetch-site'] === 'cross-site') return send(res, 403, { error: 'Same-origin request required' });
     const url = new URL(req.url, origin), sid = cookieValue(req.headers.cookie, 'flurbo_session');
@@ -68,7 +95,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
         if(!agents)return send(res,503,{error:'Agents are unavailable on this server.'});
         if(url.search||!['GET','POST'].includes(req.method))return send(res,400,{error:'Unexpected agent request.'});
-        const result=await agents.handle({method:req.method,path:url.pathname,input:req.method==='POST'?await body(req):undefined,login,origin});
+        const result=await agents.handle({method:req.method,path:url.pathname,input:req.method==='POST'?await body(req):undefined,login,origin,sessionDigest:digest(sid||'')});
         return send(res,result.status,result.body);
       }
       if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? {...TESTNET, faucet:testFaucet || TESTNET.faucet, flurboFaucet:!!testFaucet} : { environment: 'local_fork', chain_id: 10143 });

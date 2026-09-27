@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { pilotCall } from '../../shared/pilot.mjs';
 import { agentStore, memoryBackend, redisBackend, addPaperFill, addConfirmedPurchase, compactReview, transactionDigest, ownsPurchase, VERIFIED, AGENT_LIMITS } from './agent-store.mjs';
 import { quoteClaims, verifyReceipt, readResolution } from './agent-market.mjs';
+import { runtimeApi, defaultRuntimePolicy, policyView, connection } from './runtime-api.mjs';
+import { RuntimeError } from './credentials.mjs';
 import { STRATEGY, DEFAULT_CONFIG, SCHEMAS, FlurboError, assertConfig, candidateClaims, decide, claimKey, parseMarket, parseForecast, parseQuoteResult,
   parsePairAnalytics, parseClaimImplied, decisionToJSON, decisionFromJSON, recordPaperFill, paperFillToJSON, paperFillFromJSON, evaluatePaper, forecastToJSON, FILL_MODEL,
   claimFromJSON, isNamespace, parseAtoms } from '../../../../packages/sdk/src/index.ts';
@@ -80,9 +82,14 @@ export function proposalView(record, now = nowSeconds()) {
 const recordsView = (state, now) => [...state.proposals.map(p => proposalView(p, now)), ...state.paper.recent, ...state.decisions]
   .sort((a, b) => b.createdAt - a.createdAt);
 
-export function agentApi({ command = null, hosted = false, serviceFor, links, rpc, now = nowSeconds }) {
+// `previewAllows(account)` re-checks testnet approval on every headless request; `reservedWallets` are
+// operator addresses that can never become agent wallets.
+export function agentApi({ command = null, hosted = false, serviceFor, links, rpc, now = nowSeconds, previewAllows = null, reservedWallets = new Set() }) {
   if (hosted && !command) throw new Error('Durable agent storage is required when hosted');
   const store = agentStore(command ? redisBackend(command) : memoryBackend(), { unresolved: p => unresolvedProposal(p, now()) });
+  const runtime = runtimeApi({ store, serviceFor, rpc, now, previewAllows, reservedWallets, links });
+  // Autonomous runtime agents and assisted (manual forecast, paper and MetaMask approval) agents.
+  const assisted = profile => { if (profile.kind === 'runtime') fail(409, 'This agent runs on your own infrastructure. Use the SDK runtime for research and trading.'); };
   const service = namespace => {
     if (!isNamespace(namespace)) fail(400, 'Choose a supported market.');
     const s = serviceFor(namespace);
@@ -101,7 +108,7 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
   async function evaluate(account, id, input) {
     keysExactly(input, ['forecast']);
     const { profile } = await load(account, id);
-    requireActive(profile);
+    assisted(profile); requireActive(profile);
     if (profile.status !== 'active') fail(409, 'Resume this agent before evaluating.');
     if (!await store.allowEvaluation(account, now() * 1000)) fail(429, 'Evaluation limit reached for this hour. Try later.', 'RATE_LIMITED');
     const svc = service(profile.market.namespace);
@@ -192,7 +199,7 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
   async function propose(account, id, input, origin) {
     keysExactly(input, ['decisionId', 'owner']);
     const { profile } = await load(account, id);
-    requireActive(profile);
+    assisted(profile); requireActive(profile);
     if (profile.status !== 'active') fail(409, 'Resume this agent before proposing a trade.');
     if (profile.mode !== 'approval') fail(409, 'This agent is in paper mode. Switch it to approval mode to prepare real trades.');
     const owner = await linkedOwner(account, input.owner, origin), eventCount = await eventCountFor(profile);
@@ -383,9 +390,29 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
     return { name: name.trim(), mode, status };
   }
 
-  const routes = async ({ method, path, input, login, origin }) => {
+  // An autonomous agent runs on the user's own infrastructure. Flurbo stores its profile, policy for the
+  // runtime to read, credentials (as digests), the associated wallet and verified activity.
+  function runtimeProfile(input) {
+    keysExactly(input, ['kind', 'name', 'markets']);
+    const { name } = profileFrom({ name: input.name, mode: 'paper' });
+    if (!Array.isArray(input.markets) || input.markets.length < 1 || input.markets.length > 20 || new Set(input.markets).size !== input.markets.length) fail(400, 'Choose at least one market.');
+    input.markets.forEach(service);
+    return { schema: SCHEMAS.profile, kind: 'runtime', name, status: 'active', markets: [...input.markets], runtimePolicy: defaultRuntimePolicy(),
+      wallet: null, walletHistory: [], createdAt: now(), updatedAt: now() };
+  }
+  async function runtimeView(account, profile, state) {
+    const t = now(), conn = connection(state.runtime.heartbeats, t);
+    return { profile, records: [], runtime: { connection: { state: conn.state, ageSeconds: conn.ageSeconds ?? null },
+      heartbeats: state.runtime.heartbeats, policy: policyView(profile, t),
+      acknowledged: conn.latest ? conn.latest.policy.flurboVersion === profile.runtimePolicy.version : false,
+      decisions: state.runtime.decisions, executions: state.runtime.executions, totals: state.runtime.totals,
+      credentials: await runtime.session.credentials(account, profile.id), wallet: profile.wallet, walletHistory: profile.walletHistory ?? [] } };
+  }
+
+  const routes = async ({ method, path, input, login, origin, sessionDigest = null }) => {
     const account = login.address.toLowerCase(), parts = path.split('/').slice(3); // ['/', 'api', 'agents', ...]
     if (method === 'GET' && parts.length === 0) return { schema: 'flurbo.agents.v1', durable: store.durable, agents: await store.list(account), archived: await store.listArchived(account) };
+    if (method === 'POST' && parts.length === 0 && input?.kind === 'runtime') return store.create(account, runtimeProfile(input));
     if (method === 'POST' && parts.length === 0) {
       keysExactly(input, ['name', 'namespace', 'mode', 'config'], ['name', 'namespace', 'mode']);
       const svc = service(input.namespace), base = profileFrom(input);
@@ -398,22 +425,33 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
     const id = parts[0];
     if (method === 'GET' && parts.length === 1) {
       const { profile, state } = await load(account, id);
-      return { profile, records: recordsView(state, now()) };
+      return profile.kind === 'runtime' ? runtimeView(account, profile, state) : { profile, records: recordsView(state, now()) };
     }
     if (method !== 'POST') fail(405, 'Method not allowed.');
     if (parts.length === 2 && parts[1] === 'update') {
-      keysExactly(input, ['name', 'mode', 'status', 'config'], []);
-      const updated = await store.update(account, id, async current => (requireActive(current), { ...current, ...profileFrom(input, current),
-        config: input.config ? configFromInput(input.config, 100_000_000n) : current.config, updatedAt: now() }));
+      const updated = await store.update(account, id, async current => {
+        requireActive(current);
+        if (current.kind === 'runtime') { keysExactly(input, ['name']); return { ...current, name: profileFrom({ name: input.name, mode: 'paper' }).name, updatedAt: now() }; }
+        keysExactly(input, ['name', 'mode', 'status', 'config'], []);
+        return { ...current, ...profileFrom(input, current), config: input.config ? configFromInput(input.config, 100_000_000n) : current.config, updatedAt: now() };
+      });
       return updated ?? fail(404, 'Agent not found.');
     }
+    // Runtime agent administration from the signed-in dashboard.
+    if (parts[1] === 'credentials' && parts.length === 2) return runtime.session.issueCredential(account, id, input);
+    if (parts[1] === 'credentials' && parts.length === 4 && parts[3] === 'revoke') { keysExactly(input, []); return runtime.session.revokeCredential(account, id, parts[2]); }
+    if (parts[1] === 'credentials' && parts.length === 4 && parts[3] === 'rotate') return runtime.session.rotateCredential(account, id, parts[2], input);
+    if (parts[1] === 'wallet' && parts.length === 3 && parts[2] === 'challenge') return runtime.session.walletChallenge(account, id, input, origin, sessionDigest);
+    if (parts[1] === 'wallet' && parts.length === 3 && parts[2] === 'verify') return runtime.session.walletVerify(account, id, input, origin, sessionDigest);
+    if (parts[1] === 'runtime-policy' && parts.length === 2) return runtime.session.setPolicy(account, id, input);
+    if (parts[1] === 'executions' && parts.length === 4 && parts[3] === 'check') { keysExactly(input, []); return runtime.session.checkExecution(account, id, String(parts[2]).toLowerCase()); }
     if (parts.length === 2 && parts[1] === 'delete') {
       keysExactly(input, []);
       return (await store.archive(account, id, now())) ? { deleted: true, archived: true } : fail(404, 'Agent not found.');
     }
     if (parts.length === 2 && parts[1] === 'evaluate') return evaluate(account, id, input);
-    if (parts.length === 2 && parts[1] === 'performance') { keysExactly(input, []); return performance(account, id); }
-    if (parts.length === 2 && parts[1] === 'paper') return paper(account, id, input);
+    if (parts.length === 2 && parts[1] === 'performance') { keysExactly(input, []); assisted((await load(account, id)).profile); return performance(account, id); }
+    if (parts.length === 2 && parts[1] === 'paper') { assisted((await load(account, id)).profile); return paper(account, id, input); }
     if (parts.length === 2 && parts[1] === 'proposal') return propose(account, id, input, origin);
     if (parts.length === 3 && parts[1] === 'proposals') return track(account, id, parts[2], input, origin);
     fail(404, 'Unknown agent endpoint.');
@@ -421,11 +459,15 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
 
   return {
     durable: store.durable,
+    // Headless runtime API: bearer credentials only (see runtime-api.mjs).
+    runtime: runtime.handle,
+    isAgentWallet: async wallet => !!(await store.agentWallet(wallet)),
     // Returns {status, body}. Unexpected failures are reported without internal detail.
     async handle(request) {
       try { return { status: 200, body: await routes(request) }; }
       catch (e) {
         if (e instanceof HttpError) return { status: e.status, body: { error: e.message, ...(e.code ? { code: e.code } : {}) } };
+        if (e instanceof RuntimeError) return { status: e.status, body: { error: e.message, code: e.code } };
         if (e?.status === 409) return { status: 409, body: { error: e.message, code: e.code ?? 'BUSY' } };
         return { status: 503, body: { error: 'The agent service is temporarily unavailable. Nothing was traded.' } };
       }

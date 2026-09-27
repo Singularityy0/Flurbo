@@ -7,7 +7,8 @@ import { linkedWallets } from '../wallet-links';
 import { submitPilot, readPilotPending, pendingKeyFor, validatePilotReview, type PilotPending, type PilotNamespace, type PilotReview } from '../pilot';
 import { rememberConfirmedClaim } from '../pilot-claims';
 import { describeClaim, amount } from '../portfolio';
-import { agentClient, buildForecast, frechetBounds, percentToPpm, message, type ProfileJSON, type RecordJSON, type ReviewJSON, type EvidenceInput } from '../agents-client';
+import { agentClient, runtimeAdmin, buildForecast, frechetBounds, percentToPpm, message, type ProfileJSON, type RecordJSON, type ReviewJSON, type EvidenceInput } from '../agents-client';
+import { RuntimeCreateForm, RuntimeAgentDetail } from './AgentRuntime';
 import './agents.css';
 
 type Market = Awaited<ReturnType<typeof agentClient.market>>;
@@ -44,8 +45,16 @@ function belongsTo(r: RecordJSON, saved: PilotPending, login: string, pool: stri
 export default function Agents() {
   const [match, params] = useRoute('/agents/:id');
   return <main id="main" tabIndex={-1} className="markets-page agents-page">
-    {match && params?.id ? <AgentDetail id={params.id}/> : <AgentList/>}
+    {match && params?.id ? <AgentPage id={params.id}/> : <AgentList/>}
   </main>;
+}
+
+// Runtime agents and assisted agents share the URL space; the profile says which page to show.
+function AgentPage({ id }: { id: string }) {
+  const [kind, setKind] = useState<'runtime' | 'assisted' | null>(null), [error, setError] = useState('');
+  useEffect(() => { let live = true; runtimeAdmin.get(id).then(d => { if (live) setKind(d.profile.kind === 'runtime' ? 'runtime' : 'assisted'); }).catch(e => { if (live) setError(message(e)); }); return () => { live = false; }; }, [id]);
+  if (error) return <><p className="market-error" role="alert">{error}</p><Link href="/agents" className="text-link">Back to agents</Link></>;
+  return kind === null ? <p role="status">Loading agent...</p> : kind === 'runtime' ? <RuntimeAgentDetail id={id}/> : <AgentDetail id={id}/>;
 }
 
 function AgentList() {
@@ -67,8 +76,8 @@ function AgentList() {
   return <>
     <header className="market-heading agents-heading">
       <span className="eyebrow">Agents · Monad testnet · Test assets</span>
-      <h1>Forecast relationships, <em>then decide.</em></h1>
-      <p>An agent compares your joint forecast for two events with the pool's executable prices. It proposes at most one purchase, or explains why it abstains. Paper trades are simulated. Real trades always need your approval in MetaMask.</p>
+      <h1>Build agents that <em>trade relationships.</em></h1>
+      <p>Write your own agent with the Flurbo SDK and run it on your own machine or server. It researches questions, forecasts how events relate, compares that with the pool's executable prices and trades from its own wallet within limits you set. This page shows what it reports and what Flurbo verified. Test assets only; estimated edge is not a promise of profit.</p>
     </header>
     {!durable && <p className="agents-note" role="status">Development storage: agents on this server are not durable.</p>}
     {error && <p className="market-error" role="alert">{error}</p>}
@@ -76,14 +85,18 @@ function AgentList() {
       <div className="agents-list" aria-label="Your agents">
         <h2>Your agents</h2>
         {agents === null ? <p role="status">Loading agents...</p> : agents.length === 0 ? <p>No agents yet. Create one to start.</p> :
-          <ul>{agents.map(a => <li key={a.id}><Link href={`/agents/${a.id}`}><strong>{a.name}</strong><span>{a.market.title || a.market.namespace}</span>
-            <span className="agents-tags"><span>{a.mode === 'paper' ? 'Paper only' : 'Proposes for approval'}</span><span>{a.status === 'active' ? 'Active' : 'Paused'}</span></span></Link></li>)}</ul>}
+          <ul>{agents.map(a => <li key={a.id}><Link href={`/agents/${a.id}`}><strong>{a.name}</strong><span>{a.kind === 'runtime' ? (a.markets ?? []).join(', ') : a.market.title || a.market.namespace}</span>
+            <span className="agents-tags">{a.kind === 'runtime' ? <><span>Runs on your infrastructure</span><span>{a.runtimePolicy?.paused ? 'Paused' : a.runtimePolicy?.liveEnabled ? 'Live trades allowed' : 'Paper until allowed'}</span></>
+              : <><span>Assisted</span><span>{a.mode === 'paper' ? 'Paper only' : 'Proposes for approval'}</span><span>{a.status === 'active' ? 'Active' : 'Paused'}</span></>}</span></Link></li>)}</ul>}
         {archived.length > 0 && <details className="agents-archived"><summary>Archived agents ({archived.length})</summary>
           <p className="agents-fine">Kept so a transaction already sent from one of their proposals can still be recorded and verified.</p>
-          <ul>{archived.map(a => <li key={a.id}><Link href={`/agents/${a.id}`}><strong>{a.name}</strong><span>{a.market.title || a.market.namespace}</span></Link></li>)}</ul></details>}
+          <ul>{archived.map(a => <li key={a.id}><Link href={`/agents/${a.id}`}><strong>{a.name}</strong><span>{a.kind === 'runtime' ? (a.markets ?? []).join(', ') : a.market.title || a.market.namespace}</span></Link></li>)}</ul></details>}
       </div>
-      <form className="agents-card" onSubmit={create}>
-        <h2>Create an agent</h2>
+      <div>
+      <RuntimeCreateForm directory={directory}/>
+      <details className="agents-card agents-settings"><summary>Assisted agent: manual forecasts, paper trades and MetaMask approval</summary>
+      <form onSubmit={create}>
+        <h2>Create an assisted agent</h2>
         <label>Name<input value={name} onChange={e => setName(e.target.value)} maxLength={48} required placeholder="Release relationship agent"/></label>
         <label>Market<select value={namespace} onChange={e => setNamespace(e.target.value)} required>{directory.map(d => <option key={d.namespace} value={d.namespace}>{d.label}</option>)}</select></label>
         <fieldset className="agents-choice"><legend>Mode</legend>
@@ -91,8 +104,10 @@ function AgentList() {
           <label><input type="radio" checked={mode === 'approval'} onChange={() => setMode('approval')}/>Propose for approval<small>Prepares real trades that you confirm in MetaMask.</small></label>
         </fieldset>
         <p className="agents-fine">Strategy: joint edge v1. It never signs, never moves funds and never trades automatically.</p>
-        <button className="button button-dark" disabled={busy || !namespace}>{busy ? 'Creating...' : 'Create agent'}</button>
+        <button className="button button-dark" disabled={busy || !namespace}>{busy ? 'Creating...' : 'Create assisted agent'}</button>
       </form>
+      </details>
+      </div>
     </section>
   </>;
 }

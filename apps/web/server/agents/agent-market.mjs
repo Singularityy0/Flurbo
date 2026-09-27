@@ -3,7 +3,7 @@ import { pilotPoolAbi, pilotCall } from '../../shared/pilot.mjs';
 
 // Read-only chain access for agents. No pricing is computed here: every quote is the pool contract's own
 // quoteBuy/quoteSell for an exact claim and quantity, read at one pinned snapshot block.
-const READ_METHODS = ['eth_chainId', 'eth_getBlockByNumber', 'eth_call', 'eth_getTransactionReceipt', 'eth_getTransactionByHash'];
+const READ_METHODS = ['eth_chainId', 'eth_getBlockByNumber', 'eth_call', 'eth_getTransactionReceipt', 'eth_getTransactionByHash', 'eth_getBalance', 'eth_getTransactionCount'];
 const MULTICALL3 = '0xca11bde05977b3631167028862be2a173976ca11';
 const multicallAbi = parseAbi(['function aggregate3((address target,bool allowFailure,bytes callData)[] calls) payable returns ((bool success,bytes returnData)[] returnData)']);
 export const QUOTE_TTL_SECONDS = 60;

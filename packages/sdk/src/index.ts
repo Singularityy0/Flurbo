@@ -12,3 +12,13 @@ export { FILL_MODEL, type PaperFill, type PaperStore, type Performance, type Res
 export { createClient, type FlurboClient, type Transport, type HttpRequest, type HttpResponse } from './client.ts';
 export { decisionToJSON, decisionFromJSON, paperFillFromJSON, type DecisionJSON } from './serialize.ts';
 export { fixtureTransport, FIXTURE_POOL, FIXTURE_NAMESPACE, FIXTURE_NOW, FIXTURE_FORECAST, FIXTURE_SNAPSHOT } from './fixtures.ts';
+export { SELECTORS, TOPICS, encodeCall, decodeCall, decodeWords, decodePoolLog, addressFromWord, type FunctionName, type Log, type TradedEvent, type RedeemedEvent } from './abi.ts';
+export { verifyEffect, type ExecutionAction, type ExecutionIntent, type EffectResult } from './effects.ts';
+export { evaluatePolicy, effectivePolicy, worstCaseLoss, spendOf, VIOLATIONS, UNFINISHED, SERVICE_MAX_ATOMS, SERVICE_SLIPPAGE_BPS, type PolicyConfig, type PolicyInput,
+  type PolicyEntry, type JournalStatus, type Violation, type SpendWindow, type FlurboPolicy, type LiveBlock } from './policy.ts';
+export { recoveryStep, FINAL, type RecoveryAction, type ChainView, type RecoveryEntry } from './recovery.ts';
+export { validateModelOutput, forecastFromModel, buildResearchPrompt, MODEL_SCHEMA, MODEL_ABSTAIN_REASONS, type EvidenceRecord, type ResearchContext, type ResearchOutcome,
+  type ResearchAbstain, type ModelForecast, type ResearchQuestion } from './research.ts';
+export { PROTOCOL_VERSION, PROTOCOL_HEADER, RUNTIME_API_BASE, DEPLOYMENT_INTERFACE, COLLATERAL, COLLATERAL_DECIMALS, SERVICE_LIMITS, SCOPES, ERROR_CODES, STOP_CODES,
+  parseDeployment, buyLimit, sellMinimum, type Deployment, type Scope, type RuntimeErrorCode } from './protocol.ts';
+export { buildTransaction, validateTransaction, type Intent, type TransactionRequest } from './transaction.ts';

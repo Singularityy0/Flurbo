@@ -1,55 +1,89 @@
-# @flurbo/sdk (0.1.0-beta.0, private)
+# @flurbo/sdk (0.2.0-beta, private)
 
-Typed TypeScript toolkit for Flurbo agents on Monad testnet (chain 10143, test assets only). Not published to npm.
+TypeScript SDK and reference runtime for Flurbo agents on Monad testnet (chain 10143, test assets only). It is the reference implementation of the shared protocol in [protocol/](../../protocol). Not published to npm. Not a mainnet product and not a promise of profit.
 
-## What it does
+## What you can build
 
-- Reads the market directory, a pool's markets and one-share prices, pair analytics and canonical claim analytics.
-- Requests executable quotes for exact claims and quantities, read from the pool contract at one snapshot block.
-- Builds and validates structured joint forecasts (normalized distributions in parts per million).
-- Runs the reference strategy `joint-edge` v1: compare a joint forecast with finite-size quotes and propose at most one purchase, or abstain with reasons.
-- Records and evaluates paper trades with an explicit fill model.
-- Manages agent profiles and records through the authenticated Flurbo API.
+An agent that runs on your own computer or server, researches Flurbo markets, forecasts how their events relate, compares that with the pool's executable prices and trades from its own dedicated wallet, without a browser or a MetaMask confirmation per trade. Flurbo shows its status, decisions and verified trades on the agent page.
 
-## What it does not do
+```
+research (retrieval + your model or code) -> validated joint forecast -> strategy -> deterministic policy
+  -> quote and simulation on your RPC -> journal -> sign (your key) -> broadcast -> receipt -> verify -> report
+```
 
-- It never signs, submits or retries a transaction. Live purchases are prepared as unsigned reviews and confirmed by the user in MetaMask in the web app.
-- It does not compute prices. Quotes are the pool's own `quoteBuy` and `quoteSell`.
-- It does not encode combinations itself. Claims use the canonical Flurbo model (`flurbo.claim.v1`, `apps/web/shared/claims.mjs`).
-- It does not make trades private, promise profit, or settle markets.
+The model never builds transactions and has no tools. It returns a structured forecast, validated before use; everything after that is deterministic code.
 
 ## Setup
 
-Node 24 or later runs the TypeScript source directly (type stripping). No dependencies are needed for the core.
+Node 24 or later. From a checkout of the repository:
 
 ```bash
-node packages/sdk/examples/offline-research.ts   # offline, no credentials, fixture data only
-cd packages/sdk && node --test test/*.test.ts     # unit tests
-node ../../apps/web/node_modules/typescript/bin/tsc -p tsconfig.json   # typecheck (core only)
+cd packages/sdk && npm ci
+node bin/flurbo-agent.ts init --config flurbo-agent.json      # paper mode, no secrets in the file
 ```
 
-The core compiles against ES2022 only, so it cannot reach `window`, `localStorage` or React. Transport, authentication and storage are injected.
+On the agent page (flurbo.singu.online/agents): register the agent, link its dedicated wallet (`flurbo-agent sign-message --file message.txt` signs the ownership message with the agent key), issue a credential, and later allow live trades. Then set secrets in the environment, never in files:
 
-## Transports
+```bash
+export FLURBO_AGENT_TOKEN=fla1_...            # the credential, shown once on the agent page
+export FLURBO_AGENT_PRIVATE_KEY=0x...         # the dedicated agent wallet key, live mode only
+export OPENAI_API_KEY=...                     # or whichever variable your provider uses
+```
 
-- `fixtureTransport()`: offline, deterministic. Every label says "Fixture" or "not live"; the client reports `mode: 'fixture'`. Fixture quotes are hand-written numbers, not a pricing model.
-- `browserTransport()` (`@flurbo/sdk/browser`): same-origin requests that reuse the signed-in Flurbo session cookie. The SDK never reads or stores credentials.
-- Node access to live account data is not provided. Do not export browser cookies. A future headless credential would need to be scoped, revocable and read-only, and would never imply signing authority.
+| Command | Effect |
+| --- | --- |
+| `flurbo-agent start [--once]` | Run the loop in the foreground (`--once`: one cycle) |
+| `flurbo-agent stop` | Ask a running agent to stop after its current step |
+| `flurbo-agent status` | Mode, transactions in progress and what the last run recorded |
+| `flurbo-agent recover` | Reconcile and report existing transactions only; starts nothing new |
+| `flurbo-agent address` | The agent wallet address |
+| `flurbo-agent sign-message --file F` | Sign a Flurbo wallet association message (refuses anything else) |
 
-## Numbers
+Run them as `node bin/flurbo-agent.ts <command> --config flurbo-agent.json`.
 
-- Token and share amounts are `bigint` atoms internally (10^6 atoms = one share or one test AUSD) and decimal strings at JSON boundaries. Floating point is never used for amounts or limits.
-- Forecast probabilities are integer parts per million that sum exactly to 1,000,000. Pair inputs must satisfy the Fréchet bounds `max(0, P(A)+P(B)-1) <= P(A and B) <= min(P(A), P(B))`; contradictory input is rejected.
-- Model-implied probabilities (analytics) and finite-size average prices (quote divided by quantity) are different quantities and are reported separately.
+## Configuration (`flurbo.agent-config.v1`)
 
-## Errors, timeouts and retries
+- `mode`: `paper` (default) never constructs a signer. `live` needs this setting **and** live trades allowed on the agent page.
+- `markets`, `policy.markets`: namespaces the agent may trade.
+- `research.provider`: `openai-compatible` (hosted providers or a local model server), `anthropic`, `fixture` (a fixed reply file, always labelled as a fixture, never AI) or `none`. Timeouts, bounded retries and `perCycle` / `perHour` request budgets apply. Check your provider's current terms and prices.
+- `research.retriever`: allowlisted HTTPS hosts. Each market publishes a source per event; `extraSources` adds more.
+- `strategy`: the reference `joint-edge` settings.
+- `policy`: exact limits (per-trade cost and quantity, lifetime and time-window spending, per-claim position, worst-case loss across overlapping claims, slippage, gas fee and reserve, quote age, time before close, pending transactions, sell and redeem switches). Definitions: [protocol/specs/transactions.md](../../protocol/specs/transactions.md).
 
-All failures are `FlurboError` with a `code` (for example `unauthenticated`, `invite_required`, `unsupported_claim`, `cross_pool`, `stale_quote`, `rate_limited`, `timeout`, `aborted`). Reads retry at most twice on outages and rate limits, honouring `Retry-After`. Mutations are never retried. Every call accepts an `AbortSignal`.
+## Control, stated precisely
 
-## Reference strategy: joint-edge v1
+- The API credential reads and reports. It cannot sign or move funds, and it never reaches settlement, assertion, challenge or reviewer actions.
+- The wallet key never leaves your machine. Flurbo never asks for it or a seed phrase. Keep secrets out of files, logs, URLs and prompts; the SDK never logs them.
+- Policies are software checks in this runtime. The funded wallet bounds what is at risk; a raw key can bypass any SDK policy.
+- A dashboard pause is an instruction the runtime reads before each new action. Revoking the credential stops a compliant runtime from starting actions. Neither is an on-chain freeze: a transaction already sent can still confirm. None of this is cryptographically enforced delegation.
 
-For each claim covered by the forecast (single answers, each "all of these" pair combination, "at least one" and "exactly one" of each pair), the expected payout under the forecast is compared with the worst-case cost `ceil(quote x (10000 + slippage) / 10000)`. It proposes the largest edge that clears the minimum edge (relative and absolute) and the budget. It abstains when trading is closed, evidence is insufficient, quotes are unavailable or expired, the budget is exceeded or no edge clears the threshold. Expected value assumes no VOID outcome and excludes gas; both assumptions are listed in every decision. Edge is a model estimate, not a promised profit.
+## Recovery
 
-## Paper trading
+The runtime journals every intent before signing, records the signed bytes before broadcasting, and after a crash resends only those identical bytes (same hash), never a new transaction. Replaced and expired transactions are released; nothing is retried with wider slippage or more spending. One state directory per agent wallet; several processes may share it (a lock file serialises them and spending reservations). Details: [protocol/specs/transactions.md](../../protocol/specs/transactions.md).
 
-Fill model `quote-at-snapshot-no-impact-v1`: a paper fill costs the pool quote for that quantity at the decision's snapshot; hypothetical positions do not move live prices; a claim cannot be filled again unless a quote comes from a strictly newer block, and each decision fills once. Paper results are realized only after the pool resolves (VOID pays fractionally, as the contracts do). Unknown values are reported as unknown, never zero.
+## Examples
+
+| File | Shows |
+| --- | --- |
+| `examples/offline-autonomous-pipeline.ts` | The whole pipeline offline with a fixture forecaster; prints the transaction it would sign |
+| `examples/ai-agent.ts` | A real model provider, retrieval, strategy, policy and live execution from a config file |
+| `examples/custom-strategy.ts` | Your own strategy and research plugged into the runner without changing the SDK |
+| `examples/offline-research.ts` | The earlier assisted flow: forecast, decision and paper trade |
+
+## Local chain and acceptance demonstration
+
+`tools/local-stack.ts` starts an anvil chain with chain id 10143, local test AUSD at the canonical address, a funded pilot pool and the real Flurbo API. `node tools/acceptance-demo.ts` runs an agent outside the browser through every acceptance step. Needs anvil and a `forge build` in the repository root.
+
+## Tests and typechecks
+
+```bash
+node --test test/*.test.ts                                    # protocol fixtures, units, local-chain end to end
+node ../../apps/web/node_modules/typescript/bin/tsc -p tsconfig.json        # core (ES2022, no Node or DOM)
+node ../../apps/web/node_modules/typescript/bin/tsc -p tsconfig.node.json   # runtime, CLI, examples
+```
+
+`test/runtime-local.test.ts` and `test/dashboard-browser.test.ts` need anvil and the forge build; the dashboard test also needs `FLURBO_TEST_PLAYWRIGHT` and `FLURBO_TEST_BROWSER`.
+
+## Other languages
+
+The Python ([packages/sdk-python](../sdk-python/README.md)), Rust ([packages/sdk-rust](../sdk-rust/README.md)) and C++ ([packages/sdk-cpp](../sdk-cpp/README.md)) SDKs implement the same protocol, reproduce the same fixtures, read the same configuration file and keep the same journal format and lock. `node protocol/tools/conformance.mjs` from the repository root checks all four.
