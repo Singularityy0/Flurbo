@@ -5,6 +5,7 @@ import {useAuth} from '../auth/context';
 import './home.css';
 import VisitorStatus from './VisitorStatus';
 import {usePreviewAccess} from '../auth/preview-access';
+import BrandLogo from '../components/BrandLogo';
 
 function ConnectionExample(){
   const [answer,setAnswer]=useState<'all'|'yes'|'no'>('all');
@@ -50,6 +51,6 @@ export default function Home(){
       ['Can I use more than one MetaMask wallet?','Yes. Link each trading wallet to your Mera account with a signature. Your portfolio shows their shares together. Funds and positions stay in the MetaMask wallet that owns them; use that wallet to sell or collect payouts.']
     ].map(([q,a])=><details key={q}><summary>{q}<span aria-hidden="true">+</span></summary><p>{a}</p></details>)}</div></section>
     <section className="home-final"><span className="eyebrow">Separate ideas. Connected possibilities.</span><h2>Put your view<br/><em>to the test.</em></h2><Link href={destination} className="button button-dark">{action}<ArrowUpRight size={18}/></Link><p>Monad testnet · Test assets only</p></section>
-    <footer className="home-footer"><span className="logo">flurbo<span className="logo-dot"/></span><span>One pool. More possibilities.</span><a href="#faq">Questions? Start here ↗</a></footer>
+    <footer className="home-footer"><BrandLogo/><span>One pool. More possibilities.</span><a href="#faq">Questions? Start here ↗</a></footer>
   </main>;
 }

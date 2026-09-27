@@ -1,7 +1,7 @@
 import { ArrowUpRight, CircleArrowLeft, LockKeyhole, Copy, LogOut } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation } from "wouter";
-import { Logo } from "../App";
+import BrandLogo from "../components/BrandLogo";
 import { useAuth } from "../auth/context";
 
 type AuthMode = "login" | "signup" | "account";
@@ -44,7 +44,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
         </div>
         <div className="auth-panel-wrap">
           <div className="auth-panel">
-            <ol className="onboarding-steps" aria-label="Preview access steps"><li>Create account</li><li>Request access</li><li>Approval</li></ol><div className="auth-panel-brand"><Logo /><span>{policy.local ? "local test" : "passkey account"}</span></div>
+            <ol className="onboarding-steps" aria-label="Preview access steps"><li>Create account</li><li>Request access</li><li>Approval</li></ol><div className="auth-panel-brand"><BrandLogo /><span>{policy.local ? "local test" : "passkey account"}</span></div>
             <div className="unavailable-icon"><LockKeyhole size={21} strokeWidth={1.6} /></div>
             <p className="eyebrow">{active ? "Signed in with Mera" : "Powered by Mera"}</p>
             <h2>{active ? "Account created." : isLogin ? "Sign in with your passkey." : "One passkey. Your account."}</h2>

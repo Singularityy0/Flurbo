@@ -13,17 +13,10 @@ import FundingPage from './pages/FundingPage';
 import {usePreviewAccess} from './auth/preview-access';
 import AccessPage from './pages/AccessPage';
 import Agents from './pages/Agents';
+import BrandLogo from './components/BrandLogo';
 import './ux.css';
 
 export const brand = "flurbo";
-
-function Logo({ inverse = false }: { inverse?: boolean }) {
-  return (
-    <span className={`logo ${inverse ? "logo-inverse" : ""}`} aria-label="flurbo home">
-      flurbo<span className="logo-dot" aria-hidden="true" />
-    </span>
-  );
-}
 
 function Header() {
   const { state } = useAuth();
@@ -59,7 +52,7 @@ function Header() {
     <header ref={header} className={`site-header ${isHome ? "site-header-home" : "site-header-subpage"}`}>
       <div className="header-inner">
         <Link href="/" className="brand-link" aria-label="Flurbo home">
-          <Logo />
+          <BrandLogo />
         </Link>
         <nav id="main-nav" className={`main-nav ${open ? "main-nav-open" : ""}`} aria-label="Main navigation"
           onClick={(event) => {
@@ -176,5 +169,3 @@ export default function App() {
     </Switch>
   );
 }
-
-export { Logo };
