@@ -63,11 +63,13 @@ export function productionServer(config, store, staticRoot = dist) {
         const labAsset=/^\/privacy-lab\/(?:assets\/[a-zA-Z0-9_.-]+|semaphore-8\.(?:wasm|zkey))$/.test(pathname);
         if(labPage||labAsset)res.setHeader('Content-Security-Policy',security['Content-Security-Policy'].replace("script-src 'self'","script-src 'self' 'wasm-unsafe-eval'")+"; worker-src 'self' blob:");
         const brandAsset=/^\/brand\/(?:flurbo-icon-512\.png|flurbo-profile-2026\.png|flurbo-logo\.svg|flurbo-social-(?:landscape|portrait|banner|banner-v2)\.png)$/.test(pathname);
-        if (!page && !labPage && !labAsset && !brandAsset && !/^\/(?:assets\/[a-zA-Z0-9_.-]+|favicon(?:-contour)?\.svg|robots\.txt)$/.test(pathname)) { res.writeHead(404); res.end('Not found'); return; }
+        const publicationAsset=pathname==='/technical_litepaper.pdf';
+        if (!page && !labPage && !labAsset && !brandAsset && !publicationAsset && !/^\/(?:assets\/[a-zA-Z0-9_.-]+|favicon(?:-contour)?\.svg|robots\.txt)$/.test(pathname)) { res.writeHead(404); res.end('Not found'); return; }
         const file = resolve(staticRoot, page ? 'index.html' : labPage ? 'privacy-lab/index.html' : pathname.slice(1));
         if (!(await stat(file)).isFile()) throw new Error('Not a file');
-        const type = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png':'image/png', '.woff2': 'font/woff2', '.woff': 'font/woff', '.txt': 'text/plain', '.wasm':'application/wasm', '.zkey':'application/octet-stream' }[extname(file)] || 'application/octet-stream';
-        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': operatorPage || page || labPage || labAsset && !pathname.includes('/assets/') ? 'no-store' : 'public, max-age=31536000, immutable' });
+        const type = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png':'image/png', '.pdf':'application/pdf', '.woff2': 'font/woff2', '.woff': 'font/woff', '.txt': 'text/plain', '.wasm':'application/wasm', '.zkey':'application/octet-stream' }[extname(file)] || 'application/octet-stream';
+        const cache=publicationAsset?'public, max-age=3600':operatorPage || page || labPage || labAsset && !pathname.includes('/assets/') ? 'no-store' : 'public, max-age=31536000, immutable';
+        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': cache });
         res.end(req.method === 'HEAD' ? undefined : await readFile(file));
       } catch { if (!res.headersSent) res.writeHead(404); res.end('Not found'); }
     });

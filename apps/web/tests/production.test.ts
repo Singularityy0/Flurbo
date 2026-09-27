@@ -59,6 +59,7 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
   await writeFile(join(directory,'brand','flurbo-social-banner-v2.png'),'banner-v2');
   await writeFile(join(directory,'brand','flurbo-profile-2026.png'),'profile');
   await writeFile(join(directory,'favicon-contour.svg'),'<svg/>');
+  await writeFile(join(directory,'technical_litepaper.pdf'),'%PDF-fixture');
   const store = new SessionStore();
   const learningReport = {schema:'flurbo.learning-comparison.v1',input:'synthetic',changesExecutablePrices:false};
   const config = {previewAccess:null,testingOperatorAccount:signer.address.toLowerCase(),origin,rpcUrl:TESTNET.rpc,learningReport: learningReport as typeof learningReport | null, learningStatus: 'starting', androidAssetLinks: null as object[] | null};
@@ -130,6 +131,14 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     const favicon=await request('/favicon-contour.svg');
     assert.equal(favicon.status,200);
     assert.equal(favicon.headers['content-type'],'image/svg+xml');
+    for(const method of ['GET','HEAD']) {
+      const litepaper=await request('/technical_litepaper.pdf',undefined,'','flurbo.singu.online','',method);
+      assert.equal(litepaper.status,200);
+      assert.equal(litepaper.headers['content-type'],'application/pdf');
+      assert.equal(litepaper.headers['cache-control'],'public, max-age=3600');
+      assert.equal(litepaper.text,method==='HEAD'?'':'%PDF-fixture');
+    }
+    assert.equal((await request('/technical_litepaper.pdf.exe')).status,404);
     assert.equal((await request('/brand/not-public.png')).status,404);
     assert.equal((await request('/brand/../index.html')).status,404);
     assert.equal((await request('/api/network',undefined,'','evil.example')).status,421);
