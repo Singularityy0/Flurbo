@@ -56,6 +56,7 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
   await writeFile(join(directory,'brand','flurbo-social-landscape.png'),'landscape');
   await writeFile(join(directory,'brand','flurbo-social-portrait.png'),'portrait');
   await writeFile(join(directory,'brand','flurbo-social-banner.png'),'banner');
+  await writeFile(join(directory,'brand','flurbo-social-banner-v2.png'),'banner-v2');
   await writeFile(join(directory,'brand','flurbo-profile-2026.png'),'profile');
   await writeFile(join(directory,'favicon-contour.svg'),'<svg/>');
   const store = new SessionStore();
@@ -120,7 +121,7 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     assert.equal((await request('/rehearsal-rules')).json().fixtures.length,4);
     assert.equal((await request('/rehearsal-rules')).json().fixtures[1].result,'NO');
     assert.equal((await request('/.env')).status,404);
-    for(const path of ['/brand/flurbo-social-landscape.png','/brand/flurbo-social-portrait.png','/brand/flurbo-social-banner.png','/brand/flurbo-profile-2026.png']) {
+    for(const path of ['/brand/flurbo-social-landscape.png','/brand/flurbo-social-portrait.png','/brand/flurbo-social-banner.png','/brand/flurbo-social-banner-v2.png','/brand/flurbo-profile-2026.png']) {
       const asset=await request(path);
       assert.equal(asset.status,200,path);
       assert.equal(asset.headers['content-type'],'image/png');

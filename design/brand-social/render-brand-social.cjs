@@ -12,27 +12,35 @@ const paths=[
   ['48','M27 27c6-4 14 0 14 7-1 6-9 9-14 5-5-4-5-9 0-12Z'],
 ];
 
-const markSvg=(size=760)=>Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 2048 2048">
-  <g transform="translate(1024 930) scale(23) translate(-30.5 -33.5)" fill="none" stroke="#14271d" stroke-linecap="round" stroke-linejoin="round">
-    ${paths.map(([w,d])=>`<path vector-effect="non-scaling-stroke" stroke-width="${w}" d="${d}"/>`).join('')}
+const markSvg=(width=300,height=320)=>Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 70 72">
+  <g transform="translate(4 0)" fill="none" stroke="#14271d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    ${paths.map(([,d])=>`<path d="${d}"/>`).join('')}
   </g>
-  <circle cx="1290" cy="1696" r="28" fill="#d9f76d"/>
+  <circle cx="46" cy="67" r="1.8" fill="#d9f76d"/>
+</svg>`);
+
+const taglineSvg=Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="120" viewBox="0 0 1600 120">
+  <text x="800" y="68" text-anchor="middle" fill="#496055" font-family="Space Grotesk, Segoe UI, Arial, sans-serif" font-size="42" font-weight="500" letter-spacing="1.5">Trade what happens together.</text>
 </svg>`);
 
 async function main(){
   await sharp(profile).png({compressionLevel:9}).toFile(resolve(here,'flurbo-social-profile-2048.png'));
 
-  const wordmark=await sharp(sourceLockup)
+  const wordmarkCrop=await sharp(sourceLockup)
     .extract({left:340,top:0,width:800,height:400})
-    .resize({width:1080,withoutEnlargement:false})
+    .png()
+    .toBuffer();
+  const wordmark=await sharp(wordmarkCrop)
+    .trim({background:{r:0,g:0,b:0,alpha:0}})
+    .resize({width:760,withoutEnlargement:false})
     .png()
     .toBuffer();
   const mark=await sharp(markSvg()).png().toBuffer();
-  await sharp({create:{width:3000,height:1000,channels:4,background:'#f5f4ec'}})
+  await sharp({create:{width:3000,height:1000,channels:4,background:'#fbfaf5'}})
     .composite([
-      {input:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="1000"><rect width="24" height="1000" fill="#14271d"/></svg>'),left:0,top:0},
-      {input:wordmark,left:300,top:346},
-      {input:mark,left:2070,top:120},
+      {input:mark,left:955,top:245},
+      {input:wordmark,left:1305,top:266},
+      {input:taglineSvg,left:700,top:590},
     ])
     .png({compressionLevel:9})
     .toFile(resolve(here,'flurbo-social-banner-3000x1000.png'));
