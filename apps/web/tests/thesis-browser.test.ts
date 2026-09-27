@@ -45,6 +45,11 @@ test('thesis browser: private forecast, one bounded comparison, expiry, mobile, 
     await compare.waitFor();assert.equal(requests.length,0);
     await page.getByLabel('Chance B is Yes, if A is Yes',{exact:true}).fill('80');
     await compare.click();await page.locator('.thesis-candidates').waitFor();
+    assert.deepEqual(await page.locator('.thesis-candidate h3').allTextContents(),['Individual','Both answers (AND)','At least one (OR)','Exactly one']);
+    for(const [name,explanation] of [['Individual','A does not affect'],['At least one (OR)','including when both match'],['Exactly one','loses if both match'],['Both answers (AND)','does not refund']]){
+      await page.locator('.thesis-candidate').filter({has:page.getByRole('heading',{name,exact:true})}).click();
+      assert.ok((await page.locator('.thesis-warning').innerText()).includes(explanation));
+    }
     assert.equal(await review.isDisabled(),true);assert.equal(await page.locator('.thesis-distribution').count(),0);
     await page.getByLabel('Chance A is Yes',{exact:true}).fill('30');
     await page.getByLabel('Chance B is Yes, if A is No',{exact:true}).fill('20');
@@ -64,7 +69,6 @@ test('thesis browser: private forecast, one bounded comparison, expiry, mobile, 
     await page.getByLabel('Shares per option').fill('2');assert.equal(await page.locator('.thesis-candidates').count(),0);release();delay=false;
     await page.getByLabel("A's selected answer").selectOption('false');
     await compare.click();await page.locator('.thesis-candidates').waitFor();
-    await page.getByRole('button',{name:'Compare exactly one as well'}).click();
     await page.locator('.thesis-candidate').filter({has:page.getByRole('heading',{name:'Exactly one',exact:true})}).click();
     await review.click();await page.getByRole('heading',{name:'Your combined prediction'}).waitFor();
     assert.ok(page.url().endsWith('/markets/rehearsal/0?answer=no'));
