@@ -203,7 +203,7 @@ export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, 
       if (await store.count(`credential:${record.credentialId}:${minute}`, 120) > RATE_PER_MINUTE) throw new RuntimeError(429, 'RATE_LIMITED', 'Rate limit reached for this credential.', 60 - (now() % 60));
       if (await store.count(`account:${record.account.toLowerCase()}:${minute}`,120)>240)throw new RuntimeError(429,'RATE_LIMITED','Rate limit reached for this account.',60-now()%60);
       if (hosted && await store.count(`service:${minute}`,120)>SERVICE_PER_MINUTE)throw new RuntimeError(429,'RATE_LIMITED','The agent API is busy. Retry shortly.',60-now()%60);
-      if (previewAllows && !previewAllows(record.account)) fail(403, 'INVITE_REQUIRED', 'Testnet access is not approved for the account that owns this agent.');
+      if (previewAllows && !await previewAllows(record.account)) fail(403, 'INVITE_REQUIRED', 'Testnet access is not approved for the account that owns this agent.');
       const found = await store.get(record.account, record.agentId);
       if (!found || found.profile.kind !== 'runtime') fail(404, 'NOT_FOUND', 'Agent not found.');
       const parts = path.replace(/^\/api\/agent-runtime\/v1\/?/, '').split('/').filter(Boolean), matched = route(method, parts);

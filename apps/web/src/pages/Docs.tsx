@@ -6,7 +6,7 @@ const sections = [
   ['accounts', 'Accounts and wallets'], ['trading', 'Trading and shares'],
   ['combinations', 'Combined predictions'], ['what-if', 'What-if and prices'], ['thesis', 'Build your thesis'],
   ['settlement', 'Settlement and payouts'], ['portfolio', 'Portfolio and payouts'],
-  ['agents', 'Agents and SDKs'], ['help', 'Common questions'], ['preview', 'Preview limitations'],
+  ['agents', 'Agents and SDKs'], ['help', 'Common questions'], ['preview', 'Preview limitations'], ['application-data','Application data'],
 ] as const;
 
 export default function Docs() {
@@ -39,15 +39,16 @@ export default function Docs() {
           <h2 id="getting-started-title">Getting started</h2>
           <ol className="docs-steps">
             <li><strong>Create your account.</strong> Use a Mera passkey to sign in to Flurbo.</li>
-            <li><strong>Request access.</strong> Open your account page and copy your public Mera address into the application form when applications open. The team approves accounts manually. Return to the same account and select Check access after approval.</li>
+            <li><strong>Request access.</strong> Open Your account when applications are available. The native form captures your signed-in Mera account automatically. Enter your email and verify the code sent to it. The team reviews applications manually. Email verification is not approval or a new sign-in method.</li>
             <li><strong>Link MetaMask once.</strong> Choose the wallet you want to trade with and sign the account-linking message. Its shares, trades and collected payouts stay in your Mera account's portfolio across devices, even when MetaMask is disconnected. Funds remain in the trading wallet.</li>
             <li><strong>Return or switch wallets.</strong> Flurbo restores an already linked wallet when MetaMask still authorizes this site. Manage wallets from Your account, or switch on a trade. A new wallet needs its own linking signature. Unlocking MetaMask or reconnecting after permission is revoked can still require your approval.</li>
             <li><strong>Get test funds.</strong> Open <Link href="/fund">Get test funds</Link> for the available funding options. You need test MON for gas and test AUSD for purchases. Faucet availability and claim limits apply.</li>
             <li><strong>Choose a market.</strong> Check the question, close time and resolution rules. Select your answer and number of shares.</li>
             <li><strong>Review and confirm.</strong> Check the quoted cost and confirm the requested action in MetaMask. A token approval may be required before the purchase.</li>
           </ol>
-          <p>The landing page and docs are public. Markets, funding and portfolio require a signed-in, approved Mera account. Creating a passkey does not submit an application. If no application link is available, applications are not open yet.</p>
+          <p>The landing page and docs are public. Markets, funding and portfolio require a signed-in, approved Mera account. Creating a passkey does not submit an application. Your account page shows whether applications are available, pending or approved.</p>
         </section>
+        <section id="application-data" aria-labelledby="application-data-title"><h2 id="application-data-title">Your application data</h2><p>When you request access, Flurbo stores your contact email, Mera account address, verification state and application decision in a separate application database. Your email is used for verification and access updates, not marketing. Supabase provides application storage and Resend delivers these emails.</p><p>You can withdraw an unapproved application from Your account to remove its contact email. Approval records and account identifiers remain to enforce access decisions; withdrawing does not erase blockchain activity or change your passkey. Contact the Flurbo team through the channel where you received your invitation for other deletion requests. Email verification never recovers a lost passkey or grants control of a trading wallet.</p></section>
         <section id="accounts" aria-labelledby="accounts-title">
           <p className="docs-eyebrow">03 / IDENTITY AND OWNERSHIP</p>
           <h2 id="accounts-title">One account, your trading wallets</h2>

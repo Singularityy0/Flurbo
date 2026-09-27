@@ -9,6 +9,7 @@ import { cookieValue } from './session.mjs';
 import { isTestingOperator, testingPages } from './testing-access.mjs';
 import { hostedConfig } from './network.mjs';
 import {previewAccess} from './preview-access.mjs';
+import {configureApplications} from './access-applications.mjs';
 import { RedisSessionStore, redisCommand } from './redis-session.mjs';
 import { runComparison } from './learning-comparison.mjs';
 import { learningService, learningRpc, loadLearningModel } from './learning-pool.mjs';
@@ -27,7 +28,7 @@ const security = {
 
 export function productionServer(config, store, staticRoot = dist) {
   const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
-    previewAccess:config.previewAccess===undefined?previewAccess():config.previewAccess, testingOperatorAccount:config.testingOperatorAccount, testFaucet:config.testFaucet, learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
+    applications:config.applications, previewAccess:config.previewAccess===undefined?previewAccess():config.previewAccess, testingOperatorAccount:config.testingOperatorAccount, testFaucet:config.testFaucet, learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
     learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, rehearsal: config.rehearsal, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions, challengeOptions:config.challengeOptions });
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
@@ -74,6 +75,7 @@ export function productionServer(config, store, staticRoot = dist) {
 
 async function main() {
   const config = hostedConfig();
+  config.applications = configureApplications();
   config.androidAssetLinks = androidAssetLinks();
   const store = new RedisSessionStore(redisCommand());
   await store.command('PING');

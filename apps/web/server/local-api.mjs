@@ -13,10 +13,11 @@ import {validateThesisInput} from '../shared/thesis.mjs';
 import {agentApi} from './agents/agent-api.mjs';
 import {agentWalletKey} from './agents/agent-store.mjs';
 import {agentRpc} from './agents/agent-market.mjs';
+import {ApplicationError} from './access-applications.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
-  previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {} } = {}) {
+  applications = null, previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {} } = {}) {
   const hosted = publicOrigin !== null;
   // Agent wallets cannot also be linked for manual MetaMask trading; with Redis the two claims exclude each other atomically.
   const links = walletLinks({command:store.command,isReserved:wallet=>agents?agents.isAgentWallet(wallet):false,reservedKey:store.command?agentWalletKey:null});
@@ -26,7 +27,12 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
     const m=svc.manifest;
     for(const a of [m.pool,m.resolver,m.publication?.creator,m.challengePolicy?.authority,...(m.publication?.reviewers||[]).map(r=>r.address)])if(typeof a==='string')reservedWallets.add(a.toLowerCase());
   }
-  const previewAllows=previewAccess?account=>previewAccess.allows({method:'passkey',address:account})||isTestingOperator({method:'passkey',address:account},testingOperatorAccount):null;
+  const previewAllows=previewAccess||applications?async account=>{
+    const session={method:'passkey',address:account};
+    if(isTestingOperator(session,testingOperatorAccount))return true;
+    const legacy=previewAccess?await previewAccess.allows(session):false;
+    return applications?applications.allows(account,legacy):legacy;
+  }:null;
   const authorizeHolder=holderAuthorizer(challengeOptions);
   const priceArchives=new WeakMap();
   // Agents: account-isolated profiles, paper trading and user-approved proposals. Never a signer.
@@ -91,20 +97,35 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           }
         }
       }
-      if (req.method === 'GET' && url.pathname === '/api/preview') return send(res,200,{inviteOnly:!!previewAccess,applicationUrl:previewAccess?.applicationUrl||null});
+      if (req.method === 'GET' && url.pathname === '/api/preview') return send(res,200,{inviteOnly:!!previewAllows,applicationUrl:applications?null:previewAccess?.applicationUrl||null,...(applications?{nativeApplications:true}:{})});
       if (url.pathname === '/api/account/access' && req.method === 'GET') {
         const login = await getLogin();
         if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
         res.setHeader('Set-Cookie', toolsCookie(login, sid));
-        return send(res, 200, {testingTools:isTestingOperator(login, testingOperatorAccount),approved:!previewAccess||previewAccess.allows(login)||isTestingOperator(login,testingOperatorAccount),applicationUrl:previewAccess?.applicationUrl||null});
+        return send(res, 200, {testingTools:isTestingOperator(login, testingOperatorAccount),approved:!previewAllows||await previewAllows(login.address),applicationUrl:applications?null:previewAccess?.applicationUrl||null,...(applications?{nativeApplications:true}:{})});
+      }
+      if(url.pathname==='/api/account/application'||url.pathname.startsWith('/api/account/application/')){
+        const login=await getLogin();
+        if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in first.'});
+        if(!applications)return send(res,503,{error:'Applications are not open yet.'});
+        const action=url.pathname==='/api/account/application'?'status':url.pathname.slice('/api/account/application/'.length);
+        if(url.search||!((action==='status'&&req.method==='GET')||(action!=='status'&&req.method==='POST')))return send(res,405,{error:'Method unavailable.'});
+        if(action.startsWith('admin/')&&!isTestingOperator(login,testingOperatorAccount))return send(res,403,{error:'Operator access only.'});
+        const budget=async lane=>{
+          await limits.take('applications:'+lane+':account:'+login.address.toLowerCase(),lane==='email'?3:20);
+          await limits.take('applications:'+lane+':service',lane==='email'?10:120);
+        };
+        await budget('request');
+        const input=req.method==='POST'?await body(req):{};
+        return send(res,200,await applications.handle({action,account:login.address,input,operator:isTestingOperator(login,testingOperatorAccount),budget}));
       }
       // Guard every app data/action route, including legacy namespaces and RPC.
       // Published evidence stays readable by counterparties during settlement.
       const publicEvidence=req.method==='GET'&&!url.search&&/^\/api\/(pilot|rehearsal|practice-[0-9a-f]{40})\/evidence\/0x[0-9a-f]{64}$/.test(url.pathname);
-      if(previewAccess&&!url.pathname.startsWith('/api/auth/')&&!publicEvidence){
+      if(previewAllows&&!url.pathname.startsWith('/api/auth/')&&!publicEvidence){
         const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
-        if(!previewAccess.allows(login)&&!isTestingOperator(login,testingOperatorAccount))return send(res,403,{code:'INVITE_REQUIRED',error:'Testnet access has not been approved for this Mera account.'});
+        if(!await previewAllows(login.address))return send(res,403,{code:'INVITE_REQUIRED',error:'Testnet access has not been approved for this Mera account.'});
       }
       // Agent routes sit behind the same session and invite checks as every application route.
       if(url.pathname==='/api/agents'||url.pathname.startsWith('/api/agents/')){
@@ -390,6 +411,6 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           (result.environment !== 'public_testnet' || result.chain_id !== 10143 || learningRoute &&
             (result.market_id !== 'learning' || result.contracts?.pool !== learningDeployment.pool || result.contracts?.cash !== TESTNET.cash))) return send(res, 503, { error: 'Public testnet deployment verification required' });
       return send(res, upstream.status, result);
-    } catch(e) { if(e instanceof CapacityError){res.setHeader('Retry-After',String(e.retryAfter));return send(res,429,{code:e.code,error:e.message});} return send(res, 503, { error: 'Service unavailable or request rejected. Refresh before retrying. No automatic transaction retry is performed.' }); }
+    } catch(e) { if(e instanceof CapacityError){res.setHeader('Retry-After',String(e.retryAfter));return send(res,429,{code:e.code,error:e.message});} if(e instanceof ApplicationError){if(e.status===429)res.setHeader('Retry-After','60');return send(res,e.status,{error:e.message});} return send(res, 503, { error: 'Service unavailable or request rejected. Refresh before retrying. No automatic transaction retry is performed.' }); }
   };
 }
