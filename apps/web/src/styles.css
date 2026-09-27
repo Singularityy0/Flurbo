@@ -41,6 +41,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .brand-link { display: inline-flex; align-items: center; }
 .logo { display: inline-flex; align-items: center; gap: 9px; color: var(--forest); font-size: 25px; font-weight: 650; letter-spacing: -0.08em; line-height: 1; }
 .logo-mark { width: 30px; height: 30px; overflow: visible; }
+.logo-joint-state { fill: #d9f76d; stroke: none; }
 .logo-wordmark { display: block; }
 .logo-inverse { color: var(--ivory); }
 .main-nav { display: flex; align-items: center; gap: 26px; color: rgba(20, 39, 29, .78); font-size: 12px; letter-spacing: .01em; }

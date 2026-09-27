@@ -55,6 +55,9 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
   await mkdir(join(directory,'brand'));
   await writeFile(join(directory,'brand','flurbo-social-landscape.png'),'landscape');
   await writeFile(join(directory,'brand','flurbo-social-portrait.png'),'portrait');
+  await writeFile(join(directory,'brand','flurbo-social-banner.png'),'banner');
+  await writeFile(join(directory,'brand','flurbo-profile-2026.png'),'profile');
+  await writeFile(join(directory,'favicon-contour.svg'),'<svg/>');
   const store = new SessionStore();
   const learningReport = {schema:'flurbo.learning-comparison.v1',input:'synthetic',changesExecutablePrices:false};
   const config = {previewAccess:null,testingOperatorAccount:signer.address.toLowerCase(),origin,rpcUrl:TESTNET.rpc,learningReport: learningReport as typeof learningReport | null, learningStatus: 'starting', androidAssetLinks: null as object[] | null};
@@ -117,12 +120,15 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     assert.equal((await request('/rehearsal-rules')).json().fixtures.length,4);
     assert.equal((await request('/rehearsal-rules')).json().fixtures[1].result,'NO');
     assert.equal((await request('/.env')).status,404);
-    for(const path of ['/brand/flurbo-social-landscape.png','/brand/flurbo-social-portrait.png']) {
+    for(const path of ['/brand/flurbo-social-landscape.png','/brand/flurbo-social-portrait.png','/brand/flurbo-social-banner.png','/brand/flurbo-profile-2026.png']) {
       const asset=await request(path);
       assert.equal(asset.status,200,path);
       assert.equal(asset.headers['content-type'],'image/png');
       assert.equal(asset.headers['cache-control'],'public, max-age=31536000, immutable');
     }
+    const favicon=await request('/favicon-contour.svg');
+    assert.equal(favicon.status,200);
+    assert.equal(favicon.headers['content-type'],'image/svg+xml');
     assert.equal((await request('/brand/not-public.png')).status,404);
     assert.equal((await request('/brand/../index.html')).status,404);
     assert.equal((await request('/api/network',undefined,'','evil.example')).status,421);
