@@ -7,6 +7,14 @@ import type { AuthController } from './auth/controller';
 import { semanticError } from '../../../packages/sdk/src/semantics.ts';
 export const semanticAcknowledgment = 'I understand this has no ordinary winning outcome';
 export type SemanticAssessment = { mode:'disabled'|'enforced'; configRevision:string; rulesDigest?:string; status?:string; coverage?:string; notice:string; ordinaryMaximumPayoutAtoms?:string; maximumVoidPayoutAtoms?:string };
+export class PurchaseSemanticCollision extends Error {
+  readonly assessment: SemanticAssessment;
+  constructor(assessment: SemanticAssessment) {
+    super('These outcomes cannot win together under the configured rules. Review the payout warning before continuing.');
+    this.name = 'PurchaseSemanticCollision';
+    this.assessment = assessment;
+  }
+}
 
 export type Provider={request(input:{method:string;params?:unknown[]}):Promise<unknown>;on?(event:string,fn:()=>void):void;removeListener?(event:string,fn:()=>void):void};
 export type PilotState={manifest:PilotManifest;snapshot:{blockNumber:string;blockHash:string;timestamp:number};
@@ -121,7 +129,7 @@ export async function validatePurchaseSemantics(r:PilotReview, namespace:PilotNa
   const checked=result as SemanticAssessment;
   if(reason==='SEMANTIC_COLLISION'){
     if(r.semanticAssessment?.status!=='collision'||!checked.rulesDigest||acknowledgment?.rulesDigest!==checked.rulesDigest||r.semanticAssessment.rulesDigest!==checked.rulesDigest||acknowledgment.phrase!==semanticAcknowledgment)
-      throw Error('These outcomes cannot win together under the configured rules. Review the payout warning before continuing.');
+      throw new PurchaseSemanticCollision(checked);
   }else if(reason)throw Error('The outcome compatibility check is unavailable. Retry before confirming in your wallet.');
   // A mode switch or any configuration change since the review invalidates what the person saw.
   if(r.semanticAssessment&&(r.semanticAssessment.configRevision!==checked.configRevision||r.semanticAssessment.rulesDigest!==checked.rulesDigest))throw Error('The outcome rules changed. Review this purchase again.');

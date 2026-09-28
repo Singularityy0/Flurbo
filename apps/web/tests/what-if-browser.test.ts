@@ -32,7 +32,7 @@ test('What-if stays read-only, replaces pending pairs, expires snapshots and fit
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600_000}}});
       if(path==='/api/rehearsal/status')return route.fulfill({json:await f.service.status()});
-      if(path==='/api/account/wallets')return route.fulfill({json:{account:owner,wallets:[]}});
+      if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:owner,wallets:[]}});
       if(path==='/api/network')return route.fulfill({status:503,json:{error:'Offline fixture'}});
       if(path==='/api/rehearsal/price-history')return route.fulfill({status:503,json:{error:'Offline fixture'}});
       if(path==='/api/rehearsal/markets')return route.fulfill({json:await f.service.markets()});
@@ -47,6 +47,7 @@ test('What-if stays read-only, replaces pending pairs, expires snapshots and fit
     });
     await page.goto('https://flurbo.singu.online/markets/rehearsal/0');
     await page.getByText('Explore how these markets connect',{exact:true}).click();
+    assert.equal(await page.getByRole('alert').filter({hasText:'Your account holdings could not be refreshed.'}).count(),0);
     const panel=page.locator('.what-if');
     await panel.getByRole('button',{name:'Compare these questions'}).click();
     await panel.getByText('Both Yes, together',{exact:true}).waitFor();
@@ -64,7 +65,7 @@ test('What-if stays read-only, replaces pending pairs, expires snapshots and fit
     // A user can change the pair without waiting for the previous RPC read.
     delay=true;await panel.getByRole('button',{name:'Refresh comparison'}).click();
     await panel.getByRole('button',{name:'Cancel',exact:true}).waitFor();
-    await panel.getByLabel('Question to explore',{exact:true}).selectOption('2');
+    await panel.getByRole('combobox',{name:'Question to explore',exact:true}).click();await panel.getByRole('option').nth(2).click();
     assert.equal(await panel.getByRole('button',{name:'Compare these questions'}).isEnabled(),true);
     assert.equal(await panel.getByText('Both Yes, together',{exact:true}).count(),0);
     release();delay=false;
@@ -72,8 +73,8 @@ test('What-if stays read-only, replaces pending pairs, expires snapshots and fit
     await panel.getByRole('heading',{name:'Chance of Yes: Test event 3'}).waitFor();
     assert.equal(await panel.getByText('0.0 pp',{exact:true}).count(),1);
     // Swapping onto the other selection preserves a distinct pair.
-    await panel.getByLabel('Question to explore',{exact:true}).selectOption('1');
-    assert.equal(await panel.getByLabel('Suppose this question resolves').inputValue(),'2');
+    await panel.getByRole('combobox',{name:'Question to explore',exact:true}).click();await panel.getByRole('option').nth(1).click();
+    assert.equal((await panel.getByRole('combobox',{name:'Suppose this question resolves'}).innerText()).trim(),'Test event 3');
     unavailable=true;await panel.getByRole('button',{name:'Compare these questions'}).click();
     await panel.getByRole('alert').waitFor();assert.equal(await panel.locator('.what-if-results').count(),0);
     unavailable=false;badSensitivity=true;await panel.getByRole('button',{name:'Compare these questions'}).click();

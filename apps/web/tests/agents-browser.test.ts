@@ -2,16 +2,28 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {readFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
-import {encodeAbiParameters,encodeEventTopics,decodeFunctionData} from 'viem';
+import {encodeAbiParameters,encodeEventTopics,decodeFunctionData,encodeFunctionResult} from 'viem';
 import {pilotPoolAbi} from '../shared/pilot.mjs';
-import {assessSemantics} from '../server/semantic-validation.mjs';
+import {assessSemantics,semanticRegistry} from '../server/semantic-validation.mjs';
 import {alice,origin,setup} from './agent-fixture.ts';
 import {owner,hash,code} from './pilot-fixture.ts';
 
 // End to end: the real agent API and strategy run in-process over the pilot fixture; the browser drives the
 // real UI with a fake MetaMask. Nothing reaches a network, and every MetaMask send is counted.
-async function harness(browser:any,{failTracking=0}={}){
+async function harness(browser:any,{failTracking=0,collision=false}={}){
   const at=Math.floor(Date.now()/1000),s=setup({at}),pool=s.f.manifest.pool,errors:string[]=[],tracked:number[]=[];let failures=failTracking;
+  if(collision){
+    // This fixture quotes the AND cheaply enough for the strategy to propose it.
+    // Other claims cost more; the production strategy and semantic checker stay real.
+    const original=s.f.rpc;
+    s.f.rpc=async(method:string,params:any[]=[])=>{
+      if(method==='eth_call'&&params[0]?.to===pool){
+        const decoded=decodeFunctionData({abi:pilotPoolAbi,data:params[0].data});
+        if(decoded.functionName==='quoteBuy')return encodeFunctionResult({abi:pilotPoolAbi,functionName:'quoteBuy',result:decoded.args[0]===3&&decoded.args[1]===8n?250_000n:900_000n});
+      }
+      return original(method,params);
+    };
+  }
     const page=await browser.newPage({viewport:{width:1280,height:1000}});
     page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.addInitScript(({owner,hash,code}:any)=>{
@@ -46,7 +58,9 @@ async function harness(browser:any,{failTracking=0}={}){
       if(path==='/api/account/wallets')return route.fulfill({json:{account:alice,wallets:[owner]}});
       if(path==='/api/pilot/markets')return route.fulfill({json:await s.f.service.markets()});
       // Purchases re-check outcome compatibility right before the wallet prompt; answer as the server would.
-      if(path==='/api/pilot/validate-trade')return route.fulfill({json:assessSemantics(s.f.manifest,route.request().postDataJSON())});
+      if(path==='/api/pilot/validate-trade')return route.fulfill({json:assessSemantics(s.f.manifest,route.request().postDataJSON(),collision ? semanticRegistry(JSON.stringify({schema:'flurbo.semantic-rules.v1',markets:[{pool,rulesHash:s.f.manifest.rulesHash,predicates:[
+        {event:0,observation:'test:close',operator:'gte',value:'3000',sourceRule:'Fixture closing observation.'},
+        {event:1,observation:'test:close',operator:'lt',value:'2500',sourceRule:'Fixture closing observation.'}]}]})) : undefined)});
       if(path==='/api/agents'||path.startsWith('/api/agents/')){
         const input=method==='POST'?route.request().postDataJSON():undefined;
         if(input?.action==='submitted'){tracked.push(Date.now());if(failures>0){failures--;return route.fulfill({status:503,json:{error:'The agent service is temporarily unavailable. Nothing was traded.'}});}}
@@ -110,6 +124,28 @@ const browserTest=(name:string,fn:(browser:any)=>Promise<void>)=>test(name,{skip
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   try{await fn(browser);}finally{await browser.close();}
+});
+
+browserTest('agent approval explains a fresh semantic collision without an override or wallet send',async browser=>{
+  const {s,page,errors,sends,saved}=await harness(browser,{collision:true});
+  s.f.options.allowance=10n**12n;
+  const decision=await createAgentAndDecide(page);
+  await decision.getByRole('button',{name:'Prepare for MetaMask approval'}).click();
+  const approvals=page.getByRole('region',{name:'Awaiting approval'});
+  await approvals.getByText('connected with',{exact:false}).waitFor();
+  await approvals.getByRole('button',{name:'Confirm purchase in MetaMask'}).click();
+  const proposal=(await s.api.handle({method:'GET',path:new URL(page.url()).pathname.replace('/agents/','/api/agents/'),login:{address:alice,method:'passkey'},origin})).body.records.find((r:any)=>r.kind==='proposal');
+  assert.equal(proposal.claim.scope,3,JSON.stringify(proposal.claim));
+  assert.equal(proposal.claim.mask,'8',JSON.stringify(proposal.claim));
+  const conflict=approvals.getByRole('region',{name:'Outcome conflict'});
+  await conflict.getByText('This agent purchase is blocked.',{exact:false}).waitFor();
+  assert.match(await conflict.textContent(),/VOID settlement is different/);
+  assert.equal(await conflict.locator('input').count(),0,'agent approvals never offer an acknowledgment override');
+  assert.equal(await sends(),0);
+  assert.equal(await saved(),null);
+  await approvals.getByRole('button',{name:'Refresh review'}).click();
+  await conflict.waitFor({state:'detached'});
+  assert.deepEqual(errors,[]);
 });
 
 browserTest('agent flow: create, forecast, paper trade, then user-approved purchase with rejection, wallet switch and reload recovery',async browser=>{

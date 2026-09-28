@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, ArrowUpRight, Copy } from 'lucide-react';
+import StatusBadge from '../components/ui/StatusBadge';
+import Stepper, { type Step } from '../components/ui/Stepper';
+import { useLoadGate } from '../loading/gates';
 import { Link, useLocation } from 'wouter';
 import { runtimeAdmin, agentClient, message, type ProfileJSON } from '../agents-client';
 import { describeClaim, amount } from '../portfolio';
@@ -39,15 +43,15 @@ export function RuntimeCreateForm({ directory }: { directory: { namespace: strin
     event.preventDefault(); setBusy(true); setError('');
     try { navigate(`/agents/${(await runtimeAdmin.create(name, markets)).id}`); } catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
-  return <form className="agents-card" onSubmit={create} aria-label="Register an agent">
+  return <form className="agents-card agents-register" id="register-agent" onSubmit={create} aria-label="Register an agent">
     <h2>Register an agent</h2><ol className="agent-setup-steps"><li>Name your agent and choose its markets.</li><li>Associate a dedicated wallet and create a credential.</li><li>Run the SDK in paper mode, then review its activity.</li></ol>
     <p className="agents-fine">Your agent runs on your own computer or server with the Flurbo SDK. It researches, forecasts and trades with its own dedicated wallet, within limits you set. Flurbo shows its status, decisions and verified trades here.</p>
     <label>Name<input value={name} onChange={e => setName(e.target.value)} maxLength={48} required placeholder="Release relationship agent"/></label>
     <fieldset className="agents-choice"><legend>Related markets it may trade</legend>
       {directory.map(d => <label key={d.namespace}><input type="checkbox" checked={markets.includes(d.namespace)} disabled={!d.open} onChange={e => setMarkets(m => (e.target.checked ? [...m, d.namespace] : m.filter(x => x !== d.namespace)))}/>{d.label}<small>{d.open?'Open for predictions':'Unavailable for new trades'}</small></label>)}
     </fieldset>
-    {error && <p className="market-error" role="alert">{error}</p>}
-    <button className="button button-dark" disabled={busy || !markets.length}>{busy ? 'Registering...' : 'Register agent'}</button>
+    {error && <p className="state-inline error" role="alert">{error}</p>}
+    <button className="btn btn-primary" disabled={busy || !markets.length}>{busy ? 'Registering...' : 'Register agent'}</button>
   </form>;
 }
 
@@ -67,22 +71,28 @@ export function RuntimeAgentDetail({ id }: { id: string }) {
     return () => { live = false; clearInterval(timer); };
   }, [load]);
   async function act(fn: () => Promise<unknown>) { setBusy(true); setError(''); try { await fn(); await load(); } catch (e) { setError(message(e)); } finally { setBusy(false); } }
-  if (!data) return error ? <><p className="market-error" role="alert">{error}</p><Link href="/agents" className="text-link">All agents</Link></> : <p role="status">Loading agent...</p>;
+  useLoadGate('agent-runtime', { pending: !data && !error, error: !data ? error : null, label: 'Loading your agent' });
+  if (!data) return error ? <><p className="state-inline error" role="alert">{error}</p><Link href="/agents" className="link-back"><ArrowLeft aria-hidden="true" strokeWidth={1.75}/>All agents</Link></> : <><p role="status" className="sr-only">Loading agent...</p><div className="agents-skeleton" aria-hidden="true"><span className="skeleton" style={{ height: 36, width: '40%' }}/><span className="skeleton" style={{ height: 88 }}/><span className="skeleton" style={{ height: 240 }}/></div></>;
   const profile: ProfileJSON = data.profile, rt = data.runtime, policy = rt.policy, archived = profile.status === 'archived';
   const latest = rt.heartbeats[0] ?? null;
   return <>
-    <nav className="agents-back"><Link href="/agents" className="text-link">All agents</Link></nav>
+    <nav className="agents-back"><Link href="/agents" className="link-back"><ArrowLeft aria-hidden="true" strokeWidth={1.75}/>All agents</Link></nav>
     <header className="agents-profile">
-      <div><span className="eyebrow">Runs on your infrastructure · {archived ? 'Archived' : policy.paused ? 'Paused on Flurbo' : 'Registered'}</span>
+      <div className="agents-profile-title"><span className="chip">Runs on your infrastructure</span>
         <h1>{profile.name}</h1>
         <p>Closing this page does not stop the agent. Stop it where it runs with <code>flurbo-agent stop</code> or Ctrl+C.</p></div>
+      <dl className="agents-facts">
+        <div><dt>Flurbo policy</dt><dd><StatusBadge kind={archived ? 'closed' : policy.paused ? 'waiting' : policy.liveEnabled ? 'open' : 'settled'}>{archived ? 'Archived' : policy.paused ? 'Paused on Flurbo' : policy.liveEnabled ? 'Live trades allowed' : 'Paper until allowed'}</StatusBadge></dd></div>
+        <div><dt>Last reported by your runtime</dt><dd>{latest ? `${latest.mode === 'live' ? 'Live' : 'Paper'} mode, ${latest.state}` : 'No report yet'}<small>{CONNECTION[rt.connection.state]}{rt.connection.ageSeconds !== null && rt.connection.state !== 'never' ? `, ${ago(rt.connection.ageSeconds)}` : ''}</small></dd></div>
+        <div><dt>Verified on-chain</dt><dd>{rt.totals.buys} {rt.totals.buys === 1 ? 'purchase' : 'purchases'}<small>{rt.totals.sells} sales, {rt.totals.redemptions} redemptions</small></dd></div>
+      </dl>
     </header>
-    {error && <p className="market-error" role="alert">{error}</p>}
+    {error && <p className="state-inline error" role="alert">{error}</p>}
     {archived && <p className="agents-note" role="status">This agent is archived. Its credentials cannot start new work; a runtime can still report transactions it already sent so they are verified and counted once.</p>}
-    <nav className="agent-navigation" aria-label="Agent sections">{['Overview','Activity','Setup','Settings'].map(v=><button key={v} aria-pressed={view===v} disabled={busy} onClick={()=>setView(v)}>{v}</button>)}</nav>
-    {!profile.wallet&&view==='Overview'&&<div className="agents-note"><strong>Finish setting up your agent</strong><p>Associate its wallet, issue a credential and run it in paper mode.</p><button className="button button-dark" onClick={()=>setView('Setup')}>Continue setup</button></div>}
+    <nav className="agent-navigation tabs" aria-label="Agent sections">{['Overview','Activity','Setup','Settings'].map(v=><button key={v} type="button" aria-pressed={view===v} disabled={busy} onClick={()=>setView(v)}>{v}</button>)}</nav>
+    {!profile.wallet&&view==='Overview'&&<div className="agents-note"><strong>Finish setting up your agent</strong><p>Associate its wallet, issue a credential and run it in paper mode.</p><button className="btn btn-primary" onClick={()=>setView('Setup')}>Continue setup</button></div>}
     <div hidden={view!=='Overview'}><section className="agents-card" aria-label="Runtime status">
-      <div className="agents-row"><h2>Runtime</h2><span className={`agents-chip agents-chip-${rt.connection.state}`}>{CONNECTION[rt.connection.state]}{rt.connection.ageSeconds !== null && rt.connection.state !== 'never' ? `, last heartbeat ${ago(rt.connection.ageSeconds)}` : ''}</span></div>
+      <div className="agents-row"><h2>Runtime</h2><span className={`agents-chip agents-chip-${rt.connection.state}`} data-state={rt.connection.state}>{CONNECTION[rt.connection.state]}{rt.connection.ageSeconds !== null && rt.connection.state !== 'never' ? `, last heartbeat ${ago(rt.connection.ageSeconds)}` : ''}</span></div>
       {latest ? <dl className="agents-terms">
         <dt>Last reported mode (not a live confirmation)</dt><dd>{latest.mode === 'live' ? 'Live testnet trades' : 'Paper (simulated)'}; state {latest.state}</dd>
         <dt>SDK</dt><dd>{latest.sdk.language} {latest.sdk.version}</dd>
@@ -93,7 +103,8 @@ export function RuntimeAgentDetail({ id }: { id: string }) {
       </dl> : <p className="agents-fine">Open Setup for instructions to start the runtime. It appears here after its first heartbeat.</p>}
     </section>
     <Verified id={id} rt={rt} questions={questions} busy={busy} act={act}/></div>
-    <div hidden={view!=='Setup'}><h2>Set up your agent</h2><p className="agents-fine">Complete these steps in order. Keep paper mode on until you have checked its decisions.</p>
+    <div hidden={view!=='Setup'} className="agents-setup"><h2>Set up your agent</h2><p className="agents-fine">Complete these steps in order. Keep paper mode on until you have checked its decisions.</p>
+    <Stepper className="agents-checklist" label="Setup progress" steps={setupSteps(profile, rt)}/>
     {!archived && <WalletSetup id={id} profile={profile} busy={busy} act={act}/>}
     {!archived && <Credentials id={id} credentials={rt.credentials} busy={busy} act={act}/>}
     {!archived && <Setup profile={profile} hasWallet={!!profile.wallet}/>}
@@ -104,7 +115,7 @@ export function RuntimeAgentDetail({ id }: { id: string }) {
 
 function Controls({ id, policy, busy, act }: { id: string; policy: any; busy: boolean; act: (fn: () => Promise<unknown>) => Promise<void> }) {
   const [limit, setLimit] = useState(policy.limits.maxTradeCostAtoms ? amount(policy.limits.maxTradeCostAtoms) : ''), [daily, setDaily] = useState(policy.limits.windows[0] ? amount(policy.limits.windows[0].atoms) : '');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(''), [confirmLive, setConfirmLive] = useState(false);
   const save = () => { setError(''); try {
     const maxTradeCostAtoms = limit.trim() ? parseDecimal(limit.trim(), 6).toString() : null, windows = daily.trim() ? [{ seconds: 86_400, atoms: parseDecimal(daily.trim(), 6).toString() }] : [];
     void act(() => runtimeAdmin.setPolicy(id, { maxTradeCostAtoms, windows }));
@@ -113,8 +124,13 @@ function Controls({ id, policy, busy, act }: { id: string; policy: any; busy: bo
     <h2>Controls</h2>
     <div className="agents-actions">
       <button className="button button-outline" disabled={busy} onClick={() => act(() => runtimeAdmin.setPolicy(id, { paused: !policy.paused }))}>{policy.paused ? 'Resume new actions' : 'Pause new actions'}</button>
-      <button className="button button-outline" disabled={busy} onClick={() => act(() => runtimeAdmin.setPolicy(id, { liveEnabled: !policy.liveEnabled }))}>{policy.liveEnabled ? 'Stop allowing live trades' : 'Allow live testnet trades'}</button>
+      <button className="button button-outline" disabled={busy || confirmLive} onClick={() => policy.liveEnabled ? act(() => runtimeAdmin.setPolicy(id, { liveEnabled: false })) : setConfirmLive(true)}>{policy.liveEnabled ? 'Stop allowing live trades' : 'Allow live testnet trades'}</button>
     </div>
+    {confirmLive && !policy.liveEnabled && <div className="agents-confirm" role="group" aria-label="Confirm live testnet trades">
+      <p><strong>Allow this agent to send live testnet trades?</strong></p>
+      <p className="agents-fine">Its runtime can then spend test AUSD from the agent wallet on its own, within these Flurbo limits: {policy.limits.maxTradeCostAtoms ? `${amount(policy.limits.maxTradeCostAtoms)} test AUSD per trade` : 'no per-trade limit set here'}; {policy.limits.windows[0] ? `${amount(policy.limits.windows[0].atoms)} test AUSD per 24 hours` : 'no 24-hour limit set here'}. The runtime must also be set to "mode": "live". You can stop it at any time.</p>
+      <div className="agents-actions"><button className="btn btn-primary" disabled={busy} onClick={() => act(async () => { await runtimeAdmin.setPolicy(id, { liveEnabled: true }); setConfirmLive(false); })}>Confirm live testnet trades</button><button className="btn btn-secondary" onClick={() => setConfirmLive(false)}>Cancel</button></div>
+    </div>}
     <p className="agents-fine">Pause is an instruction. A compliant runtime reads it before each new action and stops starting trades within about a minute. It is not an on-chain freeze: a transaction already sent can still confirm, and the wallet key can still sign outside the runtime.</p>
     <p className="agents-fine">Live trades need both this setting and <code>"mode": "live"</code> in the runtime's own configuration. Until then it records paper decisions only. Currently: {policy.liveEnabled ? 'allowed here' : 'not allowed here'}.</p>
     <div className="agents-pair">
@@ -122,7 +138,7 @@ function Controls({ id, policy, busy, act }: { id: string; policy: any; busy: bo
       <label>Most per 24 hours, test AUSD<input inputMode="decimal" value={daily} onChange={e => setDaily(e.target.value)} placeholder="No Flurbo limit"/></label>
     </div>
     <p className="agents-fine">These limits only tighten the runtime's own limits. They are software checks in a compliant runtime; the amount in the agent wallet is the hard bound on what it can spend.</p>
-    {error && <p className="market-error" role="alert">{error}</p>}
+    {error && <p className="state-inline error" role="alert">{error}</p>}
     <button className="button button-outline" disabled={busy} onClick={save}>Save limits</button>
   </section>;
 }
@@ -156,12 +172,12 @@ function Credentials({ id, credentials, busy, act }: { id: string; credentials: 
     <h2>API credentials</h2>
     <p className="agents-fine">A credential lets the runtime read markets and report activity. It cannot sign or move funds. Revoking it stops a compliant runtime from starting new actions; it does not revoke the wallet's on-chain authority.</p>
     {issued && <div className="agents-note" role="status"><strong>Copy this token now. It is shown once.</strong><pre className="agents-code">{issued}</pre>
-      <div className="agents-actions"><button className="button button-outline" onClick={() => void navigator.clipboard?.writeText(issued)}>Copy token</button><button className="button button-outline" onClick={() => setIssued(null)}>I have stored it</button></div>
+      <div className="agents-actions"><button className="button button-outline" onClick={() => void navigator.clipboard?.writeText(issued)}><Copy aria-hidden="true" strokeWidth={1.75}/>Copy token</button><button className="button button-outline" onClick={() => setIssued(null)}>I have stored it</button></div>
       <p className="agents-fine">Set it as <code>FLURBO_AGENT_TOKEN</code> in the runtime's environment. Never put it in a file you share, a URL or a prompt.</p></div>}
     {credentials.length > 0 && <ul className="agents-proposals">{credentials.map(c => <li key={c.credentialId}>
       <strong>{c.label || 'Credential'} <code>{c.preview}</code></strong>
       <span>{c.status === 'active' ? `Active, expires ${when(c.expiresAt)}` : c.status === 'revoked' ? `Revoked ${when(c.revokedAt)}` : 'Expired'}. Last used: {when(c.lastUsedAt)}.</span>
-      <span className="agents-fine">{c.scopes.join(', ')}</span>
+      <span className="agents-fine">{c.scopes.map((x: string) => SCOPES.find(sc => sc[0] === x)?.[1] ?? x).join('; ')}</span>
       {c.status === 'active' && <div className="agents-actions">
         {confirm === c.credentialId ? <><span className="agents-fine">Revoke now? The runtime stops starting new actions.</span>
           <button className="button button-dark" disabled={busy} onClick={() => act(async () => { await runtimeAdmin.revokeCredential(id, c.credentialId); setConfirm(null); })}>Confirm revoke</button>
@@ -171,7 +187,7 @@ function Credentials({ id, credentials, busy, act }: { id: string; credentials: 
       </div>}
     </li>)}</ul>}
     <fieldset className="agents-choice"><legend>New credential</legend>
-      {SCOPES.map(([scope, text]) => <label key={scope}><input type="checkbox" checked={scopes.includes(scope)} onChange={e => setScopes(s => (e.target.checked ? [...s, scope] : s.filter(x => x !== scope)))}/>{scope}<small>{text}</small></label>)}
+      {SCOPES.map(([scope, text]) => <label key={scope}><input type="checkbox" checked={scopes.includes(scope)} onChange={e => setScopes(s => (e.target.checked ? [...s, scope] : s.filter(x => x !== scope)))}/><span>{text}<small className="mono">{scope}</small></span></label>)}
     </fieldset>
     <div className="agents-pair">
       <label>Label<input value={label} onChange={e => setLabel(e.target.value)} maxLength={48} placeholder="home server"/></label>
@@ -242,11 +258,11 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
   const readme: Record<string, string> = { typescript: 'packages/sdk/README.md', python: 'packages/sdk-python/README.md', rust: 'packages/sdk-rust/README.md', cpp: 'packages/sdk-cpp/README.md' };
   return <section className="agents-card" aria-label="Run the agent">
     <h2>Run the agent</h2><p className="agents-fine">These commands are for a terminal on your own computer. <Link href="/docs#agents">Read the setup and troubleshooting guide</Link>.</p>
-    <div className="agents-tabs" role="tablist">{(['typescript', 'python', 'rust', 'cpp'] as const).map(l => <button key={l} role="tab" aria-selected={language === l} className={language === l ? 'button button-dark' : 'button button-outline'} onClick={() => setLanguage(l)}>{{ typescript: 'TypeScript', python: 'Python', rust: 'Rust', cpp: 'C++' }[l]}</button>)}</div>
+    <div className="agents-tabs segmented" role="tablist" aria-label="SDK language">{(['typescript', 'python', 'rust', 'cpp'] as const).map(l => <button key={l} type="button" role="tab" aria-selected={language === l} aria-pressed={language === l} onClick={() => setLanguage(l)}>{{ typescript: 'TypeScript', python: 'Python', rust: 'Rust', cpp: 'C++' }[l]}</button>)}</div>
     {!hasWallet && <p className="agents-note">Associate the agent wallet first; Flurbo only attributes trades from it.</p>}
     <pre className="agents-code">{available[language]}</pre>
-    <button className="button button-outline" onClick={async()=>{try{await navigator.clipboard.writeText(available[language]);setCopyStatus('Commands copied.');}catch{setCopyStatus('Copy is unavailable. Select the commands above to copy them.');}}}>Copy commands</button><span role="status" className="agents-fine"> {copyStatus}</span>
-    <p className="agents-fine">The runtime keeps its journal in the state directory and resumes pending transactions after a restart without sending them twice. <a href={`https://github.com/Singularityy0/Flurbo/blob/main/${readme[language]}`} target="_blank" rel="noreferrer">Read the SDK guide and custom strategy examples ↗</a>.</p>
+    <button className="button button-outline" onClick={async()=>{try{await navigator.clipboard.writeText(available[language]);setCopyStatus('Commands copied.');}catch{setCopyStatus('Copy is unavailable. Select the commands above to copy them.');}}}><Copy aria-hidden="true" strokeWidth={1.75}/>Copy commands</button><span role="status" className="agents-fine"> {copyStatus}</span>
+    <p className="agents-fine">The runtime keeps its journal in the state directory and resumes pending transactions after a restart without sending them twice. <a href={`https://github.com/Singularityy0/Flurbo/blob/main/${readme[language]}`} target="_blank" rel="noreferrer">Read the SDK guide and custom strategy examples <ArrowUpRight aria-hidden="true" strokeWidth={1.75}/></a>.</p>
   </section>;
 }
 
@@ -298,4 +314,19 @@ function Archive({ id, busy, act }: { id: string; busy: boolean; act: (fn: () =>
     {confirm ? <div className="agents-actions"><button className="button button-dark" disabled={busy} onClick={() => act(async () => { await runtimeAdmin.archive(id); navigate('/agents'); })}>Confirm archive</button><button className="button button-outline" onClick={() => setConfirm(false)}>Keep</button></div>
       : <button className="button button-outline" disabled={busy} onClick={() => setConfirm(true)}>Archive agent</button>}
   </section>;
+}
+
+function setupSteps(profile: ProfileJSON, rt: any): Step[] {
+  const credential = (rt.credentials ?? []).some((c: any) => c.status === 'active');
+  const reported = (rt.heartbeats ?? []).length > 0, decided = (rt.decisions ?? []).length > 0, live = !!rt.policy?.liveEnabled;
+  const order = [!!profile.wallet, credential, reported, decided];
+  const first = order.indexOf(false);
+  const state = (i: number, done: boolean): Step['state'] => (done ? 'done' : i === first ? 'current' : 'upcoming');
+  return [
+    { key: 'wallet', title: 'Associate a dedicated wallet', state: state(0, order[0]) },
+    { key: 'credential', title: 'Issue a credential', meta: 'Shown once. Store it where the agent runs.', state: state(1, order[1]) },
+    { key: 'run', title: 'Run it in paper mode', meta: 'Paper mode records decisions without sending trades.', state: state(2, order[2]) },
+    { key: 'review', title: 'Review its decisions', state: state(3, order[3]) },
+    { key: 'live', title: 'Allow live testnet trades (optional)', meta: 'In Settings, after reviewing paper decisions.', state: live ? 'done' : first === -1 ? 'current' : 'upcoming' },
+  ];
 }

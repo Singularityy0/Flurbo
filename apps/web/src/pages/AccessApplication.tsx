@@ -1,5 +1,6 @@
 import {useEffect,useState} from 'react';
 import {appFetch} from '../platform-fetch';
+import Stepper,{type Step} from '../components/ui/Stepper';
 
 type Application={account:string;email:string|null;state:string;verified:boolean;revision:number;createdAt:string;notification:string};
 type Result={application?:Application|null;applications?:Application[];message?:string;notification?:string};
@@ -37,31 +38,37 @@ export function AccessApplication({refresh,checking}:{refresh():Promise<void>;ch
       await refresh();
     }catch(e){setError(e instanceof Error?e.message:'Try again.');}finally{setBusy(false);}
   }
-  if(loading)return <p role="status">Loading your application…</p>;
+  if(loading)return <div className="application-loading" aria-busy="true"><span className="skeleton skeleton-line" style={{width:'40%'}}/><span className="skeleton skeleton-line" style={{width:'70%'}}/><p role="status" className="sr-only">Loading your application…</p></div>;
   const state=application?.state;
   const canApply=!application||state==='withdrawn'||editing;
+  const verified=!!application?.verified&&state!=='withdrawn'&&!editing;
+  const steps:Step[]=[
+    {key:'account',title:'Account created',meta:'Your Mera passkey account',state:'done'},
+    {key:'apply',title:canApply?'Request access':state==='unverified'?'Verify your email':'Email verified',meta:canApply?'Your email, for access updates only':state==='unverified'?'Enter the six-digit code':undefined,state:canApply||state==='unverified'?'current':'done'},
+    {key:'review',title:state==='approved'?'Approved':state==='revoked'?'Access ended':state==='declined'?'Not selected this round':'Review',meta:state==='pending'&&verified?'The team reviews applications manually':undefined,state:!verified?'upcoming':state==='pending'?'current':'done'},
+  ];
   return <section className="application-form" aria-label="Your access application" aria-busy={busy}>
+    {loaded&&<Stepper steps={steps} label="Application progress" className="application-steps"/>}
     {!loaded?<div><h2>Your application couldn’t be loaded.</h2><p>Retry to check your saved status before making another request.</p></div>:canApply?<form onSubmit={e=>{e.preventDefault();void act('submit',{email,noticeAccepted:accepted});}}>
       <h2>Request your invitation.</h2><p>Leave your email. We’ll let you know when your account is approved.</p>
       <label htmlFor="application-email">Email address</label>
       <input id="application-email" type="email" autoComplete="email" maxLength={254} required value={email} onChange={e=>setEmail(e.target.value)} disabled={busy}/>
-      <label className="application-consent"><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)} required disabled={busy}/><span>I understand Flurbo will use my email for application and access updates. <a href="/docs#application-data">How we use this data</a></span></label>
-      <button className="button button-dark" disabled={busy||!accepted}>{busy?'Saving…':'Request access'}</button>
-      {editing&&<button type="button" className="text-link" onClick={()=>setEditing(false)}>Cancel</button>}
+      <label className="application-consent check-row"><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)} required disabled={busy}/><span>I understand Flurbo will use my email for application and access updates. <a href="/docs#application-data">How we use this data</a></span></label>
+      <div className="access-actions"><button className="button button-dark" disabled={busy||!accepted}>{busy?'Saving…':'Request access'}</button>
+      {editing&&<button type="button" className="text-link" onClick={()=>setEditing(false)}>Cancel</button>}</div>
     </form>:state==='unverified'?<form onSubmit={e=>{e.preventDefault();void act('verify',{code});}}>
       <h2>Check your email.</h2><p>Enter the code sent to <strong>{application.email}</strong>. It expires after 10 minutes.</p>
       <label htmlFor="application-code">Verification code</label>
       <input id="application-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,''))} disabled={busy}/>
-      <button className="button button-dark" disabled={busy||code.length!==6}>{busy?'Checking…':'Verify email'}</button>
-      <div className="access-actions"><button type="button" className="text-link" disabled={busy} onClick={()=>void act('submit',{email:application.email,noticeAccepted:true})}>Send a new code</button><button type="button" className="text-link" disabled={busy} onClick={()=>setEditing(true)}>Change email</button></div>
-      <small>Allow one minute between codes. Check your spam folder too. Verification does not grant access.</small>
+      <div className="access-actions"><button className="button button-dark" disabled={busy||code.length!==6}>{busy?'Checking…':'Verify email'}</button><button type="button" className="text-link" disabled={busy} onClick={()=>void act('submit',{email:application.email,noticeAccepted:true})}>Send a new code</button><button type="button" className="text-link" disabled={busy} onClick={()=>setEditing(true)}>Change email</button></div>
+      <small className="field-help">Allow one minute between codes. Check your spam folder too. Verification does not grant access.</small>
     </form>:<div role="status"><h2>{state==='pending'?'Your request is received.':state==='approved'?'Your invitation is ready.':state==='revoked'?'Access is no longer active.':'Not selected for this round.'}</h2>
       <p>{state==='pending'?'Your email is verified. We’ll email you when your account is approved.':state==='approved'?'Select Check application status to open your approved account.':'Your application has been reviewed. You can return here to check its status.'}</p>
       {state==='pending'&&<button className="text-link" disabled={busy} onClick={()=>setEditing(true)}>Change email</button>}
     </div>}
-    {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
-    <button className="text-link" disabled={busy||checking} onClick={()=>void checkStatus()}>{busy||checking?'Checking…':'Check application status'}</button>
-    {application&&state!=='withdrawn'&&state!=='approved'&&<details className="application-withdraw"><summary>Withdraw application</summary><p>This removes your application email. Your passkey and wallet holdings stay unchanged.</p><label className="application-consent"><input type="checkbox" checked={withdrawing} onChange={e=>setWithdrawing(e.target.checked)}/>Remove my contact email</label><button className="button button-outline" disabled={busy||!withdrawing} onClick={()=>void act('withdraw',{})}>Withdraw request</button></details>}
+    {error&&<p role="alert" className="state-inline error">{error}</p>}{notice&&<p role="status" className="field-help">{notice}</p>}
+    <div className="access-actions"><button className="btn btn-secondary" disabled={busy||checking} onClick={()=>void checkStatus()}>{busy||checking?'Checking…':'Check application status'}</button>{(busy||checking)&&<span className="progress-line access-progress" aria-hidden="true"/>}</div>
+    {application&&state!=='withdrawn'&&state!=='approved'&&<details className="application-withdraw disclosure"><summary>Withdraw application</summary><p>This removes your application email. Your passkey and wallet holdings stay unchanged.</p><label className="application-consent check-row"><input type="checkbox" checked={withdrawing} onChange={e=>setWithdrawing(e.target.checked)}/>Remove my contact email</label><button className="btn btn-danger-outline" disabled={busy||!withdrawing} onClick={()=>void act('withdraw',{})}>Withdraw request</button></details>}
   </section>;
 }
 

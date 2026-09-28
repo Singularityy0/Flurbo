@@ -91,7 +91,7 @@ test('thesis browser: visible rules before quotes, private forecast, one bounded
     assert.equal(await page.locator('.thesis-candidate').count(),4);
     assert.equal(await page.locator('.thesis-candidate').getByText('Not loaded',{exact:true}).count(),8);
     assert.equal(await review.isDisabled(),true);release();delay=false;
-    await page.getByLabel("A's selected answer").selectOption('false');
+    await page.getByRole('radiogroup',{name:"A's selected answer"}).getByRole('radio',{name:'No',exact:true}).click();
     await compare.click();await page.getByRole('button',{name:'Refresh comparison',exact:true}).waitFor();
     await page.locator('.thesis-candidate').filter({has:page.getByRole('heading',{name:'Exactly one',exact:true})}).click();
     await review.click();await page.getByRole('heading',{name:'Your combined prediction'}).waitFor();
@@ -106,7 +106,7 @@ test('thesis browser: visible rules before quotes, private forecast, one bounded
     assert.equal(await page.getByLabel('Chance A is Yes',{exact:true}).inputValue(),'');
     await compare.click();await page.getByRole('button',{name:'Refresh comparison',exact:true}).waitFor();await page.getByRole('button',{name:'Start from pool estimates'}).click();
     assert.equal(await page.getByLabel('Chance A is Yes',{exact:true}).inputValue(),'50.0');
-    await page.getByLabel('Question B',{exact:true}).selectOption('2');assert.equal(await page.getByLabel('Chance A is Yes',{exact:true}).inputValue(),'');
+    await page.getByRole('combobox',{name:'Question B',exact:true}).click();await page.getByRole('option').nth(2).click();assert.equal(await page.getByLabel('Chance A is Yes',{exact:true}).inputValue(),'');
     await compare.click();await page.getByRole('button',{name:'Refresh comparison',exact:true}).waitFor();
     await page.getByRole('button',{name:'Start from pool estimates'}).click();
     await page.clock.setSystemTime(new Date(Date.now()+65_000));await page.clock.runFor(1001);await page.getByText(/This comparison has expired/).waitFor();assert.equal(await review.isDisabled(),true);

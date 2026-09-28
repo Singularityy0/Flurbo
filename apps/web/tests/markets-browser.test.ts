@@ -14,6 +14,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
   f.manifest.publication.reviewerControl='single-operator';
   {f.manifest.publication.mode='rehearsal';f.manifest.publication.draft.title='Public rehearsal: scripted settlement checks';}
   let login=true,reads=0,historyReads=0,linked=false;const preparedQuantities:string[]=[];const preparedClaims:any[]=[];const errors:string[]=[];
+  let heldCombinationQuote:Promise<void>|null=null;
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
     await page.clock.install();
@@ -66,7 +67,12 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
       }
       if(path==='/api/'+namespace+'/status'){reads++;return route.fulfill({json:await f.service.status(url.searchParams.get('wallet')||undefined)});}
       if(path==='/api/'+namespace+'/validate-trade')return route.fulfill({json:assessSemantics(f.manifest,route.request().postDataJSON())});
-      if(path==='/api/'+namespace+'/prepare'){preparedQuantities.push(route.request().postDataJSON().quantity);preparedClaims.push(route.request().postDataJSON());return route.fulfill({json:await f.service.prepare(route.request().postDataJSON())});}
+      if(path==='/api/'+namespace+'/prepare'){
+        const input=route.request().postDataJSON();
+        preparedQuantities.push(input.quantity);preparedClaims.push(input);
+        if(input.scope===3&&input.mask==='2')await heldCombinationQuote;
+        return route.fulfill({json:await f.service.prepare(input)});
+      }
       if(path==='/api/'+namespace+'/claim-analytics'){
         const claim=route.request().postDataJSON(),snapshot=(await f.service.status()).snapshot;
         return route.fulfill({json:{schema:'flurbo.claim-analytics.v1',model:'bounded-lmsr-enumeration-v1',chainId:10143,pool:f.manifest.pool,rulesHash:f.manifest.rulesHash,...claim,snapshot,expiresAt:snapshot.timestamp+60,stateDigest:'ab'.repeat(32),unit:'tenths_of_percentage_point',closed:false,values:{market:480,independent:580,difference:-100}}});
@@ -151,14 +157,14 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     // Confirmation is checked automatically, without another app click.
     await page.getByLabel('Shares',{exact:true}).waitFor();
     assert.equal(await page.getByLabel('Shares',{exact:true}).inputValue(),'5');
-    assert.equal(await page.getByLabel('Your answer',{exact:true}).inputValue(),'no');
+    assert.equal(await page.getByRole('radiogroup',{name:'Your answer'}).getByRole('radio',{name:'No',exact:true}).getAttribute('aria-checked'),'true');
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
     // Approval is already confirmed and tracking cleared. The draft must still reopen.
     assert.equal(await page.evaluate((ns:string)=>localStorage.getItem('flurbo.'+ns+'.pending.v1'),namespace),null);
     const connectionsBeforeReload=await page.evaluate(()=>sessionStorage.getItem('connect.requests'));
     await page.reload();await page.getByLabel('Shares',{exact:true}).waitFor();
     assert.equal(await page.getByLabel('Shares',{exact:true}).inputValue(),'5');
-    assert.equal(await page.getByLabel('Your answer',{exact:true}).inputValue(),'no');
+    assert.equal(await page.getByRole('radiogroup',{name:'Your answer'}).getByRole('radio',{name:'No',exact:true}).getAttribute('aria-checked'),'true');
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('connect.requests')),connectionsBeforeReload);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('link.signatures')),'1');
@@ -175,9 +181,22 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     if(process.env.FLURBO_TEST_SCREENSHOT)await page.screenshot({path:process.env.FLURBO_TEST_SCREENSHOT.replace('.png','-mobile.png'),fullPage:true});
     await page.getByRole('button',{name:'Make another trade',exact:true}).click();
     await page.getByText('Combine with another prediction',{exact:true}).click();
-    await page.getByRole('checkbox',{name:'Will the night market open?',exact:true}).check();
-
     const reviewPanel=page.getByRole('region',{name:'Transaction review'});
+    // The previous single-claim quote has the same Buy label. Hold the new
+    // response to verify it cannot remain actionable while the combination loads.
+    let releaseCombinationQuote!:()=>void;
+    heldCombinationQuote=new Promise<void>(resolve=>{releaseCombinationQuote=resolve;});
+    const andRequest=page.waitForRequest((r:any)=>r.url().endsWith('/prepare')&&r.postDataJSON().scope===3&&r.postDataJSON().mask==='2');
+    const andQuote=page.waitForResponse((r:any)=>r.url().endsWith('/prepare')&&r.request().postDataJSON().scope===3&&r.request().postDataJSON().mask==='2');
+    try{
+      await page.getByRole('checkbox',{name:'Will the night market open?',exact:true}).check();
+      await andRequest;
+      assert.equal(await reviewPanel.count(),0);
+      assert.equal(await page.getByRole('button',{name:'Buy 5 shares',exact:true}).count(),0);
+      assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
+    }finally{releaseCombinationQuote();heldCombinationQuote=null;}
+    await andQuote;
+    await reviewPanel.locator('.review-claim').filter({hasText:'night market open'}).waitFor();
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.match(await reviewPanel.textContent(),/night market open/);
     assert.match(await reviewPanel.textContent(),/concert sell out/);

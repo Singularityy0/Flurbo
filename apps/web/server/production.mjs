@@ -49,13 +49,23 @@ export function productionServer(config, store, staticRoot = dist) {
     if (!req.url || req.url.length > 4096) { res.writeHead(414); res.end(); return; }
     await api(req, res, async () => {
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405); res.end(); return; }
+      // Page-like paths that are not allowed get the public app shell with a 404
+      // status, so visitors see Flurbo navigation. Assets keep a plain 404.
+      const notFound = async (pathname) => {
+        if (/\.[a-zA-Z0-9]+$/.test(pathname.split('/').pop() || '')) { res.writeHead(404); res.end('Not found'); return; }
+        try {
+          const shell = await readFile(resolve(staticRoot, 'index.html'));
+          res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+          res.end(req.method === 'HEAD' ? undefined : shell);
+        } catch { if (!res.headersSent) res.writeHead(404); res.end('Not found'); }
+      };
       try {
         const pathname = new URL(req.url, config.origin).pathname;
         const operatorPage = testingPages.has(pathname) || pathname === '/privacy-lab' || pathname.startsWith('/privacy-lab/');
         if (operatorPage) {
           const session = await store.read(cookieValue(req.headers.cookie, 'flurbo_tools'), config.origin);
           res.setHeader('Cache-Control','no-store');
-          if (!isTestingOperator(session, config.testingOperatorAccount)) { res.writeHead(404); res.end('Not found'); return; }
+          if (!isTestingOperator(session, config.testingOperatorAccount)) { await notFound(pathname); return; }
         }
         // Serve agent deep links on direct visits too; API session and invite gates still protect data.
         const agentPage = /^\/agents(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$/.test(pathname);
@@ -65,11 +75,11 @@ export function productionServer(config, store, staticRoot = dist) {
         if(labPage||labAsset)res.setHeader('Content-Security-Policy',security['Content-Security-Policy'].replace("script-src 'self'","script-src 'self' 'wasm-unsafe-eval'")+"; worker-src 'self' blob:");
         const brandAsset=/^\/brand\/(?:flurbo-icon-512\.png|flurbo-profile-2026\.png|flurbo-logo\.svg|flurbo-social-(?:landscape|portrait|banner|banner-v2)\.png)$/.test(pathname);
         const publicationAsset=pathname==='/technical_litepaper.pdf';
-        if (!page && !labPage && !labAsset && !brandAsset && !publicationAsset && !/^\/(?:assets\/[a-zA-Z0-9_.-]+|favicon(?:-contour)?\.svg|robots\.txt)$/.test(pathname)) { res.writeHead(404); res.end('Not found'); return; }
+        if (!page && !labPage && !labAsset && !brandAsset && !publicationAsset && !/^\/(?:assets\/[a-zA-Z0-9_.-]+|favicon(?:-contour)?\.svg|robots\.txt)$/.test(pathname)) { await notFound(pathname); return; }
         const file = resolve(staticRoot, page ? 'index.html' : labPage ? 'privacy-lab/index.html' : pathname.slice(1));
         if (!(await stat(file)).isFile()) throw new Error('Not a file');
         const type = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png':'image/png', '.pdf':'application/pdf', '.woff2': 'font/woff2', '.woff': 'font/woff', '.txt': 'text/plain', '.wasm':'application/wasm', '.zkey':'application/octet-stream' }[extname(file)] || 'application/octet-stream';
-        const cache=publicationAsset?'public, max-age=3600':operatorPage || page || labPage || labAsset && !pathname.includes('/assets/') ? 'no-store' : 'public, max-age=31536000, immutable';
+        const cache=publicationAsset||pathname==='/robots.txt'?'public, max-age=3600':operatorPage || page || labPage || labAsset && !pathname.includes('/assets/') ? 'no-store' : 'public, max-age=31536000, immutable';
         res.writeHead(200, { 'Content-Type': type, 'Cache-Control': cache });
         res.end(req.method === 'HEAD' ? undefined : await readFile(file));
       } catch { if (!res.headersSent) res.writeHead(404); res.end('Not found'); }

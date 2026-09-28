@@ -1,41 +1,56 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
+import { ArrowUpRight, FileText } from 'lucide-react';
+import { useAuth } from '../auth/context';
+import { LITEPAPER } from '../components/SiteFooter';
 import './docs.css';
 
 const sections = [
-  ['overview', 'Overview'], ['getting-started', 'Getting started'],
+  ['overview', 'Overview'], ['getting-started', 'Getting started'], ['application-data','Application data'],
   ['accounts', 'Accounts and wallets'], ['trading', 'Trading and shares'],
   ['combinations', 'Combined predictions'], ['what-if', 'What-if and prices'], ['thesis', 'Build your thesis'],
   ['settlement', 'Settlement and payouts'], ['portfolio', 'Portfolio and payouts'],
-  ['agents', 'Agents and SDKs'], ['help', 'Common questions'], ['preview', 'Preview limitations'], ['application-data','Application data'],
+  ['agents', 'Agents and SDKs'], ['help', 'Common questions'], ['preview', 'Preview limitations'],
 ] as const;
 
 export default function Docs() {
-  return <main id="main" tabIndex={-1} className="docs-page">
+  const { state } = useAuth();
+  const [active, setActive] = useState<string>(sections[0][0]);
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (visible) setActive(visible.target.id);
+    }, { rootMargin: '-110px 0px -60% 0px' });
+    sections.forEach(([id]) => { const node = document.getElementById(id); if (node) observer.observe(node); });
+    return () => observer.disconnect();
+  }, []);
+  const explore = state.address
+    ? <Link href="/markets" className="btn btn-primary docs-explore">Explore markets <ArrowUpRight size={16} strokeWidth={1.75} /></Link>
+    : <Link href="/signup" className="btn btn-primary docs-explore">Get early access <ArrowUpRight size={16} strokeWidth={1.75} /></Link>;
+  return <main id="main" tabIndex={-1} className="docs-page page">
     <header className="docs-hero">
-      <p className="docs-eyebrow">FLURBO / DOCUMENTATION</p>
-      <h1>Understand the <em>market.</em></h1>
-      <p>A guide to accounts, predictions and payouts on Flurbo.</p>
-      <span className="docs-badge">Monad testnet · Test assets only</span>
+      <h1>Understand the <span className="serif-accent">market.</span></h1>
+      <p className="lead">A guide to accounts, predictions and payouts on Flurbo.</p>
+      <a className="docs-litepaper" href={LITEPAPER.href} type="application/pdf"><FileText size={18} strokeWidth={1.75} /><span>{LITEPAPER.label}</span><small>{LITEPAPER.detail}</small></a>
     </header>
     <nav className="docs-quickstart" aria-label="Choose a guide"><a href="#getting-started"><strong>Make your first prediction</strong><small>Account, invitation, test funds and MetaMask.</small></a><a href="#combinations"><strong>Combine your ideas</strong><small>Understand when AND, OR and other choices pay.</small></a><a href="#agents"><strong>Build an agent</strong><small>Developer setup in TypeScript, Python, Rust or C++.</small></a></nav>
     <div className="docs-layout">
       <aside className="docs-sidebar">
         <nav aria-label="Documentation contents">
-          <p className="docs-eyebrow">ON THIS PAGE</p>
-          {sections.map(([id, label], i) => <a key={id} href={`#${id}`}><span aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>{label}</a>)}
+          <p className="docs-contents-title">On this page</p>
+          {sections.map(([id, label]) => <a key={id} href={`#${id}`} aria-current={active === id ? 'location' : undefined}>{label}</a>)}
         </nav>
-        <Link href="/markets" className="docs-explore">Explore markets ↗</Link>
+        {explore}
       </aside>
       <article className="docs-article">
         <section id="overview" aria-labelledby="overview-title">
-          <p className="docs-eyebrow">01 / THE PRODUCT</p>
           <h2 id="overview-title">One shared market. Related predictions.</h2>
           <p>Flurbo brings individual and combined predictions into one shared market, letting you see how the market prices relationships between events.</p>
           <p>Each question has defined outcomes and resolution rules. Related questions can share a pool. You can take a position on one answer or, where supported, combine answers into a single prediction. Separate pools have separate positions and schedules. The Markets page brings their questions together; you do not need to choose a collection.</p>
           <div className="docs-note"><strong>This is a testnet preview.</strong><p>Trading uses test AUSD on Monad testnet. Test MON pays network fees. Practice questions have scripted outcomes; real-event questions use specified external observations. Read the selected market’s rules before trading.</p></div>
         </section>
         <section id="getting-started" aria-labelledby="getting-started-title">
-          <p className="docs-eyebrow">02 / YOUR FIRST PREDICTION</p>
           <h2 id="getting-started-title">Getting started</h2>
           <ol className="docs-steps">
             <li><strong>Create your account.</strong> Use a Mera passkey to sign in to Flurbo.</li>
@@ -50,7 +65,6 @@ export default function Docs() {
         </section>
         <section id="application-data" aria-labelledby="application-data-title"><h2 id="application-data-title">Your application data</h2><p>When you request access, Flurbo stores your contact email, Mera account address, verification state and application decision in a separate application database. Your email is used for verification and access updates, not marketing. Supabase provides application storage and Resend delivers these emails.</p><p>You can withdraw an unapproved application from Your account to remove its contact email. Approval records and account identifiers remain to enforce access decisions; withdrawing does not erase blockchain activity or change your passkey. Contact the Flurbo team through the channel where you received your invitation for other deletion requests. Email verification never recovers a lost passkey or grants control of a trading wallet.</p></section>
         <section id="accounts" aria-labelledby="accounts-title">
-          <p className="docs-eyebrow">03 / IDENTITY AND OWNERSHIP</p>
           <h2 id="accounts-title">One account, your trading wallets</h2>
           <p>Your Mera address identifies your Flurbo account. Your passkey signs you in; MetaMask holds your trading funds and confirms trades. Mera is not used to place trades in the current app.</p>
           <p>You can link multiple MetaMask addresses to your account by proving control of each wallet. Flurbo can then show their shares together in your portfolio. Linking a wallet does not transfer its assets or give another wallet permission to spend them. To sell or collect a payout, use the wallet that owns the relevant shares.</p>
@@ -58,16 +72,14 @@ export default function Docs() {
           <p>Never share your wallet seed phrase, private key or passkey recovery credentials.</p>
         </section>
         <section id="trading" aria-labelledby="trading-title">
-          <p className="docs-eyebrow">04 / FROM QUOTE TO POSITION</p>
           <h2 id="trading-title">Trading and shares</h2>
           <p>A winning share pays 1 test AUSD at settlement. A losing share pays 0. The amount you pay to buy the share is separate from its eventual payout.</p>
-          <div className="docs-example"><span className="docs-eyebrow">ILLUSTRATIVE EXAMPLE</span><p>If 10 shares cost 5.12 test AUSD in total and the prediction wins, their payout is 10 test AUSD. The difference is 4.88 test AUSD before network fees. If the prediction loses, the payout is 0.</p></div>
+          <div className="docs-example"><span className="docs-example-label">Illustrative example</span><p>If 10 shares cost 5.12 test AUSD in total and the prediction wins, their payout is 10 test AUSD. The difference is 4.88 test AUSD before network fees. If the prediction loses, the payout is 0.</p></div>
           <p>The displayed one-share price is a quote for that quantity. A larger purchase can have a different average price because trading changes the pool’s state. Review the total cost, price tolerance and any per-trade limit shown in the ticket. A quote is temporary and does not guarantee execution.</p>
           <p><strong>Approval is not a purchase.</strong> An AUSD approval lets the contract spend the approved amount. The purchase requires its own transaction. Wait for the app’s transaction status before retrying; a pending transaction may still complete after you leave the page.</p>
           <p>You can sell eligible shares while trading is open, subject to a fresh quote and the applicable limits. The sale price can differ from your purchase price. Selling requires the wallet that holds those shares.</p>
         </section>
         <section id="combinations" aria-labelledby="combinations-title">
-          <p className="docs-eyebrow">05 / MORE THAN ONE ANSWER</p>
           <h2 id="combinations-title">Combined predictions</h2>
           <p>A combined prediction is one position with a rule covering multiple answers. It is different from purchasing a separate position in each event. The current interface supports combinations of up to three events where the selected pool and ticket allow them. Combinations cannot span different pools.</p>
           <div className="docs-comparison">
@@ -81,7 +93,6 @@ export default function Docs() {
           <p>Only supported claim shapes can be quoted. Flurbo does not promise a tradable market for every possible combination. Unresolved outcomes follow the VOID rule described below.</p>
         </section>
         <section id="what-if" aria-labelledby="what-if-title">
-          <p className="docs-eyebrow">06 / READING RELATIONSHIPS</p>
           <h2 id="what-if-title">What-if and prices</h2>
           <p>The What-if panel is a read-only view of the pool’s current pricing model. It compares the market-implied chance of one answer with the chance under an assumption about another answer. It does not place a trade or create a conditional position.</p>
           <dl className="docs-definitions">
@@ -94,7 +105,6 @@ export default function Docs() {
           <p>These values reflect the pool’s state, not independently verified probabilities. Mathematical consistency does not establish accuracy, and conditional relationships do not establish causation. Price history charts show sampled quotes; gaps indicate missing observations rather than a complete trading record.</p>
         </section>
         <section id="thesis" aria-labelledby="thesis-title">
-          <p className="docs-eyebrow">07 / EXPRESS YOUR VIEW</p>
           <h2 id="thesis-title">Build your thesis</h2>
           <p>Open a market and choose Explore your view to compare two questions from its shared pool. Enter the chance of A being Yes, the chance of B being Yes if A is Yes, and the chance of B being Yes if A is No. All three estimates are needed for a complete forecast.</p>
           <p>The explorer compares individual, AND, OR and exactly-one claims at equal share counts. It shows your probabilities alongside the pool's estimates, current buy quotes, and the payout in each scenario. Your expected net uses your own estimates, excludes gas and assumes binary outcomes. It is not a recommendation or guaranteed profit. VOID payouts are shown separately.</p>
@@ -102,7 +112,6 @@ export default function Docs() {
           <p>Review this prediction carries only the selected claim into the existing trade ticket. A fresh quote, linked MetaMask wallet and wallet confirmation are still required. Closed markets remain available for exploration, but cannot be traded.</p>
         </section>
         <section id="settlement" aria-labelledby="settlement-title">
-          <p className="docs-eyebrow">08 / FROM OUTCOME TO PAYOUT</p>
           <h2 id="settlement-title">Settlement and payouts</h2>
           <p>Trading closes at the time specified by the market. Resolution follows the observation window and the pool’s published deadlines. A closed market is not necessarily settled.</p>
           <ol className="docs-steps">
@@ -117,7 +126,6 @@ export default function Docs() {
           <div className="docs-note"><strong>Resolution has trust and timing limits.</strong><p>A wrong uncontested assertion can finalize. Background automation assists eligible steps, but does not guarantee correct evidence or timely execution. Disputes, source availability and network failures can delay settlement. Use the market’s current status and rules, rather than treating an estimated result time as a guarantee.</p></div>
         </section>
         <section id="portfolio" aria-labelledby="portfolio-title">
-          <p className="docs-eyebrow">09 / KEEPING TRACK</p>
           <h2 id="portfolio-title">Portfolio and payouts</h2>
           <p>Your <Link href="/portfolio">portfolio</Link> brings together the shares associated with your linked trading wallets under your Flurbo account. Individual and combined positions appear in one holdings table. The Activity tab shows confirmed purchases, sales and collected payouts for those wallets. Collected lists the amount received and the transaction even after the redeemed shares leave your holdings. Payouts collected is money received, not profit.</p>
           <p>Results and payout collection live in Portfolio. Select an eligible holding, connect its owning MetaMask wallet and confirm the collection. Holdings stay combined under your Mera account; each wallet receives its own payout.</p>
@@ -126,7 +134,6 @@ export default function Docs() {
           <p>The Performance tab’s realized PnL chart tracks sale proceeds and collected payouts minus the average purchase cost of those shares, calculated separately for each wallet and position. It excludes open positions, uncollected payouts and test MON gas. A chart appears only when indexed history is complete and reconciles with holdings. Until then, it is unavailable rather than an estimated profit figure.</p>
         </section>
         <section id="agents" aria-labelledby="agents-title">
-          <p className="docs-eyebrow">10 / YOUR AGENTS</p>
           <h2 id="agents-title">Build and run your own agent</h2>
           <p>Agents are for users comfortable running software on their own computer or server. Flurbo provides SDKs in TypeScript, Python, Rust and C++. Registering an agent does not start or host it.</p>
           <ol className="docs-steps">
@@ -137,12 +144,11 @@ export default function Docs() {
             <li><strong>Enable live testnet trading deliberately.</strong> Fund the dedicated wallet with a small amount of test AUSD and MON. Live mode must be enabled both in the runtime configuration and in Flurbo Settings. Purchases still depend on valid quotes and the runtime's checks.</li>
           </ol>
           <p>The Overview shows the latest heartbeat and verified trades. Activity shows reported decisions. Setup holds wallet association, credentials and language instructions. Settings holds limits, pause and archive controls.</p>
-          <details><summary>Developer SDK reference and custom strategies</summary><p>You can write your own script or strategy with the SDK. Follow the language's reference for configuration, execution and recovery. Custom software must preserve those checks.</p><ul>{[['sdk','TypeScript'],['sdk-python','Python'],['sdk-rust','Rust'],['sdk-cpp','C++']].map(([path,label])=><li key={path}><a href={`https://github.com/Singularityy0/Flurbo/tree/main/packages/${path}`} target="_blank" rel="noreferrer">{label} SDK and examples ↗</a></li>)}</ul></details>
+          <details><summary>Developer SDK reference and custom strategies</summary><p>You can write your own script or strategy with the SDK. Follow the language's reference for configuration, execution and recovery. Custom software must preserve those checks.</p><ul>{[['sdk','TypeScript'],['sdk-python','Python'],['sdk-rust','Rust'],['sdk-cpp','C++']].map(([path,label])=><li key={path}><a href={`https://github.com/Singularityy0/Flurbo/tree/main/packages/${path}`} target="_blank" rel="noreferrer">{label} SDK and examples <ArrowUpRight size={14} strokeWidth={1.75} /></a></li>)}</ul></details>
           <details><summary>Stopping an agent and recovering a transaction</summary><p>Closing the browser does not stop the runtime. Stop it on the machine where it runs. A pause on Flurbo is a software instruction; a previously sent transaction may still confirm. Preserve the runtime's journal and restart with the same configuration to recover pending transactions without sending duplicates.</p><p>A revoked credential stops a compliant runtime from starting new work. It does not revoke the wallet's on-chain permissions or private key. A stale heartbeat is a last-known report, not proof that the runtime has stopped.</p></details>
           <p>The optional assisted feature is different: you enter forecasts yourself and either record paper decisions or confirm proposed trades in MetaMask. It does not run an autonomous agent.</p>
         </section>
         <section id="help" aria-labelledby="help-title">
-          <p className="docs-eyebrow">11 / COMMON QUESTIONS</p>
           <h2 id="help-title">Common questions</h2>
           <details><summary>I created an account. Why can't I enter the markets?</summary><p>Account creation and invitation approval are separate. Your account page shows approval status. The request-access method is still being prepared when no application link is configured; the placeholder does not submit anything.</p></details>
           <details><summary>I approved a payment. Where are my shares?</summary><p>Token approval grants spending permission. A separate purchase transaction buys the shares. Follow the ticket's next step and wait for confirmation. If a transaction is already pending, check it instead of submitting again.</p></details>
@@ -150,17 +156,15 @@ export default function Docs() {
           <details><summary>Why is profit / loss still loading?</summary><p>Collected payouts and current holdings can appear before complete purchase history. The profit / loss chart waits for verified cost basis. Background history checks are bounded; Retry activity continues them if needed. A payout total is not a profit total.</p></details>
         </section>
         <section id="preview" aria-labelledby="preview-title">
-          <p className="docs-eyebrow">12 / CURRENT SCOPE</p>
           <h2 id="preview-title">Preview limitations</h2>
           <p>Flurbo is available for supervised testnet use. Wallet transactions and positions are public on chain. Account-level organization does not conceal on-chain activity.</p>
           <p>The current preview does not provide an audit assurance or independent adjudication. Automated resolution steps should not be understood as AI judgment. Features and availability differ by market; the published rules and live transaction state govern the selected market.</p>
           <p>Invitations control access to the hosted app. They do not make on-chain contracts permissioned or hide trades. The operator can approve or remove app access; existing on-chain balances and contract rights are not changed by that decision.</p>
           <p>Each market displays its actual schedule. Questions that share an existing pool share its trading close, and payouts wait for all underlying outcomes. Different pools can have different schedules. A new question and deadline must be published before it can appear as a tradable market.</p>
           <p>This guide describes the public product experience. For the exact question, evidence requirements, deadlines and payout conditions, read the rules linked from the individual market.</p>
-          <Link href="/markets" className="docs-explore">Explore markets ↗</Link>
+          {explore}
         </section>
       </article>
     </div>
-    <footer className="docs-footer"><span>One pool. More possibilities.</span><Link href="/">About Flurbo ↗</Link></footer>
   </main>;
 }

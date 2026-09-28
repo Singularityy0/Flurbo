@@ -29,11 +29,14 @@ export default function TradingWallets({account}:{account:string}){
     }catch(e){if(live.current)setError(e instanceof Error?e.message:'Wallet connection failed.');}
     finally{working.current=false;if(live.current)setBusy(false);}
   }
-  return <section className="access-card" aria-label="Trading wallets">
-    <h2>Trading wallets</h2><p>Your linked wallets stay with this Mera account. Portfolio combines their shares, trades and collected payouts, even when MetaMask is disconnected.</p>
-    <p>{owner?`Active for trading: ${owner.slice(0,8)}...${owner.slice(-6)}`:status==='checking'?'Checking MetaMask...':status==='unlinked'?'Link your selected wallet once to use it with this account.':'Connect MetaMask when you want to trade.'}</p>
-    <div className="access-actions"><button className="button button-dark" disabled={busy} onClick={()=>void connect(!!owner)}>{busy?'Check MetaMask...':owner?'Switch wallet':status==='unlinked'?'Link selected wallet':'Connect MetaMask'}</button>{!owner&&wallets.length>0&&<button className="button button-outline" disabled={busy} onClick={()=>void connect(true)}>Choose another wallet</button>}</div>
-    <details><summary>{wallets.length} linked {wallets.length===1?'wallet':'wallets'}</summary>{wallets.map(wallet=><p key={wallet}><code style={{overflowWrap:'anywhere'}}>{wallet}</code></p>)}<p>Adding a new wallet requires a signature proving you own it. This does not move funds.</p></details>
-    {error&&<p role="alert">{error}</p>}
+  const active=owner.toLowerCase();
+  return <section className="panel access-card trading-wallets" aria-label="Trading wallets">
+    <div className="panel-head"><h2>Trading wallets</h2><span className="field-help">{wallets.length} linked {wallets.length===1?'wallet':'wallets'}</span></div>
+    <p>Your linked wallets stay with this Mera account. Portfolio combines their shares, trades and collected payouts, even when MetaMask is disconnected.</p>
+    <p className="wallet-status" role="status">{owner?`Active for trading: ${owner.slice(0,8)}...${owner.slice(-6)}`:status==='checking'?'Checking MetaMask...':status==='unlinked'?'Link your selected wallet once to use it with this account.':'Connect MetaMask when you want to trade.'}</p>
+    {wallets.length>0&&<ul className="wallet-rows">{wallets.map(wallet=><li key={wallet}><code className="address" title={wallet}>{wallet.slice(0,8)}…{wallet.slice(-6)}</code>{wallet.toLowerCase()===active?<span className="status status-attention">Active</span>:<span className="field-help">Linked</span>}</li>)}</ul>}
+    <div className="access-actions"><button className={owner?'btn btn-secondary':'btn btn-primary'} disabled={busy} onClick={()=>void connect(!!owner)}>{busy?'Check MetaMask...':owner?'Switch wallet':status==='unlinked'?'Link selected wallet':'Connect MetaMask'}</button>{!owner&&wallets.length>0&&<button className="btn btn-secondary" disabled={busy} onClick={()=>void connect(true)}>Choose another wallet</button>}</div>
+    <details className="disclosure"><summary>Full linked addresses</summary>{wallets.map(wallet=><p key={wallet}><code className="address">{wallet}</code></p>)}<p className="field-help">Adding a new wallet requires a signature proving you own it. This does not move funds.</p></details>
+    {error&&<p role="alert" className="state-inline error">{error}</p>}
   </section>;
 }

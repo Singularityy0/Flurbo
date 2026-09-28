@@ -71,7 +71,7 @@ test('portfolio deep links and the retired history route restore auth, show full
     await page.route('**/*', async (route: any) => {
       const url = new URL(route.request().url()), path = url.pathname;
       if (path === '/api/market-directory') return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[]}});
-      if(path==='/api/account/wallets')return route.fulfill({json:{account:account,wallets:[account]}});
+      if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:account,wallets:[account]}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:true}});
       if (path === '/api/auth/session') return route.fulfill({ json: { session: signedIn ? { address: account, method: 'passkey', expiresAt: Date.now() + 3600000 } : null } });
       if (path.startsWith('/api/') && path.endsWith('/portfolio')) {
@@ -101,7 +101,12 @@ test('portfolio deep links and the retired history route restore auth, show full
     });
     await page.addInitScript(()=>sessionStorage.setItem('flurbo.trading.market','original'));
     const legacy=page.locator('.legacy-original');
-    async function openLegacy(){await page.getByText('Earlier experimental holdings',{exact:true}).click();await page.getByText('Earlier demo holdings',{exact:true}).click();}
+    async function openLegacy(){
+      await page.getByRole('link',{name:'Earlier experimental holdings',exact:true}).click();
+      await page.waitForURL('**/portfolio?legacy=1');
+      await page.locator('.portfolio-legacy > summary').click();
+      await page.getByText('Earlier demo holdings',{exact:true}).click();
+    }
     await page.goto('https://flurbo.singu.online/portfolio');await openLegacy();
     await page.getByText('Your shares could not all be checked yet. Refresh to try again.').waitFor();
     await legacy.getByRole('button',{name:'Refresh',exact:true}).click();
@@ -130,7 +135,11 @@ test('portfolio deep links and the retired history route restore auth, show full
     await legacy.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     // Consumer holdings come from verified links; there is no manual address lookup to confuse the account view.
     assert.equal(await page.getByText('Look up another address',{exact:true}).count(),0);
-    await page.getByRole('link', { name: 'Portfolio', exact: true }).click();
+    await page.getByRole('link', { name: 'Portfolio', exact: true }).first().click();
+    await page.waitForURL('**/portfolio');
+    await page.locator('.portfolio-legacy').waitFor({state:'detached'});
+    await page.getByRole('heading',{name:'Your shares',exact:true}).waitFor();
+    await openLegacy();
     // A diagnostic lookup never replaces the account's default linked-wallet view.
     await legacy.getByText('A YES AND B YES AND C YES', { exact: true }).waitFor();
     await page.locator('.portfolio-account-identity').getByText(account,{exact:true}).waitFor();

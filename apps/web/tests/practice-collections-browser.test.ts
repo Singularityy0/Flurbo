@@ -15,7 +15,7 @@ test('directory and portfolio include multiple pools without a collection select
     page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
-      if(path==='/api/account/wallets')return route.fulfill({json:{account:owner,wallets:[owner]}});
+      if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:owner,wallets:[owner]}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:true}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:namespace,markets:[

@@ -37,8 +37,8 @@ jobs:
       - name: Server, semantic validation and request-limit tests (disabled and enforced modes)
         run: npm test
         working-directory: apps/web
-      # Other browser suites are still red on main (portfolio, directory, What-if); these cover purchases.
-      - name: Browser purchase flows (acknowledgment, market namespaces, agent approvals)
+      # Run every browser regression sequentially so excluded suites cannot drift.
+      - name: Full browser regression suite
         working-directory: apps/web
         run: |
           npx vite build
@@ -47,7 +47,7 @@ jobs:
           node "$PW/cli.js" install --with-deps chromium
           export FLURBO_TEST_PLAYWRIGHT="$PW/index.mjs"
           export FLURBO_TEST_BROWSER="$(node -e "console.log(require(process.argv[1]).chromium.executablePath())" "$PW")"
-          node --experimental-strip-types --test tests/pilot-browser.test.ts tests/markets-browser.test.ts tests/agents-browser.test.ts
+          node --experimental-strip-types --test --test-concurrency=1 tests/*browser.test.ts
       - name: Protocol documents parse
         run: |
           python3 -m pip install --quiet pyyaml==6.0.2

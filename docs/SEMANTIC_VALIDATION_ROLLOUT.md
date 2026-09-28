@@ -43,9 +43,9 @@ Each step needs the previous one. Deploying code with the mode off is steps 1 to
 - **A bad mapping for one market:** fix or remove that entry. Startup validation already isolates it to its own pool.
 - Pause agents before any rollback and keep their journals. No rollback touches contracts, settlement workers, reviewer wallets, balances or pool addresses.
 
-## Results
+## Original semantic-branch results
 
-Focused checks pass; ten browser failures also reproduce on main.
+The results below record the original semantic-branch validation. At that time, focused checks passed and ten browser failures also reproduced on main. The later V2 follow-up repairs those browser tests, fixes archive query navigation, and includes all browser files in CI. See `V2_INTEGRATION_RELEASE.md` for the current validation record; this historical table is not an exemption from browser checks.
 
 Run on Linux with Node 24.21 / npm 11, Anvil and Forge, the Rust analytics examples, Chromium 141 via playwright-core 1.56.1, Python 3, and OpenSSL 3.3 for C++.
 
@@ -60,7 +60,7 @@ Run on Linux with Node 24.21 / npm 11, Anvil and Forge, the Rust analytics examp
 | Mobile | `npm ci`, typecheck clean, 35 pass, Android bundle exports |
 | OpenAPI | `scripts/check_protocol_documents.py` passes; it fails on the file as of e095e34 |
 
-The ten browser tests that fail both here and on main 901542a:
+The ten browser tests that failed on the original semantic branch and main 901542a:
 
 | File | Test |
 |---|---|
@@ -94,7 +94,7 @@ cp target/release/examples/parlay_testnet_model bin/flurbo-learning-model
 (cd apps/web && npm ci && npm run typecheck && npx vite build)
 export FLURBO_TEST_PLAYWRIGHT=/absolute/path/to/playwright-core/index.mjs   # playwright-core@1.56.1
 export FLURBO_TEST_BROWSER=/absolute/path/to/chrome
-(cd apps/web && node --experimental-strip-types --test tests/*.test.ts)
+(cd apps/web && node --experimental-strip-types --test --test-concurrency=1 tests/*.test.ts)
 
 # SDKs (Anvil on PATH; forge build needs contracts/ dependencies)
 npm --prefix packages/sdk ci && npm --prefix contracts ci && forge build
@@ -110,13 +110,13 @@ python3 -m pip install -e packages/sdk-python && (cd packages/sdk-python && pyth
 python3 scripts/check_protocol_documents.py
 ```
 
-To compare against main, run the web command in a worktree of 901542a (`git worktree add ../flurbo-main 901542a`) with the same Rust binaries and browser variables. The same ten tests fail there.
+To reproduce the historical comparison, run the web command in a separate checkout of 901542a with the same Rust binaries and browser variables. The original run reported the same ten failures there. Those old results do not describe the repaired V2 branch.
 
 ## CI
 
 `.github/workflows/checks.yml` runs on pull requests and pushes to main:
 
-- **web:** Rust analytics, `npm ci`, typecheck, `npm test` (disabled and enforced modes), the three purchase-flow browser suites, and the protocol document check. The other browser suites are left out because they fail on main.
+- **web:** Rust analytics, `npm ci`, typecheck, `npm test` (disabled and enforced modes), every `tests/*browser.test.ts` file run sequentially, and the protocol document check. No browser file is excluded for a historical main failure.
 - **sdks:** TypeScript, Python and Rust against the local chain.
 - **sdk-cpp:** Windows MSYS2 UCRT64, `make test`.
 - **mobile:** `npm ci`, typecheck, tests and an Android bundle export.

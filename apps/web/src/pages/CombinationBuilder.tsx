@@ -2,6 +2,8 @@ import {useEffect,useRef,useState} from 'react';
 import {claimScenarios, type ClaimRule} from '../../shared/claims.mjs';
 import {pilotRequest,type PilotNamespace,type PilotState} from '../pilot';
 import {marketQuestion} from '../showcase-copy';
+import {Check} from 'lucide-react';
+import SegmentedControl from '../components/ui/SegmentedControl';
 import './combination-builder.css';
 
 const rules: {value:ClaimRule;label:string;detail:string}[]=[
@@ -21,27 +23,30 @@ export default function CombinationBuilder({state,base,legs,answers,rule,scope,m
   const events=state.manifest.publication.draft.events;
   return <section className="combination-builder" aria-label="Combined prediction builder">
     <button className="combination-toggle" type="button" aria-expanded={open} onClick={()=>setOpen(!open)}>
-      <span>{legs.length>1?'Combined prediction':'Combine with another prediction'}</span><span>{open?'Close':legs.length>1?`${legs.length} answers`:'Explore'}</span>
+      <span>{legs.length>1?'Combined prediction':'Combine with another prediction'}</span><span className="combination-toggle-meta">{open?'Close':legs.length>1?`${legs.length} answers`:'Explore'}</span>
     </button>
     {open&&<div className="combination-body">
-      <p className="market-caption">Choose up to three questions from this shared pool.</p>
+      <p className="market-caption">Choose up to three questions from this shared pool. The current question stays first; others keep their order.</p>
       <div className="combination-legs">{events.map((e,i)=><div className={'combination-leg'+(legs.includes(i)?' selected':'')} key={e.id}>
-        <label><input type="checkbox" checked={legs.includes(i)} disabled={disabled||i===base||!legs.includes(i)&&legs.length>=3}
+        <label className="check-row"><input type="checkbox" checked={legs.includes(i)} disabled={disabled||i===base||!legs.includes(i)&&legs.length>=3}
           onChange={()=>onLegs(legs.includes(i)?legs.filter(v=>v!==i):[...legs,i].sort((a,b)=>a-b))}/><span>{marketQuestion(e)}{i===base&&<small>Current question</small>}</span></label>
-        {legs.includes(i)&&<label className="combination-answer"><span className="sr-only">{marketQuestion(e)} answer</span><select aria-label={marketQuestion(e)+' answer'} disabled={disabled} value={(answers[i]??true)?'yes':'no'} onChange={e=>onAnswer(i,e.target.value==='yes')}><option value="yes">Yes</option><option value="no">No</option></select></label>}
+        {legs.includes(i)&&<SegmentedControl className="combination-answer" label={marketQuestion(e)+' answer'} hideLabel value={(answers[i]??true)?'yes':'no'}
+          options={[{value:'yes',label:'Yes'},{value:'no',label:'No'}]} onChange={value=>onAnswer(i,value==='yes')} disabled={disabled}/>}
       </div>)}</div>
+      {legs.length>=3&&<p className="field-help">Three questions is the most a combined prediction can hold.</p>}
       {legs.length>1&&<>
         <fieldset className="combination-rules" disabled={disabled}><legend>I win if...</legend>
           {rules.map(r=><label key={r.value} className={rule===r.value?'selected':''}><input type="radio" name={'claim-rule-'+namespace} value={r.value} checked={rule===r.value} onChange={()=>onRule(r.value)}/><span><strong>{r.label}</strong><small>{r.detail}</small></span></label>)}
         </fieldset>
-        <details className="combination-scenarios"><summary>See winning outcomes</summary>
+        {legs.length===2&&rule==='AT_LEAST_TWO'&&<p className="field-help">With two questions, at least two means both, the same as All (AND).</p>}
+        <details className="combination-scenarios" open><summary>See winning outcomes</summary>
           <p>Each winning share pays 1 test AUSD, even if several answers match. VOID can produce a fractional payout under the market rules.</p>
-          <div className="combination-table"><table><caption>Resolved answers and payout per share</caption><thead><tr>{legs.map(event=><th key={event}>{marketQuestion(events[event])}</th>)}<th>Payout</th></tr></thead><tbody>
-            {claimScenarios(scope,mask,events.length).map(s=><tr key={s.state} className={s.wins?'wins':''}>{s.answers.map(a=><td key={a.event}>{a.yes?'Yes':'No'}</td>)}<td>{s.wins?'1':'0'} AUSD</td></tr>)}
+          <div className="combination-table"><table><caption>Resolved answers and payout per share</caption><thead><tr>{legs.map(event=><th key={event} scope="col">{marketQuestion(events[event])}</th>)}<th scope="col">Payout</th></tr></thead><tbody>
+            {claimScenarios(scope,mask,events.length).map(s=><tr key={s.state} className={s.wins?'wins':''}>{s.answers.map(a=><td key={a.event}>{a.yes?'Yes':'No'}</td>)}<td>{s.wins?<><Check aria-hidden="true" strokeWidth={2.25}/>1 AUSD</>:'0 AUSD'}</td></tr>)}
           </tbody></table></div>
           <ol>{legs.map(event=><li key={event}>{marketQuestion(events[event])}</li>)}</ol>
         </details>
-        <details><summary>Compare how the market connects these answers</summary><ClaimComparison key={`${scope}:${mask}`} namespace={namespace} manifest={state.manifest} scope={scope} mask={mask}/></details>
+        <details className="disclosure"><summary>Compare how the market connects these answers</summary><ClaimComparison key={`${scope}:${mask}`} namespace={namespace} manifest={state.manifest} scope={scope} mask={mask}/></details>
       </>}
     </div>}
     {legs.length>1&&<div className="combination-summary"><strong>I win if {ruleDescription(rule).toLowerCase()}.</strong><ul>{legs.map(event=><li key={event}><span>{marketQuestion(events[event])}</span><b>{(answers[event]??true)?'Yes':'No'}</b></li>)}</ul></div>}
@@ -68,7 +73,7 @@ function ClaimComparison({namespace,manifest,scope,mask}:{namespace:PilotNamespa
   const fresh=result&&clock/1000<result.expiresAt&&clock/1000>=result.snapshot.timestamp-15;
   const format=(v:number|null)=>v===null?'Unavailable':(v/10).toFixed(1)+'%';
   return <div className="claim-comparison">
-    <button type="button" className="button button-outline" disabled={busy} onClick={()=>void compare()}>{busy?'Reading pool...':result?'Refresh comparison':'Compare with independence'}</button>
+    <button type="button" className="btn btn-secondary" disabled={busy} onClick={()=>void compare()}>{busy?'Reading pool...':result?'Refresh comparison':'Compare with independence'}</button>
     {error&&<p role="status">{error}</p>}
     {result&&!fresh&&<p role="status">Comparison expired. Refresh to see current values.</p>}
     {fresh&&<><div className="claim-comparison-values"><div><span>Shared market</span><strong>{format(result.values.market)}</strong></div><div><span>If independent</span><strong>{format(result.values.independent)}</strong></div></div>

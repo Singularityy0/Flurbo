@@ -26,7 +26,7 @@ test('Mera keeps linked wallets across pages and reload, while MetaMask restores
    const url=new URL(route.request().url()),p=url.pathname;
    if(p==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
    if(p==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
-   if(p==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner,second]}});
+   if(p==='/api/account/wallets'||p==='/api/account/portfolio-sources')return route.fulfill({json:{account:login,wallets:[owner,second]}});
    if(p==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',markets:[{namespace:'rehearsal',label:'Practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
    if(p==='/api/network')return route.fulfill({json:{...TESTNET,flurboFaucet:true}});
    if(p==='/api/rpc')return route.fulfill({json:{result:'0x0'}});
@@ -50,7 +50,7 @@ test('Mera keeps linked wallets across pages and reload, while MetaMask restores
   await page.goto('https://flurbo.singu.online/markets/rehearsal/0');await page.getByRole('button',{name:'Allow payment',exact:true}).waitFor();assert.equal(requests.at(-1).owner,second);
   await page.reload();await page.getByRole('button',{name:'Allow payment',exact:true}).waitFor();assert.equal(await page.evaluate(()=>sessionStorage.getItem('connects')),'1');
   await page.evaluate(()=>sessionStorage.setItem('locked','1'));
-  await page.goto('https://flurbo.singu.online/portfolio');await page.getByText('Your linked wallets, together.',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Connect MetaMask',exact:true}).count(),0);
+  await page.goto('https://flurbo.singu.online/portfolio');await page.getByText('Across 2 trading wallets',{exact:true}).waitFor();await page.getByRole('heading',{name:'Your shares',exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Connect MetaMask',exact:true}).count(),0);
   assert.deepEqual(errors,[]);
  }finally{await browser.close();}
 });
