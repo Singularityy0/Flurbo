@@ -32,6 +32,34 @@ const approved=(route:any)=>route.fulfill({json:{approved:true}});
 const later=(ms:number)=>async(route:any)=>{await new Promise(r=>setTimeout(r,ms));await route.fulfill({json:{approved:true}});};
 const heading=(page:any)=>page.getByRole('heading',{name:'Build agents that trade relationships.'});
 
+test('slow Markets and Agents revisits show the loader again without reloading the document',{skip},async()=>{
+  const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href),browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
+  let release=()=>{};
+  try{
+    const {page,errors}=await open(browser,{access:approved});
+    let heldPath='',pending=Promise.resolve();
+    await page.route('**/api/**',async(route:any)=>{
+      if(new URL(route.request().url()).pathname===heldPath)await pending;
+      await route.fallback();
+    });
+    for(const [index,path] of ['/markets','/agents','/markets','/agents'].entries()){
+      heldPath=path==='/markets'?'/api/market-directory':'/api/agents';
+      pending=new Promise<void>(resolve=>{release=resolve;});
+      if(index===0)await page.goto('https://flurbo.singu.online'+path);
+      else await page.locator(`a[href="${path}"]`).first().click();
+      await page.locator('.contour-loader').waitFor({state:'visible',timeout:5000});
+      assert.equal(await page.locator('.app-root').evaluate((e:HTMLElement)=>e.inert),true);
+      release();
+      await page.locator('.contour-loader').waitFor({state:'detached',timeout:10000});
+      assert.equal(await page.locator('.app-root').evaluate((e:HTMLElement)=>e.inert),false);
+      const recorded=await page.evaluate(()=>(window as any).__loader);
+      assert.equal(recorded.added.length,index+1,'each slow visit shows exactly one loader');
+      assert.equal(recorded.removed.length,index+1,'each visit finishes its loader');
+    }
+    assert.deepEqual(errors,[]);
+  }finally{release();await browser.close();}
+});
+
 test('quick checks complete before the show delay without flashing the loader',{skip},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href),browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   try{

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import { useLayoutEffect, useSyncExternalStore } from 'react';
 
 // Pages report readiness here; the loader host only observes. Registering a gate
 // never starts a request, so the loader cannot add reads of its own.
@@ -21,7 +21,11 @@ export function setGate(id: string, value: { label: string; status: GateStatus; 
   gates.set(id, { id, ...value, order: current?.order ?? ++order });
   emit();
 }
-export function clearGate(id: string) { if (gates.delete(id)) emit(); }
+export function clearGate(id: string) {
+  // Completion belongs to this mounted page, not every future visit to its route.
+  completed.delete(id);
+  if (gates.delete(id)) emit();
+}
 export function completeGates(ids: string[]) { ids.forEach((id) => completed.add(id)); emit(); }
 export function hasCompleted(id: string) { return completed.has(id); }
 
@@ -31,17 +35,16 @@ export function activeGates(): Gate[] {
 }
 
 /**
- * A page's first load in a session uses the branded loader. Later visits render
- * at once and show their own skeletons, so the long animation never replays.
+ * Each mounted page can use the branded loader for its initial data load.
+ * Completion suppresses background refreshes until the page unmounts. The host's
+ * show delay still lets fast visits finish without displaying an animation.
  */
 export function useLoadGate(id: string, { pending, error, label, retry }: { pending: boolean; error?: string | null; label: string; retry?: () => void }) {
-  const [branded] = useState(() => !completed.has(id));
   useSyncExternalStore(subscribeGates, gatesVersion, gatesVersion);
   const status: GateStatus = error ? 'error' : pending ? 'pending' : 'ready';
   useLayoutEffect(() => {
-    if (!branded) return;
     setGate(id, { label, status, error: error || undefined, retry });
-  }, [branded, id, label, status, error, retry]);
+  }, [id, label, status, error, retry]);
   useLayoutEffect(() => () => clearGate(id), [id]);
-  return { branded, covered: branded && !completed.has(id) };
+  return { branded: true, covered: !completed.has(id) };
 }
