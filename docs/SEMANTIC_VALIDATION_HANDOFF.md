@@ -4,6 +4,14 @@ Status: implemented and tested locally, parked on `semantic-trade-validation` in
 
 Read [the protocol specification](../protocol/specs/semantics.md) for the JSON schema, endpoint contract, configuration example and exact execution behavior. This document explains the implementation, remaining work and rollout sequence. No credentials or private keys are included or required for the new configuration.
 
+## Update: disabled-by-default integration (28 September 2026)
+
+The branch now merges current main and adds an explicit mode switch, `FLURBO_SEMANTIC_MODE` (`off` by default, or `enforce`). Disabled mode returns a claim-bound `mode: "disabled"` assessment, which updated clients treat as "proceed without assurance"; failures are never treated as disabled. Enforced mode validates rules once at startup and isolates a bad entry to its own pool. The server logs the mode, revision and per-market coverage at startup and exposes them to the operator at `GET /api/semantic-status`. The native app now passes its market namespace and shows the acknowledgment. See [the specification](../protocol/specs/semantics.md#modes). Production enforcement stays off until reviewed mappings and candidate-deployment checks pass. The final Pilot review UI must be reconciled with the unpublished V2 redesign.
+
+Configuration, rollout gates, rollback and current test results for this integration are in [the rollout guide](SEMANTIC_VALIDATION_ROLLOUT.md). Where it differs from the staged rollout below, the rollout guide applies: code can reach main with the mode off, and enforcement is a separate configuration change.
+
+No semantic collision has been demonstrated in the currently reviewed markets (the pilot release events, Showcase v0 Ethereum block metrics and the rehearsal set). Threshold and range markets are the obvious future application.
+
 ## Problem and scope
 
 Flurbo's probability model operates over Boolean outcomes. Numerical consistency does not establish whether a state is possible under the real-world event definitions. For example, the same official ETH closing observation cannot be both at least $3,000 and below $2,500. A claim selecting both Yes outcomes has no ordinary winning state under those definitions.
