@@ -138,3 +138,11 @@ node --experimental-strip-types --test --test-concurrency=1 tests/*browser.test.
 ```
 
 The loader timing improvement is covered by state-machine and browser tests. It is not a new network performance benchmark. The existing signed-in route prefetch remains, and total signed-in download cost still needs measurement under realistic network conditions.
+
+## PR #3 browser CI follow-up
+
+The uploaded CI log for `5cf8ab2` reports a successful web build and 16 of 18 selected browser tests passing. Both failures are in `markets-browser.test.ts`, for rehearsal and practice. After selecting a second prediction, the test waits for `Buy 5 shares`, which also labels the previous single-prediction quote. It can therefore assert against the old review before the combination quote arrives.
+
+The follow-up waits for the exact combination request and its rendered claim. It also holds the response deliberately and verifies that the previous review and Buy button are absent, with no additional wallet transaction. The original claim assertions remain. Application code is unchanged; its confirmation path already checks the review against the selected owner, action, scope, mask and quantity before submission.
+
+The two affected flows pass locally with the held-response regression. The full seven-file CI browser selection then passed all 18 tests, with no failures or skips, on Windows with installed Chrome (Node 24.13.0). Logs are in the ignored files `tmp/v2-ci-market-fix.log` and `tmp/v2-ci-browser-fix.log`. Remote Ubuntu CI must rerun after this fix is pushed. The ten broader browser failures documented above remain separate release concerns.
