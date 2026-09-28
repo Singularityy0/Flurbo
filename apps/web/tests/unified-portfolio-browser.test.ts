@@ -13,6 +13,7 @@ test('one portfolio combines pools, shows account-only trades and reveals real P
  const logsB=[log(3,owner,true,'5000000','2000000'),log(4,owner,false,'5000000','5000000','Redeemed'),log(5,second,true,'3000000','1000000')];
  try{
   const page=await browser.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',(e:Error)=>errors.push(e.message));
+  await page.clock.install();await page.clock.pauseAt(new Date());
   await page.route('**/*',async(route:any)=>{
    const u=new URL(route.request().url()),p=u.pathname,b=p.startsWith('/api/'+nsB+'/'),manifest={...f.manifest,pool:b?poolB:f.manifest.pool,publication:{...f.manifest.publication,mode:'rehearsal'}};
    if(p==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
@@ -36,7 +37,7 @@ test('one portfolio combines pools, shows account-only trades and reveals real P
   assert.equal(await page.getByRole('img',{name:/Realized PnL/}).count(),0);
   await page.getByRole('button',{name:'Activity',exact:true}).click();await page.getByRole('heading',{name:'Your trades'}).waitFor();assert.equal(await page.locator('.portfolio-activity tbody tr').count(),6);
   await page.getByRole('button',{name:'Collected',exact:true}).click();await page.getByRole('heading',{name:'Collected payouts'}).waitFor();assert.equal(await page.locator('.portfolio-activity tbody tr').count(),1);assert.match(await page.locator('.portfolio-summary-grid').innerText(),/Payouts collected\n5/);
-  complete=true;await page.getByRole('button',{name:'Load more activity'}).click();await page.getByRole('button',{name:'Performance',exact:true}).click();await page.getByRole('img',{name:/Realized PnL after 2.*\+4 test AUSD/}).waitFor();assert.equal(accounts,2);
+  complete=true;await page.clock.runFor(3100);await page.getByRole('button',{name:'Performance',exact:true}).click();await page.getByRole('img',{name:/Realized PnL after 2.*\+4 test AUSD/}).waitFor();assert.equal(accounts,2,'background history catches up without rereading accounts');
   await page.getByRole('button',{name:/Holdings ·/}).click();
   await mkdir(new URL('../../../target/unified-portfolio/',import.meta.url),{recursive:true});
   for(const width of [1440,390]){await page.setViewportSize({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);if(width===1440)assert.equal(await page.locator('.unified-holdings tbody tr').first().evaluate((row:any)=>row.querySelector('strong').getBoundingClientRect().right<=row.children[1].getBoundingClientRect().left),true);await page.screenshot({path:new URL(`../../../target/unified-portfolio/portfolio-${width}.png`,import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),fullPage:true});}

@@ -39,8 +39,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .site-header-subpage { position: relative; background: var(--ivory); }
 .header-inner { max-width: 1320px; margin: 0 auto; padding: 28px 40px; display: flex; align-items: center; justify-content: space-between; gap: 36px; }
 .brand-link { display: inline-flex; align-items: center; }
-.logo { display: inline-flex; align-items: baseline; font-size: 25px; font-weight: 650; letter-spacing: -0.08em; line-height: 1; }
-.logo-dot { display: inline-block; width: 6px; height: 6px; margin: 0 0 2px 4px; border-radius: 50%; background: var(--lime); }
+.logo { display: inline-flex; align-items: center; gap: 9px; color: var(--forest); font-size: 25px; font-weight: 650; letter-spacing: -0.08em; line-height: 1; }
+.logo-mark { width: 30px; height: 30px; overflow: visible; }
+.logo-joint-state { fill: #d9f76d; stroke: none; }
+.logo-wordmark { display: block; }
+.logo-inverse { color: var(--ivory); }
 .main-nav { display: flex; align-items: center; gap: 26px; color: rgba(20, 39, 29, .78); font-size: 12px; letter-spacing: .01em; }
 .main-nav a { transition: opacity .18s ease, transform .18s var(--ease-out); }
 .main-nav a:hover { opacity: .62; }

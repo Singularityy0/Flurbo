@@ -1,3 +1,4 @@
+import {CapacityError} from '../request-limits.mjs';
 import { randomBytes } from 'node:crypto';
 import { assessSemantics } from '../semantic-validation.mjs';
 import { verifyMessage, encodeFunctionData, decodeFunctionResult } from 'viem';
@@ -195,10 +196,16 @@ export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, 
       if (headers['sec-fetch-site'] || headers['sec-fetch-dest']) fail(403, 'BROWSER_NOT_SUPPORTED', 'The agent runtime API is for runtimes outside the browser. Use the agent page in the browser.');
       if (headers['flurbo-agent-protocol'] !== PROTOCOL_VERSION) fail(400, 'UNSUPPORTED_PROTOCOL', `Send Flurbo-Agent-Protocol: ${PROTOCOL_VERSION}.`);
       const minute = Math.floor(now() / 60);
-      if (hosted && await store.count(`service:${minute}`, 120) > SERVICE_PER_MINUTE) throw new RuntimeError(429, 'RATE_LIMITED', 'The agent API is busy. Retry shortly.', 60);
-      const record = await authenticate(store, headers.authorization, now());
+      let record;
+      try { record = await authenticate(store, headers.authorization, now()); }
+      catch(e) {
+        if(hosted && await store.count(`unauthenticated:${minute}`,120)>300)throw new RuntimeError(429,'RATE_LIMITED','Retry after the cooldown.',60-now()%60);
+        throw e;
+      }
       if (await store.count(`credential:${record.credentialId}:${minute}`, 120) > RATE_PER_MINUTE) throw new RuntimeError(429, 'RATE_LIMITED', 'Rate limit reached for this credential.', 60 - (now() % 60));
-      if (previewAllows && !previewAllows(record.account)) fail(403, 'INVITE_REQUIRED', 'Testnet access is not approved for the account that owns this agent.');
+      if (await store.count(`account:${record.account.toLowerCase()}:${minute}`,120)>240)throw new RuntimeError(429,'RATE_LIMITED','Rate limit reached for this account.',60-now()%60);
+      if (hosted && await store.count(`service:${minute}`,120)>SERVICE_PER_MINUTE)throw new RuntimeError(429,'RATE_LIMITED','The agent API is busy. Retry shortly.',60-now()%60);
+      if (previewAllows && !await previewAllows(record.account)) fail(403, 'INVITE_REQUIRED', 'Testnet access is not approved for the account that owns this agent.');
       const found = await store.get(record.account, record.agentId);
       if (!found || found.profile.kind !== 'runtime') fail(404, 'NOT_FOUND', 'Agent not found.');
       const parts = path.replace(/^\/api\/agent-runtime\/v1\/?/, '').split('/').filter(Boolean), matched = route(method, parts);
@@ -210,6 +217,7 @@ export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, 
       const input = method === 'POST' ? parseBody(body) : undefined;
       return { status: 200, body: await routes[name]({ record, profile: found.profile, state: found.state, param, input }) };
     } catch (e) {
+      if(e instanceof CapacityError)return {status:429,body:{code:e.code,error:e.message,retryable:true},retryAfter:e.retryAfter};
       if (e instanceof RuntimeError) return { status: e.status, body: { code: e.code, error: e.message, retryable: [429, 503].includes(e.status) }, retryAfter: e.retryAfter };
       if (e?.status === 409) return { status: 409, body: { code: e.code === 'HASH_CONFLICT' ? 'HASH_CONFLICT' : 'CONFLICT', error: e.message, retryable: e.code === 'BUSY' } };
       return { status: 503, body: { code: 'UNAVAILABLE', error: 'The agent service is temporarily unavailable.', retryable: true } };

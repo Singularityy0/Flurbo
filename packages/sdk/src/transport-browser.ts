@@ -1,3 +1,4 @@
+import {scheduledFetch} from './request-scheduler.ts';
 import type { Transport } from './client.ts';
 
 // Browser transport. Same-origin requests reuse the existing HttpOnly Flurbo session cookie; the SDK never
@@ -7,7 +8,7 @@ type FetchLike = (input: string, init: { method: string; credentials: 'same-orig
 
 export function browserTransport(options: { baseUrl?: string; fetch?: FetchLike } = {}): Transport {
   const base = options.baseUrl ?? '';
-  const doFetch = options.fetch ?? ((globalThis as unknown as { fetch: FetchLike }).fetch);
+  const doFetch = options.fetch ?? ((scheduledFetch as FetchLike));
   return {
     kind: 'live',
     async send({ method, path, body, signal }) {

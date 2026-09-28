@@ -9,6 +9,8 @@ test('ordinary account challenges from the market page with separate approval, r
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const f=challengeFixture(),namespace='practice-'+f.manifest.pool.slice(2),login='0x'+'99'.repeat(20),errors:string[]=[];
+  // An assertion can only exist after trading and observation have closed.
+  f.manifest.publication.draft.closesAt=f.now-7200;
   let confirmDispute=false,eligible=false;
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
@@ -39,6 +41,7 @@ test('ordinary account challenges from the market page with separate approval, r
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:namespace,markets:[{namespace,label:'Challenge fixture',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
+      if(path==='/api/account/portfolio-sources')return route.fulfill({json:{account:login,wallets:[owner],agentWallets:[]}});
       if(path===api+'status')return route.fulfill({json:await f.service.status(url.searchParams.get('wallet')||undefined)});
       if(path===api+'markets')return route.fulfill({json:await f.service.markets()});
       if(path===api+'positions')return route.fulfill({json:{rows:[{mask:'1',quantity:'0',payoutAtoms:null},{mask:'2',quantity:'0',payoutAtoms:null}]}});
@@ -68,7 +71,8 @@ test('ordinary account challenges from the market page with separate approval, r
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
     await page.goto('https://flurbo.singu.online/markets/'+namespace+'/0');
-    const evidence=page.getByRole('link',{name:'Read proposed answer evidence',exact:true});await evidence.waitFor();assert.equal(await evidence.getAttribute('href'),'/api/'+namespace+'/evidence/'+hash);
+    await page.getByText('Read proposed answer evidence',{exact:true}).click();
+    const evidence=page.getByRole('link',{name:'View raw evidence record',exact:false});await evidence.waitFor();assert.equal(await evidence.getAttribute('href'),'/api/'+namespace+'/evidence/'+hash);
     await page.getByRole('button',{name:'Challenge proposed answer',exact:true}).click();
     const form=page.getByRole('region',{name:'Challenge an answer'});
     await form.getByRole('button',{name:'Switch wallet',exact:true}).waitFor();

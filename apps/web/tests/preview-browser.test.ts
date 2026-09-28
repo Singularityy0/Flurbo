@@ -49,6 +49,9 @@ test('invite flow denies pending accounts, approved directory filters real sched
     assert.equal(await page.locator('.access-identity code').innerText(),owner);
     await page.screenshot({path:fileURLToPath(new URL('../../../target/preview-ui/access-mobile.png',import.meta.url)),fullPage:true});
     approved=true;await page.goto('https://flurbo.singu.online/markets');
+    await page.locator('.market-card').nth(3).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Open',exact:true}).getAttribute('aria-pressed'),'true');
+    await page.getByRole('button',{name:'All',exact:true}).click();
     for(const width of [1440,390]){
       await page.setViewportSize({width,height:900});await page.locator('.market-card').nth(7).waitFor({timeout:10000}).catch(async(e:Error)=>{throw Error(e.message+'\n'+await page.locator('body').innerText());});
       assert.equal(await page.getByLabel('Collection',{exact:true}).count(),0);

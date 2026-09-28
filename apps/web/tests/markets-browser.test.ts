@@ -54,6 +54,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
       if(path.endsWith('/history'))historyReads++;
       if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:namespace,markets:[{namespace,label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:loginAddress,wallets:linked?[owner]:[]}});
+      if(path==='/api/account/portfolio-sources')return route.fulfill({json:{account:loginAddress,wallets:linked?[owner]:[],agentWallets:[]}});
       if(path==='/api/account/wallets/challenge'){assert.equal(route.request().postDataJSON().wallet,owner);return route.fulfill({json:{id:'fixture-proof',message:'Link this MetaMask wallet to your Flurbo account; no transaction.'}});}
       if(path==='/api/account/wallets/verify'){assert.equal(route.request().postDataJSON().id,'fixture-proof');linked=true;return route.fulfill({json:{account:loginAddress,wallets:[owner]}});}
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
@@ -182,31 +183,32 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     assert.match(await reviewPanel.textContent(),/concert sell out/);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
     var orQuote=page.waitForResponse((r:any)=>r.url().endsWith('/prepare')&&r.request().postDataJSON().mask==='11');
-    await page.getByRole('radio',{name:'Any One or more, including all',exact:true}).check();
+    await page.getByRole('radio',{name:'At least one (OR) One or more answers are correct, including all',exact:true}).check();
     await orQuote;
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.equal(preparedClaims.at(-1).mask,'11'); // A Yes OR B No.
     assert.match(await reviewPanel.textContent(),/ OR /);
+    await page.getByText('Compare how the market connects these answers',{exact:true}).click();
     await page.getByRole('button',{name:'Compare with independence',exact:true}).click();
     await page.getByText('48.0%',{exact:true}).waitFor();
     await page.getByText('See winning outcomes',{exact:true}).click();
     assert.equal(await page.locator('.combination-table tr.wins').count(),3);
     const exactQuote=page.waitForResponse((r:any)=>r.url().endsWith('/prepare')&&r.request().postDataJSON().mask==='9');
-    await page.getByRole('radio',{name:'Exactly one One answer, no more',exact:true}).check();
+    await page.getByRole('radio',{name:'Exactly one Exactly one answer is correct',exact:true}).check();
     await exactQuote;
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.equal(preparedClaims.at(-1).mask,'9');
     assert.equal(await page.getByText('48.0%',{exact:true}).count(),0); // Old analysis removed.
     await page.getByRole('checkbox',{name:'Will it rain on Saturday?',exact:true}).check();
     const thresholdQuote=page.waitForResponse((r:any)=>r.url().endsWith('/prepare')&&r.request().postDataJSON().mask==='178');
-    await page.getByRole('radio',{name:'At least two Two or more answers',exact:true}).check();
+    await page.getByRole('radio',{name:'At least two Two or more answers are correct',exact:true}).check();
     await thresholdQuote;
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.equal(preparedClaims.at(-1).scope,7);assert.equal(preparedClaims.at(-1).mask,'178');
     assert.equal(await page.getByRole('checkbox',{name:'Will the new cafe open?',exact:true}).isDisabled(),true);
     await page.reload();
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
-    assert.equal(await page.getByRole('radio',{name:'At least two Two or more answers',exact:true}).isChecked(),true);
+    assert.equal(await page.getByRole('radio',{name:'At least two Two or more answers are correct',exact:true}).isChecked(),true);
     assert.equal(preparedClaims.at(-1).mask,'178');
     if(namespace==='rehearsal'){
       await page.setViewportSize({width:1440,height:1000});
@@ -218,7 +220,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     }
     await page.getByRole('checkbox',{name:'Will it rain on Saturday?',exact:true}).uncheck();
     var orQuote=page.waitForResponse((r:any)=>r.url().endsWith('/prepare')&&r.request().postDataJSON().mask==='11');
-    await page.getByRole('radio',{name:'Any One or more, including all',exact:true}).check();
+    await page.getByRole('radio',{name:'At least one (OR) One or more answers are correct, including all',exact:true}).check();
     await orQuote;
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'2');
@@ -255,6 +257,8 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     await page.evaluate(()=>sessionStorage.setItem('wallet.unknownSend','1'));
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).click();
     await page.getByRole('heading',{name:'Waiting for confirmation'}).waitFor();
+    const originalClose=f.manifest.publication.draft.closesAt;
+    f.manifest.publication.draft.closesAt=Math.floor(Date.now()/1000)-1;
     await page.reload();
     await page.getByRole('heading',{name:'Waiting for confirmation'}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'3');
@@ -262,6 +266,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     const unresolved=await page.evaluate((ns:string)=>JSON.parse(localStorage.getItem('flurbo.'+ns+'.pending.v1')!),namespace);
     assert.equal(unresolved.hash,null);
     assert.equal(unresolved.review.requested.scope,3);
+    f.manifest.publication.draft.closesAt=originalClose;
     await page.goto('https://flurbo.singu.online/markets');
     await page.getByRole('textbox',{name:'Search markets'}).fill('concert');
     assert.equal(await page.locator('.market-card').count(),1);

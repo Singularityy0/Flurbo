@@ -5,10 +5,10 @@ import {marketQuestion} from '../showcase-copy';
 import './combination-builder.css';
 
 const rules: {value:ClaimRule;label:string;detail:string}[]=[
-  {value:'AND',label:'All',detail:'Every selected answer'},
-  {value:'OR',label:'Any',detail:'One or more, including all'},
-  {value:'EXACTLY_ONE',label:'Exactly one',detail:'One answer, no more'},
-  {value:'AT_LEAST_TWO',label:'At least two',detail:'Two or more answers'},
+  {value:'AND',label:'All (AND)',detail:'Every selected answer is correct'},
+  {value:'OR',label:'At least one (OR)',detail:'One or more answers are correct, including all'},
+  {value:'EXACTLY_ONE',label:'Exactly one',detail:'Exactly one answer is correct'},
+  {value:'AT_LEAST_TWO',label:'At least two',detail:'Two or more answers are correct'},
 ];
 export const ruleDescription=(rule:ClaimRule)=>rules.find(r=>r.value===rule)!.detail;
 
@@ -31,20 +31,20 @@ export default function CombinationBuilder({state,base,legs,answers,rule,scope,m
         {legs.includes(i)&&<label className="combination-answer"><span className="sr-only">{marketQuestion(e)} answer</span><select aria-label={marketQuestion(e)+' answer'} disabled={disabled} value={(answers[i]??true)?'yes':'no'} onChange={e=>onAnswer(i,e.target.value==='yes')}><option value="yes">Yes</option><option value="no">No</option></select></label>}
       </div>)}</div>
       {legs.length>1&&<>
-        <fieldset className="combination-rules" disabled={disabled}><legend>This prediction wins when these answers match</legend>
+        <fieldset className="combination-rules" disabled={disabled}><legend>I win if...</legend>
           {rules.map(r=><label key={r.value} className={rule===r.value?'selected':''}><input type="radio" name={'claim-rule-'+namespace} value={r.value} checked={rule===r.value} onChange={()=>onRule(r.value)}/><span><strong>{r.label}</strong><small>{r.detail}</small></span></label>)}
         </fieldset>
         <details className="combination-scenarios"><summary>See winning outcomes</summary>
           <p>Each winning share pays 1 test AUSD, even if several answers match. VOID can produce a fractional payout under the market rules.</p>
-          <div className="combination-table"><table><caption>Resolved answers and payout per share</caption><thead><tr>{legs.map((event,i)=><th key={event}>Question {i+1}</th>)}<th>Payout</th></tr></thead><tbody>
+          <div className="combination-table"><table><caption>Resolved answers and payout per share</caption><thead><tr>{legs.map(event=><th key={event}>{marketQuestion(events[event])}</th>)}<th>Payout</th></tr></thead><tbody>
             {claimScenarios(scope,mask,events.length).map(s=><tr key={s.state} className={s.wins?'wins':''}>{s.answers.map(a=><td key={a.event}>{a.yes?'Yes':'No'}</td>)}<td>{s.wins?'1':'0'} AUSD</td></tr>)}
           </tbody></table></div>
           <ol>{legs.map(event=><li key={event}>{marketQuestion(events[event])}</li>)}</ol>
         </details>
-        <ClaimComparison key={`${scope}:${mask}`} namespace={namespace} manifest={state.manifest} scope={scope} mask={mask}/>
+        <details><summary>Compare how the market connects these answers</summary><ClaimComparison key={`${scope}:${mask}`} namespace={namespace} manifest={state.manifest} scope={scope} mask={mask}/></details>
       </>}
     </div>}
-    {legs.length>1&&<div className="combination-summary"><strong>{ruleDescription(rule)} must match</strong><ul>{legs.map(event=><li key={event}><span>{marketQuestion(events[event])}</span><b>{(answers[event]??true)?'Yes':'No'}</b></li>)}</ul></div>}
+    {legs.length>1&&<div className="combination-summary"><strong>I win if {ruleDescription(rule).toLowerCase()}.</strong><ul>{legs.map(event=><li key={event}><span>{marketQuestion(events[event])}</span><b>{(answers[event]??true)?'Yes':'No'}</b></li>)}</ul></div>}
   </section>;
 }
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { request as httpRequest } from 'node:http';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, basename } from 'node:path';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -52,6 +52,14 @@ test('host configuration rejects local/mainnet RPC and session storage never fal
 test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only submission policy without local funding', async () => {
   const directory = await mkdtemp(join(tmpdir(),'flurbo-server-'));
   await writeFile(join(directory,'index.html'),'<html>Flurbo</html>');
+  await mkdir(join(directory,'brand'));
+  await writeFile(join(directory,'brand','flurbo-social-landscape.png'),'landscape');
+  await writeFile(join(directory,'brand','flurbo-social-portrait.png'),'portrait');
+  await writeFile(join(directory,'brand','flurbo-social-banner.png'),'banner');
+  await writeFile(join(directory,'brand','flurbo-social-banner-v2.png'),'banner-v2');
+  await writeFile(join(directory,'brand','flurbo-profile-2026.png'),'profile');
+  await writeFile(join(directory,'favicon-contour.svg'),'<svg/>');
+  await writeFile(join(directory,'technical_litepaper.pdf'),'%PDF-fixture');
   const store = new SessionStore();
   const learningReport = {schema:'flurbo.learning-comparison.v1',input:'synthetic',changesExecutablePrices:false};
   const config = {previewAccess:null,testingOperatorAccount:signer.address.toLowerCase(),origin,rpcUrl:TESTNET.rpc,learningReport: learningReport as typeof learningReport | null, learningStatus: 'starting', androidAssetLinks: null as object[] | null};
@@ -114,6 +122,25 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     assert.equal((await request('/rehearsal-rules')).json().fixtures.length,4);
     assert.equal((await request('/rehearsal-rules')).json().fixtures[1].result,'NO');
     assert.equal((await request('/.env')).status,404);
+    for(const path of ['/brand/flurbo-social-landscape.png','/brand/flurbo-social-portrait.png','/brand/flurbo-social-banner.png','/brand/flurbo-social-banner-v2.png','/brand/flurbo-profile-2026.png']) {
+      const asset=await request(path);
+      assert.equal(asset.status,200,path);
+      assert.equal(asset.headers['content-type'],'image/png');
+      assert.equal(asset.headers['cache-control'],'public, max-age=31536000, immutable');
+    }
+    const favicon=await request('/favicon-contour.svg');
+    assert.equal(favicon.status,200);
+    assert.equal(favicon.headers['content-type'],'image/svg+xml');
+    for(const method of ['GET','HEAD']) {
+      const litepaper=await request('/technical_litepaper.pdf',undefined,'','flurbo.singu.online','',method);
+      assert.equal(litepaper.status,200);
+      assert.equal(litepaper.headers['content-type'],'application/pdf');
+      assert.equal(litepaper.headers['cache-control'],'public, max-age=3600');
+      assert.equal(litepaper.text,method==='HEAD'?'':'%PDF-fixture');
+    }
+    assert.equal((await request('/technical_litepaper.pdf.exe')).status,404);
+    assert.equal((await request('/brand/not-public.png')).status,404);
+    assert.equal((await request('/brand/../index.html')).status,404);
     assert.equal((await request('/api/network',undefined,'','evil.example')).status,421);
     assert.equal((await request('/api/auth/challenge',{address:signer.address},'','flurbo.singu.online','https://evil.example')).status,403);
     assert.equal((await request('/api/local-wallet-setup',{wallet:signer.address})).status,404);

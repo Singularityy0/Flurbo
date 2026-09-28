@@ -10,20 +10,13 @@ import Workspace from './pages/Workspace';
 import Markets from './pages/Markets';
 import EvidenceReview from './pages/EvidenceReview';
 import FundingPage from './pages/FundingPage';
-import {useTestingAccess} from './auth/testing-access';
 import {usePreviewAccess} from './auth/preview-access';
 import AccessPage from './pages/AccessPage';
 import Agents from './pages/Agents';
+import BrandLogo from './components/BrandLogo';
+import './ux.css';
 
 export const brand = "flurbo";
-
-function Logo({ inverse = false }: { inverse?: boolean }) {
-  return (
-    <span className={`logo ${inverse ? "logo-inverse" : ""}`} aria-label="flurbo home">
-      flurbo<span className="logo-dot" aria-hidden="true" />
-    </span>
-  );
-}
 
 function Header() {
   const { state } = useAuth();
@@ -59,16 +52,16 @@ function Header() {
     <header ref={header} className={`site-header ${isHome ? "site-header-home" : "site-header-subpage"}`}>
       <div className="header-inner">
         <Link href="/" className="brand-link" aria-label="Flurbo home">
-          <Logo />
+          <BrandLogo />
         </Link>
         <nav id="main-nav" className={`main-nav ${open ? "main-nav-open" : ""}`} aria-label="Main navigation"
           onClick={(event) => {
             if ((event.target as HTMLElement).closest("a")) setOpen(false);
           }}>
-          {state.address ? <><Link href="/markets">Markets</Link><Link href="/agents">Agents</Link><Link href="/portfolio">Portfolio</Link><Link href="/access">Your account</Link></> : <><a href="/#how-it-works">How it works</a><a href="/#the-idea">The idea</a></>}
+          {state.restoring ? <span role="status" className="nav-loading">Loading your account...</span> : state.address ? <><Link href="/markets">Markets</Link><Link href="/agents">Agents</Link><Link href="/portfolio">Portfolio</Link><Link href="/access">Your account</Link></> : <><a href="/#how-it-works">How it works</a><a href="/#the-idea">The idea</a></>}
           <Link href="/docs" aria-current={location === '/docs' ? 'page' : undefined}>Docs</Link>
           <span className="nav-rule" aria-hidden="true" />
-          {state.address ? (isHome ? <Link href="/markets" className="nav-cta">Explore markets <ArrowUpRight size={15} strokeWidth={1.8} /></Link> : <Link href="/" className="nav-login">About Flurbo</Link>) : <>
+          {state.restoring ? null : state.address ? (isHome ? <Link href="/markets" className="nav-cta">Explore markets <ArrowUpRight size={15} strokeWidth={1.8} /></Link> : <Link href="/" className="nav-login">About Flurbo</Link>) : <>
             <Link href="/login" className="nav-login">Sign in</Link>
             <Link href="/signup" className="nav-cta">Get early access <ArrowUpRight size={15} strokeWidth={1.8} /></Link>
           </>}
@@ -101,7 +94,7 @@ function AuthShell({ mode }: { mode: "login" | "signup" | "account" }) {
 
 function AccountRoute() {
   const preview = usePreviewAccess();
-  const testingAccess = useTestingAccess();
+  const testingAccess = preview.access?.testingTools===true;
   const [location] = useLocation();
   const { controller, state } = useAuth();
   const [, navigate] = useLocation();
@@ -176,5 +169,3 @@ export default function App() {
     </Switch>
   );
 }
-
-export { Logo };

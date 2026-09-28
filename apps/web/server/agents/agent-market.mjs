@@ -1,3 +1,4 @@
+import {rpcFetch} from '../rpc-capacity.mjs';
 import { decodeEventLog, decodeFunctionResult, encodeFunctionData, parseAbi } from 'viem';
 import { pilotPoolAbi, pilotCall } from '../../shared/pilot.mjs';
 
@@ -19,7 +20,7 @@ export function agentRpc(endpoint, { hosted = true, request = fetch } = {}) {
   return async (method, params = []) => {
     if (!READ_METHODS.includes(method)) throw new Error('Agent RPC is read-only');
     const callId = ++id;
-    const response = await request(endpoint, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' },
+    const response = await rpcFetch(request,endpoint, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: callId, method, params }), signal: AbortSignal.timeout(15_000) });
     const body = await response.json();
     // Provider error text can contain endpoint details; it is never surfaced.
