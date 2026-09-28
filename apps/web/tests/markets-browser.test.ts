@@ -151,14 +151,14 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     // Confirmation is checked automatically, without another app click.
     await page.getByLabel('Shares',{exact:true}).waitFor();
     assert.equal(await page.getByLabel('Shares',{exact:true}).inputValue(),'5');
-    assert.equal(await page.getByLabel('Your answer',{exact:true}).inputValue(),'no');
+    assert.equal(await page.getByRole('radiogroup',{name:'Your answer'}).getByRole('radio',{name:'No',exact:true}).getAttribute('aria-checked'),'true');
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');
     // Approval is already confirmed and tracking cleared. The draft must still reopen.
     assert.equal(await page.evaluate((ns:string)=>localStorage.getItem('flurbo.'+ns+'.pending.v1'),namespace),null);
     const connectionsBeforeReload=await page.evaluate(()=>sessionStorage.getItem('connect.requests'));
     await page.reload();await page.getByLabel('Shares',{exact:true}).waitFor();
     assert.equal(await page.getByLabel('Shares',{exact:true}).inputValue(),'5');
-    assert.equal(await page.getByLabel('Your answer',{exact:true}).inputValue(),'no');
+    assert.equal(await page.getByRole('radiogroup',{name:'Your answer'}).getByRole('radio',{name:'No',exact:true}).getAttribute('aria-checked'),'true');
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('connect.requests')),connectionsBeforeReload);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('link.signatures')),'1');

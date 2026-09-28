@@ -1,8 +1,39 @@
-.what-if{margin-top:38px;padding:30px;border:1px solid var(--line);border-radius:18px;background:#fff9}
-.what-if-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}.what-if h2{font-size:40px;letter-spacing:-.04em;font-weight:500;line-height:1.2;margin-top:8px}.what-if h2 em{font-family:var(--serif);font-weight:400}.what-if p{font-size:14px;line-height:1.7;color:var(--ink-soft);margin:12px 0}.what-if h3{font-size:19px;font-weight:500;line-height:1.4}
-.what-if-controls{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:24px 0 18px}.what-if-controls label{display:grid;gap:9px;font-size:12px;min-width:0}.what-if-controls select{width:100%;min-height:48px;min-width:0;font:inherit;font-size:14px;color:var(--forest);background:var(--ivory);border:1px solid var(--line);border-radius:9px;padding:12px}
-.what-if-actions{display:flex;gap:12px;flex-wrap:wrap}.what-if-actions .button{font-size:13px}.what-if-results{border-top:1px solid var(--line);margin-top:26px;padding-top:24px}.what-if-probabilities{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0}.what-if-probabilities>div{display:flex;flex-direction:column;gap:12px;padding:20px;border-radius:12px;background:var(--ivory)}.what-if-probabilities>div:first-child{background:var(--forest);color:var(--ivory)}.what-if-probabilities span{font-size:12px;line-height:1.5}.what-if-probabilities strong{font-size:clamp(25px,3vw,37px);font-weight:500;letter-spacing:-.04em}.what-if small{display:block;font-size:12px;line-height:1.6}
-.what-if-comparison{border-top:1px solid var(--line);padding-top:24px;margin-top:24px}.what-if-bar-row{display:grid;grid-template-columns:1fr auto;gap:10px;margin:18px 0;font-size:13px}.what-if-bar-row strong{font-weight:500}.what-if-bar{grid-column:1/-1;height:12px;background:var(--ivory-deep);border-radius:20px;overflow:hidden}.what-if-bar>span{display:block;height:100%;background:var(--forest);border-radius:20px}.what-if-bar.baseline>span{background:#8c9869}.what-if .what-if-gap{color:var(--forest)}.what-if-gap span{font-size:12px;color:var(--ink-soft)}.what-if-evidence{margin:20px 0;font-size:13px}.what-if-evidence summary{cursor:pointer;padding:10px 0}.what-if .what-if-identifier{font-size:11px;overflow-wrap:anywhere}.what-if .market-caption{font-size:12px}
-@media(max-width:650px){.what-if{padding:20px}.what-if-heading{align-items:flex-start;flex-direction:column}.what-if-controls,.what-if-probabilities{grid-template-columns:1fr}.what-if-probabilities>div{padding:16px}.what-if-probabilities strong{font-size:32px}}
-.what-if-sensitivity{border-top:1px solid var(--line);margin-top:24px;padding-top:16px}.what-if-sensitivity summary{cursor:pointer;font-size:16px;padding:12px 0;line-height:1.5}.what-if-scenarios{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:18px 0}.what-if-scenarios article{padding:20px;background:var(--ivory);border:1px solid var(--line);border-radius:12px;min-width:0}.what-if-scenarios h4{font-weight:500;font-size:16px}.what-if-legs{display:grid;gap:4px}.what-if-legs strong{font-size:12px;margin-bottom:10px;color:var(--forest)}.what-if-scenarios dl>div{padding:12px 0;border-top:1px solid var(--line)}.what-if-scenarios dt{font-size:12px;line-height:1.5}.what-if-scenarios dd{display:flex;flex-wrap:wrap;gap:8px 20px;margin:8px 0 0;font-size:15px}.what-if-scenarios dd span{color:var(--ink-soft)}.what-if-scenarios dd strong{font-weight:500}
-@media(max-width:650px){.what-if-scenarios{grid-template-columns:1fr}}
+/* What-if: read-only conditional and joint chances from one pool snapshot. */
+.what-if { display: grid; gap: var(--s-4); grid-template-columns: minmax(0, 1fr); margin-top: var(--s-3); }
+.what-if-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.what-if h2 { font-size: 18px; }
+.what-if h3 { font-size: 15px; line-height: 1.4; }
+.what-if p { color: var(--ink-2); font-size: 14px; }
+.what-if-controls { display: grid; gap: var(--s-3); }
+@media (min-width: 768px) { .what-if-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.what-if-actions { display: flex; flex-wrap: wrap; gap: var(--s-3); }
+.what-if-results { display: grid; gap: var(--s-4); padding-top: var(--s-4); border-top: 1px solid var(--rule); animation: disclose var(--t-base) var(--ease-out); }
+.what-if-probabilities { display: grid; gap: var(--s-2); }
+@media (min-width: 640px) { .what-if-probabilities { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.what-if-probabilities > div { display: grid; gap: 4px; align-content: start; padding: var(--s-4); border-radius: var(--r-control); background: var(--surface-sunken); }
+.what-if-probabilities > div:first-child { background: var(--surface-inverse); color: var(--on-inverse); }
+.what-if-probabilities > div:first-child span, .what-if-probabilities > div:first-child small { color: var(--on-inverse-2); }
+.what-if-probabilities span { color: var(--ink-2); font-size: 12px; line-height: 1.45; }
+.what-if-probabilities strong { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; animation: value-in var(--t-base) var(--ease-out); }
+.what-if-probabilities small, .what-if-bar-row small { color: var(--ink-3); font-size: 12px; }
+.what-if-comparison { display: grid; gap: var(--s-3); }
+.what-if-bar-row { display: grid; grid-template-columns: 120px 70px minmax(0, 1fr); align-items: center; gap: var(--s-3); font-size: 14px; }
+.what-if-bar-row strong { font-variant-numeric: tabular-nums; text-align: right; }
+.what-if-bar-row small { grid-column: 1 / -1; }
+.what-if-bar { height: 8px; border-radius: 4px; overflow: hidden; }
+.what-if-bar span { display: block; height: 100%; background: var(--ink); transform-origin: left center; transition: transform var(--t-enter) var(--ease-out); }
+.what-if-bar.baseline span { background: repeating-linear-gradient(90deg, var(--ink-3) 0 6px, transparent 6px 9px); }
+.what-if-gap { color: var(--ink) !important; }
+.what-if-gap span { color: var(--ink-3); }
+.what-if-scenarios { display: grid; gap: var(--s-3); margin-top: var(--s-3); }
+@media (min-width: 768px) { .what-if-scenarios { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.what-if-scenarios article { display: grid; gap: var(--s-2); align-content: start; padding: var(--s-4); border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--bg); }
+.what-if-scenarios h4 { font-size: 14px; }
+.what-if-legs { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px var(--s-3); font-size: 13px !important; }
+.what-if-scenarios dl { display: grid; gap: var(--s-2); margin: 0; }
+.what-if-scenarios dl > div { display: grid; gap: 2px; font-size: 13px; }
+.what-if-scenarios dt { color: var(--ink-3); }
+.what-if-scenarios dd { display: flex; flex-wrap: wrap; gap: var(--s-3); margin: 0; font-variant-numeric: tabular-nums; }
+.what-if-identifier { font-family: var(--mono); font-size: 12px !important; overflow-wrap: anywhere; }
+.what-if-sensitivity > :not(summary), .what-if-evidence > :not(summary) { margin-top: var(--s-2); }
+@media (max-width: 480px) { .what-if-bar-row { grid-template-columns: 1fr auto; } .what-if-bar { grid-column: 1 / -1; } }

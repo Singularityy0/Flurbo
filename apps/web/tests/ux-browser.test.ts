@@ -69,6 +69,7 @@ test('runtime setup keeps issued credentials across sections and exposes all SDK
     await page.goto(origin+'/agents');
     const form=page.getByRole('form',{name:'Register an agent'});
     await form.getByLabel('Name',{exact:true}).fill('UX fixture agent');await form.getByRole('button',{name:'Register agent',exact:true}).click();
+    await page.waitForURL(/\/agents\/[0-9a-f-]{36}$/, {timeout:15000}).catch(async()=>{throw Error(await page.locator('main').innerText());});
     await page.getByRole('button',{name:'Continue setup'}).click();
     const credentials=page.getByRole('region',{name:'API credentials'});
     await credentials.getByRole('button',{name:'Issue credential'}).click();

@@ -60,6 +60,7 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
   await writeFile(join(directory,'brand','flurbo-profile-2026.png'),'profile');
   await writeFile(join(directory,'favicon-contour.svg'),'<svg/>');
   await writeFile(join(directory,'technical_litepaper.pdf'),'%PDF-fixture');
+  await writeFile(join(directory,'robots.txt'),'User-agent: *\nDisallow: /markets\n');
   const store = new SessionStore();
   const learningReport = {schema:'flurbo.learning-comparison.v1',input:'synthetic',changesExecutablePrices:false};
   const config = {previewAccess:null,testingOperatorAccount:signer.address.toLowerCase(),origin,rpcUrl:TESTNET.rpc,learningReport: learningReport as typeof learningReport | null, learningStatus: 'starting', androidAssetLinks: null as object[] | null};
@@ -138,6 +139,24 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
       assert.equal(litepaper.headers['cache-control'],'public, max-age=3600');
       assert.equal(litepaper.text,method==='HEAD'?'':'%PDF-fixture');
     }
+    // Unknown page-like paths keep a 404 status but show the Flurbo shell; assets stay plain.
+    for(const path of ['/does-not-exist','/markets/unknown/99','/agents/not-an-id','/rehearsal']) {
+      const missing=await request(path);
+      assert.equal(missing.status,404,path);
+      assert.equal(missing.headers['content-type'],'text/html; charset=utf-8',path);
+      assert.equal(missing.headers['cache-control'],'no-store',path);
+      assert.equal(missing.text,'<html>Flurbo</html>',path);
+    }
+    for(const path of ['/assets/missing.js','/brand/not-public.png','/.env','/technical_litepaper.pdf.exe']) {
+      const missing=await request(path);
+      assert.equal(missing.status,404,path);
+      assert.equal(missing.text,'Not found',path);
+    }
+    const robots=await request('/robots.txt');
+    assert.equal(robots.status,200);
+    assert.equal(robots.headers['content-type'],'text/plain');
+    assert.equal(robots.headers['cache-control'],'public, max-age=3600');
+    assert.match(robots.text,/Disallow: \/markets/);
     assert.equal((await request('/technical_litepaper.pdf.exe')).status,404);
     assert.equal((await request('/brand/not-public.png')).status,404);
     assert.equal((await request('/brand/../index.html')).status,404);

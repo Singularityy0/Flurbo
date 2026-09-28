@@ -53,9 +53,9 @@ test('landing example and unified directory work on desktop and mobile without l
     await source.waitFor();
     assert.equal(await source.locator('time').getAttribute('datetime'),new Date((now+14520)*1000).toISOString());
     assert.match(await source.innerText(),/No assertion evidence is published/);
-    assert.equal(await page.getByRole('link',{name:'View source ↗',exact:true}).count(),0);
+    assert.equal(await page.getByRole('link',{name:'View source',exact:true}).count(),0);
     await source.getByText('How the block is checked',{exact:true}).click();
-    assert.equal(await source.getByRole('link',{name:'Ethereum API documentation ↗',exact:true}).getAttribute('href'),'https://ethereum.org/developers/docs/apis/json-rpc/');
+    assert.equal(await source.getByRole('link',{name:'Ethereum API documentation',exact:true}).getAttribute('href'),'https://ethereum.org/developers/docs/apis/json-rpc/');
     assert.match(await source.innerText(),/not evidence of this market’s result/);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     evidencePublished=true;await page.reload();

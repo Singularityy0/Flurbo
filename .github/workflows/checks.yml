@@ -47,7 +47,7 @@ jobs:
           node "$PW/cli.js" install --with-deps chromium
           export FLURBO_TEST_PLAYWRIGHT="$PW/index.mjs"
           export FLURBO_TEST_BROWSER="$(node -e "console.log(require(process.argv[1]).chromium.executablePath())" "$PW")"
-          node --experimental-strip-types --test tests/pilot-browser.test.ts tests/markets-browser.test.ts tests/agents-browser.test.ts
+          node --experimental-strip-types --test --test-concurrency=1 tests/pilot-browser.test.ts tests/markets-browser.test.ts tests/agents-browser.test.ts tests/semantic-ticket-browser.test.ts tests/loader-browser.test.ts tests/ui-controls-browser.test.ts tests/ux-browser.test.ts
       - name: Protocol documents parse
         run: |
           python3 -m pip install --quiet pyyaml==6.0.2

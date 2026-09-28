@@ -4,11 +4,16 @@ import { useAuth } from '../auth/context';
 import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
 import { watchTradingWallet, type TradingConnection } from '../auth/trading-session';
 import { linkedWallets } from '../wallet-links';
-import { submitPilot, readPilotPending, pendingKeyFor, validatePilotReview, type PilotPending, type PilotNamespace, type PilotReview } from '../pilot';
+import { submitPilot, readPilotPending, pendingKeyFor, validatePilotReview, PurchaseSemanticCollision, type PilotPending, type PilotNamespace, type PilotReview } from '../pilot';
+import { SemanticReview } from '../components/SemanticReview';
 import { rememberConfirmedClaim } from '../pilot-claims';
 import { describeClaim, amount } from '../portfolio';
 import { agentClient, runtimeAdmin, buildForecast, frechetBounds, percentToPpm, message, type ProfileJSON, type RecordJSON, type ReviewJSON, type EvidenceInput } from '../agents-client';
 import { RuntimeCreateForm, RuntimeAgentDetail } from './AgentRuntime';
+import { ArrowLeft, Bot } from 'lucide-react';
+import PageHeader from '../components/PageHeader';
+import StatusBadge from '../components/ui/StatusBadge';
+import { useLoadGate } from '../loading/gates';
 import './agents.css';
 
 type Market = Awaited<ReturnType<typeof agentClient.market>>;
@@ -44,7 +49,7 @@ function belongsTo(r: RecordJSON, saved: PilotPending, login: string, pool: stri
 
 export default function Agents() {
   const [match, params] = useRoute('/agents/:id');
-  return <main id="main" tabIndex={-1} className="markets-page agents-page">
+  return <main id="main" tabIndex={-1} className="page markets-page agents-page">
     {match && params?.id ? <AgentPage id={params.id}/> : <AgentList/>}
   </main>;
 }
@@ -53,8 +58,9 @@ export default function Agents() {
 function AgentPage({ id }: { id: string }) {
   const [kind, setKind] = useState<'runtime' | 'assisted' | null>(null), [error, setError] = useState('');
   useEffect(() => { let live = true; runtimeAdmin.get(id).then(d => { if (live) setKind(d.profile.kind === 'runtime' ? 'runtime' : 'assisted'); }).catch(e => { if (live) setError(message(e)); }); return () => { live = false; }; }, [id]);
-  if (error) return <><p className="market-error" role="alert">{error}</p><Link href="/agents" className="text-link">Back to agents</Link></>;
-  return kind === null ? <p role="status">Loading agent...</p> : kind === 'runtime' ? <RuntimeAgentDetail id={id}/> : <AgentDetail id={id}/>;
+  useLoadGate('agent', { pending: kind === null && !error, error: kind === null ? error : null, label: 'Loading your agent' });
+  if (error) return <><p className="state-inline error" role="alert">{error}</p><Link href="/agents" className="link-back"><ArrowLeft aria-hidden="true" strokeWidth={1.75}/>Back to agents</Link></>;
+  return kind === null ? <p role="status" className="sr-only">Loading agent...</p> : kind === 'runtime' ? <RuntimeAgentDetail id={id}/> : <AgentDetail id={id}/>;
 }
 
 function AgentList() {
@@ -73,28 +79,28 @@ function AgentList() {
     try { const created = await agentClient.agents.create({ name, namespace, mode }) as ProfileJSON; navigate(`/agents/${created.id}`); }
     catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
+  useLoadGate('agents', { pending: agents === null && !error, error: agents === null ? error : null, label: 'Loading your agents' });
   return <>
-    <header className="market-heading agents-heading">
-      <span className="eyebrow">Agents · Monad testnet · Test assets</span>
-      <h1>Build agents that <em>trade relationships.</em></h1>
-      <p>Create an agent with the Flurbo SDK, run it on your own computer and follow its decisions here. Start with simulated trades before allowing live testnet trades.</p>
-    </header>
+    <PageHeader className="agents-heading" title="Build agents that trade relationships."
+      lead="Write an agent with the Flurbo SDK and run it on your own computer or server. Flurbo does not host a model for you; it shows your agent's status, decisions and verified trades here."
+      actions={<a href="#register-agent" className="btn btn-primary">Register an agent</a>}/>
+    <p className="agents-explainer">Paper mode records what your agent would have traded without sending anything on-chain. Live testnet trades need your explicit permission, a dedicated agent wallet and limits you set.</p>
     {!durable && <p className="agents-note" role="status">Development storage: agents on this server are not durable.</p>}
-    {error && <p className="market-error" role="alert">{error}</p>}
+    {error && <p className="state-inline error" role="alert">{error}</p>}
     <section className="agents-grid">
       <div className="agents-list" aria-label="Your agents">
         <h2>Your agents</h2>
-        {agents === null ? <p role="status">Loading agents...</p> : agents.length === 0 ? <p>No agents yet. Create one to start.</p> :
+        {agents === null ? <><p role="status" className="sr-only">Loading agents...</p><div className="agents-rows-skeleton" aria-hidden="true"><span className="skeleton" style={{ height: 64 }}/><span className="skeleton" style={{ height: 64 }}/></div></> : agents.length === 0 ? <div className="state-block"><Bot aria-hidden="true" strokeWidth={1.75}/><p>No agents yet. Register one to start in paper mode.</p></div> :
           <ul>{agents.map(a => <li key={a.id}><Link href={`/agents/${a.id}`}><strong>{a.name}</strong><span>{a.kind === 'runtime' ? (a.markets ?? []).map(ns=>directory.find(d=>d.namespace===ns)?.label||'Related markets').join(', ') : a.market.title || a.market.namespace}</span>
-            <span className="agents-tags">{a.kind === 'runtime' ? <><span>Runs on your infrastructure</span><span>{a.runtimePolicy?.paused ? 'Paused' : a.runtimePolicy?.liveEnabled ? 'Live trades allowed' : 'Paper until allowed'}</span></>
-              : <><span>Assisted</span><span>{a.mode === 'paper' ? 'Paper only' : 'Proposes for approval'}</span><span>{a.status === 'active' ? 'Active' : 'Paused'}</span></>}</span></Link></li>)}</ul>}
+            <span className="agents-tags">{a.kind === 'runtime' ? <><span className="agents-kind">Runs on your infrastructure</span><StatusBadge kind={a.runtimePolicy?.paused ? 'waiting' : a.runtimePolicy?.liveEnabled ? 'open' : 'settled'}>{a.runtimePolicy?.paused ? 'Paused' : a.runtimePolicy?.liveEnabled ? 'Live trades allowed' : 'Paper until allowed'}</StatusBadge></>
+              : <><span className="agents-kind">Assisted, {a.mode === 'paper' ? 'Paper only' : 'Proposes for approval'}</span><StatusBadge kind={a.status === 'active' ? 'open' : 'waiting'}>{a.status === 'active' ? 'Active' : 'Paused'}</StatusBadge></>}</span></Link></li>)}</ul>}
         {archived.length > 0 && <details className="agents-archived"><summary>Archived agents ({archived.length})</summary>
           <p className="agents-fine">Kept so a transaction already sent from one of their proposals can still be recorded and verified.</p>
           <ul>{archived.map(a => <li key={a.id}><Link href={`/agents/${a.id}`}><strong>{a.name}</strong><span>{a.kind === 'runtime' ? (a.markets ?? []).map(ns=>directory.find(d=>d.namespace===ns)?.label||'Related markets').join(', ') : a.market.title || a.market.namespace}</span></Link></li>)}</ul></details>}
       </div>
       <div>
-      <p className="agents-fine">For developers: TypeScript, Python, Rust and C++. <Link href="/docs#agents">Read the setup guide</Link></p><RuntimeCreateForm directory={directory}/>
-      <details className="agents-card agents-settings"><summary>Assisted agent: manual forecasts, paper trades and MetaMask approval</summary>
+      <RuntimeCreateForm directory={directory}/><p className="agents-fine">SDKs for TypeScript, Python, Rust and C++. <Link href="/docs#agents">Read the setup guide</Link></p>
+      <details className="agents-card agents-settings disclosure"><summary>Assisted agent: manual forecasts, paper trades and MetaMask approval</summary>
       <form onSubmit={create}>
         <h2>Create an assisted agent</h2>
         <label>Name<input value={name} onChange={e => setName(e.target.value)} maxLength={48} required placeholder="Release relationship agent"/></label>
@@ -124,14 +130,15 @@ function AgentDetail({ id }: { id: string }) {
   }, [id]);
   useEffect(() => { const c = new AbortController(); void load(c.signal).catch(e => { if (!c.signal.aborted) setError(message(e)); }); return () => c.abort(); }, [load]);
   async function act(fn: () => Promise<void>) { setBusy(true); setError(''); try { await fn(); } catch (e) { setError(message(e)); } finally { setBusy(false); } }
-  if (error && !profile) return <><p className="market-error" role="alert">{error}</p><Link href="/agents" className="text-link">Back to agents</Link></>;
-  if (!profile || !market) return <p role="status">Loading agent...</p>;
+  useLoadGate('agent-assisted', { pending: (!profile || !market) && !error, error: !profile ? error : null, label: 'Loading your agent' });
+  if (error && !profile) return <><p className="state-inline error" role="alert">{error}</p><Link href="/agents" className="link-back"><ArrowLeft aria-hidden="true" strokeWidth={1.75}/>Back to agents</Link></>;
+  if (!profile || !market) return <p role="status" className="sr-only">Loading agent...</p>;
   const questions = market.events.map(e => e.question);
   const latest = records.find(r => r.kind === 'decision'), isArchived = profile.status === 'archived';
   return <>
-    <nav className="agents-back"><Link href="/agents" className="text-link">All agents</Link></nav>
+    <nav className="agents-back"><Link href="/agents" className="link-back"><ArrowLeft aria-hidden="true" strokeWidth={1.75}/>All agents</Link></nav>
     <header className="agents-profile">
-      <div><span className="eyebrow">{profile.mode === 'paper' ? 'Paper only' : 'Proposes for your approval'} · {isArchived ? 'Archived' : profile.status === 'active' ? 'Active' : 'Paused'}</span>
+      <div className="agents-profile-title"><span className="chip">{profile.mode === 'paper' ? 'Paper only' : 'Proposes for your approval'} · {isArchived ? 'Archived' : profile.status === 'active' ? 'Active' : 'Paused'}</span>
         <h1>{profile.name}</h1><p>{market.title}. Trading {market.open ? `closes ${when(market.closesAt)}` : 'is closed'}.</p></div>
       {!isArchived && <div className="agents-actions">
         <button className="button button-outline" disabled={busy} onClick={() => act(async () => { setProfile(await agentClient.agents.update(id, { status: profile.status === 'active' ? 'paused' : 'active' }) as ProfileJSON); })}>{profile.status === 'active' ? 'Pause' : 'Resume'}</button>
@@ -144,7 +151,7 @@ function AgentDetail({ id }: { id: string }) {
     </header>
     {isArchived && <p className="agents-note" role="status">This agent is archived. It no longer evaluates or proposes. Transactions sent from its proposals can still be recorded and checked below.</p>}
     {!isArchived && <Settings profile={profile}/>}
-    {error && <p className="market-error" role="alert">{error}</p>}
+    {error && <p className="state-inline error" role="alert">{error}</p>}
     {notice && <p className="agents-note" role="status">{notice}</p>}
     {!isArchived && <ForecastForm market={market} disabled={busy || profile.status !== 'active'} onSubmit={forecast => act(async () => {
       setNotice('Evaluating with current pool quotes...');
@@ -212,7 +219,7 @@ function ForecastForm({ market, disabled, onSubmit }: { market: Market; disabled
     <label>Uncertainty<input value={uncertainty} onChange={e => setUncertainty(e.target.value)} maxLength={600} required placeholder="What would change your view"/></label>
     <label>Assumptions (one per line, optional)<textarea value={assumptions} onChange={e => setAssumptions(e.target.value)} maxLength={2400}/></label>
     <label>Your own confidence (self-reported, not calibrated)<select value={confidence} onChange={e => setConfidence(e.target.value as never)}><option value="">Not stated</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
-    {error && <p className="market-error" role="alert">{error}</p>}
+    {error && <p className="state-inline error" role="alert">{error}</p>}
     <button className="button button-dark" disabled={disabled}>Preview decision</button>
   </form>;
 }
@@ -260,7 +267,7 @@ function DecisionCard({ record, questions, market, profile, busy, hasLiveProposa
           }}>{working ? 'Preparing...' : 'Prepare for MetaMask approval'}</button>
         </>}
       </div>
-      {error && <p className="market-error" role="alert">{error}</p>}
+      {error && <p className="state-inline error" role="alert">{error}</p>}
     </>}
   </section>;
 }
@@ -280,6 +287,7 @@ function Approvals({ id, profile, records, setRecords, questions, login, reload 
   const namespace = profile.market.namespace as PilotNamespace;
   const [wallets, setWallets] = useState<BrowserWallet[]>([]), [connection, setConnection] = useState<TradingConnection>({ owner: '', status: 'checking' });
   const [pending, setPending] = useState<PilotPending | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [hash, setHash] = useState('');
+  const [semanticFailure, setSemanticFailure] = useState<{recordId:string; original:unknown; review:PilotReview} | null>(null);
   const provider = useRef<BrowserWallet['provider'] | null>(null), live = useRef(true), resumed = useRef(new Set<string>());
   const replace = (r: RecordJSON) => setRecords(list => list.map(x => (x.id === r.id ? r : x)));
   const save = (value: PilotPending | null) => { if (value) localStorage.setItem(pendingKeyFor(namespace), JSON.stringify(value)); else localStorage.removeItem(pendingKeyFor(namespace)); setPending(value); };
@@ -327,13 +335,21 @@ function Approvals({ id, profile, records, setRecords, questions, login, reload 
 
   if (!open.length && !pending) return null;
   async function approve(record: RecordJSON) {
+    setSemanticFailure(null);
     if (connection.owner !== record.owner) throw new Error('Select the MetaMask wallet this proposal was prepared for. Wallet changes need a new review.');
     if (!provider.current || !navigator.locks) throw new Error('MetaMask and Web Locks are required.');
     const review = record.review as PilotReview; validatePilotReview(review);
     await navigator.locks.request('flurbo-pilot-submit', { ifAvailable: true }, async lock => {
       if (!lock || readPilotPending(namespace)) throw new Error('Another transaction for this market is being tracked. Finish it first.');
       try { await submitPilot(provider.current as never, review, login, save, () => live.current && connection.owner === record.owner, {namespace}); }
-      catch (e) { if (message(e) === 'Wallet request rejected.') replace(await agentClient.agents.track(id, record.id, { action: 'rejected' }) as RecordJSON); throw e; }
+      catch (e) {
+        if (e instanceof PurchaseSemanticCollision) {
+          setSemanticFailure({recordId:record.id, original:record.review, review:{...review, semanticAssessment:e.assessment}});
+          return;
+        }
+        if (message(e) === 'Wallet request rejected.') replace(await agentClient.agents.track(id, record.id, { action: 'rejected' }) as RecordJSON);
+        throw e;
+      }
     });
     const saved = readPilotPending(namespace);
     if (saved?.hash) { resumed.current.add(saved.hash); await register(record, saved); }
@@ -362,6 +378,7 @@ function Approvals({ id, profile, records, setRecords, questions, login, reload 
       <span>{STATUS[r.status] ?? r.status}</span>
       {review && <span className="agents-fine">{review.action === 'approve' ? `Step 1: approve exactly ${amount(review.amountAtoms)} test AUSD for the pool.` : `Buy ${amount(r.quantityAtoms)} share(s), paying at most ${amount(review.amountAtoms)} test AUSD.`} Wallet {r.owner.slice(0, 8)}...{r.owner.slice(-6)}. Review valid until {when(review.expiresAt)}.</span>}
       {r.transactions?.length > 0 && <span className="agents-fine">Tracked transaction {short(r.transactions.at(-1).hash)}.</span>}
+      {semanticFailure?.recordId === r.id && semanticFailure.original === r.review && <SemanticReview review={semanticFailure.review} phrase="" onChange={() => {}} allowManualOverride={false}/>}
       <div className="agents-actions">
         {!archived && r.status === 'awaiting-approval' && <button className="button button-dark" disabled={blocked} onClick={() => run(() => approve(r))}>{review?.action === 'approve' ? 'Approve allowance in MetaMask' : 'Confirm purchase in MetaMask'}</button>}
         {r.status === 'submitted' && <button className="button button-outline" disabled={busy} onClick={() => run(() => check(r))}>Check confirmation</button>}
@@ -369,7 +386,7 @@ function Approvals({ id, profile, records, setRecords, questions, login, reload 
         {!archived && ['approval-confirmed', 'expired'].includes(r.status) && <button className="button button-outline" disabled={blocked} onClick={() => run(async () => replace(await agentClient.agents.track(id, r.id, { action: 'rejected' }) as RecordJSON))}>Dismiss</button>}
       </div>
     </li>; })}</ul>
-    {error && <p className="market-error" role="alert">{error}</p>}
+    {error && <p className="state-inline error" role="alert">{error}</p>}
   </section>;
 }
 

@@ -6,27 +6,41 @@ import Docs from './pages/Docs';
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 import { useAuth } from "./auth/context";
-import Workspace from './pages/Workspace';
-import Markets from './pages/Markets';
-import EvidenceReview from './pages/EvidenceReview';
-import FundingPage from './pages/FundingPage';
 import {usePreviewAccess} from './auth/preview-access';
-import AccessPage from './pages/AccessPage';
-import Agents from './pages/Agents';
 import BrandLogo from './components/BrandLogo';
-import './ux.css';
+import SiteFooter from './components/SiteFooter';
+import { useLoadGate } from './loading/gates';
+import { rememberReturnPath } from './return-path';
+import { preloadRoutes, useRoutePage, type RouteKey } from './routes';
 
 export const brand = "flurbo";
+
+const APP_LINKS = [
+  { href: '/markets', label: 'Markets', match: (path: string) => path === '/markets' || path.startsWith('/markets/') },
+  { href: '/agents', label: 'Agents', match: (path: string) => path === '/agents' || path.startsWith('/agents/') },
+  { href: '/portfolio', label: 'Portfolio', match: (path: string) => path === '/portfolio' },
+  { href: '/access', label: 'Your account', match: (path: string) => path === '/access' },
+];
 
 function Header() {
   const { state } = useAuth();
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
   const header = useRef<HTMLElement>(null);
+  const sentinel = useRef<HTMLSpanElement>(null);
   const isHome = location === "/";
+  const signedIn = !!state.address;
 
   useEffect(() => setOpen(false), [location]);
+  useEffect(() => {
+    const node = sentinel.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => setScrolled(!entry.isIntersecting));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -48,45 +62,60 @@ function Header() {
     };
   }, [open]);
 
+  const current = (match: boolean) => (match ? 'page' as const : undefined);
   return (
-    <header ref={header} className={`site-header ${isHome ? "site-header-home" : "site-header-subpage"}`}>
-      <div className="header-inner">
-        <Link href="/" className="brand-link" aria-label="Flurbo home">
-          <BrandLogo />
-        </Link>
-        <nav id="main-nav" className={`main-nav ${open ? "main-nav-open" : ""}`} aria-label="Main navigation"
-          onClick={(event) => {
-            if ((event.target as HTMLElement).closest("a")) setOpen(false);
-          }}>
-          {state.restoring ? <span role="status" className="nav-loading">Loading your account...</span> : state.address ? <><Link href="/markets">Markets</Link><Link href="/agents">Agents</Link><Link href="/portfolio">Portfolio</Link><Link href="/access">Your account</Link></> : <><a href="/#how-it-works">How it works</a><a href="/#the-idea">The idea</a></>}
-          <Link href="/docs" aria-current={location === '/docs' ? 'page' : undefined}>Docs</Link>
-          <span className="nav-rule" aria-hidden="true" />
-          {state.restoring ? null : state.address ? (isHome ? <Link href="/markets" className="nav-cta">Explore markets <ArrowUpRight size={15} strokeWidth={1.8} /></Link> : <Link href="/" className="nav-login">About Flurbo</Link>) : <>
-            <Link href="/login" className="nav-login">Sign in</Link>
-            <Link href="/signup" className="nav-cta">Get early access <ArrowUpRight size={15} strokeWidth={1.8} /></Link>
-          </>}
-        </nav>
-        <button ref={menuButton} className="mobile-menu" type="button" aria-label={open ? "Close navigation" : "Open navigation"} aria-controls="main-nav" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-          {open ? <X size={22} /> : <Menu size={22} />}
-        </button>
-      </div>
-    </header>
+    <>
+      <span ref={sentinel} className="header-sentinel" aria-hidden="true" />
+      <header ref={header} className={`site-header ${isHome ? "site-header-home" : "site-header-subpage"}`} data-scrolled={scrolled}>
+        <div className="header-inner">
+          <Link href="/" className="brand-link" aria-label="Flurbo home">
+            <BrandLogo title="Flurbo" />
+          </Link>
+          <nav id="main-nav" className={`main-nav ${open ? "main-nav-open" : ""}`} aria-label="Main navigation"
+            onClick={(event) => {
+              if ((event.target as HTMLElement).closest("a")) setOpen(false);
+            }}>
+            <div className="nav-links">
+              {state.restoring ? <span role="status" className="nav-loading">Loading your account...</span>
+                : signedIn ? APP_LINKS.map((link) => <Link key={link.href} href={link.href} aria-current={current(link.match(location))}>{link.label}</Link>)
+                : <><a href="/#how-it-works">How it works</a><a href="/#the-idea">The idea</a></>}
+              <Link href="/docs" aria-current={current(location === '/docs')}>Docs</Link>
+            </div>
+            <span className="nav-rule" aria-hidden="true" />
+            <div className="nav-actions">
+              {state.restoring ? null : signedIn ? <>
+                <span className="network-indicator"><i aria-hidden="true" /><span>Monad testnet<span className="network-detail">, test assets only</span></span></span>
+                {isHome ? <Link href="/markets" className="btn btn-primary btn-sm nav-cta">Explore markets <ArrowUpRight size={15} strokeWidth={1.75} /></Link>
+                  : <Link href="/" className="nav-login">About Flurbo</Link>}
+              </> : <>
+                {location !== '/login' && <Link href="/login" className="nav-login">Sign in</Link>}
+                {location !== '/signup' && <Link href="/signup" className="btn btn-primary btn-sm nav-cta">Get early access <ArrowUpRight size={15} strokeWidth={1.75} /></Link>}
+              </>}
+            </div>
+          </nav>
+          <button ref={menuButton} className="mobile-menu" type="button" aria-label={open ? "Close navigation" : "Open navigation"} aria-controls="main-nav" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+            {open ? <X size={22} strokeWidth={1.75} /> : <Menu size={22} strokeWidth={1.75} />}
+          </button>
+        </div>
+      </header>
+    </>
   );
 }
 
-function AppShell({ children }: { children: React.ReactNode }) {
+function AppShell({ children, compactFooter = false }: { children: React.ReactNode; compactFooter?: boolean }) {
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">Skip to content</a>
       <Header />
       {children}
+      <SiteFooter compact={compactFooter} />
     </div>
   );
 }
 
 function AuthShell({ mode }: { mode: "login" | "signup" | "account" }) {
   return (
-    <AppShell>
+    <AppShell compactFooter>
       <AuthPage mode={mode} />
     </AppShell>
   );
@@ -99,9 +128,33 @@ function AccountRoute() {
   const { controller, state } = useAuth();
   const [, navigate] = useLocation();
   const authenticated = !!state.address && state.expiresAt !== null && state.expiresAt > Date.now();
+  const checkingAccess = authenticated && !preview.access && !preview.error;
+  const checking = state.restoring || checkingAccess;
+  const operatorPath = ['/account','/kuru','/events','/rehearsal','/evidence'].includes(location);
+  // Same page choice as before; the page for this address starts loading during the checks.
+  const locationKey: RouteKey | null = location==='/access' ? 'access' : location==='/fund' ? 'fund'
+    : operatorPath ? (checking || !testingAccess ? null : location==='/evidence' ? 'evidence' : 'workspace')
+    : location==='/agents'||location.startsWith('/agents/') ? 'agents'
+    : location.startsWith('/markets/')||['/markets','/portfolio'].includes(location) ? 'markets' : 'workspace';
+  const approved = !!preview.access?.approved;
+  const key: RouteKey | null = !authenticated ? null : checking ? locationKey : !approved ? 'access' : locationKey;
+  const route = useRoutePage(key);
+  const loadingPage = authenticated && !checking && key !== null && !route.Page && !route.error;
+  const gate = useLoadGate('app', {
+    pending: checking || loadingPage,
+    error: authenticated && !preview.access && preview.error ? preview.error : route.error,
+    label: state.restoring ? 'Checking your session' : checkingAccess ? 'Checking your access' : 'Loading the page',
+    // A stalled page download is retried by reloading; a stalled check by checking again.
+    retry: route.error ? route.retry : checking ? preview.refresh : undefined,
+  });
+
+  useEffect(() => { if (approved) preloadRoutes(['markets', 'agents', 'access', 'fund']); }, [approved]);
 
   useEffect(() => {
-    if (!state.restoring && !authenticated) navigate('/login', { replace: true });
+    if (!state.restoring && !authenticated) {
+      rememberReturnPath(window.location.pathname + window.location.search);
+      navigate('/login', { replace: true });
+    }
   }, [state.restoring, authenticated, navigate]);
 
   useEffect(() => {
@@ -111,30 +164,44 @@ function AccountRoute() {
   }, [controller, authenticated, state.expiresAt]);
 
   // Do not mount the market, its data requests or wallet listeners until the
-  // server-backed login has been restored. Remembered addresses are not login.
-  return <AppShell>{state.restoring
-    ? <main id="main" tabIndex={-1} className="auth-page"><p role="status">Checking your session...</p></main>
-    : authenticated ? ((!preview.access?.approved || location==='/access')?<AccessPage {...preview}/>:location==='/fund'?<FundingPage/>:['/account','/kuru','/events','/rehearsal','/evidence'].includes(location)&&!testingAccess?<main id="main" className="auth-page"><h1>Operator access only</h1><Link href="/markets">Back to markets</Link></main>:location==='/evidence'?<EvidenceReview/>:location==='/agents'||location.startsWith('/agents/')?<Agents/>:(location.startsWith('/markets/')||['/markets','/portfolio'].includes(location)) ? <Markets /> : <Workspace />) : null}</AppShell>;
+  // server-backed login and access have been confirmed. Remembered addresses are not login.
+  const waiting = checking || loadingPage;
+  const Page = route.Page;
+  const busyText = state.restoring ? 'Checking your session...' : checkingAccess ? 'Checking your access...' : 'Loading the page...';
+  return <AppShell compactFooter>{waiting
+    ? <main id="main" tabIndex={-1} className="page route-pending" aria-busy="true">
+        {!gate.covered && <><span className="progress-line" aria-hidden="true" /><p role="status" className="busy-text">{busyText}</p></>}
+        {gate.covered && <p role="status" className="sr-only">{busyText}</p>}
+      </main>
+    : !authenticated ? null
+    : route.error ? <main id="main" tabIndex={-1} className="page page-task"><div className="state-block"><h1>This page did not load</h1><p role="alert">{route.error}</p><button type="button" className="btn btn-primary" onClick={route.retry}>Try again</button></div></main>
+    : approved && location!=='/access' && location!=='/fund' && operatorPath && !testingAccess ? <main id="main" tabIndex={-1} className="page page-task"><div className="state-block"><h1>Operator access only</h1><p>This page is for Flurbo operators.</p><Link href="/markets" className="btn btn-secondary">Back to markets</Link></div></main>
+    : Page ? (key === 'access' ? <Page {...preview}/> : <Page/>) : null}</AppShell>;
+}
+
+function pageTitle(location: string) {
+  return location === "/login" ? "Sign in | flurbo"
+    : location === "/signup" ? "Create an account | flurbo"
+    : /^\/markets\/[^/]+\/[0-3]\/thesis$/.test(location) ? "Build your thesis | flurbo"
+    : location.startsWith("/markets") ? "Markets | flurbo"
+    : location === "/access" ? "Your account | flurbo"
+    : location === "/fund" ? "Get test funds | flurbo"
+    : location === "/docs" ? "Documentation | flurbo"
+    : location === "/account" ? "Your account | flurbo"
+    : location === "/portfolio" ? "Your portfolio | flurbo"
+    : location.startsWith("/agents") ? "Agents | flurbo"
+    : location === "/kuru" ? "Kuru order book | flurbo"
+    : location === "/events" ? "Real events | flurbo"
+    : location === "/evidence" ? "Evidence review | flurbo"
+    : location === "/rehearsal" ? "Testnet rehearsal | flurbo"
+    : location === "/" ? "flurbo | combine what you know" : "Page not found | flurbo";
 }
 
 export default function App() {
   const [location] = useLocation();
   const previousLocation = useRef(location);
   useEffect(() => {
-    document.title = location === "/login" ? "Sign in | flurbo"
-      : location === "/signup" ? "Create an account | flurbo"
-      : location.startsWith("/markets") ? "Markets | flurbo"
-      : location === "/access" ? "Your access | flurbo"
-      : location === "/fund" ? "Get test funds | flurbo"
-      : location === "/docs" ? "Documentation | flurbo"
-      : location === "/account" ? "Your account | flurbo"
-      : location === "/portfolio" ? "Your portfolio | flurbo"
-      : location.startsWith("/agents") ? "Agents | flurbo"
-      : location === "/kuru" ? "Kuru order book | flurbo"
-      : location === "/events" ? "Real events | flurbo"
-      : location === "/evidence" ? "Evidence review | flurbo"
-      : location === "/rehearsal" ? "Testnet rehearsal | flurbo"
-      : location === "/" ? "flurbo | combine what you know" : "Page not found | flurbo";
+    document.title = pageTitle(location);
     const changed = previousLocation.current !== location;
     previousLocation.current = location;
     const frame = requestAnimationFrame(() => {
@@ -165,7 +232,7 @@ export default function App() {
       <Route path="/events" component={AccountRoute} />
       <Route path="/rehearsal" component={AccountRoute} />
       <Route path="/evidence" component={AccountRoute} />
-      <Route component={NotFound} />
+      <Route component={() => <AppShell><NotFound /></AppShell>} />
     </Switch>
   );
 }
