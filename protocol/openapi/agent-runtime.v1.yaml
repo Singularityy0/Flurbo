@@ -171,7 +171,7 @@ paths:
                 quantityAtoms: { $ref: "#/components/schemas/Atoms" }
       responses:
         "200": { description: "{status: ok, quote} or {status: unavailable, reason, detail}" }
-          default: { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
   /markets/{namespace}/validate-trade:
     post:
       summary: Outcome compatibility under configured predicates (scope markets:read)
