@@ -1,3 +1,4 @@
+import {scheduledFetch} from '../request-scheduler.ts';
 import { FlurboError } from '../errors.ts';
 import { PROTOCOL_HEADER, PROTOCOL_VERSION, RUNTIME_API_BASE, STOP_CODES, parseDeployment, type Deployment, type RuntimeErrorCode } from '../protocol.ts';
 import type { FlurboPolicy } from '../policy.ts';
@@ -24,7 +25,7 @@ export function runtimeClient(options: { baseUrl: string; token: string; fetch?:
   const base = new URL(options.baseUrl);
   if (base.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(base.hostname)) throw new FlurboError('invalid_input', 'Use HTTPS for the Flurbo API.');
   if (!/^fla1_[0-9a-f]{16}_[A-Za-z0-9_-]{43}$/.test(options.token)) throw new FlurboError('unauthenticated', 'The agent credential is missing or malformed.');
-  const request = options.fetch ?? fetch, timeoutMs = options.timeoutMs ?? 20_000;
+  const request = options.fetch ?? scheduledFetch, timeoutMs = options.timeoutMs ?? 20_000;
   async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
     let response: Response;
     try {

@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cstring>
 #include <mutex>
+#include <deque>
+#include <map>
 
 #include "flurbo/runtime.hpp"
 
@@ -258,6 +260,28 @@ std::string url_segment(const std::string& s) {
   return out;
 }
 
+namespace {
+struct CapacityBucket { std::deque<int64_t> starts; size_t active=0; int64_t until=0; };
+std::mutex capacity_mutex;
+std::map<std::string,CapacityBucket> capacity_buckets;
+struct CapacityPermit {
+  std::string origin;
+  explicit CapacityPermit(const std::string& key, size_t limit):origin(key) {
+    std::lock_guard<std::mutex> lock(capacity_mutex);
+    if(!capacity_buckets.count(key)&&capacity_buckets.size()>=64)throw Error("rate_limited","Too many request origins.");
+    auto& b=capacity_buckets[key];auto now=now_seconds();
+    while(!b.starts.empty()&&b.starts.front()<=now-60)b.starts.pop_front();
+    if(b.active>=4||b.starts.size()>=limit||now<b.until)throw Error("rate_limited","Request capacity reached. Retry after the cooldown.");
+    b.active++;b.starts.push_back(now);
+  }
+  ~CapacityPermit(){std::lock_guard<std::mutex> lock(capacity_mutex);capacity_buckets[origin].active--;}
+  void cooldown(const std::string& value){
+    auto now=now_seconds(),until=now+60;
+    try {if(!value.empty()&&value.find_first_not_of("0123456789")==std::string::npos){auto n=std::stoll(value);until=n>INT64_MAX-now?INT64_MAX:now+std::max<int64_t>(1,n);}else if(auto date=parse_http_date(value))until=*date;}catch(...){}
+    std::lock_guard<std::mutex> lock(capacity_mutex);auto& b=capacity_buckets[origin];b.until=std::max(b.until,std::max(now+1,until));
+  }
+};
+}
 HttpResponse http_request(const HttpRequest& req) {
   auto u = parse_url(req.url);
   if (!u || (u->scheme != "http" && u->scheme != "https")) throw invalid("Unsupported URL.");
@@ -318,6 +342,13 @@ HttpResponse http_request(const HttpRequest& req) {
   }
   if (r.body.size() > req.max_body) r.body.resize(req.max_body);
   return r;
+}
+
+HttpResponse capacity_http_request(const HttpRequest& req, bool rpc) {
+  auto u=parse_url(req.url);if(!u)throw invalid("Unsupported URL.");
+  CapacityPermit permit((rpc?"rpc:":"api:")+u->origin,rpc?600:100);auto response=http_request(req);
+  if(response.status==429)permit.cooldown(response.header("Retry-After").value_or(""));
+  return response;
 }
 
 namespace net {

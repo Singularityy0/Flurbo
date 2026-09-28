@@ -31,20 +31,20 @@ const ago = (s: number | null) => (s === null ? '' : s < 90 ? `${s}s ago` : s < 
 const short = (x: string) => `${x.slice(0, 10)}...${x.slice(-6)}`;
 const pct = (ppm: bigint) => `${(Number(ppm) / 10_000).toFixed(1)}%`;
 
-export function RuntimeCreateForm({ directory }: { directory: { namespace: string; label: string }[] }) {
+export function RuntimeCreateForm({ directory }: { directory: { namespace: string; label: string; open?:boolean }[] }) {
   const [name, setName] = useState(''), [markets, setMarkets] = useState<string[]>([]), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [, navigate] = useLocation();
-  useEffect(() => { setMarkets(m => (m.length ? m : directory.slice(0, 1).map(d => d.namespace))); }, [directory]);
+  useEffect(() => { setMarkets(m => (m.length ? m : directory.filter(d=>d.open).slice(0, 1).map(d => d.namespace))); }, [directory]);
   async function create(event: React.FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
     try { navigate(`/agents/${(await runtimeAdmin.create(name, markets)).id}`); } catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
   return <form className="agents-card" onSubmit={create} aria-label="Register an agent">
-    <h2>Register an agent</h2>
+    <h2>Register an agent</h2><ol className="agent-setup-steps"><li>Name your agent and choose its markets.</li><li>Associate a dedicated wallet and create a credential.</li><li>Run the SDK in paper mode, then review its activity.</li></ol>
     <p className="agents-fine">Your agent runs on your own computer or server with the Flurbo SDK. It researches, forecasts and trades with its own dedicated wallet, within limits you set. Flurbo shows its status, decisions and verified trades here.</p>
     <label>Name<input value={name} onChange={e => setName(e.target.value)} maxLength={48} required placeholder="Release relationship agent"/></label>
-    <fieldset className="agents-choice"><legend>Markets it may trade</legend>
-      {directory.map(d => <label key={d.namespace}><input type="checkbox" checked={markets.includes(d.namespace)} onChange={e => setMarkets(m => (e.target.checked ? [...m, d.namespace] : m.filter(x => x !== d.namespace)))}/>{d.label}<small>{d.namespace}</small></label>)}
+    <fieldset className="agents-choice"><legend>Related markets it may trade</legend>
+      {directory.map(d => <label key={d.namespace}><input type="checkbox" checked={markets.includes(d.namespace)} disabled={!d.open} onChange={e => setMarkets(m => (e.target.checked ? [...m, d.namespace] : m.filter(x => x !== d.namespace)))}/>{d.label}<small>{d.open?'Open for predictions':'Unavailable for new trades'}</small></label>)}
     </fieldset>
     {error && <p className="market-error" role="alert">{error}</p>}
     <button className="button button-dark" disabled={busy || !markets.length}>{busy ? 'Registering...' : 'Register agent'}</button>
@@ -52,6 +52,7 @@ export function RuntimeCreateForm({ directory }: { directory: { namespace: strin
 }
 
 export function RuntimeAgentDetail({ id }: { id: string }) {
+  const [view,setView]=useState('Overview');
   const [data, setData] = useState<any>(null), [questions, setQuestions] = useState<Record<string, string[]>>({}), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
     const d = await runtimeAdmin.get(id);
@@ -72,30 +73,32 @@ export function RuntimeAgentDetail({ id }: { id: string }) {
   return <>
     <nav className="agents-back"><Link href="/agents" className="text-link">All agents</Link></nav>
     <header className="agents-profile">
-      <div><span className="eyebrow">Runs on your infrastructure · {archived ? 'Archived' : policy.paused ? 'Paused on Flurbo' : 'Active'}</span>
+      <div><span className="eyebrow">Runs on your infrastructure · {archived ? 'Archived' : policy.paused ? 'Paused on Flurbo' : 'Registered'}</span>
         <h1>{profile.name}</h1>
         <p>Closing this page does not stop the agent. Stop it where it runs with <code>flurbo-agent stop</code> or Ctrl+C.</p></div>
     </header>
     {error && <p className="market-error" role="alert">{error}</p>}
     {archived && <p className="agents-note" role="status">This agent is archived. Its credentials cannot start new work; a runtime can still report transactions it already sent so they are verified and counted once.</p>}
-    <section className="agents-card" aria-label="Runtime status">
+    <nav className="agent-navigation" aria-label="Agent sections">{['Overview','Activity','Setup','Settings'].map(v=><button key={v} aria-pressed={view===v} disabled={busy} onClick={()=>setView(v)}>{v}</button>)}</nav>
+    {!profile.wallet&&view==='Overview'&&<div className="agents-note"><strong>Finish setting up your agent</strong><p>Associate its wallet, issue a credential and run it in paper mode.</p><button className="button button-dark" onClick={()=>setView('Setup')}>Continue setup</button></div>}
+    <div hidden={view!=='Overview'}><section className="agents-card" aria-label="Runtime status">
       <div className="agents-row"><h2>Runtime</h2><span className={`agents-chip agents-chip-${rt.connection.state}`}>{CONNECTION[rt.connection.state]}{rt.connection.ageSeconds !== null && rt.connection.state !== 'never' ? `, last heartbeat ${ago(rt.connection.ageSeconds)}` : ''}</span></div>
       {latest ? <dl className="agents-terms">
-        <dt>Mode reported by the runtime</dt><dd>{latest.mode === 'live' ? 'Live testnet trades' : 'Paper (simulated)'}; state {latest.state}</dd>
+        <dt>Last reported mode (not a live confirmation)</dt><dd>{latest.mode === 'live' ? 'Live testnet trades' : 'Paper (simulated)'}; state {latest.state}</dd>
         <dt>SDK</dt><dd>{latest.sdk.language} {latest.sdk.version}</dd>
         <dt>Transactions in progress</dt><dd>{latest.pending}</dd>
         <dt>Policy</dt><dd>{rt.acknowledged ? `Applies Flurbo policy version ${policy.version}` : `Has not applied policy version ${policy.version} yet (applies ${latest.policy.flurboVersion ?? 'none'})`}</dd>
         <dt>Local limits reported</dt><dd>{latest.policy.summary?.maxTradeCostAtoms ? `${amount(latest.policy.summary.maxTradeCostAtoms)} test AUSD per trade` : 'Not reported'}{latest.policy.summary?.totalAtoms ? `, ${amount(latest.policy.summary.totalAtoms)} total` : ''}</dd>
         {latest.lastErrorCode && <><dt>Last error</dt><dd>{latest.lastErrorCode}</dd></>}
-      </dl> : <p className="agents-fine">Start the runtime with the instructions below. It appears here after its first heartbeat.</p>}
+      </dl> : <p className="agents-fine">Open Setup for instructions to start the runtime. It appears here after its first heartbeat.</p>}
     </section>
-    {!archived && <Controls id={id} policy={policy} busy={busy} act={act}/>}
+    <Verified id={id} rt={rt} questions={questions} busy={busy} act={act}/></div>
+    <div hidden={view!=='Setup'}><h2>Set up your agent</h2><p className="agents-fine">Complete these steps in order. Keep paper mode on until you have checked its decisions.</p>
     {!archived && <WalletSetup id={id} profile={profile} busy={busy} act={act}/>}
     {!archived && <Credentials id={id} credentials={rt.credentials} busy={busy} act={act}/>}
     {!archived && <Setup profile={profile} hasWallet={!!profile.wallet}/>}
-    <Verified id={id} rt={rt} questions={questions} busy={busy} act={act}/>
-    <Decisions decisions={rt.decisions} questions={questions}/>
-    {!archived && <Archive id={id} busy={busy} act={act}/>}
+    </div><div hidden={view!=='Activity'}><Decisions decisions={rt.decisions} questions={questions}/>{!rt.decisions.length&&<p>No decisions yet. Start the agent in paper mode from Setup.</p>}</div>
+    <div hidden={view!=='Settings'}>{!archived&&<><Controls id={id} policy={policy} busy={busy} act={act}/><Archive id={id} busy={busy} act={act}/></>}{archived&&<p>This agent is archived. Its verified activity remains available.</p>}</div>
   </>;
 }
 
@@ -180,6 +183,7 @@ function Credentials({ id, credentials, busy, act }: { id: string; credentials: 
 
 function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolean }) {
   const [language, setLanguage] = useState<'typescript' | 'python' | 'rust' | 'cpp'>('typescript');
+  const [copyStatus,setCopyStatus]=useState('');
   const origin = typeof window === 'undefined' ? 'https://flurbo.singu.online' : window.location.origin;
   const ts = [
     '# Node 24 or later, in a checkout of the Flurbo repository',
@@ -196,7 +200,11 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
   ].join('\n');
   const py = [
     '# Python 3.11 or later, in a checkout of the Flurbo repository',
-    'cd packages/sdk-python && python -m venv .venv && .venv/bin/pip install -e .',
+    'cd packages/sdk-python && python -m venv .venv',
+    '# macOS / Linux: source .venv/bin/activate',
+    '# Windows Git Bash: source .venv/Scripts/activate',
+    '# Windows PowerShell: .venv\\Scripts\\Activate.ps1',
+    'python -m pip install -e .',
     'python -m flurbo_sdk init --config flurbo-agent.json',
     `# Same configuration format as TypeScript: api.baseUrl "${origin}", markets ${JSON.stringify(profile.markets ?? [])},`,
     '# research.provider, strategy and policy. Keep "mode": "paper" until ready.',
@@ -233,11 +241,12 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
   const available: Record<string, string> = { typescript: ts, python: py, rust: rs, cpp };
   const readme: Record<string, string> = { typescript: 'packages/sdk/README.md', python: 'packages/sdk-python/README.md', rust: 'packages/sdk-rust/README.md', cpp: 'packages/sdk-cpp/README.md' };
   return <section className="agents-card" aria-label="Run the agent">
-    <h2>Run the agent</h2>
+    <h2>Run the agent</h2><p className="agents-fine">These commands are for a terminal on your own computer. <Link href="/docs#agents">Read the setup and troubleshooting guide</Link>.</p>
     <div className="agents-tabs" role="tablist">{(['typescript', 'python', 'rust', 'cpp'] as const).map(l => <button key={l} role="tab" aria-selected={language === l} className={language === l ? 'button button-dark' : 'button button-outline'} onClick={() => setLanguage(l)}>{{ typescript: 'TypeScript', python: 'Python', rust: 'Rust', cpp: 'C++' }[l]}</button>)}</div>
     {!hasWallet && <p className="agents-note">Associate the agent wallet first; Flurbo only attributes trades from it.</p>}
     <pre className="agents-code">{available[language]}</pre>
-    <p className="agents-fine">The runtime keeps its journal in the state directory and resumes pending transactions after a restart without sending them twice. See {readme[language]} and its examples, including a custom strategy.</p>
+    <button className="button button-outline" onClick={async()=>{try{await navigator.clipboard.writeText(available[language]);setCopyStatus('Commands copied.');}catch{setCopyStatus('Copy is unavailable. Select the commands above to copy them.');}}}>Copy commands</button><span role="status" className="agents-fine"> {copyStatus}</span>
+    <p className="agents-fine">The runtime keeps its journal in the state directory and resumes pending transactions after a restart without sending them twice. <a href={`https://github.com/Singularityy0/Flurbo/blob/main/${readme[language]}`} target="_blank" rel="noreferrer">Read the SDK guide and custom strategy examples ↗</a>.</p>
   </section>;
 }
 
@@ -262,21 +271,22 @@ function Verified({ id, rt, questions, busy, act }: { id: string; rt: any; quest
 }
 
 function Decisions({ decisions, questions }: { decisions: any[]; questions: Record<string, string[]> }) {
+  const [showAll,setShowAll]=useState(false);
   if (!decisions.length) return null;
   return <section className="agents-card" aria-label="Decisions">
     <h2>Decisions</h2>
     <p className="agents-fine">Reported by the runtime. Forecasts, evidence and reasons are the agent's own and are not verified by Flurbo.</p>
-    <ol className="agents-activity">{decisions.map(d => {
+    <ol className="agents-activity">{(showAll?decisions:decisions.slice(0,5)).map(d => {
       const joint = d.forecast?.joint, s = joint?.statesPpm?.map((x: string) => BigInt(x));
       return <li key={d.decisionId}><time>{when(d.createdAt)}</time><div>
         <strong>{d.outcome === 'trade' ? 'Traded' : d.outcome === 'paper' ? 'Paper trade' : d.outcome === 'rejected_by_policy' ? 'Stopped by policy' : 'Abstained'}</strong>
         {d.reasons.length > 0 && <span> {d.reasons.map((r: string) => REASON[r] ?? r.replace(/_/g, ' ').toLowerCase()).join('; ')}.</span>}
-        {s && s.length === 4 && <span className="agents-fine"> Forecast: P({joint.events[0]}) {pct(s[1] + s[3])}, P({joint.events[1]}) {pct(s[2] + s[3])}, both {pct(s[3])}.</span>}
+        {s && s.length === 4 && <span className="agents-fine"> Forecast: {questions[d.namespace]?.[joint.events[0]]||`Question ${joint.events[0]+1}`} {pct(s[1] + s[3])}, {questions[d.namespace]?.[joint.events[1]]||`Question ${joint.events[1]+1}`} {pct(s[2] + s[3])}, both {pct(s[3])}.</span>}
         {d.candidate && <span className="agents-fine"> Claim: {describeClaim(d.candidate.claim.scope, Number(d.candidate.claim.mask), questions[d.namespace])}, quote {amount(d.candidate.quoteAtoms)} test AUSD.</span>}
         <span className="agents-fine"> Source: {d.provenance.kind === 'model' ? `model ${d.provenance.name}` : d.provenance.kind === 'fixture' ? `fixture ${d.provenance.name} (not AI)` : d.provenance.name}.</span>
         {d.forecast?.evidence?.length > 0 && <details className="agents-assumptions"><summary>Evidence ({d.forecast.evidence.length})</summary><ul>{d.forecast.evidence.map((e: any) => <li key={e.id}>{e.url ? <a href={e.url} rel="noreferrer noopener" target="_blank">{e.title}</a> : e.title} ({e.source}, {new Date(e.observedAt).toLocaleDateString()})</li>)}</ul></details>}
       </div></li>;
-    })}</ol>
+    })}</ol>{decisions.length>5&&<button className="button button-outline" onClick={()=>setShowAll(v=>!v)}>{showAll?'Show recent only':`Show all ${decisions.length} decisions`}</button>}
   </section>;
 }
 

@@ -33,10 +33,11 @@ async function associate(s:Setup,id:string,key=generatePrivateKey(),login=alice)
 test('credentials: shown once, stored as a digest, scoped, expiring, rotatable, revocable and rate limited',async()=>{
   const s=setup(),agent=await runtimeAgent(s),{token,credential:c}=await credential(s,agent.id,['markets:read','runtime:report'],alice,{ttlDays:7,label:'laptop'});
   assert.match(token,/^fla1_[0-9a-f]{16}_[A-Za-z0-9_-]{43}$/);
+  const secret=token.match(/^fla1_[0-9a-f]{16}_([A-Za-z0-9_-]{43})$/)![1];
   const stored=(await s.redis.keys()).map(async k=>await s.redis.get(k));
-  for(const v of await Promise.all(stored))assert.ok(!String(v).includes(token.split('_')[2]),'the secret is never stored');
+  for(const v of await Promise.all(stored))assert.ok(!String(v).includes(secret),'the secret is never stored');
   const listed=(await s.call(alice,'GET',`/api/agents/${agent.id}`)).body.runtime.credentials;
-  assert.equal(listed.length,1);assert.equal(listed[0].status,'active');assert.ok(!JSON.stringify(listed).includes(token.split('_')[2]));
+  assert.equal(listed.length,1);assert.equal(listed[0].status,'active');assert.ok(!JSON.stringify(listed).includes(secret));
   // Authentication and scopes.
   const session=await rt(s,token,'GET','session');
   assert.equal(session.status,200);assert.equal(session.body.agentId,agent.id);assert.deepEqual(session.body.credential.scopes,['markets:read','runtime:report']);
@@ -80,7 +81,7 @@ test('credentials are isolated by account, re-check testnet approval, and archiv
   assert.equal((await s.call(bob,'GET',`/api/agents/${agent.id}`)).status,404);
   assert.equal((await rt(s,token,'GET','session')).status,200,'still valid after the attempts');
   // Approval removed: the next request is refused.
-  let approved=true;const gated=s.make({previewAllows:(account:string)=>approved&&account===alice.toLowerCase()});
+  let approved=true;const gated=s.make({previewAllows:async(account:string)=>approved&&account===alice.toLowerCase()});
   assert.equal((await rt(s,token,'GET','session',undefined,{},gated)).status,200);
   approved=false;
   assert.equal((await rt(s,token,'GET','session',undefined,{},gated)).body.code,'INVITE_REQUIRED');

@@ -29,11 +29,13 @@ Value JsonRpc::call(const std::string& method, const Value& params) {
   request.set("params", params);
   HttpResponse r;
   try {
-    r = http_request({"POST", url_, {{"Content-Type", "application/json"}}, request.dump(), timeout_ms_});
+    r = capacity_http_request({"POST", url_, {{"Content-Type", "application/json"}}, request.dump(), timeout_ms_},true);
   } catch (const Error& e) {
+    if (e.code == "rate_limited") throw;
     if (e.code == "timeout") throw rpc_error("timeout", "The chain did not answer " + method + " in time.");
     throw rpc_error("unavailable", "The chain endpoint could not be reached for " + method + ".");
   }
+  if(r.status==429)throw Error("rate_limited","RPC rate limited. Retry after the cooldown.");
   Value body;
   try {
     body = json::parse(r.body);
@@ -229,8 +231,9 @@ Value RuntimeClient::call(const std::string& method, const std::string& path, co
   }
   HttpResponse r;
   try {
-    r = http_request(req);
-  } catch (const Error&) {
+    r = capacity_http_request(req);
+  } catch (const Error& e) {
+    if(e.code=="rate_limited")throw;
     throw api_error("NETWORK", "The Flurbo API could not be reached.", std::nullopt);
   }
   Value parsed;

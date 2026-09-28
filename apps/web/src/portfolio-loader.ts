@@ -51,16 +51,16 @@ export async function loadPortfolio({groups,account,wallets,signal,publish,reque
   const payoutQueue=[...groups];
   await Promise.all(Array.from({length:Math.min(2,groups.length)},async()=>{
     while(payoutQueue.length&&!signal.aborted){
-      const group=payoutQueue.shift()!,value=data[group.namespace];if(!value)continue;
+      const group=payoutQueue.shift()!,value=data[group.namespace];if(!value||historyOnly&&value.payouts?.complete&&!value.payoutError)continue;
       try{value.payouts=await call<HistoryRead>(group,'collected-payouts',{});value.payoutError=false;}
       catch{value.payoutError=true;}send(value);
     }
   }));
-  // One bounded history scan per pool. Further catch-up is explicit and never
-  // locks navigation, wallet changes, holdings or payout controls.
+  // One bounded history scan per pool. The UI can continue catch-up without
+  // blocking navigation, wallet changes, holdings or payout controls.
   for(const group of groups){
     if(signal.aborted)return;
-    const value=data[group.namespace];if(!value)continue;
+    const value=data[group.namespace];if(!value||historyOnly&&value.history?.complete&&!value.historyError)continue;
     try{
       const history=await call<HistoryRead>(group,'history',{});value.history=history;value.historyError=false;send(value);
       const count=value.manifest?.publication.draft.events.length;if(!count)continue;

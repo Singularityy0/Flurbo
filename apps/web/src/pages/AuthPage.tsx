@@ -1,7 +1,7 @@
 import { ArrowUpRight, CircleArrowLeft, LockKeyhole, Copy, LogOut } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation } from "wouter";
-import { Logo } from "../App";
+import BrandLogo from "../components/BrandLogo";
 import { useAuth } from "../auth/context";
 
 type AuthMode = "login" | "signup" | "account";
@@ -35,7 +35,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
           <Link href="/" className="auth-back"><CircleArrowLeft size={17} /> Back to flurbo</Link>
           <div className="auth-aside-copy">
             <span className="eyebrow">{active ? "Your place in the picture" : isLogin ? "Welcome back" : "Make a little room"}</span>
-            <h1>{active ? "A familiar way in." : isLogin ? "Your view. Your account." : "Create your place in the picture."}</h1>
+            <h1>{active ? "A familiar way in." : isLogin ? "Your view. Your account." : "Create your Flurbo account."}</h1>
             <p>{active ? "Your passkey opens the same account each time. Keep access to it through your password manager."
               : isLogin ? "Use your saved Flurbo passkey to return to your account."
               : "Start with a passkey. Your device or password manager handles the sign-in, without another password to remember."}</p>
@@ -44,7 +44,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
         </div>
         <div className="auth-panel-wrap">
           <div className="auth-panel">
-            <div className="auth-panel-brand"><Logo /><span>{policy.local ? "local test" : "passkey account"}</span></div>
+            <ol className="onboarding-steps" aria-label="Preview access steps"><li>Create account</li><li>Request access</li><li>Approval</li></ol><div className="auth-panel-brand"><BrandLogo /><span>{policy.local ? "local test" : "passkey account"}</span></div>
             <div className="unavailable-icon"><LockKeyhole size={21} strokeWidth={1.6} /></div>
             <p className="eyebrow">{active ? "Signed in with Mera" : "Powered by Mera"}</p>
             <h2>{active ? "Account created." : isLogin ? "Sign in with your passkey." : "One passkey. Your account."}</h2>

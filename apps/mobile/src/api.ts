@@ -1,3 +1,4 @@
+import {scheduledFetch} from '../../../packages/sdk/src/request-scheduler.ts';
 import type { SessionTransport } from '../../web/src/auth/server-session';
 export const ORIGIN = 'https://flurbo.singu.online';
 export class AccountServiceError extends Error { readonly code = 'ACCOUNT_SERVICE_UNAVAILABLE'; }
@@ -16,7 +17,7 @@ export function createApiTransport(request: typeof fetch): typeof fetch {
     return response;
   };
 }
-export const apiFetch = createApiTransport((input, init) => globalThis.fetch(input, init));
+export const apiFetch = createApiTransport((input, init) => scheduledFetch(input, init));
 export async function api<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const abort = new AbortController();
   const cancel = () => abort.abort();

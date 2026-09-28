@@ -1,3 +1,4 @@
+from .capacity import permit, cooldown
 """JSON-RPC to the operator's own chain endpoint. Provider error text can contain endpoint details or keys,
 so it is never surfaced: callers get a kind and a safe message."""
 import itertools
@@ -30,11 +31,15 @@ def json_rpc(url: str, timeout: float = 15.0):
         request = urllib.request.Request(url, data=json.dumps({"jsonrpc": "2.0", "id": call_id, "method": method, "params": params or []}).encode(),
                                          headers={"Content-Type": "application/json"}, method="POST")
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with permit(url,"rpc"), urllib.request.urlopen(request, timeout=timeout) as response:
                 body = json.loads(response.read())
         except (socket.timeout, TimeoutError):
             raise RpcError("timeout", None, f"The chain did not answer {method} in time.") from None
         except urllib.error.HTTPError as e:
+            if e.code == 429:
+                cooldown(url, e.headers.get("Retry-After") if e.headers else None,"rpc")
+                e.close()
+                raise FlurboError("rate_limited", "RPC rate limited. Retry after the cooldown.") from None
             try:
                 body = json.loads(e.read())
             except Exception:

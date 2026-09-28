@@ -31,6 +31,7 @@ export function fakeRedis(){
     }
     // Agent wallet claim refused while the manual link key (KEYS[2]) exists.
     if(op==='EVAL'&&a[0].includes("EXISTS',KEYS[2]")){const [,,key,blocker,value]=a;if(data.has(blocker))return -1;if(data.has(key)&&data.get(key)!==value)return 0;data.set(key,value);return 1;}
+    if(op==='EVAL'&&a[0].includes('INCRBY')){const key=a[2],n=Number(data.get(key)??0)+Number(a[4]);data.set(key,String(n));ttl.set(key,Number(a[3]));return n;}
     if(op==='EVAL'&&a[0].includes('tonumber')){const [,,key,n]=a;if(Number(n)<=Number(data.get(key)??0))return 0;data.set(key,n);return 1;}
     if(op==='EVAL'&&a[0].includes('ARGV[3]')){
       // The agent state save script: revision check, ownership checks, then the writes.

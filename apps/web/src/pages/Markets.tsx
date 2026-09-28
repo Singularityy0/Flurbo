@@ -30,8 +30,9 @@ export default function Markets(){
 }
 function MarketDirectory({groups}:{groups:MarketGroup[]}){
   const [data,setData]=useState<Record<string,MarketSnapshot>>({}),[failed,setFailed]=useState<string[]>([]),[loading,setLoading]=useState(true),[revision,setRevision]=useState(0);
-  const [query,setQuery]=useState(''),[filter,setFilter]=useState('All'),[sort,setSort]=useState('closing'),[now,setNow]=useState(Date.now());
+  const [query,setQuery]=useState(''),[filter,setFilter]=useState('Open'),[sort,setSort]=useState('closing'),[now,setNow]=useState(Date.now());
   useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(t);},[]);
+  useEffect(()=>{const timer=setInterval(()=>{if(!document.hidden&&!loading)setRevision(n=>n+1);},45000);return()=>clearInterval(timer);},[loading]);
   useEffect(()=>{
     const c=new AbortController(),queue=[...groups];setLoading(true);setFailed([]);
     // Two pools at a time. One unavailable pool never hides the others.
@@ -54,7 +55,7 @@ function MarketDirectory({groups}:{groups:MarketGroup[]}){
     <div className="market-toolbar"><label className="market-search"><Search size={18}/><span className="sr-only">Search markets</span><input placeholder="Find a market" value={query} onChange={e=>setQuery(e.target.value)}/></label><button className="button button-outline" disabled={loading} onClick={()=>setRevision(x=>x+1)}>{loading?'Updating prices...':'Refresh prices'}</button></div>
     <div className="directory-controls"><div className="directory-filters" aria-label="Market status">{['All','Open','Closed','Settled'].map(f=><button key={f} type="button" aria-pressed={f===filter} onClick={()=>setFilter(f)}>{f}</button>)}</div><label>Sort <select value={sort} onChange={e=>setSort(e.target.value)}><option value="closing">Closing soon</option><option value="name">Question name</option></select></label></div>
     {failed.length>0&&<p role="alert" className="market-error">Some markets could not be refreshed. Other markets are still available. Use Refresh prices to retry.</p>}
-    <div className="directory-summary"><span>{all.length} questions{loading?' loaded so far':''}</span><span>One-share buy prices in test AUSD</span></div>
+    <div className="directory-summary"><span>{rows.length} of {all.length} questions{loading?' loaded so far':''}</span><span>One-share buy prices in test AUSD</span></div>
     <div className="market-grid">{rows.map(({group,event,index,value})=>{
       const status=marketStatus(value,now/1000),quotes=value.prices.find(p=>p.event===index),fresh=now/1000-value.snapshot.timestamp<60;
       const price=(atoms:string|null|undefined)=>atoms!=null&&fresh?Number(formatUnits(BigInt(atoms),6)).toFixed(3):null;
@@ -66,7 +67,7 @@ function MarketDirectory({groups}:{groups:MarketGroup[]}){
         <Link className="market-detail-link" href={marketHref(group.namespace,index)}>View market <ArrowUpRight size={15}/></Link>
       </article>;
     })}</div>
-    {!rows.length&&<section className="directory-empty"><h2>{loading?'Loading questions...':!all.length&&failed.length?'Markets are temporarily unavailable':filter==='Open'?'No open markets right now':'No markets to show'}</h2><p>{loading?'Questions appear as their prices are checked.':filter==='Open'?'You can view closed markets and follow existing positions in Portfolio. New opening dates have not been announced.':'Try another status or search. New questions will appear here when they are published.'}</p></section>}
+    {!rows.length&&<section className="directory-empty"><h2>{loading?'Loading questions...':!all.length&&failed.length?'Markets are temporarily unavailable':query?'No matching questions':filter==='Open'?'No open markets right now':'No markets to show'}</h2><p>{loading?'Questions appear as their prices are checked.':query?'Try a different search or show all markets.':filter==='Open'?'You can view closed markets and follow existing positions in Portfolio. New opening dates have not been announced.':'Try another status or search. New questions will appear here when they are published.'}</p><button className="button button-outline" onClick={()=>{setQuery('');setFilter('All');}}>Show all markets</button></section>}
     <footer className="market-footer"><span>One view. More possibilities.</span><Link href="/docs#combinations">How combined predictions work</Link></footer>
   </main>;
 }

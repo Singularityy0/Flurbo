@@ -39,11 +39,13 @@ impl JsonRpc {
 
 impl Rpc for JsonRpc {
     fn call(&self, method: &str, params: Value) -> Result<Value> {
+        let _permit = super::capacity::rpc_permit(&self.url)?;
         let id = self.ids.fetch_add(1, Ordering::Relaxed);
         let request = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
         let response = self.agent.post(&self.url).set("Content-Type", "application/json").send_string(&request.to_string());
         let text = match response {
             Ok(r) => r.into_string().map_err(|_| rpc_error("unavailable", format!("The chain endpoint failed {}.", method)))?,
+            Err(ureq::Error::Status(429, r)) => {super::capacity::rpc_cooldown(&self.url,r.header("Retry-After"));return Err(FlurboError::new("rate_limited","RPC rate limited. Retry after the cooldown."));},
             Err(ureq::Error::Status(_, r)) => r.into_string().map_err(|_| rpc_error("unavailable", format!("The chain endpoint failed {}.", method)))?,
             Err(ureq::Error::Transport(t)) if is_timeout(&t) => return Err(rpc_error("timeout", format!("The chain did not answer {} in time.", method))),
             Err(_) => return Err(rpc_error("unavailable", format!("The chain endpoint could not be reached for {}.", method))),

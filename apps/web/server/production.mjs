@@ -1,3 +1,4 @@
+import {installRpcCapacity} from './rpc-capacity.mjs';
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
@@ -8,6 +9,7 @@ import { cookieValue } from './session.mjs';
 import { isTestingOperator, testingPages } from './testing-access.mjs';
 import { hostedConfig } from './network.mjs';
 import {previewAccess} from './preview-access.mjs';
+import {configureApplications} from './access-applications.mjs';
 import { RedisSessionStore, redisCommand } from './redis-session.mjs';
 import { runComparison } from './learning-comparison.mjs';
 import { learningService, learningRpc, loadLearningModel } from './learning-pool.mjs';
@@ -26,7 +28,7 @@ const security = {
 
 export function productionServer(config, store, staticRoot = dist) {
   const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
-    previewAccess:config.previewAccess===undefined?previewAccess():config.previewAccess, testingOperatorAccount:config.testingOperatorAccount, testFaucet:config.testFaucet, learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
+    applications:config.applications, previewAccess:config.previewAccess===undefined?previewAccess():config.previewAccess, testingOperatorAccount:config.testingOperatorAccount, testFaucet:config.testFaucet, learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
     learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, rehearsal: config.rehearsal, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions, challengeOptions:config.challengeOptions });
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
@@ -60,11 +62,14 @@ export function productionServer(config, store, staticRoot = dist) {
         const labPage=['/privacy-lab','/privacy-lab/'].includes(pathname);
         const labAsset=/^\/privacy-lab\/(?:assets\/[a-zA-Z0-9_.-]+|semaphore-8\.(?:wasm|zkey))$/.test(pathname);
         if(labPage||labAsset)res.setHeader('Content-Security-Policy',security['Content-Security-Policy'].replace("script-src 'self'","script-src 'self' 'wasm-unsafe-eval'")+"; worker-src 'self' blob:");
-        if (!page && !labPage && !labAsset && !/^\/(?:assets\/[a-zA-Z0-9_.-]+|favicon\.svg|robots\.txt)$/.test(pathname)) { res.writeHead(404); res.end('Not found'); return; }
+        const brandAsset=/^\/brand\/(?:flurbo-icon-512\.png|flurbo-profile-2026\.png|flurbo-logo\.svg|flurbo-social-(?:landscape|portrait|banner|banner-v2)\.png)$/.test(pathname);
+        const publicationAsset=pathname==='/technical_litepaper.pdf';
+        if (!page && !labPage && !labAsset && !brandAsset && !publicationAsset && !/^\/(?:assets\/[a-zA-Z0-9_.-]+|favicon(?:-contour)?\.svg|robots\.txt)$/.test(pathname)) { res.writeHead(404); res.end('Not found'); return; }
         const file = resolve(staticRoot, page ? 'index.html' : labPage ? 'privacy-lab/index.html' : pathname.slice(1));
         if (!(await stat(file)).isFile()) throw new Error('Not a file');
-        const type = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff', '.txt': 'text/plain', '.wasm':'application/wasm', '.zkey':'application/octet-stream' }[extname(file)] || 'application/octet-stream';
-        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': operatorPage || page || labPage || labAsset && !pathname.includes('/assets/') ? 'no-store' : 'public, max-age=31536000, immutable' });
+        const type = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png':'image/png', '.pdf':'application/pdf', '.woff2': 'font/woff2', '.woff': 'font/woff', '.txt': 'text/plain', '.wasm':'application/wasm', '.zkey':'application/octet-stream' }[extname(file)] || 'application/octet-stream';
+        const cache=publicationAsset?'public, max-age=3600':operatorPage || page || labPage || labAsset && !pathname.includes('/assets/') ? 'no-store' : 'public, max-age=31536000, immutable';
+        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': cache });
         res.end(req.method === 'HEAD' ? undefined : await readFile(file));
       } catch { if (!res.headersSent) res.writeHead(404); res.end('Not found'); }
     });
@@ -73,9 +78,11 @@ export function productionServer(config, store, staticRoot = dist) {
 
 async function main() {
   const config = hostedConfig();
+  config.applications = configureApplications();
   config.androidAssetLinks = androidAssetLinks();
   const store = new RedisSessionStore(redisCommand());
   await store.command('PING');
+  installRpcCapacity({command:store.command});
   config.pilotEvidence = pilotEvidence(store.command, config.origin);
   config.pilot = await configurePilot({rpcUrl:config.rpcUrl,command:store.command});
   config.rehearsal = await configureRehearsal({rpcUrl:config.rpcUrl,command:store.command});

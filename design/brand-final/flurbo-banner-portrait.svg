@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2160 2700" role="img" aria-labelledby="title desc">
+  <title id="title">Flurbo portrait brand banner</title>
+  <desc id="desc">A portrait ivory institutional banner with the Copula Contour identity and Flurbo's shared-pool positioning.</desc>
+  <rect width="2160" height="2700" fill="#f5f4ec"/>
+  <rect x="0" y="0" width="2160" height="34" fill="#14271d"/>
+
+  <g transform="translate(132 130) scale(1.12)" fill="none" stroke="#14271d" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width="4.8" d="M11 19C18 7 39 5 51 14c10 8 7 29-4 38-11 10-31 4-39-9-6-10-3-18 3-24Z"/>
+    <path stroke-width="4.8" d="M20 19c8-6 22-4 27 5 5 9-2 20-12 23-10 3-20-3-21-13-1-6 1-11 6-15Z"/>
+    <path stroke-width="5.8" d="M27 27c6-4 14 0 14 7-1 6-9 9-14 5-5-4-5-9 0-12Z"/>
+  </g>
+  <text x="223" y="191" fill="#14271d" font-family="Space Grotesk, Arial, sans-serif" font-size="66" font-weight="560" letter-spacing="-4">flurbo</text>
+  <text x="1675" y="184" fill="#5c665f" font-family="Space Grotesk, Arial, sans-serif" font-size="22" font-weight="600" letter-spacing="4">MONAD TESTNET</text>
+
+  <g transform="translate(420 360) scale(20.5)" fill="none" stroke="#14271d" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width=".88" d="M11 19C18 7 39 5 51 14c10 8 7 29-4 38-11 10-31 4-39-9-6-10-3-18 3-24Z"/>
+    <path stroke-width=".88" d="M20 19c8-6 22-4 27 5 5 9-2 20-12 23-10 3-20-3-21-13-1-6 1-11 6-15Z"/>
+    <path stroke-width="1.08" d="M27 27c6-4 14 0 14 7-1 6-9 9-14 5-5-4-5-9 0-12Z"/>
+  </g>
+
+  <text x="132" y="1750" fill="#5c665f" font-family="Space Grotesk, Arial, sans-serif" font-size="23" font-weight="600" letter-spacing="5.8">COMBINATORIAL PREDICTION MARKETS</text>
+  <text x="126" y="1925" fill="#14271d" font-family="Space Grotesk, Arial, sans-serif" font-size="150" font-weight="560" letter-spacing="-9">Price the</text>
+  <text x="126" y="2080" fill="#14271d" font-family="Cormorant Garamond, Georgia, serif" font-size="190" font-weight="400" font-style="italic" letter-spacing="-8">relationship.</text>
+  <text x="132" y="2202" fill="#5c665f" font-family="Space Grotesk, Arial, sans-serif" font-size="39">Individual and combined predictions</text>
+  <text x="132" y="2258" fill="#5c665f" font-family="Space Grotesk, Arial, sans-serif" font-size="39">priced from one shared pool.</text>
+
+  <rect x="132" y="2386" width="414" height="78" rx="39" fill="#14271d"/>
+  <text x="190" y="2437" fill="#f5f4ec" font-family="Space Grotesk, Arial, sans-serif" font-size="25" font-weight="600">Invite-based testnet</text>
+  <text x="132" y="2588" fill="#14271d" font-family="Space Grotesk, Arial, sans-serif" font-size="29" font-weight="560">flurbo.singu.online</text>
+  <text x="1785" y="2588" fill="#5c665f" font-family="Space Grotesk, Arial, sans-serif" font-size="24">Test assets only</text>
+  <circle cx="1719" cy="2580" r="9" fill="#d9f76d"/>
+</svg>

@@ -58,14 +58,14 @@ function AgentPage({ id }: { id: string }) {
 }
 
 function AgentList() {
-  const [agents, setAgents] = useState<ProfileJSON[] | null>(null), [directory, setDirectory] = useState<{ namespace: string; label: string }[]>([]);
+  const [agents, setAgents] = useState<ProfileJSON[] | null>(null), [directory, setDirectory] = useState<{ namespace: string; label: string; open?:boolean }[]>([]);
   const [name, setName] = useState(''), [namespace, setNamespace] = useState(''), [mode, setMode] = useState<'paper' | 'approval'>('paper');
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [durable, setDurable] = useState(true), [archived, setArchived] = useState<ProfileJSON[]>([]);
   const [, navigate] = useLocation();
   useEffect(() => {
     const c = new AbortController();
     void agentClient.agents.list(c.signal).then((r: any) => { setAgents(r.agents); setArchived(r.archived ?? []); setDurable(r.durable); }).catch(e => { if (!c.signal.aborted) setError(message(e)); });
-    void agentClient.directory(c.signal).then(d => { setDirectory(d); setNamespace(v => v || d[0]?.namespace || ''); }).catch(() => {});
+    void agentClient.directory(c.signal).then(async d => { const choices=await Promise.all(d.map(async entry=>{try{const market=await agentClient.market(entry.namespace as PilotNamespace,c.signal);return {...entry,open:market.open&&market.closesAt>Date.now()/1000};}catch{return {...entry,open:false};}}));if(!c.signal.aborted){setDirectory(choices);setNamespace(v=>v||choices.find(x=>x.open)?.namespace||'');} }).catch(() => {});
     return () => c.abort();
   }, []);
   async function create(event: React.FormEvent) {
@@ -77,7 +77,7 @@ function AgentList() {
     <header className="market-heading agents-heading">
       <span className="eyebrow">Agents · Monad testnet · Test assets</span>
       <h1>Build agents that <em>trade relationships.</em></h1>
-      <p>Write your own agent with the Flurbo SDK and run it on your own machine or server. It researches questions, forecasts how events relate, compares that with the pool's executable prices and trades from its own wallet within limits you set. This page shows what it reports and what Flurbo verified. Test assets only; estimated edge is not a promise of profit.</p>
+      <p>Create an agent with the Flurbo SDK, run it on your own computer and follow its decisions here. Start with simulated trades before allowing live testnet trades.</p>
     </header>
     {!durable && <p className="agents-note" role="status">Development storage: agents on this server are not durable.</p>}
     {error && <p className="market-error" role="alert">{error}</p>}
@@ -85,20 +85,20 @@ function AgentList() {
       <div className="agents-list" aria-label="Your agents">
         <h2>Your agents</h2>
         {agents === null ? <p role="status">Loading agents...</p> : agents.length === 0 ? <p>No agents yet. Create one to start.</p> :
-          <ul>{agents.map(a => <li key={a.id}><Link href={`/agents/${a.id}`}><strong>{a.name}</strong><span>{a.kind === 'runtime' ? (a.markets ?? []).join(', ') : a.market.title || a.market.namespace}</span>
+          <ul>{agents.map(a => <li key={a.id}><Link href={`/agents/${a.id}`}><strong>{a.name}</strong><span>{a.kind === 'runtime' ? (a.markets ?? []).map(ns=>directory.find(d=>d.namespace===ns)?.label||'Related markets').join(', ') : a.market.title || a.market.namespace}</span>
             <span className="agents-tags">{a.kind === 'runtime' ? <><span>Runs on your infrastructure</span><span>{a.runtimePolicy?.paused ? 'Paused' : a.runtimePolicy?.liveEnabled ? 'Live trades allowed' : 'Paper until allowed'}</span></>
               : <><span>Assisted</span><span>{a.mode === 'paper' ? 'Paper only' : 'Proposes for approval'}</span><span>{a.status === 'active' ? 'Active' : 'Paused'}</span></>}</span></Link></li>)}</ul>}
         {archived.length > 0 && <details className="agents-archived"><summary>Archived agents ({archived.length})</summary>
           <p className="agents-fine">Kept so a transaction already sent from one of their proposals can still be recorded and verified.</p>
-          <ul>{archived.map(a => <li key={a.id}><Link href={`/agents/${a.id}`}><strong>{a.name}</strong><span>{a.kind === 'runtime' ? (a.markets ?? []).join(', ') : a.market.title || a.market.namespace}</span></Link></li>)}</ul></details>}
+          <ul>{archived.map(a => <li key={a.id}><Link href={`/agents/${a.id}`}><strong>{a.name}</strong><span>{a.kind === 'runtime' ? (a.markets ?? []).map(ns=>directory.find(d=>d.namespace===ns)?.label||'Related markets').join(', ') : a.market.title || a.market.namespace}</span></Link></li>)}</ul></details>}
       </div>
       <div>
-      <RuntimeCreateForm directory={directory}/>
+      <p className="agents-fine">For developers: TypeScript, Python, Rust and C++. <Link href="/docs#agents">Read the setup guide</Link></p><RuntimeCreateForm directory={directory}/>
       <details className="agents-card agents-settings"><summary>Assisted agent: manual forecasts, paper trades and MetaMask approval</summary>
       <form onSubmit={create}>
         <h2>Create an assisted agent</h2>
         <label>Name<input value={name} onChange={e => setName(e.target.value)} maxLength={48} required placeholder="Release relationship agent"/></label>
-        <label>Market<select value={namespace} onChange={e => setNamespace(e.target.value)} required>{directory.map(d => <option key={d.namespace} value={d.namespace}>{d.label}</option>)}</select></label>
+        <label>Market<select value={namespace} onChange={e => setNamespace(e.target.value)} required>{directory.map(d => <option key={d.namespace} value={d.namespace} disabled={!d.open}>{d.label}{!d.open?' · Unavailable for new trades':''}</option>)}</select></label>
         <fieldset className="agents-choice"><legend>Mode</legend>
           <label><input type="radio" checked={mode === 'paper'} onChange={() => setMode('paper')}/>Paper only<small>Simulated trades. Nothing is sent on-chain.</small></label>
           <label><input type="radio" checked={mode === 'approval'} onChange={() => setMode('approval')}/>Propose for approval<small>Prepares real trades that you confirm in MetaMask.</small></label>
