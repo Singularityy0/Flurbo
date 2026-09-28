@@ -10,6 +10,8 @@ async function asset(route:any,path:string){
   const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
   return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
 }
+// Waits a bounded time for the rendered result of a keyboard action.
+const expanded=(select:any,value:'true'|'false')=>select.and(select.page().locator(`[aria-expanded="${value}"]`)).waitFor({timeout:5000});
 async function thesisPage(browser:any,options:any={}){
   const f=pilotFixture(Math.floor(Date.now()/1000),4),context=await browser.newContext({viewport:{width:1440,height:1000},...options}),page=await context.newPage(),errors:string[]=[];
   page.on('pageerror',(e:Error)=>errors.push(e.message));
@@ -34,16 +36,20 @@ test('select and segmented controls work from the keyboard and fall back to nati
     const select=page.getByRole('combobox',{name:'Question B',exact:true});
     await select.waitFor();
     await page.locator('.contour-loader').waitFor({state:'detached'});
+    assert.equal(await page.locator('.app-root').evaluate((e:HTMLElement)=>e.inert),false,'the page is interactive');
     const before=await select.innerText();
-    await select.focus();await page.keyboard.press('ArrowDown');
-    assert.equal(await select.getAttribute('aria-expanded'),'true');
+    await select.focus();
+    assert.equal(await select.evaluate((e:Element)=>e===document.activeElement),true,'the combobox has focus before any key is sent');
+    await page.keyboard.press('ArrowDown');
+    await expanded(select,'true');
     const listbox=page.getByRole('listbox');await listbox.waitFor();
     assert.ok(await select.getAttribute('aria-activedescendant'),'the active option is announced while focus stays on the button');
     await page.keyboard.press('Escape');
-    assert.equal(await select.getAttribute('aria-expanded'),'false');
+    await expanded(select,'false');
     assert.equal(await select.innerText(),before,'Escape closes without changing the choice');
-    await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
-    assert.equal(await select.getAttribute('aria-expanded'),'false');
+    await page.keyboard.press('ArrowDown');await expanded(select,'true');
+    await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
+    await expanded(select,'false');
     assert.notEqual(await select.innerText(),before,'arrows and Enter choose another question');
     assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('role')),'combobox','focus returns to the select');
 
