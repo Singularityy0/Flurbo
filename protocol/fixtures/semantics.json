@@ -24,6 +24,8 @@
       },
       "result": {
         "schema": "flurbo.semantic-assessment.v1",
+        "mode": "enforced",
+        "configRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "pool": "0x1111111111111111111111111111111111111111",
         "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
         "scope": 3,
@@ -89,6 +91,8 @@
       },
       "result": {
         "schema": "flurbo.semantic-assessment.v1",
+        "mode": "enforced",
+        "configRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "pool": "0x1111111111111111111111111111111111111111",
         "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
         "scope": 3,
@@ -154,6 +158,8 @@
       },
       "result": {
         "schema": "flurbo.semantic-assessment.v1",
+        "mode": "enforced",
+        "configRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "pool": "0x1111111111111111111111111111111111111111",
         "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
         "scope": 3,
@@ -204,6 +210,8 @@
       },
       "result": {
         "schema": "flurbo.semantic-assessment.v1",
+        "mode": "enforced",
+        "configRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "pool": "0x1111111111111111111111111111111111111111",
         "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
         "scope": 1,
@@ -254,6 +262,8 @@
       },
       "result": {
         "schema": "flurbo.semantic-assessment.v1",
+        "mode": "enforced",
+        "configRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "pool": "0x1111111111111111111111111111111111111111",
         "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
         "scope": 3,
@@ -319,6 +329,8 @@
       },
       "result": {
         "schema": "flurbo.semantic-assessment.v1",
+        "mode": "enforced",
+        "configRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "pool": "0x1111111111111111111111111111111111111111",
         "rulesHash": "0x4444444444444444444444444444444444444444444444444444444444444444",
         "scope": 3,
@@ -384,6 +396,8 @@
       },
       "result": {
         "schema": "flurbo.semantic-assessment.v1",
+        "mode": "enforced",
+        "configRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "pool": "0x1111111111111111111111111111111111111111",
         "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
         "scope": 3,
@@ -449,6 +463,8 @@
       },
       "result": {
         "schema": "flurbo.semantic-assessment.v1",
+        "mode": "enforced",
+        "configRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "pool": "0x1111111111111111111111111111111111111111",
         "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
         "scope": 3,
@@ -514,6 +530,8 @@
       },
       "result": {
         "schema": "flurbo.semantic-assessment.v1",
+        "mode": "enforced",
+        "configRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "pool": "0x1111111111111111111111111111111111111111",
         "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
         "scope": 3,
@@ -579,6 +597,8 @@
       },
       "result": {
         "schema": "flurbo.semantic-assessment.v1",
+        "mode": "enforced",
+        "configRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "pool": "0x1111111111111111111111111111111111111111",
         "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
         "scope": 3,
@@ -644,6 +664,8 @@
       },
       "result": {
         "schema": "flurbo.semantic-assessment.v1",
+        "mode": "enforced",
+        "configRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "pool": "0x1111111111111111111111111111111111111111",
         "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
         "scope": 3,
@@ -688,6 +710,8 @@
       },
       "result": {
         "schema": "flurbo.semantic-assessment.v1",
+        "mode": "enforced",
+        "configRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "pool": "0x1111111111111111111111111111111111111111",
         "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
         "scope": 3,
@@ -738,6 +762,226 @@
         ],
         "notice": "No collision under the configured predicates. This is not a forecast or a profit guarantee."
       },
+      "error": "SEMANTICS_UNAVAILABLE"
+    },
+    {
+      "name": "disabled proceeds without semantic assurance",
+      "claim": {
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000"
+      },
+      "result": {
+        "schema": "flurbo.semantic-assessment.v1",
+        "mode": "disabled",
+        "pool": "0x1111111111111111111111111111111111111111",
+        "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000",
+        "configRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "checkedAt": 1790000000,
+        "expiresAt": 1790000060,
+        "notice": "Outcome compatibility checks are switched off. This purchase has not been checked."
+      },
+      "error": null
+    },
+    {
+      "name": "disabled but expired",
+      "claim": {
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000"
+      },
+      "result": {
+        "schema": "flurbo.semantic-assessment.v1",
+        "mode": "disabled",
+        "pool": "0x1111111111111111111111111111111111111111",
+        "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000",
+        "configRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "checkedAt": 1789999880,
+        "expiresAt": 1789999940,
+        "notice": "Outcome compatibility checks are switched off. This purchase has not been checked."
+      },
+      "error": "SEMANTICS_UNAVAILABLE"
+    },
+    {
+      "name": "disabled for another pool",
+      "claim": {
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000"
+      },
+      "result": {
+        "schema": "flurbo.semantic-assessment.v1",
+        "mode": "disabled",
+        "pool": "0x9999999999999999999999999999999999999999",
+        "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000",
+        "configRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "checkedAt": 1790000000,
+        "expiresAt": 1790000060,
+        "notice": "Outcome compatibility checks are switched off. This purchase has not been checked."
+      },
+      "error": "SEMANTICS_UNAVAILABLE"
+    },
+    {
+      "name": "disabled for another quantity",
+      "claim": {
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000"
+      },
+      "result": {
+        "schema": "flurbo.semantic-assessment.v1",
+        "mode": "disabled",
+        "pool": "0x1111111111111111111111111111111111111111",
+        "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "2000000",
+        "configRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "checkedAt": 1790000000,
+        "expiresAt": 1790000060,
+        "notice": "Outcome compatibility checks are switched off. This purchase has not been checked."
+      },
+      "error": "SEMANTICS_UNAVAILABLE"
+    },
+    {
+      "name": "disabled without configuration revision",
+      "claim": {
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000"
+      },
+      "result": {
+        "schema": "flurbo.semantic-assessment.v1",
+        "mode": "disabled",
+        "pool": "0x1111111111111111111111111111111111111111",
+        "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000",
+        "checkedAt": 1790000000,
+        "expiresAt": 1790000060,
+        "notice": "Outcome compatibility checks are switched off. This purchase has not been checked."
+      },
+      "error": "SEMANTICS_UNAVAILABLE"
+    },
+    {
+      "name": "missing mode is never treated as disabled",
+      "claim": {
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000"
+      },
+      "result": {
+        "schema": "flurbo.semantic-assessment.v1",
+        "configRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pool": "0x1111111111111111111111111111111111111111",
+        "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000",
+        "status": "collision",
+        "code": "SEMANTIC_COLLISION",
+        "coverage": "complete",
+        "rulesDigest": "c42093d4e12b9b2f886f88c4b09ebd603e5d698c50df3036e7ee67f861701296",
+        "checkedAt": 1790000000,
+        "expiresAt": 1790000060,
+        "ordinaryMinimumPayoutAtoms": "0",
+        "ordinaryMaximumPayoutAtoms": "0",
+        "maximumVoidPayoutAtoms": "500000",
+        "matrix": [
+          {
+            "state": 0,
+            "admissible": true,
+            "pays": false
+          },
+          {
+            "state": 1,
+            "admissible": true,
+            "pays": false
+          },
+          {
+            "state": 2,
+            "admissible": true,
+            "pays": false
+          },
+          {
+            "state": 3,
+            "admissible": false,
+            "pays": true
+          }
+        ],
+        "predicates": [
+          {
+            "event": 0,
+            "observation": "same:close",
+            "operator": "gte",
+            "value": "300000",
+            "sourceRule": "Same closing ETH USD cents observation."
+          },
+          {
+            "event": 1,
+            "observation": "same:close",
+            "operator": "lt",
+            "value": "250000",
+            "sourceRule": "Same closing ETH USD cents observation."
+          }
+        ],
+        "notice": "These answers have no winning ordinary outcome under the configured rules. Existing VOID payouts may differ. Automated purchases are blocked."
+      },
+      "error": "SEMANTICS_UNAVAILABLE"
+    },
+    {
+      "name": "unrecognised mode is unavailable",
+      "claim": {
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000"
+      },
+      "result": {
+        "schema": "flurbo.semantic-assessment.v1",
+        "mode": "off",
+        "pool": "0x1111111111111111111111111111111111111111",
+        "rulesHash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000",
+        "configRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "checkedAt": 1790000000,
+        "expiresAt": 1790000060,
+        "notice": "Outcome compatibility checks are switched off. This purchase has not been checked."
+      },
+      "error": "SEMANTICS_UNAVAILABLE"
+    },
+    {
+      "name": "error response is never treated as disabled",
+      "claim": {
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000"
+      },
+      "result": {
+        "code": "SEMANTICS_UNAVAILABLE",
+        "error": "The semantic check is unavailable. Retry before trading."
+      },
+      "error": "SEMANTICS_UNAVAILABLE"
+    },
+    {
+      "name": "null response is unavailable",
+      "claim": {
+        "scope": 3,
+        "mask": "8",
+        "quantityAtoms": "1000000"
+      },
+      "result": null,
       "error": "SEMANTICS_UNAVAILABLE"
     }
   ]

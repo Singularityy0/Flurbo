@@ -16,7 +16,7 @@ from ..transaction import build_transaction, validate_transaction
 from .headless import RuntimeApiError
 from .journal import FileJournal, is_final, owner, policy_entries
 from .signer import transaction_hash
-from ..semantics import semantic_error
+from ..semantics import semantic_error, semantics_disabled
 
 MAX_GAS = 15_000_000
 
@@ -48,14 +48,16 @@ class Executor:
         self.wallet = signer.address
 
     def semantic_check(self, deployment, claim, quantity):
-        reason = 'SEMANTICS_UNAVAILABLE'
+        reason, disabled = 'SEMANTICS_UNAVAILABLE', False
         try:
             if self.client:
-                reason = semantic_error(self.client.validate_trade(deployment['namespace'], claim, quantity), deployment, claim, quantity, self.now())
+                r = self.client.validate_trade(deployment['namespace'], claim, quantity)
+                reason = semantic_error(r, deployment, claim, quantity, self.now())
+                disabled = reason is None and semantics_disabled(r)
         except Exception:
             pass
-        if reason:
-            self.log(reason, {'namespace': deployment['namespace'], 'scope': claim['scope'], 'mask': str(claim['mask'])})
+        if reason or disabled:
+            self.log(reason or 'SEMANTICS_DISABLED', {'namespace': deployment['namespace'], 'scope': claim['scope'], 'mask': str(claim['mask'])})
         return reason
 
     # Everything up to and including the policy check and reservation.

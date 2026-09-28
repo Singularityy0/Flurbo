@@ -6,7 +6,7 @@ import { pilotCall, type PilotManifest } from '../shared/pilot.mjs';
 import type { AuthController } from './auth/controller';
 import { semanticError } from '../../../packages/sdk/src/semantics.ts';
 export const semanticAcknowledgment = 'I understand this has no ordinary winning outcome';
-export type SemanticAssessment = { rulesDigest:string; status:string; coverage:string; notice:string; ordinaryMaximumPayoutAtoms:string; maximumVoidPayoutAtoms:string };
+export type SemanticAssessment = { mode:'disabled'|'enforced'; configRevision:string; rulesDigest?:string; status?:string; coverage?:string; notice:string; ordinaryMaximumPayoutAtoms?:string; maximumVoidPayoutAtoms?:string };
 
 export type Provider={request(input:{method:string;params?:unknown[]}):Promise<unknown>;on?(event:string,fn:()=>void):void;removeListener?(event:string,fn:()=>void):void};
 export type PilotState={manifest:PilotManifest;snapshot:{blockNumber:string;blockHash:string;timestamp:number};
@@ -118,12 +118,13 @@ export async function validatePurchaseSemantics(r:PilotReview, namespace:PilotNa
   const wanted=r.requested;
   const result=await pilotRequest('validate-trade',{scope:wanted.scope,mask:wanted.mask,quantityAtoms:wanted.quantity},namespace);
   const reason=semanticError(result,{pool:r.manifest.pool,rulesHash:r.manifest.rulesHash,eventCount:r.manifest.publication.draft.events.length,scope:wanted.scope!,mask:wanted.mask!,quantityAtoms:wanted.quantity!},Math.floor(Date.now()/1000),false);
+  const checked=result as SemanticAssessment;
   if(reason==='SEMANTIC_COLLISION'){
-    const checked=result as SemanticAssessment;
-    if(r.semanticAssessment?.status!=='collision'||acknowledgment?.rulesDigest!==checked.rulesDigest||r.semanticAssessment.rulesDigest!==checked.rulesDigest||acknowledgment.phrase!==semanticAcknowledgment)
+    if(r.semanticAssessment?.status!=='collision'||!checked.rulesDigest||acknowledgment?.rulesDigest!==checked.rulesDigest||r.semanticAssessment.rulesDigest!==checked.rulesDigest||acknowledgment.phrase!==semanticAcknowledgment)
       throw Error('These outcomes cannot win together under the configured rules. Review the payout warning before continuing.');
   }else if(reason)throw Error('The outcome compatibility check is unavailable. Retry before confirming in your wallet.');
-  if(r.semanticAssessment&&r.semanticAssessment.rulesDigest!==(result as SemanticAssessment).rulesDigest)throw Error('The outcome rules changed. Review this purchase again.');
+  // A mode switch or any configuration change since the review invalidates what the person saw.
+  if(r.semanticAssessment&&(r.semanticAssessment.configRevision!==checked.configRevision||r.semanticAssessment.rulesDigest!==checked.rulesDigest))throw Error('The outcome rules changed. Review this purchase again.');
 }
 
 export async function submitPilot(p:Provider,r:PilotReview,login:string,save:(value:PilotPending|null)=>void,current:()=>boolean,options:{namespace?:PilotNamespace;acknowledgment?:{rulesDigest:string;phrase:string}}={}) {

@@ -266,16 +266,22 @@ Value RuntimeClient::validate_trade(const std::string& ns, unsigned scope, unsig
   body.set("scope", static_cast<int64_t>(scope)); body.set("mask", std::to_string(mask)); body.set("quantityAtoms", quantity);
   return call("POST", "/markets/" + url_segment(ns) + "/validate-trade", body);
 }
+bool semantics_disabled(const Value& r) { return r.is_object() && r["mode"].is_string() && r.str("mode") == "disabled"; }
 std::string semantic_error(const Value& r, const Deployment& d, unsigned scope, unsigned mask, const std::string& quantity, int64_t now) {
   const std::string unavailable = "SEMANTICS_UNAVAILABLE";
   if (d.event_count < 2 || d.event_count > 4) return unavailable;
   try {
     if (r.str("schema") != "flurbo.semantic-assessment.v1" || r.str("pool") != d.pool || r.str("rulesHash") != d.rules_hash || r.integer("scope") != scope
         || r.str("mask") != std::to_string(mask) || r.str("quantityAtoms") != quantity) return unavailable;
+    auto is_digest = [](const std::string& h) { return h.size() == 64 && h.find_first_not_of("0123456789abcdef") == std::string::npos; };
     auto checked = r.integer("checkedAt"), expires = r.integer("expiresAt");
+    if (checked < 0 || checked > now + 15 || expires <= now || expires < checked || expires - checked != 60
+        || !r["configRevision"].is_string() || !is_digest(r.str("configRevision"))) return unavailable;
+    // A valid, claim-bound "disabled" answer proceeds without semantic assurance; any other mode is unavailable.
+    if (r["mode"].is_string() && r.str("mode") == "disabled") return "";
+    if (!r["mode"].is_string() || r.str("mode") != "enforced") return unavailable;
     auto digest = r.str("rulesDigest"), status = r.str("status"), coverage = r.str("coverage");
-    if (checked < 0 || checked > now + 15 || expires <= now || expires < checked || expires - checked != 60 || digest.size() != 64
-        || digest.find_first_not_of("0123456789abcdef") != std::string::npos
+    if (!is_digest(digest)
         || (status != "collision" && status != "unknown" && status != "no_declared_collision")
         || (coverage != "unknown" && coverage != "partial" && coverage != "complete")) return unavailable;
     const auto& rows = r["matrix"].as_array();

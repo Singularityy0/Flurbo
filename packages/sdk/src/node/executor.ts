@@ -9,7 +9,7 @@ import { FileJournal, isFinal, policyEntries, type JournalEntry, type JournalFil
 import { transactionHash, type Signer } from './signer.ts';
 import type { ChainReader, Block } from './chain.ts';
 import { RuntimeApiError, type RuntimeClient } from './headless.ts';
-import { semanticError } from '../semantics.ts';
+import { semanticError, semanticsDisabled } from '../semantics.ts';
 
 // Live execution (protocol/specs/transactions.md). The order matters for crash safety:
 //   plan under the lock (policy check and spend reservation in one step)
@@ -43,8 +43,10 @@ export function executor(o: ExecutorOptions) {
   const wallet = o.signer.address, sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
   async function semanticCheck(d: Deployment, scope: number, mask: string, quantityAtoms: string) {
     let reason: string | null = 'SEMANTICS_UNAVAILABLE';
-    try { if (o.client) reason = semanticError(await o.client.validateTrade(d.namespace,{scope,mask,quantityAtoms}),{...d,scope,mask,quantityAtoms},now()); } catch {}
+    let disabled = false;
+    try { if (o.client) { const r = await o.client.validateTrade(d.namespace,{scope,mask,quantityAtoms}); reason = semanticError(r,{...d,scope,mask,quantityAtoms},now()); disabled = !reason && semanticsDisabled(r); } } catch {}
     if (reason) log(reason, {namespace:d.namespace,scope,mask});
+    else if (disabled) log('SEMANTICS_DISABLED', {namespace:d.namespace,scope,mask});
     return reason;
   }
 

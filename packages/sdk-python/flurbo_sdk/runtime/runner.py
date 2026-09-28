@@ -278,10 +278,13 @@ class AgentRunner:
                 candidate = {"claim": {"scope": p["scope"], "mask": str(p["mask"])}, "quantityAtoms": str(p["quantityAtoms"]), "quoteAtoms": str(p["quoteAtoms"]),
                              "slippageBps": p["slippageBps"], "edgeAtoms": None if p.get("edgeAtoms") is None else str(p["edgeAtoms"]), "edgeBps": p.get("edgeBps"), "quoteBlock": str(head["number"])}
                 if self.config["mode"] == "paper":
-                    from ..semantics import semantic_error
+                    from ..semantics import semantic_error, semantics_disabled
                     reason = 'SEMANTICS_UNAVAILABLE'
                     try:
-                        reason = semantic_error(self.client.validate_trade(d['namespace'], candidate['claim'], p['quantityAtoms']), d, candidate['claim'], p['quantityAtoms'], self.now())
+                        assessment = self.client.validate_trade(d['namespace'], candidate['claim'], p['quantityAtoms'])
+                        reason = semantic_error(assessment, d, candidate['claim'], p['quantityAtoms'], self.now())
+                        if reason is None and semantics_disabled(assessment):
+                            self.log('SEMANTICS_DISABLED', {'namespace': d['namespace']})
                     except Exception:
                         pass
                     if reason:

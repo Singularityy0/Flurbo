@@ -137,9 +137,10 @@ pub struct Executor {
 
 impl Executor {
     fn semantic_check(&self, d: &Deployment, scope: u32, mask: u32, quantity: &str) -> Option<&'static str> {
-        let reason = self.client.as_ref().and_then(|c|c.validate_trade(&d.namespace,scope,mask,quantity).ok())
-            .map(|r|crate::semantics::semantic_error(&r,d,scope,mask,quantity,self.controls.now())).unwrap_or(Some("SEMANTICS_UNAVAILABLE"));
-        if let Some(code)=reason { self.controls.log(code,json!({"namespace":d.namespace,"scope":scope,"mask":mask.to_string()})); }
+        let response = self.client.as_ref().and_then(|c|c.validate_trade(&d.namespace,scope,mask,quantity).ok());
+        let reason = response.as_ref().map(|r|crate::semantics::semantic_error(r,d,scope,mask,quantity,self.controls.now())).unwrap_or(Some("SEMANTICS_UNAVAILABLE"));
+        let disabled = reason.is_none() && response.as_ref().is_some_and(crate::semantics::semantics_disabled);
+        if let Some(code)=reason.or(if disabled { Some("SEMANTICS_DISABLED") } else { None }) { self.controls.log(code,json!({"namespace":d.namespace,"scope":scope,"mask":mask.to_string()})); }
         reason
     }
     pub fn new(chain: Arc<ChainReader>, signer: Arc<dyn Signer>, journal: Arc<FileJournal>, client: Option<Arc<RuntimeClient>>, controls: Arc<dyn Controls>, wait: Duration) -> Self {

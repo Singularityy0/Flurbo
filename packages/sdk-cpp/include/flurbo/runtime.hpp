@@ -123,6 +123,8 @@ class ChainReader {
 bool token_ok(const std::string& token);
 bool is_stop(const Error& e);
 std::string semantic_error(const json::Value& result, const Deployment& deployment, unsigned scope, unsigned mask, const std::string& quantity, int64_t now);
+// Only meaningful after semantic_error returned "": checks are switched off, so nothing was verified.
+bool semantics_disabled(const json::Value& result);
 class RuntimeClient {
  public:
   RuntimeClient(const std::string& base_url, const std::string& token);

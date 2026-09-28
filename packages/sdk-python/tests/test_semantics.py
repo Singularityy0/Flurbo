@@ -28,3 +28,14 @@ class Semantics(unittest.TestCase):
             self.assertEqual(entry['status'],'abandoned')
             self.assertEqual(entry['note'],code)
             self.assertIn(code,logs)
+
+    def test_disabled_passes_guard_but_failures_never_do(self):
+        disabled = next(c for c in F['cases'] if c['name'] == 'disabled proceeds without semantic assurance')['result']
+        def offline(*a):
+            raise OSError('offline')
+        for validate, expected in ((lambda *a: disabled, None), (offline, 'SEMANTICS_UNAVAILABLE'), (lambda *a: {'code': 'SEMANTICS_UNAVAILABLE'}, 'SEMANTICS_UNAVAILABLE')):
+            with self.subTest(expected=expected):
+                logs = []
+                ex = Executor(None, SimpleNamespace(address='0x'+'4'*40), None, SimpleNamespace(validate_trade=validate), None, lambda: (True, None), now=lambda: F['now'], log=lambda code, detail: logs.append(code))
+                self.assertEqual(ex.semantic_check(F['deployment'], {'scope': 3, 'mask': 8}, 1000000), expected)
+                self.assertEqual('SEMANTICS_DISABLED' in logs, expected is None)

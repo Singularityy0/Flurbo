@@ -17,6 +17,7 @@ import { pilotEvidence } from './pilot.mjs';
 import { configurePilot, configureRehearsal } from './pilot-config.mjs';
 import { androidAssetLinks } from './native-association.mjs';
 import { configurePracticeCollections } from './practice-collections.mjs';
+import { loadSemanticConfig, semanticDiagnostics } from './semantic-validation.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -90,6 +91,14 @@ async function main() {
   config.rehearsal=config.practiceCollections.legacy;
   for(const service of config.practiceCollections.services.values())if(config.pilot&&(service.manifest.pool===config.pilot.manifest.pool||service.manifest.resolver===config.pilot.manifest.resolver))throw Error('Practice collections must be separate from the real pilot');
   if(config.rehearsal&&config.pilot&&(config.rehearsal.manifest.pool===config.pilot.manifest.pool||config.rehearsal.manifest.resolver===config.pilot.manifest.resolver))throw new Error('Rehearsal and real pilot must be separate');
+  // Invalid semantic configuration fails the deploy here instead of failing purchases later.
+  const semantics = loadSemanticConfig();
+  const semanticStatus = semanticDiagnostics(semantics, [['pilot', config.pilot], ...config.practiceCollections.services]
+    .filter(([, service]) => service).map(([namespace, service]) => ({ namespace, manifest: service.manifest })));
+  console.log(`Semantic validation ${semantics.mode} (revision ${semantics.revision.slice(0, 12)}): `
+    + semanticStatus.markets.map(m => `${m.namespace}=${m.status}`).join(', '));
+  for (const m of semanticStatus.markets) if (m.error) console.error(`Semantic rules for ${m.namespace} are misconfigured; new purchases there stop until fixed: ${m.error}`);
+  if (semanticStatus.unusedRules.length) console.warn(`Semantic rules configured for unknown pools: ${semanticStatus.unusedRules.join(', ')}`);
   const comparison = new AbortController();
   config.learningStatus = 'starting';
   // Do not hold up account/trading access while a sleeping free-tier server warms.

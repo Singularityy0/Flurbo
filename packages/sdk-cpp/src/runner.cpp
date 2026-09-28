@@ -461,7 +461,13 @@ void AgentRunner::decide_pair(const Deployment& d, const Value& detail, const st
                                             {"quoteBlock", std::to_string(head.number)}});
   if (config_.str("mode") == "paper") {
     std::string reason="SEMANTICS_UNAVAILABLE";
-    try { if(client_) reason=semantic_error(client_->validate_trade(d.namespace_,p.scope,p.mask,to_string(p.quantity_atoms)),d,p.scope,p.mask,to_string(p.quantity_atoms),shared_->now()); } catch (...) {}
+    try {
+      if(client_) {
+        auto assessment=client_->validate_trade(d.namespace_,p.scope,p.mask,to_string(p.quantity_atoms));
+        reason=semantic_error(assessment,d,p.scope,p.mask,to_string(p.quantity_atoms),shared_->now());
+        if(reason.empty()&&semantics_disabled(assessment)) shared_->log("SEMANTICS_DISABLED",with(Value::object(),{{"namespace",d.namespace_}}));
+      }
+    } catch (...) {}
     if(!reason.empty()) {
       shared_->log(reason,with(Value::object(),{{"namespace",d.namespace_}}));
       report_decision(with(base,{{"outcome","abstain"},{"reasons",strings({reason})},{"provenance",provenance.to_json()},{"forecast",found.forecast},{"candidate",candidate},{"summary","The purchase did not pass outcome compatibility checks."}}));

@@ -181,7 +181,9 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     const gasPrice=BigInt(await rpc('eth_gasPrice',[]));
     if(gasLimit<=0n || gasLimit>15_000_000n || gasPrice<=0n || gasPrice>500_000_000_000n) throw new Error('Gas exceeds pilot policy');
     await stable(s);
-    const semanticAssessment=input.action==='buy'?assessSemantics(manifest,{scope:input.scope,mask:input.mask,quantityAtoms:input.quantity}):null;
+    // Informational only: the browser re-checks before the wallet prompt, so a failed check here must not break the review.
+    let semanticAssessment=null;
+    if(input.action==='buy')try{semanticAssessment=assessSemantics(manifest,{scope:input.scope,mask:input.mask,quantityAtoms:input.quantity});}catch{}
     return json({schema:'flurbo.pilot-review.v1',manifest,snapshot:s,expiresAt:s.timestamp+300,action:name,requested:input,title,semanticAssessment,
       amountAtoms:amount.toString(),quotedCostAtoms:quotedCost?.toString()??null,minimumReceivedAtoms:minimumReceived.toString(),gasLimit:gasLimit.toString(),gasPrice:gasPrice.toString(),maximumFeeWei:(gasLimit*gasPrice).toString(),
       transaction,notice:name==='approve'?'Approve the exact token allowance, then review the intended action separately.':'Review the outcome, evidence and wallet before confirming.'});

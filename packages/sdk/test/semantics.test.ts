@@ -22,3 +22,18 @@ test('custom execution and direct signing reject collisions before signer, nonce
     assert.equal(await ex.sign('test',f.deployment),null);assert.equal(entry.status,'abandoned');assert.equal(entry.note,actual);assert.ok(logs.includes(actual));
   }
 });
+test('a valid disabled answer passes the guard and is logged; a failed request is never treated as disabled',async()=>{
+  const disabled=f.cases.find((c:any)=>c.name==='disabled proceeds without semantic assurance').result;
+  for(const [validateTrade,expected] of [[async()=>disabled,null],[async()=>{throw Error('offline');},'SEMANTICS_UNAVAILABLE'],[async()=>({code:'SEMANTICS_UNAVAILABLE'}),'SEMANTICS_UNAVAILABLE']] as const){
+    const logs:string[]=[], entry:any={id:'test',status:'planned',action:'buy',claim:{scope:3,mask:'8'},quantityAtoms:'1000000'};
+    const chain=new Proxy({}, {get(){throw Error('reached chain');}});
+    const ex=executor({chain:chain as any,client:{validateTrade} as any,journal:{locked:async(fn:any)=>fn({entries:[entry]})} as any,signer:{address:'0x'+'4'.repeat(40),signTransaction:()=>{throw Error('must not sign');}} as any,
+      now:()=>f.now,policy:()=>{throw Error('must not reach policy');},liveAllowed:()=>({allowed:true,reason:null}),log:e=>logs.push(e)});
+    if(expected===null){
+      await assert.rejects(ex.sign('test',f.deployment));
+      assert.equal(entry.status,'planned');assert.ok(logs.includes('SEMANTICS_DISABLED'));
+    } else {
+      assert.equal(await ex.sign('test',f.deployment),null);assert.equal(entry.note,expected);assert.ok(!logs.includes('SEMANTICS_DISABLED'));
+    }
+  }
+});

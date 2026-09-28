@@ -1,4 +1,4 @@
-import {assessSemantics} from '../server/semantic-validation.mjs';
+import {assessSemantics,semanticRegistry} from '../server/semantic-validation.mjs';
 import {semanticAcknowledgment} from '../src/pilot.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -12,9 +12,9 @@ for(const namespace of ['pilot','rehearsal'] as const) test(namespace+' flow kee
   const loginAddress='0x'+'99'.repeat(20);
   const f=pilotFixture();
   let conflict=false;
-  const semanticRules=()=>conflict?[{pool:f.manifest.pool,rulesHash:f.manifest.rulesHash,predicates:[
+  const semanticRules=()=>semanticRegistry(conflict?JSON.stringify({schema:'flurbo.semantic-rules.v1',markets:[{pool:f.manifest.pool,rulesHash:f.manifest.rulesHash,predicates:[
     {event:0,observation:'test:close',operator:'gte',value:'3000',sourceRule:'Fixture closing observation.'},
-    {event:1,observation:'test:close',operator:'lt',value:'2500',sourceRule:'Fixture closing observation.'}]}]:[];
+    {event:1,observation:'test:close',operator:'lt',value:'2500',sourceRule:'Fixture closing observation.'}]}]}):'');
   f.manifest.publication.reviewerControl='single-operator';
   if(namespace==='rehearsal'){f.manifest.publication.mode='rehearsal';f.manifest.publication.draft.title='Public rehearsal: scripted settlement checks';}
   let login=true,reads=0;const errors:string[]=[];

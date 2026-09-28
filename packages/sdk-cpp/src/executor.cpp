@@ -162,8 +162,15 @@ Planned Executor::plan(const Deployment& d, const Intent& intent, const std::str
 
 std::string Executor::semantic_check(const Deployment& d, const Claim& c, i128 quantity) {
   std::string reason = "SEMANTICS_UNAVAILABLE";
-  try { if (client_) reason = semantic_error(client_->validate_trade(d.namespace_, c.scope, c.mask, to_string(quantity)), d, c.scope, c.mask, to_string(quantity), controls_->now()); } catch (...) {}
-  if (!reason.empty()) { Value detail = Value::object(); detail.set("namespace", d.namespace_); controls_->log(reason, detail); }
+  bool disabled = false;
+  try {
+    if (client_) {
+      auto r = client_->validate_trade(d.namespace_, c.scope, c.mask, to_string(quantity));
+      reason = semantic_error(r, d, c.scope, c.mask, to_string(quantity), controls_->now());
+      disabled = reason.empty() && semantics_disabled(r);
+    }
+  } catch (...) {}
+  if (!reason.empty() || disabled) { Value detail = Value::object(); detail.set("namespace", d.namespace_); controls_->log(disabled ? "SEMANTICS_DISABLED" : reason, detail); }
   return reason;
 }
 

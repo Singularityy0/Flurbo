@@ -34,7 +34,26 @@ Supported predicates are `lt`, `lte`, `gt`, `gte`, `eq` over integer observation
 
 The pool address and existing rules hash bind the mapping to a deployment. A mismatched hash fails closed. The metadata itself is operator-managed, not committed on-chain. Its SHA-256 digest binds a manual acknowledgment to the mapping reviewed. A server compromise or an incorrect mapping remains a trust risk.
 
-Empty configuration returns unknown. **There is no built-in mapping for existing public pools in this change. Updated agents abstain on combined purchases until their selected events have reviewed metadata.** Do not copy test fixtures into hosting settings. Single-event purchases may proceed with unknown metadata but receive no semantic assurance. Invalid JSON or an invalid deployment mapping blocks purchases, not selling or redemption.
+### Modes
+
+`FLURBO_SEMANTIC_MODE` selects one of two modes. Any other value stops the server from starting.
+
+| Mode | Setting | Server behavior | Updated clients |
+| --- | --- | --- | --- |
+| Disabled (default) | unset, empty or `off` | Never reads `FLURBO_SEMANTIC_RULES_JSON`. Answers every valid request with a claim-bound `mode: "disabled"` assessment. | Proceed without semantic assurance and log `SEMANTICS_DISABLED`. The manual review shows no compatibility claim. |
+| Enforced | `enforce` | Evaluates the configured rules. | Apply the checks below. |
+
+Only a fresh, claim-bound answer with `mode: "disabled"` means "switched off". A network failure, an error response, a stale or mismatched answer, a missing `mode` or `configRevision`, or any other mode is `SEMANTICS_UNAVAILABLE` and stops a new purchase. Removing the endpoint is therefore not a way to switch checks off: updated clients stop buying.
+
+Switching to `off` restores availability by withdrawing protection. It is an operational rollback, not a fix. Every assessment carries `configRevision`, a SHA-256 digest of the mode and, when enforced, the rules text. The manual flow asks for a new review if the revision changes between review and wallet confirmation.
+
+### Startup validation and diagnostics
+
+In enforced mode the rules are parsed once at startup. Unreadable JSON, a wrong schema, more than fifty markets or an entry without a valid lowercase pool address stops the deploy. An otherwise invalid or duplicated entry, or one whose `rulesHash` does not match the deployment, makes only that pool unavailable: new purchases there stop until it is fixed, and other markets are unaffected. In disabled mode the rules are ignored, so unused configuration cannot disrupt trading.
+
+The server logs the effective mode, the first twelve characters of the revision and each market's status at startup. The testing operator can read the same report at `GET /api/semantic-status` (`flurbo.semantic-status.v1`): per market `disabled`, `mapped`, `partial`, `unmapped` or `misconfigured` with the reason, plus rules configured for unknown pools.
+
+In enforced mode an empty configuration returns unknown. **There is no built-in mapping for existing public pools in this change. In enforced mode, updated agents abstain on combined purchases until their selected events have reviewed metadata.** Do not copy test fixtures into hosting settings. Single-event purchases may proceed with unknown metadata but receive no semantic assurance. A misconfigured pool blocks purchases there, not selling or redemption.
 
 ## Endpoints
 
@@ -48,7 +67,7 @@ Exact request fields:
 {"scope":3,"mask":"8","quantityAtoms":"1000000"}
 ```
 
-The response schema is `flurbo.semantic-assessment.v1`. It includes the pool and rules hash, exact request, mapping digest, checked/expiry times, coverage, status, Boolean payout matrix, ordinary minimum/maximum payout atoms, maximum VOID payout atoms and predicates. Assessments expire after sixty seconds. These are payout bounds, not executable quotes or probability estimates. The actual purchase cost and fees are determined by the separate quote and transaction.
+The response schema is `flurbo.semantic-assessment.v1`. Every response includes `mode`, `configRevision`, the pool and rules hash, the exact request and checked/expiry times. An enforced response also includes the mapping digest, coverage, status, Boolean payout matrix, ordinary minimum/maximum payout atoms, maximum VOID payout atoms and predicates. Assessments expire after sixty seconds. These are payout bounds, not executable quotes or probability estimates. The actual purchase cost and fees are determined by the separate quote and transaction.
 
 Status is `collision`, `unknown` or `no_declared_collision`. The last means no contradiction was found under the configured predicates, not a guarantee of feasibility, accuracy or profitability.
 
@@ -62,7 +81,7 @@ All four supported live executors check before starting a purchase, including be
 
 Reference paper runners use the same guard before recording a fill. Existing sell, redemption and already-signed transaction recovery paths do not require this assessment. Recovery can rebroadcast only the transaction bytes already journaled, using the existing recovery checks. An assessment is not a signing authorization and cannot freeze a wallet outside these runtimes.
 
-The manual review shows the ordinary loss and VOID distinction. A human can acknowledge a known collision by typing the exact displayed phrase. Confirmation stays disabled until then. A fresh check runs before the wallet prompt; a different mapping digest invalidates the acknowledgment. The server accepts no client-supplied predicates. The exception is deliberate user-interface friction, not on-chain enforcement or a server-issued permit.
+The manual review shows the ordinary loss and VOID distinction. A human can acknowledge a known collision by typing the exact displayed phrase. Confirmation stays disabled until then. A fresh check runs before the wallet prompt; a different mapping digest invalidates the acknowledgment. The server accepts no client-supplied predicates. The exception is deliberate user-interface friction, not on-chain enforcement or a server-issued permit. The native app uses the same shared submission check with its own market namespace and shows the same warning and typed acknowledgment. Native builds distributed before this change keep their old behavior.
 
 ## Boundaries and next work
 

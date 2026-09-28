@@ -65,7 +65,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
         return route.fulfill({json:{pool:f.manifest.pool,sampling:'current',points:[0,300,600].map((offset,i)=>({timestamp:end-600+offset,blockNumber:String(100+i),prices:[0,1,2,3].map(event=>({event,yes:String(400000+i*50000),no:String(620000-i*50000)}))}))}});
       }
       if(path==='/api/'+namespace+'/status'){reads++;return route.fulfill({json:await f.service.status(url.searchParams.get('wallet')||undefined)});}
-      if(path==='/api/'+namespace+'/validate-trade')return route.fulfill({json:assessSemantics(f.manifest,route.request().postDataJSON(),[])});
+      if(path==='/api/'+namespace+'/validate-trade')return route.fulfill({json:assessSemantics(f.manifest,route.request().postDataJSON())});
       if(path==='/api/'+namespace+'/prepare'){preparedQuantities.push(route.request().postDataJSON().quantity);preparedClaims.push(route.request().postDataJSON());return route.fulfill({json:await f.service.prepare(route.request().postDataJSON())});}
       if(path==='/api/'+namespace+'/claim-analytics'){
         const claim=route.request().postDataJSON(),snapshot=(await f.service.status()).snapshot;

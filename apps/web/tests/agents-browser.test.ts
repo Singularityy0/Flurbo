@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import {encodeAbiParameters,encodeEventTopics,decodeFunctionData} from 'viem';
 import {pilotPoolAbi} from '../shared/pilot.mjs';
+import {assessSemantics} from '../server/semantic-validation.mjs';
 import {alice,origin,setup} from './agent-fixture.ts';
 import {owner,hash,code} from './pilot-fixture.ts';
 
@@ -44,6 +45,8 @@ async function harness(browser:any,{failTracking=0}={}){
       if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',markets:[{namespace:'pilot',label:'Release fixture',pool,closesAt:s.f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:alice,wallets:[owner]}});
       if(path==='/api/pilot/markets')return route.fulfill({json:await s.f.service.markets()});
+      // Purchases re-check outcome compatibility right before the wallet prompt; answer as the server would.
+      if(path==='/api/pilot/validate-trade')return route.fulfill({json:assessSemantics(s.f.manifest,route.request().postDataJSON())});
       if(path==='/api/agents'||path.startsWith('/api/agents/')){
         const input=method==='POST'?route.request().postDataJSON():undefined;
         if(input?.action==='submitted'){tracked.push(Date.now());if(failures>0){failures--;return route.fulfill({status:503,json:{error:'The agent service is temporarily unavailable. Nothing was traded.'}});}}
