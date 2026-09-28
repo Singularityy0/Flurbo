@@ -32,19 +32,26 @@ const approved=(route:any)=>route.fulfill({json:{approved:true}});
 const later=(ms:number)=>async(route:any)=>{await new Promise(r=>setTimeout(r,ms));await route.fulfill({json:{approved:true}});};
 const heading=(page:any)=>page.getByRole('heading',{name:'Build agents that trade relationships.'});
 
-test('the loader never flashes: quick checks skip it, and any showing lasts its minimum',{skip},async()=>{
+test('quick checks complete before the show delay without flashing the loader',{skip},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href),browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   try{
     const {page,errors}=await open(browser,{access:approved});
-    for(let visit=0;visit<3;visit++){
-      await page.goto('https://flurbo.singu.online/agents');
-      await heading(page).waitFor();await page.locator('.contour-loader').waitFor({state:'detached'});await page.waitForTimeout(300);
-      const {added,removed}=await page.evaluate(()=>(window as any).__loader);
-      // A cold browser start can legitimately pass the show delay; then it must not blink.
-      if(added.length)assert.ok(removed[0]-added[0]>=400,`shown for only ${Math.round(removed[0]-added[0])}ms`);
-      else return assert.deepEqual(errors,[]);
-    }
-    assert.fail('warm loads with instant checks still showed the loader');
+    // Instant mock responses do not imply a fast page on a busy CI worker.
+    // Freeze page time while the real bundle downloads and React mounts, then
+    // advance through readiness (60ms) and beyond the show delay (200ms).
+    // This also catches a stale show timer that fires after readiness.
+    const start=new Date('2026-01-01T00:00:00Z');
+    await page.clock.install({time:start});
+    await page.clock.pauseAt(start);
+    await page.goto('https://flurbo.singu.online/agents');
+    await heading(page).waitFor();
+    await page.getByText('No agents yet. Register one to start in paper mode.',{exact:true}).waitFor();
+    await page.clock.runFor(100);
+    await page.clock.runFor(1_000);
+    assert.deepEqual(await page.evaluate(()=>(window as any).__loader),{added:[],removed:[]});
+    assert.equal(await page.locator('.contour-loader').count(),0);
+    assert.equal(await page.locator('.app-root').evaluate((e:HTMLElement)=>e.inert),false);
+    assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });
 

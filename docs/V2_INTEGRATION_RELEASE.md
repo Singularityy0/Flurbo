@@ -156,3 +156,11 @@ Final local verification on Windows, Node 24.13.0 and installed Chrome:
 - Diff whitespace check: passed.
 
 Ignored local logs: `tmp/v2-ten-baseline.log`, `tmp/v2-ten-fix.log`, `tmp/v2-legacy-fix.log`, `tmp/v2-ten-build.log`, and `tmp/v2-all-browser-fixed.log`. The first repaired run passed nine original failures and revealed the archive navigation bug; the final full run includes its fix. These results supersede the earlier 35-pass/10-fail V2 record. Ubuntu CI still needs to run on the newly pushed commit. No public-network transaction, commit, push, merge or deployment was performed during this follow-up.
+
+## Loader timing follow-up after merging main
+
+The CI log for `4dddba3` reports 44 browser tests passing and one failure in the quick-loader test: `shown for only NaNms`. The merge has no tree changes relative to its first parent. The test treated immediate mocked responses as evidence that a real browser would finish within the loader's show delay. Its initial detached check could finish before the loader appeared, and its later snapshot could contain an appearance without a disappearance. Subtracting the missing timestamp produced `NaN`.
+
+The quick-load test now pauses browser time while the bundle and mocked data load. It waits for the agents empty state, advances through the readiness debounce, then advances beyond the show delay and asserts that the loader never appeared and the page is interactive. The separate slow-load test retains its real-time minimum-duration, focus and scroll assertions. No application code or loader timing was changed, and no test was skipped.
+
+Local verification: all five loader browser tests and nine loader state-machine tests passed, with no failures or skips, using Node 24.13.0 and installed Chrome. The ignored log is `tmp/loader-clock-fix.log`. The full Ubuntu browser CI must pass on the follow-up commit before merging PR #3.
