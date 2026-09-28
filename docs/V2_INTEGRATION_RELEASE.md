@@ -4,15 +4,15 @@ Prepared on 2026-09-28. This document describes local changes and a proposed rel
 
 ## Git state and scope
 
-The current checkout is `redesign/v2`, based on `901542a`. The semantic rollout reviewed here is `origin/feature/semantic-validation-rollout` at `fbbeba1`, the source of PR #2.
+The current checkout is `redesign/v2`. The original integration started at `901542a` and preserved semantic ancestry from `fbbeba1`, the source of PR #2. Integration commit `5cf8ab2` and quote-test fix `120a692` have been pushed in PR #3. The remaining browser follow-up is described below.
 
-The previous agent copied semantic files into the uncommitted V2 working tree. All 58 files changed by the semantic branch are present. After this follow-up, 50 match that branch after newline normalization. Eight contain intentional integration changes: the CI workflow, production server, SemanticReview, Agents, Pilot, shared pilot client, agent browser tests, and market browser tests. No SDK, mobile, protocol, semantic backend or rollout documentation content from that branch is missing.
+The previous agent copied semantic files into the then-uncommitted V2 working tree. The original integration confirmed that all 58 files changed by the semantic branch were present. At that point, 50 matched that branch after newline normalization and eight contained intentional integration changes. The later browser follow-up also updates rollout documentation; those original file counts are a historical snapshot.
 
-Do not use the earlier V2-only staging instructions. V2 now imports semantic modules that are not tracked on its current parent. `V2_RELEASE_PATHS.txt` lists the application, SDK, protocol, CI and release files that belong in this combined snapshot. It excludes personal skill folders, design experiments, local resources, research proposals, temporary reports and credentials.
+`V2_RELEASE_PATHS.txt` records the original combined snapshot. Its one-time packaging is complete. For subsequent fixes, stage only the changed files. Keep personal skill folders, design experiments, local resources, research proposals, temporary reports and credentials out of release commits.
 
 ## Follow-up changes
 
-1. CI explicitly runs the semantic trade-ticket, loader and UI control browser tests. The general test run skips browser tests without the browser environment, so listing them in the actual browser step matters. Browser files run sequentially to avoid launching many competing Chromium processes.
+1. CI now runs every browser test file, including semantic trade-ticket, loader, UI controls, portfolio, discovery and What-if coverage. The general test run skips browser tests without the browser environment. Browser files run sequentially to avoid launching many competing Chromium processes.
 2. The shared purchase validator exposes a typed collision error carrying the validated assessment. The agent approval screen renders that assessment with the ordinary loss explanation and separate VOID maximum payout. It offers no acknowledgment input or agent override. A fresh review clears the old explanation. No wallet transaction or pending intent is created for a blocked purchase.
 3. The loader retains its two-sided contour merge and reduced-motion behavior. Completion timing is shorter: normal merge 240 ms, logo reveal and hold 200 ms, exit 180 ms. With the 60 ms readiness debounce, the normal completion sequence takes 680 ms instead of 1500 ms. An already displayed fast loader may use its minimum visible duration. A state-machine regression bounds the completion sequence to 750 ms. These are animation timings, not total network or route loading times.
 4. Browser tests wait for the loader to release focus before testing keyboard input, and wait for runtime registration navigation before operating its settings.
@@ -21,40 +21,26 @@ This does not change semantic enforcement defaults, contracts, authentication, a
 
 ## Commit and push from Git Bash
 
-The helper has not been executed against this repository. It creates local commits only when you run it.
+The one-time integration helper already ran to produce `5cf8ab2`. Do not run it again. For the remaining browser fixes, use:
 
 ```bash
 cd /c/Users/anany/Flurbo
 git status --short
-git fetch origin
-bash scripts/commit-v2-integration.sh
-# Continue only if the helper succeeds.
-git log -3 --oneline
-git diff --stat origin/feature/semantic-validation-rollout...HEAD
-git push -u origin redesign/v2
+git switch redesign/v2
+git add .github/workflows/checks.yml apps/web/src/pages/AccountPortfolio.tsx
+git add apps/web/tests/pilot-ledger-browser.test.ts apps/web/tests/practice-collections-browser.test.ts apps/web/tests/showcase-browser.test.ts
+git add apps/web/tests/wallet-session-browser.test.ts apps/web/tests/what-if-browser.test.ts apps/web/tests/workspace-browser.test.ts
+git add docs/V2_INTEGRATION_RELEASE.md docs/SEMANTIC_VALIDATION_ROLLOUT.md
+git diff --cached --stat
+git commit -m "Fix remaining V2 browser regressions and enforce full browser CI"
+git push origin redesign/v2
 ```
 
-The helper contains the explicit staging command:
-
-```bash
-git add --pathspec-from-file=docs/V2_RELEASE_PATHS.txt
-```
-
-It refuses the wrong branch, a changed starting commit, a changed semantic branch, pre-existing staged edits or an existing recovery branch. It then:
-
-1. Commits the complete selected working tree as a local snapshot.
-2. Saves that commit on `backup/redesign-v2-tested-snapshot`.
-3. Uses `git reset --soft fbbeba1` to move only the unpublished V2 branch parent. The index and working files remain intact.
-4. Commits the V2 changes on top of the actual semantic history.
-5. Verifies that the final tree is identical to the saved snapshot and that semantic history is an ancestor.
-
-Each commit uses one `-m`, without attribution trailers. The temporary snapshot stays on the local recovery branch and need not be pushed. No force push is needed. If any command fails, stop and inspect `git status` and the recovery branch. Do not repeat the helper, use `reset --hard`, delete files, or overwrite the recovery branch.
-
-This packaging changes commit ancestry without changing the tested application files. It avoids creating an apparent second implementation of PR #2 or resolving its conflicts again by discarding one side.
+The helper preserved the tested tree and semantic ancestry, with a recovery snapshot on `backup/redesign-v2-tested-snapshot`. That branch need not be pushed. No force push, reset or repeat integration is needed for these fixes. Check the staged diff before committing.
 
 ## Merge order
 
-Pushing a branch is not approval to deploy it. Keep both PRs in draft until their intended checks and review are complete. The broader browser failures documented below remain release gates where they cover changed workflows.
+Pushing a branch is not approval to deploy it. Keep both PRs in draft until their intended checks and review are complete. The full browser suite is now a CI release gate; historical failures must not be used to waive a new failure.
 
 1. Open a V2 draft PR into `main`. It will initially include semantic ancestry because PR #2 has not merged. Run all four CI jobs on this exact head, including the expanded browser step. PR #2's previous green status does not certify V2.
 2. Confirm the effective hosted semantic mode is `off` in Render and in authenticated operator diagnostics. Absence from `render.yaml` does not prove the deployed environment is unset. Do not enable enforcement during this UI release.
@@ -87,9 +73,9 @@ Check `/healthz`, direct page loads and refreshes, access approval, market disco
 
 If V2 introduces a regression, revert the V2 merge commit through a reviewed revert PR and deploy that result. With the recommended merge order this keeps the semantic rollout installed with enforcement off. Do not revert PR #2 merely to roll back styling. Do not force-reset shared main. Keep the pre-release deployed SHA in the deployment record.
 
-## Validation record
+## Original integration validation record
 
-See the final verification results below. Mocked browser tests use the real production bundle and local fixtures, not a funded public-network wallet. The inherited four-language CI remains the cross-platform release authority; not every language suite has been rerun locally during this follow-up.
+This table records the earlier integration before the browser repairs. See the follow-up section for current results. Mocked browser tests use the real production bundle and local fixtures, not a funded public-network wallet. The inherited four-language CI remains the cross-platform release authority.
 
 | Check | Result in this follow-up |
 | --- | --- |
@@ -108,7 +94,7 @@ Local environment: Windows, Node 24.13.0, installed Chrome driven by Playwright,
 
 An initial all-tests parallel browser run had 16 failures. Sequential execution removed the six additional failures. The ten remaining test names match the prior main-baseline report in `SEMANTIC_VALIDATION_ROLLOUT.md`. Old main was not independently rebuilt and retested during this follow-up, so this is a match against the recorded baseline, not a new proof that all ten are harmless.
 
-The unresolved files are:
+The files with failures at that time were:
 
 - `pilot-ledger-browser.test.ts`: five tests covering fresh-device combined holdings, refresh, history outage, wallet/pool isolation, and bounded/cancelled discovery.
 - `practice-collections-browser.test.ts`: multiple-pool directory and portfolio.
@@ -117,7 +103,7 @@ The unresolved files are:
 - `what-if-browser.test.ts`: read-only comparison, pending replacement and expiry.
 - `workspace-browser.test.ts`: portfolio deep links and legacy history.
 
-These cover real release concerns. Their existing status alone does not justify ignoring them. Before merging V2, determine which assertions or fixtures are obsolete, repair those with equivalent behavioral coverage, and fix any actual application regressions. Do not simply skip them or delete assertions. All four remote CI jobs must also pass on the final V2 head. A green focused CI job is not an all-browser-suite pass.
+These cover real release concerns. The follow-up repairs them with equivalent behavioral coverage rather than skipping them. All four remote CI jobs, including the newly expanded full browser job, must pass on the final V2 head.
 
 Local raw logs, intentionally excluded from commits:
 
@@ -145,4 +131,28 @@ The uploaded CI log for `5cf8ab2` reports a successful web build and 16 of 18 se
 
 The follow-up waits for the exact combination request and its rendered claim. It also holds the response deliberately and verifies that the previous review and Buy button are absent, with no additional wallet transaction. The original claim assertions remain. Application code is unchanged; its confirmation path already checks the review against the selected owner, action, scope, mask and quantity before submission.
 
-The two affected flows pass locally with the held-response regression. The full seven-file CI browser selection then passed all 18 tests, with no failures or skips, on Windows with installed Chrome (Node 24.13.0). Logs are in the ignored files `tmp/v2-ci-market-fix.log` and `tmp/v2-ci-browser-fix.log`. Remote Ubuntu CI must rerun after this fix is pushed. The ten broader browser failures documented above remain separate release concerns.
+The two affected flows passed locally with the held-response regression. The full seven-file CI browser selection then passed all 18 tests, with no failures or skips, on Windows with installed Chrome (Node 24.13.0). Logs are in the ignored files `tmp/v2-ci-market-fix.log` and `tmp/v2-ci-browser-fix.log`. The user subsequently supplied the PR #3 screenshot showing all four remote jobs passing for `120a692`. At that point, the ten broader browser failures were still outstanding; the following section records their repair.
+
+## Full browser follow-up: all ten failures repaired
+
+The six affected files were rerun against the production bundle at `120a692`: 11 tests ran, with the same ten failures and the existing workspace test passing. Updating the fixtures exposed a real archive navigation issue that had been hidden by the earlier missing API mock.
+
+| Area | Cause and repair | Behavior retained or strengthened |
+| --- | --- | --- |
+| Portfolio and multiple collections | Fixtures served `/api/account/wallets` but not the current `/api/account/portfolio-sources`. Add the current read endpoint using the same verified account and wallets. | Fresh-browser discovery without saved hints, exact balances, separate pool totals, linked-wallet replacement, late-response isolation, failed-read recovery and cancellation on leaving. |
+| Named combination discovery | The old expectation of 16 claims omitted the two XOR claims now included in discovery. Expect 18 and explicitly assert masks 6, 8 and 9 and both requested owners. | The batch remains bounded and combined shares appear before history responds. |
+| History catch-up | Old copy and timing assertions predated bounded background history catch-up. Use the current notice and a controlled browser clock. | History errors stop catch-up, unchanged progress allows only one extra attempt, holdings reads remain bounded, and refresh cannot start history before initial holdings finish. |
+| Showcase evidence | The old test expected a direct link with an arrow in its label; evidence now opens inline. Open the disclosure, verify the submitted statement, then check the raw record URL. | Published evidence is accessible and points to the correct namespace and hash. |
+| Wallet persistence | The old portfolio sentence was removed, and its sources endpoint was missing from the fixture. Check the linked-wallet count and holdings section instead. | Linked wallets remain visible when MetaMask is locked, navigation and reload do not prompt reconnect, and switching wallets changes the quote owner. |
+| What-if | A legitimate portfolio-sources read was being classified as an unexpected request. Mock that read explicitly. | Keep the assertion rejecting every other unexpected request and accepting only `a,b` analytics inputs; expiry, cancellation, invalid responses and mobile layout remain covered. |
+| Legacy holdings navigation | The archive now has a dedicated `?legacy=1` URL, but the component read `window.location.search` without subscribing to router updates. Returning through the Portfolio navigation could leave the archive visible after the URL lost the query. Use `useSearch` and reset archive expansion when leaving that view. | Verify the archive detaches on return to `/portfolio`, can reopen with the same holdings, retains refresh/error recovery and redirects signed-out users without portfolio reads. |
+
+No tests were removed or newly skipped. Application changes are confined to archive query navigation. Contract behavior, semantic enforcement defaults and transaction signing are unchanged. CI now runs `tests/*browser.test.ts` sequentially instead of the seven-file selection.
+
+Final local verification on Windows, Node 24.13.0 and installed Chrome:
+
+- Production build and TypeScript check: passed (`npm run build`).
+- All browser files: **45 passed, 0 failed, 0 skipped** in approximately 211 seconds.
+- Diff whitespace check: passed.
+
+Ignored local logs: `tmp/v2-ten-baseline.log`, `tmp/v2-ten-fix.log`, `tmp/v2-legacy-fix.log`, `tmp/v2-ten-build.log`, and `tmp/v2-all-browser-fixed.log`. The first repaired run passed nine original failures and revealed the archive navigation bug; the final full run includes its fix. These results supersede the earlier 35-pass/10-fail V2 record. Ubuntu CI still needs to run on the newly pushed commit. No public-network transaction, commit, push, merge or deployment was performed during this follow-up.

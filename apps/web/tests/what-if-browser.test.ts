@@ -32,7 +32,7 @@ test('What-if stays read-only, replaces pending pairs, expires snapshots and fit
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600_000}}});
       if(path==='/api/rehearsal/status')return route.fulfill({json:await f.service.status()});
-      if(path==='/api/account/wallets')return route.fulfill({json:{account:owner,wallets:[]}});
+      if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:owner,wallets:[]}});
       if(path==='/api/network')return route.fulfill({status:503,json:{error:'Offline fixture'}});
       if(path==='/api/rehearsal/price-history')return route.fulfill({status:503,json:{error:'Offline fixture'}});
       if(path==='/api/rehearsal/markets')return route.fulfill({json:await f.service.markets()});
@@ -47,6 +47,7 @@ test('What-if stays read-only, replaces pending pairs, expires snapshots and fit
     });
     await page.goto('https://flurbo.singu.online/markets/rehearsal/0');
     await page.getByText('Explore how these markets connect',{exact:true}).click();
+    assert.equal(await page.getByRole('alert').filter({hasText:'Your account holdings could not be refreshed.'}).count(),0);
     const panel=page.locator('.what-if');
     await panel.getByRole('button',{name:'Compare these questions'}).click();
     await panel.getByText('Both Yes, together',{exact:true}).waitFor();

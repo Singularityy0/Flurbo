@@ -23,6 +23,7 @@ test('landing example and unified directory work on desktop and mobile without l
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:ns,markets:[{namespace:ns,label:'Showcase v0',pool:showcase.pool,closesAt:now+14400},{namespace:old,label:'October practice',pool:october.pool,closesAt:now+86400}]}});
       if(path===`/api/${ns}/status`){const state=await f.service.status();if(evidencePublished)state.cases[0].evidenceHash='0x'+'ab'.repeat(32);return route.fulfill({json:{...state,manifest:showcase}});}
+      if(path===`/api/${ns}/evidence/0x${'ab'.repeat(32)}`)return route.fulfill({json:{outcome:2,statement:'The selected finalized Ethereum block meets the published threshold.',sourceURL:'https://ethereum.org/developers/docs/apis/json-rpc/'}});
       if(path.endsWith('/markets')&&path.startsWith('/api/')){requests.push(path);return route.fulfill({json:{manifest:path.includes(old)?october:showcase,snapshot:{timestamp:now,blockNumber:'100'},open:true,prices:[0,1,2,3].map(event=>({event,yes:'512495',no:'512495'}))}});}
       if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unavailable fixture'}});
       const file=path.startsWith('/assets/')?path.slice(1):'index.html';
@@ -59,7 +60,9 @@ test('landing example and unified directory work on desktop and mobile without l
     assert.match(await source.innerText(),/not evidence of this market’s result/);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     evidencePublished=true;await page.reload();
-    const evidence=page.getByRole('link',{name:'View published assertion evidence ↗',exact:true});
+    await source.getByText('View published assertion evidence',{exact:true}).click();
+    await source.getByText('The selected finalized Ethereum block meets the published threshold.',{exact:true}).waitFor();
+    const evidence=source.getByRole('link',{name:'View raw evidence record',exact:true});
     await evidence.waitFor();assert.equal(await evidence.getAttribute('href'),`/api/${ns}/evidence/0x${'ab'.repeat(32)}`);
   }finally{await browser.close();}
 });

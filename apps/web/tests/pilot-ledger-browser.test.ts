@@ -16,7 +16,7 @@ test('combined shares appear in a fresh browser before history responds, with no
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
       if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
-      if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
+      if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/account')return route.fulfill({json:{...await f.service.account(url.searchParams.get('wallet')),claimScopes:[1,2,3]}});
@@ -34,7 +34,10 @@ test('combined shares appear in a fresh browser before history responds, with no
     await combined.locator('strong').getByText('Test event 1 + Test event 2',{exact:true}).waitFor();
     await combined.locator('small').getByText('Yes AND Yes',{exact:true}).waitFor();
     await page.getByRole('cell',{name:'10',exact:true}).waitFor();
-    assert.equal(batches.length,2);assert.ok(batches.every(b=>b.claims.length===16));
+    assert.equal(batches.length,2);assert.ok(batches.every(b=>b.claims.length===18));
+    // Four binary questions plus every named two-question claim, including XOR.
+    assert.deepEqual(batches.map(b=>b.owner).sort(),[login,owner].sort());
+    for(const batch of batches)for(const mask of ['6','8','9'])assert.ok(batch.claims.some((c:any)=>c.scope===3&&c.mask===mask));
     assert.equal(await page.getByRole('button',{name:/^Refresh/}).count(),1);
     assert.equal(await page.evaluate(()=>localStorage.length),0);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
@@ -44,19 +47,20 @@ test('combined shares appear in a fresh browser before history responds, with no
   }finally{release();await browser.close();}
 });
 
-test('account portfolio discovers older combinations on refresh without repeated background scans',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+test('account portfolio discovers older combinations on refresh and stops scanning after a history error',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const fixture=pilotFixture();let scans=0,fail=false;
   const login='0x'+'99'.repeat(20),errors:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:390,height:844}});
+    await page.clock.install();await page.clock.pauseAt(new Date());
     page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.addInitScript(({login,owner}:any)=>{sessionStorage.setItem('flurbo.trading.market','pilot');sessionStorage.setItem('flurbo.view-wallet:'+login,owner);},{login,owner});
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
       if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'pilot',label:'Earlier real-event markets',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
-      if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
+      if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/pilot/account')return route.fulfill({json:await fixture.service.account(owner)});
@@ -78,9 +82,9 @@ test('account portfolio discovers older combinations on refresh without repeated
     assert.equal(await page.locator('.portfolio-account-identity').getByText(login,{exact:true}).count(),1);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     fail=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();
-    await page.getByText('More history is needed for your activity and PnL.',{exact:true}).waitFor();
+    await page.getByText('Earlier activity is still being verified. Current holdings and collected payouts remain available.',{exact:true}).waitFor();
     assert.equal(await page.getByRole('link',{name:'Check history'}).count(),0);
-    const stopped=scans;await page.waitForTimeout(1800);assert.equal(scans,stopped);
+    const stopped=scans;await page.clock.runFor(6500);assert.equal(scans,stopped,'a history error must stop background catch-up');
     fail=false;await page.getByRole('button',{name:'Refresh',exact:true}).click();
     await page.getByText('Test event 1 + Test event 2',{exact:true}).waitFor();
     assert.equal(scans,stopped+1);assert.deepEqual(errors,[]);
@@ -100,7 +104,7 @@ test('practice history outage still shows owned shares through the retired histo
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;requests.push(path);
       if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
-      if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
+      if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/account')return failAccount?route.fulfill({status:503,json:{error:'Account unavailable'}}):route.fulfill({json:await fixture.service.account(url.searchParams.get('wallet'))});
@@ -119,7 +123,7 @@ test('practice history outage still shows owned shares through the retired histo
     await page.goto('https://flurbo.singu.online/history');await page.waitForURL('**/portfolio');
     await page.getByRole('cell',{name:'10',exact:true}).waitFor();
     await page.getByText('Test event 1',{exact:true}).waitFor();
-    await page.getByText('More history is needed for your activity and PnL.',{exact:true}).waitFor();
+    await page.getByText('Earlier activity is still being verified. Current holdings and collected payouts remain available.',{exact:true}).waitFor();
     assert.doesNotMatch(await page.locator('body').innerText(),/No indexed activity|No shares in this collection yet/);
     await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();
     const stopped=scans;await page.waitForTimeout(1800);assert.equal(scans,stopped);
@@ -169,7 +173,7 @@ test('portfolio pool isolation and linked-wallet changes survive late replies',{
       if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[
         {namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt},
         {namespace:other,label:'October practice',pool:'0x'+'cd'.repeat(20),closesAt:fixture.manifest.publication.draft.closesAt}]}});
-      if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:linked}});
+      if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:login,wallets:linked}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path.endsWith('/account')){const account=await fixture.service.account(url.searchParams.get('wallet'));return route.fulfill({json:namespace===other?{...account,manifest:{...account.manifest,pool:'0x'+'cd'.repeat(20)}}:account});}
@@ -213,6 +217,7 @@ test('portfolio shares one discovery read across linked wallets, bounds reads an
   const batches:number[]=[],errors:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:1280,height:900}});
+    await page.clock.install();await page.clock.pauseAt(new Date());
     page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.addInitScript(()=>{
       sessionStorage.setItem('flurbo.trading.market','rehearsal');
@@ -222,7 +227,7 @@ test('portfolio shares one discovery read across linked wallets, bounds reads an
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
       if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
-      if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets}});
+      if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:login,wallets}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/rehearsal/history'){scans++;return route.fulfill({json:{through:150,target:200,complete:false,logs:[]}});}
@@ -242,18 +247,22 @@ test('portfolio shares one discovery read across linked wallets, bounds reads an
     await page.goto('https://flurbo.singu.online/portfolio');
     // Three linked wallets plus the Mera account each hold one share of the same claim, combined into one row.
     await page.getByRole('cell',{name:'4',exact:true}).waitFor();
-    await page.getByText('More history is needed for your activity and PnL.',{exact:true}).waitFor();
+    await page.getByText('Earlier activity is still being verified. Current holdings and collected payouts remain available.',{exact:true}).waitFor();
     assert.equal(scans,1,'one shared discovery read, not one per wallet');
     assert.ok(peak<=2,`at most two concurrent account reads, saw ${peak}`);
     assert.ok(batches.length>0&&batches.every(n=>n>0&&n<=30),`position batches exceed thirty claims: ${batches}`);
-    await page.waitForTimeout(1800);assert.equal(scans,1,'an incomplete index must not trigger automatic rescans');
+    await page.clock.runFor(3100);
+    await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();
+    assert.equal(scans,2,'one bounded history catch-up is allowed');
+    await page.clock.runFor(6500);assert.equal(scans,2,'unchanged index progress must stop automatic catch-up');
+    const scansBeforeRefresh=scans;
     hold=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();await until(()=>held);
-    assert.equal(scans,1,'history must wait for initial holdings, including on refresh');
+    assert.equal(scans,scansBeforeRefresh,'history must wait for initial holdings, including on refresh');
     const cancelled=await page.evaluate(()=>(window as any).cancelledReads);
     await page.getByRole('link',{name:'Markets',exact:true}).first().click();await page.waitForURL('**/markets');
     assert.ok(await page.evaluate(()=>(window as any).cancelledReads)>cancelled,'leaving Portfolio cancels pending reads');
     release();await page.waitForTimeout(300);
-    assert.equal(scans,1);assert.equal(await page.locator('.unified-portfolio').count(),0);
+    assert.equal(scans,scansBeforeRefresh);assert.equal(await page.locator('.unified-portfolio').count(),0);
     assert.deepEqual(errors,[]);
   }finally{release();await browser.close();}
 });
