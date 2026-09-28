@@ -55,6 +55,31 @@ test('quick checks complete before the show delay without flashing the loader',{
   }finally{await browser.close();}
 });
 
+test('a check that finishes just before the show delay never covers the ready page',{skip},async()=>{
+  const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href),browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
+  try{
+    // Hold the access check while page time is frozen, then answer it 170ms into the
+    // 200ms show delay: readiness is still in its 60ms hold when the show timer fires.
+    let release!:()=>void;const held=new Promise<void>(r=>{release=r;});
+    const {page,errors}=await open(browser,{access:async(route:any)=>{await held;await route.fulfill({json:{approved:true}});}});
+    const start=new Date('2026-01-01T00:00:00Z');
+    await page.clock.install({time:start});
+    await page.clock.pauseAt(start);
+    await page.goto('https://flurbo.singu.online/agents');
+    await page.waitForFunction(()=>document.querySelector('.app-root')!==null);
+    await page.clock.runFor(170);
+    release();
+    await heading(page).waitFor();
+    await page.getByText('No agents yet. Register one to start in paper mode.',{exact:true}).waitFor();
+    await page.clock.runFor(10);
+    await page.clock.runFor(40);
+    await page.clock.runFor(1_000);
+    assert.deepEqual(await page.evaluate(()=>(window as any).__loader),{added:[],removed:[]});
+    assert.equal(await page.locator('.app-root').evaluate((e:HTMLElement)=>e.inert),false);
+    assert.deepEqual(errors,[]);
+  }finally{await browser.close();}
+});
+
 test('a slow check shows the loader for its minimum time, then reveals the page and restores focus',{skip},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href),browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   try{

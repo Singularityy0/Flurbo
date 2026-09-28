@@ -9,6 +9,8 @@ import './loader.css';
 // The download starts with the show delay; a failed download falls back to the static cover.
 const loadContour = () => import('./ContourLoader');
 const ContourLoader = lazy(() => loadContour().catch(() => ({ default: PlainLoader })));
+// Readiness must hold this long so a child page can register its own gate first.
+const READY_HOLD = 60;
 
 // Owns every timer of the branded loader. Readiness comes only from gates that
 // pages register; the host adds no requests and restores scroll and focus on exit.
@@ -21,6 +23,8 @@ export default function LoaderHost({ children }: { children: ReactNode }) {
   const pending = gates.filter((gate) => gate.status === 'pending');
   const failed = gates.find((gate) => gate.status === 'error');
   const ready = gates.length > 0 && !pending.length && !failed;
+  const readyRef = useRef(ready);
+  readyRef.current = ready;
   const readyCount = gates.filter((gate) => gate.status === 'ready').length;
   const current = pending[pending.length - 1] || failed || gates[gates.length - 1];
   const label = current?.label || 'Loading Flurbo';
@@ -50,7 +54,7 @@ export default function LoaderHost({ children }: { children: ReactNode }) {
     const timer = setTimeout(() => {
       if (state.phase === 'failed') dispatch({ type: 'retry' });
       dispatch({ type: 'ready', now: performance.now() });
-    }, 60);
+    }, READY_HOLD);
     return () => clearTimeout(timer);
   }, [ready, state.phase]);
 
@@ -65,7 +69,11 @@ export default function LoaderHost({ children }: { children: ReactNode }) {
   useEffect(() => {
     const now = performance.now();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    if (state.phase === 'armed') timer = setTimeout(() => dispatch({ type: 'show', now: performance.now() }), TIMING.showDelay);
+    if (state.phase === 'armed') {
+      // A page that is already ready is only holding for child gates; showing now would cover it.
+      const show = () => { if (readyRef.current) timer = setTimeout(show, READY_HOLD); else dispatch({ type: 'show', now: performance.now() }); };
+      timer = setTimeout(show, TIMING.showDelay);
+    }
     else if (state.phase === 'entering') timer = setTimeout(() => dispatch({ type: 'entered' }), reduced ? TIMING.reducedFadeIn : TIMING.enter);
     else if (state.phase === 'resolving') timer = setTimeout(() => dispatch({ type: 'resolved' }), resolveDuration(state, reduced));
     else if (state.phase === 'complete') {

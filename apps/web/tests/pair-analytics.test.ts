@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { decodeFunctionData, encodeFunctionResult } from 'viem';
 import { pairAnalytics, runPairModel } from '../server/pair-analytics.mjs';
 import { certifiedPair, pairInput } from '../server/pair-math.mjs';
@@ -9,10 +8,10 @@ import { simulatePairPurchase } from '../server/pair-sensitivity.mjs';
 import { pilotPoolAbi, pilotCash } from '../shared/pilot.mjs';
 import { pilotFixture, hash } from './pilot-fixture.ts';
 import { localApi } from '../server/local-api.mjs';
+import { rustExample } from './rust-example.ts';
 
 const fixtures=JSON.parse(await readFile(new URL('./fixtures/pair-analytics.json',import.meta.url),'utf8'));
-const file=fileURLToPath(new URL('../../../target/debug/examples/pair_analytics'+(process.platform==='win32'?'.exe':''),import.meta.url));
-const model=(input:string)=>runPairModel(input,{file});
+const model=(input:string)=>runPairModel(input,{file:rustExample('pair_analytics')});
 test('integer interval results match independent 90-digit Decimal fixtures, including rare events',()=>{
   for(const row of fixtures)assert.deepEqual(certifiedPair(row.state).values,row.displayed,row.name);
 });
