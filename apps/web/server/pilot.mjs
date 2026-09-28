@@ -2,6 +2,7 @@ import {rpcFetch} from './rpc-capacity.mjs';
 import { decodeFunctionResult, encodeFunctionData, keccak256, stringToHex, parseAbi } from 'viem';
 import { pilotCash, pilotCashAbi, pilotPoolAbi, resolverAbi, pilotCall, evidenceURI, validClaim } from '../shared/pilot.mjs';
 import {holderResolverAbi,dependsOnEvent,challengeCandidates} from '../shared/holder-challenge.mjs';
+import {assessSemantics} from './semantic-validation.mjs';
 
 const address = value => {
   if(typeof value!=='string' || !/^0x[0-9a-f]{40}$/i.test(value) || /^0x0{40}$/i.test(value)) throw new Error('Invalid wallet');
@@ -129,7 +130,7 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     if(!input || typeof input!=='object' || Array.isArray(input) || Object.keys(input).some(k=>!['owner','action','event','outcome','evidenceHash','evidenceURI','scope','mask','quantity','slippageBps','authorization','signature'].includes(k))) throw new Error('Invalid action');
     if((input.authorization||input.signature)&&(!manifest.challengePolicy||input.action!=='dispute'))throw Error('Unexpected challenge authorization');
     const owner=address(input.owner), s=await snapshot(), tag=tagFor(s);
-    let to=manifest.resolver, abi=resolverAbi, name=input.action, args=[], amount=0n, minimumReceived=0n, title=name;
+    let to=manifest.resolver, abi=resolverAbi, name=input.action, args=[], amount=0n, minimumReceived=0n, title=name, quotedCost=null;
     if(['assertOutcome','dispute','vote'].includes(name)) {
       if(!Number.isInteger(input.event) || input.event<0 || input.event>=manifest.publication.draft.events.length || ![1,2,3].includes(input.outcome)
         || !/^0x[0-9a-f]{64}$/i.test(input.evidenceHash||'') || /^0x0{64}$/.test(input.evidenceHash) || !evidenceURI(input.evidenceURI)) throw new Error('Evidence and outcome required');
@@ -162,7 +163,7 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
         const limit=name==='buy'?(quote*BigInt(10000+input.slippageBps)+9999n)/10000n:quote*BigInt(10000-input.slippageBps)/10000n;
         const deadline=Math.min(s.timestamp+300,manifest.publication.draft.closesAt-1);
         args.push(limit,BigInt(deadline));
-        if(name==='buy') amount=limit;
+        if(name==='buy') {amount=limit;quotedCost=quote;}
         else minimumReceived=limit;
       }
     } else if(!['deliver','withdrawBond'].includes(name)) throw new Error('Unsupported pilot action');
@@ -180,8 +181,11 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     const gasPrice=BigInt(await rpc('eth_gasPrice',[]));
     if(gasLimit<=0n || gasLimit>15_000_000n || gasPrice<=0n || gasPrice>500_000_000_000n) throw new Error('Gas exceeds pilot policy');
     await stable(s);
-    return json({schema:'flurbo.pilot-review.v1',manifest,snapshot:s,expiresAt:s.timestamp+300,action:name,requested:input,title,
-      amountAtoms:amount.toString(),minimumReceivedAtoms:minimumReceived.toString(),gasLimit:gasLimit.toString(),gasPrice:gasPrice.toString(),maximumFeeWei:(gasLimit*gasPrice).toString(),
+    // Informational only: the browser re-checks before the wallet prompt, so a failed check here must not break the review.
+    let semanticAssessment=null;
+    if(input.action==='buy')try{semanticAssessment=assessSemantics(manifest,{scope:input.scope,mask:input.mask,quantityAtoms:input.quantity});}catch{}
+    return json({schema:'flurbo.pilot-review.v1',manifest,snapshot:s,expiresAt:s.timestamp+300,action:name,requested:input,title,semanticAssessment,
+      amountAtoms:amount.toString(),quotedCostAtoms:quotedCost?.toString()??null,minimumReceivedAtoms:minimumReceived.toString(),gasLimit:gasLimit.toString(),gasPrice:gasPrice.toString(),maximumFeeWei:(gasLimit*gasPrice).toString(),
       transaction,notice:name==='approve'?'Approve the exact token allowance, then review the intended action separately.':'Review the outcome, evidence and wallet before confirming.'});
   }
   async function position(owner,scope,mask) {

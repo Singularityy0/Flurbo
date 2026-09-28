@@ -172,6 +172,26 @@ paths:
       responses:
         "200": { description: "{status: ok, quote} or {status: unavailable, reason, detail}" }
         default: { $ref: "#/components/responses/Error" }
+  /markets/{namespace}/validate-trade:
+    post:
+      summary: Outcome compatibility under configured predicates (scope markets:read)
+      description: Returns a claim-bound assessment, not a quote or permission to sign. With mode "disabled" nothing was checked and the purchase proceeds without semantic assurance. With mode "enforced", unknown combinations make updated agents abstain. An error response or any other shape is never "disabled". See specs/semantics.md.
+      parameters: [{ $ref: "#/components/parameters/protocol" }, { $ref: "#/components/parameters/namespace" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scope, mask, quantityAtoms]
+              properties:
+                scope: { type: integer, minimum: 1, maximum: 15 }
+                mask: { type: string }
+                quantityAtoms: { $ref: "#/components/schemas/Atoms" }
+      responses:
+        "200": { description: "flurbo.semantic-assessment.v1 with mode and configRevision. Mode disabled carries only the exact bindings and freshness. Mode enforced adds status collision, unknown or no_declared_collision, the matrix and separate ordinary/VOID payout bounds. Expires in 60 seconds." }
+        default: { $ref: "#/components/responses/Error" }
   /markets/{namespace}/claim-analytics:
     post:
       summary: Model-implied probability of a claim (tenths of a percentage point). Not an executable price.

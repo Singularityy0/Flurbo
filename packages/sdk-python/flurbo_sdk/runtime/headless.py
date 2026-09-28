@@ -74,6 +74,9 @@ class RuntimeClient:
     def market(self, namespace: str):
         return self._call("GET", f"/markets/{quote(namespace)}")
 
+    def validate_trade(self, namespace: str, claim: dict, quantity):
+        return self._call("POST", f"/markets/{quote(namespace)}/validate-trade", {"scope": claim["scope"], "mask": str(claim["mask"]), "quantityAtoms": str(quantity)})
+
     def pair_analytics(self, namespace: str, a: int, b: int):
         return self._call("POST", f"/markets/{quote(namespace)}/pair-analytics", {"a": a, "b": b})
 

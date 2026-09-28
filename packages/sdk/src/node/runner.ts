@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { semanticError, semanticsDisabled } from '../semantics.ts';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, resolve, basename } from 'node:path';
 import { FlurboError } from '../errors.ts';
@@ -255,6 +256,9 @@ export function agentRunner(o: RunnerOptions) {
       const candidate = { claim: { scope: p.claim.scope, mask: p.claim.mask.toString() }, quantityAtoms: p.quantityAtoms.toString(), quoteAtoms: p.quoteAtoms.toString(), slippageBps: p.slippageBps,
         edgeAtoms: p.edgeAtoms?.toString() ?? null, edgeBps: p.edgeBps ?? null, quoteBlock: head.number.toString() };
       if (config.mode === 'paper') {
+        let reason:string|null='SEMANTICS_UNAVAILABLE';
+        try { const r=await client!.validateTrade(d.namespace,{...candidate.claim,quantityAtoms:candidate.quantityAtoms}); reason=semanticError(r,{...d,...candidate.claim,quantityAtoms:candidate.quantityAtoms},now()); if(!reason&&semanticsDisabled(r))log('SEMANTICS_DISABLED',{namespace:d.namespace}); } catch {}
+        if(reason){log(reason,{namespace:d.namespace});await reportDecision({...base,outcome:'abstain',reasons:[reason],provenance,forecast:forecastJson,candidate,summary:'The purchase did not pass outcome compatibility checks.'});continue;}
         const r = await paper.fill({ decisionId, namespace: d.namespace, claim: candidate.claim, quantityAtoms: candidate.quantityAtoms, costAtoms: candidate.quoteAtoms, snapshotBlock: candidate.quoteBlock, filledAt: now() });
         log(r.ok ? 'paper_trade' : 'paper_skipped', { namespace: d.namespace, claim: candidate.claim, ...(r.ok ? {} : { reason: r.reason }) });
         await reportDecision({ ...base, outcome: r.ok ? 'paper' : 'abstain', reasons: r.ok ? [] : [r.reason], provenance, forecast: forecastJson, candidate, summary: decision.explanation.slice(0, 600) });

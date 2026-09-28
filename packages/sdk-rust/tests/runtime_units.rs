@@ -260,6 +260,32 @@ fn entry(id: String, seq: usize) -> JournalEntry {
 
 const WALLET: &str = "0x2222222222222222222222222222222222222222";
 
+#[test]
+fn semantic_collision_blocks_custom_execute_and_sign() {
+    use flurbo_sdk::runtime::executor::{Executor, FixedControls, ExecutionRequest};
+    use flurbo_sdk::runtime::chain::{ChainReader, Block};
+    use flurbo_sdk::runtime::rpc::JsonRpc;
+    use flurbo_sdk::transaction::Claim;
+    use flurbo_sdk::claims::ClaimRef;
+    let f:Value=serde_json::from_str(include_str!("../../../protocol/fixtures/semantics.json")).unwrap();
+    let d=serde_json::from_value::<flurbo_sdk::protocol::Deployment>(f["deployment"].clone()).unwrap();
+    let mut result=f["cases"][0]["result"].clone();
+    let now=flurbo_sdk::time::now_seconds();result["checkedAt"]=json!(now);result["expiresAt"]=json!(now+60);
+    let server=Server::start(Box::new(move |_,_|(200,h(&[("Content-Type","application/json")]),result.to_string())));
+    let signer=Arc::new(LocalKeySigner::new(&format!("0x{}","01".repeat(32))).unwrap());
+    let dir=std::env::temp_dir().join(format!("flurbo-semantic-sign-{}",std::process::id()));
+    let journal=Arc::new(FileJournal::new(&dir,&signer.address()).unwrap());
+    let mut e=entry("collision".into(),0);e.action="buy".into();e.status="planned".into();e.claim=Some(ClaimRef{scope:3,mask:"8".into()});e.quantity_atoms="1000000".into();
+    journal.locked(|j|{j.entries=vec![e.clone()];Ok(())}).unwrap();
+    let ex=Executor::new(Arc::new(ChainReader::new(Box::new(JsonRpc::new("http://127.0.0.1:9",Duration::from_secs(1)).unwrap()))),signer,journal.clone(),Some(Arc::new(RuntimeClient::new(&server.url,TOKEN).unwrap())),Arc::new(FixedControls{policy:parse_config(&default_config()).unwrap().policy,allowed:true}),Duration::ZERO);
+    assert!(ex.sign("collision",&d).unwrap().is_none());
+    assert_eq!(journal.read().unwrap().entries[0].note.as_deref(),Some("SEMANTIC_COLLISION"));
+    let c=ExecutionRequest{decision_id:"test".into(),deployment:d,action:"buy".into(),claim:Claim{scope:3,mask:8},quantity_atoms:1000000,slippage_bps:50,quote_atoms:500000,quote_block:Block{number:1,hash:"0x".into(),timestamp:now}};
+    assert_eq!(ex.execute(&c).unwrap().reason.as_deref(),Some("SEMANTIC_COLLISION"));
+    assert!(journal.read().unwrap().entries[0].raw_transaction.is_none());
+    std::fs::remove_file(dir.join("journal.json")).unwrap();std::fs::remove_dir(dir).unwrap();
+}
+
 /// Runs only as a child process of `journal_lock_serialises_separate_processes`.
 #[test]
 fn journal_child_writer() {
@@ -383,4 +409,29 @@ fn signer_cli_and_configuration() {
     secret["research"]["provider"] = json!({"kind": "anthropic", "model": "m", "apiKeyEnv": "K", "privateKey": key});
     assert!(parse_config(&secret).unwrap_err().message.contains("secrets"));
     let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn semantic_disabled_passes_guard_but_failures_never_do() {
+    use flurbo_sdk::runtime::executor::{Executor, FixedControls};
+    use flurbo_sdk::runtime::chain::ChainReader;
+    use flurbo_sdk::runtime::rpc::JsonRpc;
+    use flurbo_sdk::claims::ClaimRef;
+    let f:Value=serde_json::from_str(include_str!("../../../protocol/fixtures/semantics.json")).unwrap();
+    let d=serde_json::from_value::<flurbo_sdk::protocol::Deployment>(f["deployment"].clone()).unwrap();
+    let mut disabled=f["cases"].as_array().unwrap().iter().find(|c|c["name"]=="disabled proceeds without semantic assurance").unwrap()["result"].clone();
+    let now=flurbo_sdk::time::now_seconds();disabled["checkedAt"]=json!(now);disabled["expiresAt"]=json!(now+60);
+    for (status,body,blocked) in [(200,disabled.to_string(),false),(503,json!({"code":"SEMANTICS_UNAVAILABLE"}).to_string(),true),(200,json!({"code":"SEMANTICS_UNAVAILABLE"}).to_string(),true)] {
+        let server=Server::start(Box::new(move |_,_|(status,h(&[("Content-Type","application/json")]),body.clone())));
+        let signer=Arc::new(LocalKeySigner::new(&format!("0x{}","01".repeat(32))).unwrap());
+        let dir=std::env::temp_dir().join(format!("flurbo-semantic-disabled-{}-{}-{}",std::process::id(),status,blocked));
+        let journal=Arc::new(FileJournal::new(&dir,&signer.address()).unwrap());
+        let mut e=entry("disabled".into(),0);e.action="buy".into();e.status="planned".into();e.claim=Some(ClaimRef{scope:3,mask:"8".into()});e.quantity_atoms="1000000".into();
+        journal.locked(|j|{j.entries=vec![e.clone()];Ok(())}).unwrap();
+        let ex=Executor::new(Arc::new(ChainReader::new(Box::new(JsonRpc::new("http://127.0.0.1:9",Duration::from_secs(1)).unwrap()))),signer,journal.clone(),Some(Arc::new(RuntimeClient::new(&server.url,TOKEN).unwrap())),Arc::new(FixedControls{policy:parse_config(&default_config()).unwrap().policy,allowed:true}),Duration::ZERO);
+        let _=ex.sign("disabled",&d);
+        let note=journal.read().unwrap().entries[0].note.clone();
+        assert_eq!(note.as_deref()==Some("SEMANTICS_UNAVAILABLE"),blocked,"{status} {note:?}");
+        let _=std::fs::remove_dir_all(dir);
+    }
 }

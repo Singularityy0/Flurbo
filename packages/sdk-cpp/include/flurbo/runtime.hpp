@@ -122,12 +122,16 @@ class ChainReader {
 // ---- the Flurbo agent runtime API (credential only in the Authorization header) ----
 bool token_ok(const std::string& token);
 bool is_stop(const Error& e);
+std::string semantic_error(const json::Value& result, const Deployment& deployment, unsigned scope, unsigned mask, const std::string& quantity, int64_t now);
+// Only meaningful after semantic_error returned "": checks are switched off, so nothing was verified.
+bool semantics_disabled(const json::Value& result);
 class RuntimeClient {
  public:
   RuntimeClient(const std::string& base_url, const std::string& token);
   json::Value session();
   std::vector<Deployment> deployments();
   json::Value market(const std::string& ns);
+  json::Value validate_trade(const std::string& ns, unsigned scope, unsigned mask, const std::string& quantity);
   json::Value policy();
   json::Value heartbeat(const json::Value& beat);
   json::Value decision(const json::Value& d);
@@ -255,6 +259,7 @@ class Executor {
   std::shared_ptr<RuntimeClient> client_;
   std::shared_ptr<Controls> controls_;
   int wait_ms_;
+  std::string semantic_check(const Deployment& d, const Claim& claim, i128 quantity);
   Outcome run(const Deployment& d, const Intent& intent, const std::string& decision_id, const std::optional<Block>& quote_block, int64_t slippage_bps);
   std::vector<std::string> precheck(const Deployment& d, const Claim& c, i128 quantity, i128 limit, const Block& quote_block, i128 slippage_bps);
 };

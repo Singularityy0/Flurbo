@@ -261,6 +261,39 @@ TEST(journal_child_writer) {
     });
 }
 
+TEST(semantic_disabled_passes_guard_but_failures_never_do) {
+  Deployment d; d.namespace_="pilot"; d.pool="0x"+std::string(40,'1');d.rules_hash="0x"+std::string(64,'2');d.event_count=2;d.closes_at=2000000000;
+  auto disabled=json::parse(R"({"schema":"flurbo.semantic-assessment.v1","mode":"disabled","scope":3,"mask":"8","quantityAtoms":"1000000"})");
+  disabled.set("pool",d.pool);disabled.set("rulesHash",d.rules_hash);disabled.set("configRevision",std::string(64,'b'));disabled.set("checkedAt",now_seconds());disabled.set("expiresAt",now_seconds()+60);
+  struct Case { int status; std::string body; bool blocked; };
+  for (const auto& c : std::vector<Case>{{200,disabled.dump(),false},{503,R"({"code":"SEMANTICS_UNAVAILABLE"})",true},{200,R"({"code":"SEMANTICS_UNAVAILABLE"})",true}}) {
+    Server server([c](const std::string&,int)->std::tuple<int,Headers,std::string>{return {c.status,{{"Content-Type","application/json"}},c.body};});
+    auto signer=std::make_shared<LocalKeySigner>("0x"+std::string(64,'1'));
+    auto dir=temp("semantic-disabled");auto journal=std::make_shared<FileJournal>(dir,signer->address());
+    journal->locked([&](Value& j){auto e=json::parse(R"({"id":"disabled","action":"buy","status":"planned","claim":{"scope":3,"mask":"8"},"quantityAtoms":"1000000","limitAtoms":"500000","deadline":1800000000})");j.get_or_add("entries").push(e);});
+    auto controls=std::make_shared<FixedControls>(Policy::from_json(default_config()["policy"]),true);
+    Executor ex(std::make_shared<ChainReader>(std::make_shared<JsonRpc>("http://127.0.0.1:9")),signer,journal,std::make_shared<RuntimeClient>(server.url,TOKEN),controls,0);
+    try { ex.sign("disabled",d); } catch (...) {}
+    CHECK_EQ(journal->read()["entries"][0].str("note")==std::string("SEMANTICS_UNAVAILABLE"),c.blocked);
+    std::filesystem::remove_all(dir);
+  }
+}
+TEST(semantic_collision_blocks_custom_execute_and_sign) {
+  Deployment d; d.namespace_="pilot"; d.pool="0x"+std::string(40,'1');d.rules_hash="0x"+std::string(64,'2');d.event_count=2;d.closes_at=2000000000;
+  auto result=json::parse(R"({"schema":"flurbo.semantic-assessment.v1","scope":3,"mask":"8","quantityAtoms":"1000000","status":"collision","coverage":"complete","matrix":[{"state":0,"admissible":true,"pays":false},{"state":1,"admissible":true,"pays":false},{"state":2,"admissible":true,"pays":false},{"state":3,"admissible":false,"pays":true}]})");
+  result.set("pool",d.pool);result.set("rulesHash",d.rules_hash);result.set("rulesDigest",std::string(64,'3'));result.set("mode","enforced");result.set("configRevision",std::string(64,'a'));result.set("checkedAt",now_seconds());result.set("expiresAt",now_seconds()+60);
+  Server server([result](const std::string&,int)->std::tuple<int,Headers,std::string>{return {200,{{"Content-Type","application/json"}},result.dump()};});
+  auto signer=std::make_shared<LocalKeySigner>("0x"+std::string(64,'1'));
+  auto dir=temp("semantic-sign");auto journal=std::make_shared<FileJournal>(dir,signer->address());
+  journal->locked([&](Value& j){auto e=json::parse(R"({"id":"collision","action":"buy","status":"planned","claim":{"scope":3,"mask":"8"},"quantityAtoms":"1000000","limitAtoms":"500000","deadline":1800000000})");j.get_or_add("entries").push(e);});
+  auto controls=std::make_shared<FixedControls>(Policy::from_json(default_config()["policy"]),true);
+  Executor ex(std::make_shared<ChainReader>(std::make_shared<JsonRpc>("http://127.0.0.1:9")),signer,journal,std::make_shared<RuntimeClient>(server.url,TOKEN),controls,0);
+  CHECK(!ex.sign("collision",d));CHECK_EQ(journal->read()["entries"][0].str("note"),std::string("SEMANTIC_COLLISION"));
+  CHECK_EQ(ex.execute({"test",d,"buy",{3,8},1000000,50,500000,{1,"0x",now_seconds()}}).reason,std::string("SEMANTIC_COLLISION"));
+  CHECK(journal->read()["entries"][0]["rawTransaction"].is_null());
+  std::filesystem::remove(std::filesystem::path(dir)/"journal.json");std::filesystem::remove(dir);
+}
+
 TEST(journal_lock_serialises_separate_processes) {
   if (get_env("FLURBO_JOURNAL_CHILD_DIR")) return;
   std::string dir = temp("journal");

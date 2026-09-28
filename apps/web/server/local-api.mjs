@@ -13,6 +13,7 @@ import {validateThesisInput} from '../shared/thesis.mjs';
 import {agentApi} from './agents/agent-api.mjs';
 import {agentWalletKey} from './agents/agent-store.mjs';
 import {agentRpc} from './agents/agent-market.mjs';
+import {assessSemantics,activeSemanticConfig,semanticDiagnostics} from './semantic-validation.mjs';
 import {ApplicationError} from './access-applications.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
@@ -98,6 +99,16 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         }
       }
       if (req.method === 'GET' && url.pathname === '/api/preview') return send(res,200,{inviteOnly:!!previewAllows,applicationUrl:applications?null:previewAccess?.applicationUrl||null,...(applications?{nativeApplications:true}:{})});
+      if (url.pathname === '/api/semantic-status') {
+        const login = await getLogin();
+        if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
+        if (!isTestingOperator(login, testingOperatorAccount)) return send(res, 403, {error:'Operator access only.'});
+        if (req.method !== 'GET' || url.search) return send(res, 400, {error:'Semantic status accepts a GET without parameters'});
+        const services = [['pilot', publishedPilot], ...(practiceCollections ? [...practiceCollections.services] : [['rehearsal', rehearsal]])]
+          .filter(([, service]) => service).map(([namespace, service]) => ({ namespace, manifest: service.manifest }));
+        try { return send(res, 200, semanticDiagnostics(activeSemanticConfig(), services)); }
+        catch { return send(res, 503, {code:'SEMANTICS_UNAVAILABLE', error:'Semantic configuration could not be loaded.'}); }
+      }
       if (url.pathname === '/api/account/access' && req.method === 'GET') {
         const login = await getLogin();
         if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
@@ -217,6 +228,10 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           return send(res,200,await pilot.status(url.searchParams.get('wallet')||undefined));
         }
         if(url.search) return send(res,400,{error:'Unexpected pilot query'});
+        if(req.method==='POST' && url.pathname==='/api/pilot/validate-trade') {
+          try { return send(res,200,assessSemantics(pilot.manifest,await body(req))); }
+          catch(e) { return send(res,e.status===400?400:503,{code:e.status===400?'INVALID_INPUT':'SEMANTICS_UNAVAILABLE',error:e.status===400?e.message:'The semantic check is unavailable. Retry before trading.'}); }
+        }
         if(req.method==='GET' && url.pathname==='/api/pilot/price-history') {
           if(!store.command)return send(res,503,{error:'Price history storage is unavailable.'});
           try{

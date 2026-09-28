@@ -261,6 +261,48 @@ std::vector<Deployment> RuntimeClient::deployments() {
 }
 
 Value RuntimeClient::market(const std::string& ns) { return call("GET", "/markets/" + url_segment(ns), std::nullopt); }
+Value RuntimeClient::validate_trade(const std::string& ns, unsigned scope, unsigned mask, const std::string& quantity) {
+  Value body = Value::object();
+  body.set("scope", static_cast<int64_t>(scope)); body.set("mask", std::to_string(mask)); body.set("quantityAtoms", quantity);
+  return call("POST", "/markets/" + url_segment(ns) + "/validate-trade", body);
+}
+bool semantics_disabled(const Value& r) { return r.is_object() && r["mode"].is_string() && r.str("mode") == "disabled"; }
+std::string semantic_error(const Value& r, const Deployment& d, unsigned scope, unsigned mask, const std::string& quantity, int64_t now) {
+  const std::string unavailable = "SEMANTICS_UNAVAILABLE";
+  if (d.event_count < 2 || d.event_count > 4) return unavailable;
+  try {
+    if (r.str("schema") != "flurbo.semantic-assessment.v1" || r.str("pool") != d.pool || r.str("rulesHash") != d.rules_hash || r.integer("scope") != scope
+        || r.str("mask") != std::to_string(mask) || r.str("quantityAtoms") != quantity) return unavailable;
+    auto is_digest = [](const std::string& h) { return h.size() == 64 && h.find_first_not_of("0123456789abcdef") == std::string::npos; };
+    auto checked = r.integer("checkedAt"), expires = r.integer("expiresAt");
+    if (checked < 0 || checked > now + 15 || expires <= now || expires < checked || expires - checked != 60
+        || !r["configRevision"].is_string() || !is_digest(r.str("configRevision"))) return unavailable;
+    // A valid, claim-bound "disabled" answer proceeds without semantic assurance; any other mode is unavailable.
+    if (r["mode"].is_string() && r.str("mode") == "disabled") return "";
+    if (!r["mode"].is_string() || r.str("mode") != "enforced") return unavailable;
+    auto digest = r.str("rulesDigest"), status = r.str("status"), coverage = r.str("coverage");
+    if (!is_digest(digest)
+        || (status != "collision" && status != "unknown" && status != "no_declared_collision")
+        || (coverage != "unknown" && coverage != "partial" && coverage != "complete")) return unavailable;
+    const auto& rows = r["matrix"].as_array();
+    if (rows.size() != (1u << d.event_count)) return unavailable;
+    bool any = false, winning = false;
+    unsigned count = 0;
+    for (unsigned bit = 0; bit < d.event_count; ++bit) if (scope & (1u << bit)) ++count;
+    for (unsigned state = 0; state < rows.size(); ++state) {
+      const auto& row = rows[state];
+      unsigned local = 0, index = 0;
+      for (unsigned bit = 0; bit < d.event_count; ++bit) if (scope & (1u << bit)) { if (state & (1u << bit)) local |= 1u << index; ++index; }
+      bool pays = (mask & (1u << local)) != 0;
+      if (!row["state"].is_integer() || row.integer("state") != state || !row["admissible"].is_bool() || !row["pays"].is_bool() || row["pays"].as_bool() != pays) return unavailable;
+      any |= row["admissible"].as_bool(); winning |= row["admissible"].as_bool() && pays;
+    }
+    if (!any || (!winning) != (status == "collision")) return unavailable;
+    if (!winning) return "SEMANTIC_COLLISION";
+    if (count > 1 && (coverage != "complete" || status == "unknown")) return "SEMANTICS_UNKNOWN";
+    return "";
+  } catch (...) { return unavailable; }
+}
 Value RuntimeClient::policy() { return call("GET", "/policy", std::nullopt); }
 Value RuntimeClient::heartbeat(const Value& beat) { return call("POST", "/heartbeat", beat); }
 Value RuntimeClient::decision(const Value& d) { return call("POST", "/decisions", d); }

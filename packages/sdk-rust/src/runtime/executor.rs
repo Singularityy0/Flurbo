@@ -136,6 +136,13 @@ pub struct Executor {
 }
 
 impl Executor {
+    fn semantic_check(&self, d: &Deployment, scope: u32, mask: u32, quantity: &str) -> Option<&'static str> {
+        let response = self.client.as_ref().and_then(|c|c.validate_trade(&d.namespace,scope,mask,quantity).ok());
+        let reason = response.as_ref().map(|r|crate::semantics::semantic_error(r,d,scope,mask,quantity,self.controls.now())).unwrap_or(Some("SEMANTICS_UNAVAILABLE"));
+        let disabled = reason.is_none() && response.as_ref().is_some_and(crate::semantics::semantics_disabled);
+        if let Some(code)=reason.or(if disabled { Some("SEMANTICS_DISABLED") } else { None }) { self.controls.log(code,json!({"namespace":d.namespace,"scope":scope,"mask":mask.to_string()})); }
+        reason
+    }
     pub fn new(chain: Arc<ChainReader>, signer: Arc<dyn Signer>, journal: Arc<FileJournal>, client: Option<Arc<RuntimeClient>>, controls: Arc<dyn Controls>, wait: Duration) -> Self {
         let wallet = signer.address();
         Executor { chain, signer, journal, client, controls, wait, poll: Duration::from_millis(1000), wallet }
@@ -289,6 +296,10 @@ impl Executor {
                 e.final_at = Some(self.controls.now());
                 e.note = Some(format!("not signed: {}", reason.unwrap_or_default()));
                 return Ok(None);
+            }
+            if e.action == "buy" {
+                let reason = match e.claim.as_ref() { Some(c) => self.semantic_check(d,c.scope,c.mask_u32(),&e.quantity_atoms), None => Some("SEMANTICS_UNAVAILABLE") };
+                if let Some(reason)=reason { e.status="abandoned".into(); e.final_at=Some(self.controls.now()); e.note=Some(reason.into()); return Ok(None); }
             }
             let call = UnsignedCall { chain_id: 10143, from: self.wallet.clone(), to: e.to.clone(), data: e.data.clone(), value: 0 };
             validate_transaction(&call, &intent_of(e)?, d, &self.wallet)?;
@@ -529,6 +540,7 @@ impl Executor {
             }
             _ => {}
         }
+        if let Some(reason)=self.semantic_check(d,c.claim.scope,c.claim.mask,&c.quantity_atoms.to_string()) { return Ok(Outcome::of("blocked",Some(reason.into()))); }
         let mut limit = buy_limit(c.quote_atoms, c.slippage_bps);
         let mut quote_block = c.quote_block.clone();
         if self.journal.read()?.entries.iter().any(|e| e.action == "approve" && e.pool == d.pool && !e.is_final()) {

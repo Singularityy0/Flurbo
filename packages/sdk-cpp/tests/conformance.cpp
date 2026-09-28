@@ -7,6 +7,7 @@
 #include "flurbo/crypto.hpp"
 #include "flurbo/policy.hpp"
 #include "flurbo/research.hpp"
+#include "flurbo/runtime.hpp"
 
 using namespace flurbo;
 using json::Value;
@@ -40,6 +41,15 @@ static Value legs_json(const std::vector<Leg>& ls) {
 }
 
 static std::string s(i128 v) { return to_string(v); }
+
+TEST(semantic_conformance) {
+  auto f = fixture("semantics");
+  Deployment d; d.pool=f["deployment"].str("pool"); d.rules_hash=f["deployment"].str("rulesHash"); d.event_count=2;
+  for (const auto& c : f["cases"].as_array()) {
+    const auto& claim=c["claim"];
+    CHECK_EQ(semantic_error(c["result"], d, claim.integer("scope"), std::stoul(claim.str("mask")), claim.str("quantityAtoms"), f.integer("now")), c.str("error"));
+  }
+}
 
 TEST(claims) {
   Value f = fixture("claims");
