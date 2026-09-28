@@ -1,14 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
 import { decodeFunctionData,encodeFunctionResult } from 'viem';
 import { checkMockReadiness } from '../server/mock-readiness.mjs';
 import { runMockReadiness } from '../scripts/check-mock-readiness.mjs';
 import { runPairModel } from '../server/pair-analytics.mjs';
 import { pilotPoolAbi,pilotCash } from '../shared/pilot.mjs';
 import { pilotFixture } from './pilot-fixture.ts';
+import { rustExample } from './rust-example.ts';
 
-const file=fileURLToPath(new URL('../../../target/debug/examples/pair_analytics'+(process.platform==='win32'?'.exe':''),import.meta.url));
 function fixture(){
   const now=1_800_000_000,f=pilotFixture(now,4),namespace='practice-'+f.manifest.pool.slice(2);
   f.manifest.publication.mode='rehearsal';
@@ -32,7 +31,7 @@ function fixture(){
     }
     return f.rpc(method,params);
   };
-  return {health,values,calls,setGuard:(value:number)=>{guard=value;},options:{manifest:f.manifest,namespace,featured:true,request,rpc,now:()=>now,model:(input:string)=>runPairModel(input,{file})}};
+  return {health,values,calls,setGuard:(value:number)=>{guard=value;},options:{manifest:f.manifest,namespace,featured:true,request,rpc,now:()=>now,model:(input:string)=>runPairModel(input,{file:rustExample('pair_analytics')})}};
 }
 test('readiness checks October identity, guarded routes, quotes and certified analytics without signing',async()=>{
   const f=fixture(),report=await checkMockReadiness(f.options);
