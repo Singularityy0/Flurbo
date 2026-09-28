@@ -3,6 +3,7 @@ import { rememberConfirmedClaim } from '../../web/src/pilot-claims';
 import { auth, storage } from './runtime';
 import { tradingProvider, externalWallet, type WalletKind } from './wallet';
 import { lockOperation } from './operation-lock';
+import { submitOptions, type SemanticConsent } from './semantic';
 
 type State = { busy: boolean; pending: PilotPending | null; namespace: PilotNamespace; notice: string; revision: number };
 let state: State = { busy: false, pending: null, namespace: 'rehearsal', notice: '', revision: 0 };
@@ -22,7 +23,7 @@ export const transactions = {
       if (pending) { update({ namespace, pending, notice: 'An earlier transaction needs checking. Do not buy again.' }); return; }
     }
   },
-  async submit(review: PilotReview, namespace: PilotNamespace, kind: WalletKind, reviewed: () => boolean = () => true) {
+  async submit(review: PilotReview, namespace: PilotNamespace, kind: WalletKind, reviewed: () => boolean = () => true, consent: SemanticConsent = { review: null, phrase: '' }) {
     if (state.busy || state.pending) throw new Error('Check the pending transaction before another action.');
     const login = auth.getSnapshot().address;
     if (!login) throw new Error('Sign in before trading.');
@@ -34,7 +35,7 @@ export const transactions = {
     update({ busy: true, namespace, notice: 'Checking this exact transaction before confirmation...' });
     try {
       const current = () => reviewed() && auth.getSnapshot().address === login && externalWallet.getSnapshot().address === owner;
-      await submitPilot(tradingProvider(kind, namespace), review, login, save, current);
+      await submitPilot(tradingProvider(kind, namespace), review, login, save, current, submitOptions(review, namespace, consent));
       await storage.flush();
       update({ notice: 'Submitted. Check confirmation before placing another trade.' });
     } catch (e) { update({ notice: e instanceof Error ? e.message : 'Check wallet activity before retrying.' }); throw e; }

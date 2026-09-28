@@ -8,6 +8,8 @@ import { externalWallet, type WalletKind } from './wallet';
 import { transactions } from './transactions';
 import { makeClaim, quantityAtoms } from './market-model';
 import { useRequest } from './hooks';
+import { semanticCollision, semanticReady, type SemanticConsent } from './semantic';
+import { semanticAcknowledgment } from '../../web/src/pilot';
 import { Button, Card, Choice, Copy, Field, Heading, Notice, Title, s } from './ui';
 
 export type MarketList = Pick<PilotState, 'manifest' | 'snapshot'> & { open: boolean; prices: { event: number; yes: string | null; no: string | null }[] };
@@ -19,6 +21,7 @@ export function Markets({ namespace, kind, onPortfolio }: { namespace: PilotName
   const [search, setSearch] = useState(''), [answers, setAnswers] = useState<Record<number, boolean>>({}), [mode, setMode] = useState<'all' | 'any'>('all');
   const [quantity, setQuantity] = useState('1'), [side, setSide] = useState<'buy' | 'sell' | 'redeem'>('buy'), [error, setError] = useState('');
   const [clock, setClock] = useState(Date.now()), [rules, setRules] = useState(false);
+  const [consent, setConsent] = useState<SemanticConsent>({ review: null, phrase: '' });
   const key = `flurbo.mobile.checkout:${namespace}:${login.address}`;
   useEffect(() => {
     try { const saved = JSON.parse(storage.getItem(key) ?? 'null'); if (saved) { makeClaim(saved.answers, saved.mode); quantityAtoms(saved.quantity); setAnswers(saved.answers); setQuantity(saved.quantity); setMode(saved.mode === 'any' ? 'any' : 'all'); } else setAnswers({}); } catch { setAnswers({}); }
@@ -53,7 +56,7 @@ export function Markets({ namespace, kind, onPortfolio }: { namespace: PilotName
   async function confirm() {
     if (!quote.value || quote.busy) return;
     const reviewed = quote.value;
-    try { await transactions.submit(reviewed, namespace, kind, () => quote.isCurrent(reviewed)); }
+    try { await transactions.submit(reviewed, namespace, kind, () => quote.isCurrent(reviewed), consent); }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not submit. Check wallet activity.'); }
   }
   return <>
@@ -79,7 +82,13 @@ export function Markets({ namespace, kind, onPortfolio }: { namespace: PilotName
       {quote.value && <><Heading>{quote.value.title}</Heading><Copy>{quote.value.action === 'approve' ? 'Allowance required: ' : side === 'sell' ? 'Minimum received: ' : 'Maximum test AUSD: '}{amount(side === 'sell' ? quote.value.minimumReceivedAtoms : quote.value.amountAtoms)}</Copy>
         <Copy small>Maximum network fee: {formatUnits(BigInt(quote.value.maximumFeeWei), 18)} test MON. Slippage limit: 0.5%.</Copy>
         <Copy small>{quote.value.notice}</Copy>
-        {clock / 1000 >= quote.value.expiresAt ? <Notice>Price expired. Change the quantity or refresh this selection before confirming.</Notice> : <Button title={tx.busy ? 'Checking transaction...' : quote.value.action === 'approve' ? 'Approve AUSD in wallet' : `Confirm ${side === 'redeem' ? 'payout' : side} in wallet`} disabled={quote.busy || tx.busy || !!tx.pending} onPress={() => void confirm()} />}
+        {semanticCollision(quote.value) && <Card><Heading>These outcomes cannot win together</Heading>
+          <Copy>Under the configured rules, this purchase pays 0 test AUSD when all events resolve Yes or No. The purchase cost is lost in those outcomes, plus network fees.</Copy>
+          <Copy small>VOID settlement is different. Its maximum payout for this quantity is {amount(quote.value.semanticAssessment!.maximumVoidPayoutAtoms ?? '0')} test AUSD under the existing contract rules. This is not a prediction of a VOID result.</Copy>
+          <Copy small>Automated purchases are blocked. To proceed manually, type the following acknowledgment.</Copy>
+          <Field label={semanticAcknowledgment} value={consent.review === quote.value ? consent.phrase : ''} onChange={phrase => setConsent({ review: quote.value, phrase })} />
+        </Card>}
+        {clock / 1000 >= quote.value.expiresAt ? <Notice>Price expired. Change the quantity or refresh this selection before confirming.</Notice> : <Button title={tx.busy ? 'Checking transaction...' : quote.value.action === 'approve' ? 'Approve AUSD in wallet' : `Confirm ${side === 'redeem' ? 'payout' : side} in wallet`} disabled={quote.busy || tx.busy || !!tx.pending || !semanticReady(quote.value, consent)} onPress={() => void confirm()} />}
         {quote.value.action === 'approve' && <Copy small>Approval allows the pool to use this amount. It does not buy shares. A fresh purchase confirmation follows.</Copy>}
       </>}
 
