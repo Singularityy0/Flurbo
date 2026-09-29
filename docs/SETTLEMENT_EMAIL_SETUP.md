@@ -16,13 +16,13 @@ The workflow checks the real-event pilot and the four-event practice pool direct
 | `FLURBO_MONITOR_HEALTHCHECK_URL` | Dedicated Healthchecks.io UUID ping URL |
 | `UPSTASH_REDIS_REST_URL` | Existing Upstash REST endpoint |
 | `UPSTASH_REDIS_REST_TOKEN` | Existing Upstash token with GET, SET and EVAL access |
-| `FLURBO_REHEARSAL_MANIFEST_JSON` | Exact contents of the deployed `target/deployments/rehearsal-testnet.json` |
+| `FLURBO_PRACTICE_COLLECTIONS_JSON` | Optional. The same practice collection entries as the web service |
 | `FLURBO_ALCHEMY_TESTNET_RPC_URL` | Optional private Monad testnet RPC; public RPC is the default |
 
-The real pilot manifest is read from checked-in `config/pilot-testnet.json`. Both pools are mandatory. The Redis namespace is `flurbo:monitor:v1:*`, separate from login/session data. Never clear the entire Redis database to reset monitoring. Preserve old pool manifests when deploying a new collection; this workflow monitors only these two configured identities.
+The real pilot manifest is read from checked-in `config/pilot-testnet.json` and is mandatory. Practice collections are optional. The Redis namespace is `flurbo:monitor:v1:*`, separate from login/session data. Never clear the entire Redis database to reset monitoring. This workflow monitors only the configured identities.
 
 4. After pushing the code to `main`, add repository **variable** `FLURBO_MONITOR_ENABLED` with value `true`. Leave it absent until configuration is complete. The workflow has read-only repository permissions and rejects branches other than `main`.
-5. Open **Actions > Settlement monitor > Run workflow**, select `main`, enable `test_email`, and run. Expect one labelled test message per pool. Provider acceptance in job output is not inbox receipt: open both emails and confirm timestamps/pool addresses. Verify that Healthchecks shows a successful ping. Test messages do not authorize resolution.
+5. Open **Actions > Settlement monitor > Run workflow**, select `main`, enable `test_email`, and run. Expect one labelled test message per pool. Provider acceptance in job output is not inbox receipt: open each email and confirm timestamps/pool addresses. Verify that Healthchecks shows a successful ping. Test messages do not authorize resolution.
 6. Confirm at least two normal scheduled runs succeed. Normal unchanged healthy observations do not send mail. During assertion/challenge/voting windows an operator must still inspect outcomes and act within the contract deadlines.
 
 The selected recipient is intentionally absent from tracked configuration. Service quotas and billing depend on your accounts; check their dashboards before leaving a schedule active.

@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { pilotFixture, owner, hash, code } from './pilot-fixture.ts';
 
-for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer markets preserve wallet confirmation flow for '+namespace,{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+for(const namespace of ['practice-'+'22'.repeat(20)])test('consumer markets preserve wallet confirmation flow for '+namespace,{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const loginAddress='0x'+'99'.repeat(20);
@@ -229,7 +229,7 @@ for(const namespace of ['rehearsal','practice-'+'22'.repeat(20)])test('consumer 
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
     assert.equal(await page.getByRole('radio',{name:'At least two Two or more answers are correct',exact:true}).isChecked(),true);
     assert.equal(preparedClaims.at(-1).mask,'178');
-    if(namespace==='rehearsal'){
+    {
       await page.setViewportSize({width:1440,height:1000});
       await page.locator('.combination-builder').screenshot({path:new URL('../../../target/combination-desktop.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1')});
       await page.setViewportSize({width:390,height:844});

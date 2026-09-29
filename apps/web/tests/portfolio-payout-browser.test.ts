@@ -47,11 +47,11 @@ test('portfolio alone collects owned payouts, preserves combined totals and reco
       }};
     },{owner,empty,hash,code});
     await page.route('**/*',async(route:any)=>{
-      const u=new URL(route.request().url()),p=u.pathname,api='/api/rehearsal/';
+      const u=new URL(route.request().url()),p=u.pathname,api='/api/practice-2222222222222222222222222222222222222222/';
       if(p==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(p==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if((p==='/api/account/wallets'||p==='/api/account/portfolio-sources'))return route.fulfill({json:{account:login,wallets:[owner,second,empty]}});
-      if(p==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'Settled round',pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(p==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'practice-2222222222222222222222222222222222222222',markets:[{namespace:'practice-2222222222222222222222222222222222222222',label:'Settled round',pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(p===api+'status'){const s=await service.status(u.searchParams.get('wallet')||undefined);s.cases.forEach((c:any,i:number)=>{c.phase=3;c.result=i===3?3:2;});s.resolved=true;s.delivered=true;return route.fulfill({json:s});}
       if(p===api+'account')return route.fulfill({json:{...await service.account(u.searchParams.get('wallet')),claimScopes:[3]}});
       if(p===api+'history')return route.fulfill({json:{complete:true,logs:[]}});
@@ -61,7 +61,7 @@ test('portfolio alone collects owned payouts, preserves combined totals and reco
       if(p===api+'position'){const input=route.request().postDataJSON();return route.fulfill({json:await service.position(input.owner,input.scope,input.mask)});}
       if(p===api+'prepare'){const input=route.request().postDataJSON();intents.push(input);return route.fulfill({json:await service.prepare(input)});}
       if(p===api+'rpc'){
-        const input=route.request().postDataJSON(),saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('flurbo.rehearsal.pending.v1')||'null'));
+        const input=route.request().postDataJSON(),saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('flurbo.practice-2222222222222222222222222222222222222222.pending.v1')||'null'));
         if(input.method==='eth_getTransactionReceipt'){
           if(!confirm)return route.fulfill({json:{result:null}});paid=true;
           return route.fulfill({json:{result:{transactionHash:hash,blockNumber:'0x64',blockHash:hash,status:'0x1'}}});
@@ -88,7 +88,7 @@ test('portfolio alone collects owned payouts, preserves combined totals and reco
     await form.getByText('10 test AUSD',{exact:true}).waitFor();
     assert.equal(intents[0].action,'redeem');assert.equal(intents[0].quantity,'10000000');assert.equal(intents[0].scope,3);assert.equal(intents[0].mask,'8');
     await page.evaluate(()=>sessionStorage.setItem('reject','1'));await form.getByRole('button',{name:'Confirm payout in MetaMask'}).click();
-    await form.getByText('Wallet request rejected.',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>localStorage.getItem('flurbo.rehearsal.pending.v1')),null);
+    await form.getByText('Wallet request rejected.',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>localStorage.getItem('flurbo.practice-2222222222222222222222222222222222222222.pending.v1')),null);
     await form.getByRole('button',{name:'Review payout',exact:true}).click();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     await mkdir(new URL('../../../target/portfolio-payout/',import.meta.url),{recursive:true});
@@ -97,7 +97,7 @@ test('portfolio alone collects owned payouts, preserves combined totals and reco
     await page.reload();await page.getByRole('heading',{name:'Checking your transaction'}).waitFor();confirm=true;
     await page.getByText('Payout collected. Your portfolio has been refreshed.').waitFor();
     await page.getByRole('cell',{name:'7',exact:true}).waitFor();
-    assert.equal(await page.evaluate(()=>sessionStorage.getItem('sends')),'1');assert.equal(await page.evaluate(()=>localStorage.getItem('flurbo.rehearsal.pending.v1')),null);
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('sends')),'1');assert.equal(await page.evaluate(()=>localStorage.getItem('flurbo.practice-2222222222222222222222222222222222222222.pending.v1')),null);
     assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });

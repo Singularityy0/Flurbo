@@ -63,10 +63,8 @@ export async function runNotifications({ env = process.env, args = process.argv.
     if (args.length > 1 || args.length === 1 && args[0] !== '--test-email') throw new Error('Invalid arguments');
     const config = emailConfig(env), command = redisCommand(env, request), send = resendDelivery(config, request);
     const root = fileURLToPath(new URL('../../../', import.meta.url));
-    const manifests = [JSON.parse(env.FLURBO_PILOT_MANIFEST_JSON ?? await readFile(resolve(root, 'config/pilot-testnet.json'), 'utf8')),
-      JSON.parse(env.FLURBO_REHEARSAL_MANIFEST_JSON || '')];
-    if (['rehearsal','ethereum-activity',DETERMINISTIC_MODE].includes(manifests[0].publication?.mode) || manifests[1].publication?.mode !== 'rehearsal'
-      || monitorIdentity(manifests[0]) === monitorIdentity(manifests[1])) throw new Error('Configure both distinct pools');
+    const manifests = [JSON.parse(env.FLURBO_PILOT_MANIFEST_JSON ?? await readFile(resolve(root, 'config/pilot-testnet.json'), 'utf8'))];
+    if (['rehearsal','ethereum-activity',DETERMINISTIC_MODE].includes(manifests[0].publication?.mode)) throw new Error('Configure the release pilot pool');
     const extras=env.FLURBO_PRACTICE_COLLECTIONS_JSON?JSON.parse(env.FLURBO_PRACTICE_COLLECTIONS_JSON):[];
     if(!Array.isArray(extras)||extras.length>8)throw Error('Invalid practice collections');
     for(const row of extras){

@@ -65,12 +65,12 @@ export function Markets({ namespace, kind, onPortfolio }: { namespace: PilotName
     <Button secondary title={data.busy ? 'Stop loading markets' : 'Refresh prices'} onPress={() => data.busy ? data.cancel() : void data.run(signal => pilotRequest('markets', undefined, namespace, signal))} />
     <Notice>{data.error}</Notice>
     {events.map((event, i) => event.question.toLowerCase().includes(search.toLowerCase()) && <Card key={event.id}>
-      <Copy small>{namespace === 'rehearsal' ? 'PRACTICE' : 'RELEASE EVENT'} · {data.value?.open ? 'Open' : 'Trading closed'}</Copy><Heading>{event.question}</Heading>
+      <Copy small>{namespace === 'pilot' ? 'RELEASE EVENT' : 'PRACTICE'} · {data.value?.open ? 'Open' : 'Trading closed'}</Copy><Heading>{event.question}</Heading>
       <Copy small>Closes {new Date(Number(data.value!.manifest.publication.draft.closesAt) * 1000).toLocaleString()}</Copy>
       <View style={s.row}>{[true, false].map(yes => { const price = data.value?.prices.find(p => p.event === i)?.[yes ? 'yes' : 'no']; return <Button key={String(yes)} disabled={tx.busy} secondary={answers[i] !== yes} title={`${yes ? 'Yes' : 'No'}${price == null ? '' : ` · ${amount(price)} AUSD`}`} onPress={() => select(i, yes)} />; })}</View>
       {i in answers && <Button secondary title="Remove from prediction" disabled={tx.busy} onPress={() => setAnswers(old => { const next = { ...old }; delete next[i]; return next; })} />}
     </Card>)}
-    <Copy small>Prices are costs for one share, not probabilities. Test assets only. {namespace === 'rehearsal' ? 'Practice outcomes are scripted.' : 'Read the published event rules before trading.'}</Copy>
+    <Copy small>Prices are costs for one share, not probabilities. Test assets only. {data.value?.manifest.publication.mode === 'rehearsal' ? 'Practice outcomes are scripted.' : 'Read the published event rules before trading.'}</Copy>
     {!!Object.keys(answers).length && <Card><Heading>Your prediction</Heading><Copy>{names}</Copy><Copy small>{label}</Copy>
       {Object.keys(answers).length > 1 && <Choice value={mode} options={[{ value: 'all', label: 'All happen (AND)' }, { value: 'any', label: 'At least one (OR)' }]} onChange={setMode} />}
       <Choice value={side} options={[{ value: 'buy', label: 'Buy' }, { value: 'sell', label: 'Sell' }, { value: 'redeem', label: 'Claim payout' }]} onChange={setSide} />

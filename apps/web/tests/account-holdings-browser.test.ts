@@ -8,20 +8,21 @@ test('one Mera portfolio sums wallets, loads beyond thirty claims, and recovers 
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const login='0x'+'99'.repeat(20),second='0x'+'ab'.repeat(20),fixture=pilotFixture(Math.floor(Date.now()/1000),4);
+  // Practice collections are addressed by pool; this mode keeps the real-event wording.
+  fixture.manifest.publication.mode='deterministic-source-v1';
   let fail=false,scans=0;const batches:any[]=[],errors:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:390,height:844}});
     page.on('pageerror',(e:Error)=>errors.push(e.message));
-    await page.addInitScript(()=>sessionStorage.setItem('flurbo.trading.market','rehearsal'));
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
       if((path==='/api/account/wallets'||path==='/api/account/portfolio-sources'))return route.fulfill({json:{account:login,wallets:[owner,second]}});
-      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'Practice markets',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
-      if(path==='/api/rehearsal/account')return route.fulfill({json:{...await fixture.service.account(url.searchParams.get('wallet')),claimScopes:[3,5,6,7,9,10,11,12,13,14]}});
-      if(path==='/api/rehearsal/history'){scans++;return route.fulfill({json:{complete:true,logs:[]}});}
-      if(path==='/api/rehearsal/positions'){
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'practice-2222222222222222222222222222222222222222',markets:[{namespace:'practice-2222222222222222222222222222222222222222',label:'Practice markets',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/practice-2222222222222222222222222222222222222222/account')return route.fulfill({json:{...await fixture.service.account(url.searchParams.get('wallet')),claimScopes:[3,5,6,7,9,10,11,12,13,14]}});
+      if(path==='/api/practice-2222222222222222222222222222222222222222/history'){scans++;return route.fulfill({json:{complete:true,logs:[]}});}
+      if(path==='/api/practice-2222222222222222222222222222222222222222/positions'){
         const input=route.request().postDataJSON();batches.push(input);
         if(fail&&input.owner===second)return route.fulfill({status:503,json:{error:'Read failed'}});
         return route.fulfill({json:{rows:input.claims.map((c:any)=>({...c,payoutAtoms:null,quantity:

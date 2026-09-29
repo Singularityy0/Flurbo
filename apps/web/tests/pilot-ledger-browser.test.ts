@@ -8,20 +8,22 @@ test('combined shares appear in a fresh browser before history responds, with no
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const f=pilotFixture(Math.floor(Date.now()/1000),4),login='0x'+'99'.repeat(20),errors:string[]=[],batches:any[]=[];
+  // Practice collections are addressed by pool; this mode keeps the real-event wording.
+  f.manifest.publication.mode='deterministic-source-v1';
   let release!:()=>void;const gate=new Promise<void>(r=>{release=r;});
   try{
     const page=await browser.newPage({viewport:{width:390,height:844}});
     page.on('pageerror',(e:Error)=>errors.push(e.message));
-    await page.addInitScript(({login,owner}:any)=>{sessionStorage.setItem('flurbo.trading.market','rehearsal');sessionStorage.setItem('flurbo.view-wallet:'+login,owner);},{login,owner});
+    await page.addInitScript(({login,owner}:any)=>{sessionStorage.setItem('flurbo.view-wallet:'+login,owner);},{login,owner});
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
-      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'practice-2222222222222222222222222222222222222222',markets:[{namespace:'practice-2222222222222222222222222222222222222222',label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
-      if(path==='/api/rehearsal/account')return route.fulfill({json:{...await f.service.account(url.searchParams.get('wallet')),claimScopes:[1,2,3]}});
-      if(path==='/api/rehearsal/history'){await gate;return route.fulfill({status:503,json:{error:'History unavailable'}}).catch(()=>{});}
-      if(path==='/api/rehearsal/positions'){
+      if(path==='/api/practice-2222222222222222222222222222222222222222/account')return route.fulfill({json:{...await f.service.account(url.searchParams.get('wallet')),claimScopes:[1,2,3]}});
+      if(path==='/api/practice-2222222222222222222222222222222222222222/history'){await gate;return route.fulfill({status:503,json:{error:'History unavailable'}}).catch(()=>{});}
+      if(path==='/api/practice-2222222222222222222222222222222222222222/positions'){
         const input=route.request().postDataJSON();batches.push(input);
         return route.fulfill({json:{snapshot:{blockNumber:'200'},rows:input.claims.map((c:any)=>({...c,quantity:input.owner===owner&&c.scope===3&&c.mask==='8'?'10000000':'0',payoutAtoms:null}))}});
       }
@@ -59,7 +61,7 @@ test('account portfolio discovers older combinations on refresh and stops scanni
     await page.addInitScript(({login,owner}:any)=>{sessionStorage.setItem('flurbo.trading.market','pilot');sessionStorage.setItem('flurbo.view-wallet:'+login,owner);},{login,owner});
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
-      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'pilot',label:'Earlier real-event markets',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'practice-2222222222222222222222222222222222222222',markets:[{namespace:'pilot',label:'Earlier real-event markets',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
@@ -95,24 +97,26 @@ test('practice history outage still shows owned shares through the retired histo
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const fixture=pilotFixture(Math.floor(Date.now()/1000),4),login='0x'+'99'.repeat(20);
+  // Practice collections are addressed by pool; this mode keeps the real-event wording.
+  fixture.manifest.publication.mode='deterministic-source-v1';
   let failHistory=true,failAccount=false,scans=0;
   const errors:string[]=[],requests:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:390,height:844}});
     page.on('pageerror',(e:Error)=>errors.push(e.message));
-    await page.addInitScript(({login,owner}:any)=>{sessionStorage.setItem('flurbo.trading.market','rehearsal');sessionStorage.setItem('flurbo.view-wallet:'+login,owner);},{login,owner});
+    await page.addInitScript(({login,owner}:any)=>{sessionStorage.setItem('flurbo.view-wallet:'+login,owner);},{login,owner});
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;requests.push(path);
-      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'practice-2222222222222222222222222222222222222222',markets:[{namespace:'practice-2222222222222222222222222222222222222222',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
-      if(path==='/api/rehearsal/account')return failAccount?route.fulfill({status:503,json:{error:'Account unavailable'}}):route.fulfill({json:await fixture.service.account(url.searchParams.get('wallet'))});
-      if(path==='/api/rehearsal/history'){
+      if(path==='/api/practice-2222222222222222222222222222222222222222/account')return failAccount?route.fulfill({status:503,json:{error:'Account unavailable'}}):route.fulfill({json:await fixture.service.account(url.searchParams.get('wallet'))});
+      if(path==='/api/practice-2222222222222222222222222222222222222222/history'){
         scans++;if(failHistory)return route.fulfill({status:503,json:{error:'History unavailable'}});
         return route.fulfill({json:{through:200,target:200,complete:true,logs:[{name:'Traded',hash,index:0,block:150,args:{trader:owner,scope:1,mask:'2',isBuy:true,quantity:'10000000',collateralAmount:'6201146'}}]}});
       }
-      if(path==='/api/rehearsal/positions'){
+      if(path==='/api/practice-2222222222222222222222222222222222222222/positions'){
         const input=route.request().postDataJSON();
         return route.fulfill({json:{snapshot:{blockNumber:'200'},rows:input.claims.map((c:any)=>({...c,quantity:input.owner===owner&&c.scope===1&&c.mask==='2'?'10000000':'0',payoutAtoms:null}))}});
       }
@@ -157,11 +161,11 @@ test('portfolio pool isolation and linked-wallet changes survive late replies',{
     const page=await browser.newPage({viewport:{width:390,height:844}});
     page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.addInitScript(({login,owner}:any)=>{
-      sessionStorage.setItem('flurbo.trading.market','rehearsal');sessionStorage.setItem('flurbo.view-wallet:'+login,owner);
+      sessionStorage.setItem('flurbo.view-wallet:'+login,owner);
       // Deliver late replies despite cancellation, so the stale-result guard is exercised, not only fetch abort.
       const original=window.fetch;(window as any).cancelledReads=0;
       window.fetch=(input,options)=>{
-        if(/^\/api\/(rehearsal|practice-)/.test(String(input))){
+        if(/^\/api\/practice-/.test(String(input))){
           options?.signal?.addEventListener('abort',()=>{(window as any).cancelledReads++;},{once:true});
           return original(input,{...options,signal:undefined});
         }
@@ -170,8 +174,8 @@ test('portfolio pool isolation and linked-wallet changes survive late replies',{
     },{login,owner});
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname,namespace=path.split('/')[2];
-      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[
-        {namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt},
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'practice-2222222222222222222222222222222222222222',markets:[
+        {namespace:'practice-2222222222222222222222222222222222222222',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt},
         {namespace:other,label:'October practice',pool:'0x'+'cd'.repeat(20),closesAt:fixture.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:login,wallets:linked}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
@@ -180,7 +184,7 @@ test('portfolio pool isolation and linked-wallet changes survive late replies',{
       if(path.endsWith('/history'))return route.fulfill({json:{through:200,target:200,complete:true,logs:[]}});
       if(path.endsWith('/positions')){
         const input=route.request().postDataJSON();let quantity='0';
-        if(namespace==='rehearsal'&&input.owner===owner){if(holdOld){heldOld=true;await oldGate;}quantity='10000000';}
+        if(namespace==='practice-2222222222222222222222222222222222222222'&&input.owner===owner){if(holdOld){heldOld=true;await oldGate;}quantity='10000000';}
         else if(namespace===other&&input.owner===owner){if(holdLinked){heldLinked=true;await linkedGate;quantity='10000000';}else quantity='3000000';}
         else if(namespace===other&&input.owner===second)quantity='5000000';
         return route.fulfill({json:{snapshot:{blockNumber:'200'},rows:input.claims.map((c:any)=>({...c,quantity:c.scope===1&&c.mask==='2'?quantity:'0',payoutAtoms:null}))}}).catch(()=>{});
@@ -213,6 +217,8 @@ test('portfolio shares one discovery read across linked wallets, bounds reads an
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const fixture=pilotFixture(Math.floor(Date.now()/1000),4),login='0x'+'99'.repeat(20),wallets=[owner,'0x'+'aa'.repeat(20),'0x'+'bb'.repeat(20)];
+  // Practice collections are addressed by pool; this mode keeps the real-event wording.
+  fixture.manifest.publication.mode='deterministic-source-v1';
   let scans=0,active=0,peak=0,hold=false,held=false,release!:()=>void;const gate=new Promise<void>(r=>release=r);
   const batches:number[]=[],errors:string[]=[];
   try{
@@ -220,18 +226,17 @@ test('portfolio shares one discovery read across linked wallets, bounds reads an
     await page.clock.install();await page.clock.pauseAt(new Date());
     page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.addInitScript(()=>{
-      sessionStorage.setItem('flurbo.trading.market','rehearsal');
       const original=window.fetch;(window as any).cancelledReads=0;
       window.fetch=(input,options)=>{options?.signal?.addEventListener('abort',()=>{(window as any).cancelledReads++;},{once:true});return original(input,options);};
     });
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url()),path=url.pathname;
-      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'practice-2222222222222222222222222222222222222222',markets:[{namespace:'practice-2222222222222222222222222222222222222222',label:'September practice',pool:fixture.manifest.pool,closesAt:fixture.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:login,wallets}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
-      if(path==='/api/rehearsal/history'){scans++;return route.fulfill({json:{through:150,target:200,complete:false,logs:[]}});}
-      if(path==='/api/rehearsal/account'||path==='/api/rehearsal/positions'){
+      if(path==='/api/practice-2222222222222222222222222222222222222222/history'){scans++;return route.fulfill({json:{through:150,target:200,complete:false,logs:[]}});}
+      if(path==='/api/practice-2222222222222222222222222222222222222222/account'||path==='/api/practice-2222222222222222222222222222222222222222/positions'){
         active++;peak=Math.max(peak,active);
         try{
           await new Promise(r=>setTimeout(r,60));

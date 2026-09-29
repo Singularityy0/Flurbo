@@ -47,8 +47,6 @@
 .portfolio-load-notice { justify-self: start; }
 .portfolio-payout-panel { display: grid; gap: var(--s-3); justify-items: start; padding: var(--s-5); border: 1px solid var(--ink); border-radius: var(--r-panel); background: var(--surface); }
 .portfolio-payout-panel > section { justify-self: stretch; }
-.portfolio-archive-link { justify-self: start; font-size: 14px; }
-.portfolio-legacy > :not(summary) { margin-top: var(--s-3); }
 
 .portfolio-performance { display: grid; gap: var(--s-4); }
 .portfolio-pnl-chart svg { width: 100%; height: auto; color: var(--ink); }

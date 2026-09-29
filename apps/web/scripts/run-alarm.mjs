@@ -12,7 +12,7 @@ const json = async path => JSON.parse(await readFile(resolve(root, path), 'utf8'
 export async function localAlarmConfig(env = process.env) {
   if (env.FLURBO_ALARM_CONFIG_JSON) return alarmConfig(JSON.parse(env.FLURBO_ALARM_CONFIG_JSON));
   const bundle = await json('target/deployments/showcase-v0-collections.json');
-  const manifests = [await json('config/pilot-testnet.json'), await json('config/practice-rehearsal.json'), ...bundle.map(r => r.manifest || r)];
+  const manifests = [await json('config/pilot-testnet.json'), ...bundle.map(r => r.manifest || r)];
   return alarmConfig({ repository: 'Singularityy0/Flurbo', monitorWorkflow: 'settlement-monitor.yml', workerWorkflow: 'resolution-worker.yml',
     signer: env.FLURBO_RESOLUTION_SIGNER_ADDRESS || '0x632a158d5eccc10f864ab94cec99511e1cc514f3',
     pools: alarmPoolsFromManifests(manifests, env.FLURBO_RESOLUTION_POOL || null) });

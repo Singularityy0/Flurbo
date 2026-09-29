@@ -15,7 +15,7 @@ SERVICE_SLIPPAGE_BPS = (10, 50, 100)
 MAX_DEADLINE_SECONDS = 300
 SCOPES = ("markets:read", "wallet:read", "runtime:report", "executions:report")
 STOP_CODES = ("UNAUTHENTICATED", "CREDENTIAL_EXPIRED", "CREDENTIAL_REVOKED", "INVITE_REQUIRED", "AGENT_ARCHIVED", "SCOPE_REQUIRED")
-_NAMESPACE = re.compile(r"^(pilot|rehearsal|practice-[0-9a-f]{40})$")
+_NAMESPACE = re.compile(r"^(pilot|practice-[0-9a-f]{40})$")
 _ADDRESS = re.compile(r"^0x[0-9a-f]{40}$")
 _HASH = re.compile(r"^0x[0-9a-f]{64}$")
 

@@ -151,10 +151,10 @@ test('email and watchdog transports reject redirects/errors and do not expose cr
   assert.ok(!urls[0].endsWith('/fail')); assert.ok(urls[1].endsWith('/fail'));
 });
 
-test('runner handles both pools, signals failed reads to watchdog, and redacts configuration errors', async () => {
+test('runner handles the pilot and practice pools, signals failed reads to watchdog, and redacts configuration errors', async () => {
   const r = redis(), pilot = pilotFixture().manifest, rehearsal = structuredClone(pilot);
   rehearsal.publication.mode = 'rehearsal'; rehearsal.rulesHash = '0x' + 'ab'.repeat(32);
-  const env = { FLURBO_PILOT_MANIFEST_JSON: JSON.stringify(pilot), FLURBO_REHEARSAL_MANIFEST_JSON: JSON.stringify(rehearsal),
+  const env = { FLURBO_PILOT_MANIFEST_JSON: JSON.stringify(pilot),
     UPSTASH_REDIS_REST_URL: 'https://fixture.upstash.io', UPSTASH_REDIS_REST_TOKEN: 'storage-secret',
     FLURBO_MONITOR_EMAIL_FROM: config.from, FLURBO_MONITOR_EMAIL_TO: config.to[0], FLURBO_MONITOR_RESEND_KEY: config.key,
     FLURBO_MONITOR_HEALTHCHECK_URL: 'https://hc-ping.com/00000000-0000-0000-0000-000000000000' };
@@ -167,24 +167,24 @@ test('runner handles both pools, signals failed reads to watchdog, and redacts c
   const options = { env, args: [], request, now: () => 1000, output: (s: string) => output.push(s),
     inspect: async ({ manifest }: any) => observed(manifest, 1000) };
   assert.equal(await runNotifications(options), 0);
-  assert.equal(output.length, 2);
+  assert.equal(output.length, 1);
   const extra=structuredClone(rehearsal);extra.pool='0x'+'aa'.repeat(20);extra.resolver='0x'+'bb'.repeat(20);
   extra.codeHashes[extra.pool]=rehearsal.codeHashes[rehearsal.pool];extra.codeHashes[extra.resolver]=rehearsal.codeHashes[rehearsal.resolver];
   const extraEnv={...env,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'October practice',manifest:extra}])};
   const before=output.length;assert.equal(await runNotifications({...options,env:extraEnv}),0);
-  assert.equal(output.length-before,3);assert.ok(output.some(line=>JSON.parse(line).pool===extra.pool));
+  assert.equal(output.length-before,2);assert.ok(output.some(line=>JSON.parse(line).pool===extra.pool));
   const general=deterministicManifest();general.pool='0x'+'ac'.repeat(20);general.codeHashes[general.pool]=pilot.codeHashes[pilot.pool];
   // The resolver address remains committed; this extra does not share either configured pool or resolver.
   const {settlementBindings,pilotRulesHash}=await import('../server/settlement-publication.mjs');
   general.resolver='0x'+'ad'.repeat(20);general.codeHashes[general.resolver]=pilot.codeHashes[pilot.resolver];
   general.rulesHash=pilotRulesHash(settlementBindings(general.publication).config,general.resolver,general.publication.creator);
   const generalEnv={...env,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'Source test',manifest:general}])};
-  const generalBefore=output.length;assert.equal(await runNotifications({...options,env:generalEnv}),0);assert.equal(output.length-generalBefore,3);
+  const generalBefore=output.length;assert.equal(await runNotifications({...options,env:generalEnv}),0);assert.equal(output.length-generalBefore,2);
   general.publication.settlementRules[0].decision.value='4.3';
   assert.equal(await runNotifications({...options,env:{...generalEnv,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'Source test',manifest:general}])}}),2);
   assert.equal(await runNotifications({...options,env:generalEnv}),0);
   assert.ok(!pings.at(-1)!.endsWith('/fail'));
-  assert.equal(await runNotifications({...options,env:{...env,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'Duplicate',manifest:rehearsal}])}}),2);
+  assert.equal(await runNotifications({...options,env:{...env,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'Duplicate pool',manifest:rehearsal}])}}),2);
   assert.equal(await runNotifications({ ...options, inspect: async () => { throw new Error('storage-secret'); } }), 2);
   assert.ok(pings.at(-1)!.endsWith('/fail'));
   assert.ok(!output.join('').includes('storage-secret'));

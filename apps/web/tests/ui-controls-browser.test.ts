@@ -14,18 +14,20 @@ async function asset(route:any,path:string){
 const expanded=(select:any,value:'true'|'false')=>select.and(select.page().locator(`[aria-expanded="${value}"]`)).waitFor({timeout:5000});
 async function thesisPage(browser:any,options:any={}){
   const f=pilotFixture(Math.floor(Date.now()/1000),4),context=await browser.newContext({viewport:{width:1440,height:1000},...options}),page=await context.newPage(),errors:string[]=[];
+  // Practice collections are addressed by pool; this mode keeps the real-event wording.
+  f.manifest.publication.mode='deterministic-source-v1';
   page.on('pageerror',(e:Error)=>errors.push(e.message));
   await page.route('**/*',async(route:any)=>{
     const path=new URL(route.request().url()).pathname;
-    if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',markets:[{namespace:'rehearsal',label:'Test pool',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+    if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',markets:[{namespace:'practice-2222222222222222222222222222222222222222',label:'Test pool',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
     if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
     if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600_000}}});
-    if(path==='/api/rehearsal/status')return route.fulfill({json:await f.service.status()});
-    if(path==='/api/rehearsal/markets')return route.fulfill({json:await f.service.markets()});
+    if(path==='/api/practice-2222222222222222222222222222222222222222/status')return route.fulfill({json:await f.service.status()});
+    if(path==='/api/practice-2222222222222222222222222222222222222222/markets')return route.fulfill({json:await f.service.markets()});
     if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Offline fixture'}});
     return asset(route,path);
   });
-  await page.goto('https://flurbo.singu.online/markets/rehearsal/0/thesis');
+  await page.goto('https://flurbo.singu.online/markets/practice-2222222222222222222222222222222222222222/0/thesis');
   return {page,context,errors};
 }
 

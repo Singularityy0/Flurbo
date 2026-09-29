@@ -7,7 +7,7 @@ const review = (semanticAssessment: any, action = 'buy') => ({ requested: { acti
 const collision = review({ mode: 'enforced', status: 'collision', rulesDigest: 'd'.repeat(64), configRevision: 'a'.repeat(64) });
 
 test('mobile passes its own market to the shared purchase check', () => {
-  for (const namespace of ['pilot', 'rehearsal', `practice-${'1'.repeat(40)}`] as const)
+  for (const namespace of ['pilot', `practice-${'1'.repeat(40)}`] as const)
     assert.equal(submitOptions(collision, namespace, { review: null, phrase: '' }).namespace, namespace);
 });
 test('a known collision needs the exact phrase for this review; disabled and unchecked purchases do not', () => {

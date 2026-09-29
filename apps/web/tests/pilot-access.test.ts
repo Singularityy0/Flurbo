@@ -46,7 +46,7 @@ test('pilot endpoints require Mera login; public evidence remains readable; raw 
   }finally{globalThis.fetch=original;await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 
-test('rehearsal API is authenticated and cannot sign for the official pool',async()=>{
+test('practice collection API is authenticated, cannot sign for another pool, and the retired alias is gone',async()=>{
   const signer=privateKeyToAccount(('0x'+'11'.repeat(32)) as `0x${string}`),f=pilotFixture(),origin='https://flurbo.singu.online';
   const rehearsalPool=('0x'+'aa'.repeat(20)) as `0x${string}`;
   const manifest={...f.manifest,pool:rehearsalPool,publication:{...f.manifest.publication,mode:'rehearsal'}};
@@ -55,7 +55,7 @@ test('rehearsal API is authenticated and cannot sign for the official pool',asyn
   const namespace='practice-'+'bb'.repeat(20), archivedPool=('0x'+'bb'.repeat(20)) as `0x${string}`;
   const archived={...rehearsal,manifest:{...manifest,pool:archivedPool},status:async()=>({pool:archivedPool})};
   const practiceCollections={services:new Map([[namespace,archived]]),catalog:{active:namespace}};
-  const server=productionServer({previewAccess:null, origin,rpcUrl:TESTNET.rpc,pilot:f.service,rehearsal,practiceCollections},store);
+  const server=productionServer({previewAccess:null, origin,rpcUrl:TESTNET.rpc,pilot:f.service,practiceCollections},store);
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const port=(server.address() as {port:number}).port,original=globalThis.fetch;let writes=0;
   globalThis.fetch=async()=>{writes++;return Response.json({result:hash});};
@@ -64,18 +64,16 @@ test('rehearsal API is authenticated and cannot sign for the official pool',asyn
   });
   const raw=async(spender:`0x${string}`)=>signer.signTransaction({type:'legacy',chainId:10143,nonce:0,to:TESTNET.cash as `0x${string}`,data:encodeFunctionData({abi:pilotCashAbi,functionName:'approve',args:[spender,1000000n]}),value:0n,gas:100000n,gasPrice:1000000000n});
   try{
-    assert.equal(await request('/api/rehearsal/status',undefined,false),401);
-    assert.equal(await request('/api/rehearsal/status'),200);
-    assert.equal(await request('/api/rehearsal/rpc',{method:'eth_sendRawTransaction',params:[await raw(pool)]}),403);
+    assert.equal(await request('/api/rehearsal/status'),404);
+    assert.equal(await request('/api/rehearsal/rpc',{method:'eth_sendRawTransaction',params:[await raw(rehearsalPool)]}),404);
     assert.equal(await request('/api/pilot/rpc',{method:'eth_sendRawTransaction',params:[await raw(rehearsalPool)]}),403);
-    assert.equal(await request('/api/rehearsal/rpc',{method:'eth_sendRawTransaction',params:[await raw(rehearsalPool)]}),403);
+    assert.equal(await request('/api/'+namespace+'/rpc',{method:'eth_sendRawTransaction',params:[await raw(pool)]}),403);
     assert.equal(await request('/api/practice-collections',undefined,false),401);
     assert.equal(await request('/api/practice-collections'),200);
     assert.equal(await request('/api/'+namespace+'/status',undefined,false),401);
     assert.equal(await request('/api/'+namespace+'/status'),200);
-    assert.equal(await request('/api/practice-'+'cc'.repeat(20)+'/status'),503);
+    assert.equal(await request('/api/practice-'+'cc'.repeat(20)+'/status'),404);
     assert.equal(await request('/api/'+namespace+'/rpc',{method:'eth_sendRawTransaction',params:[await raw(rehearsalPool)]}),403);
-    assert.equal(await request('/api/rehearsal/rpc',{method:'eth_sendRawTransaction',params:[await raw(archivedPool)]}),403);
     assert.equal(await request('/api/'+namespace+'/rpc',{method:'eth_sendRawTransaction',params:[await raw(archivedPool)]}),403);
     assert.equal(writes,0);
   }finally{globalThis.fetch=original;await new Promise<void>(resolve=>server.close(()=>resolve()));}

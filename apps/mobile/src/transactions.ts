@@ -6,7 +6,7 @@ import { lockOperation } from './operation-lock';
 import { submitOptions, type SemanticConsent } from './semantic';
 
 type State = { busy: boolean; pending: PilotPending | null; namespace: PilotNamespace; notice: string; revision: number };
-let state: State = { busy: false, pending: null, namespace: 'rehearsal', notice: '', revision: 0 };
+let state: State = { busy: false, pending: null, namespace: 'pilot', notice: '', revision: 0 };
 const listeners = new Set<() => void>();
 const update = (patch: Partial<State>) => { state = { ...state, ...patch, revision: state.revision + 1 }; listeners.forEach(fn => fn()); };
 function save(value: PilotPending | null) {
@@ -18,7 +18,8 @@ export const transactions = {
   getSnapshot: () => state,
   subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; },
   restore() {
-    for (const namespace of ['rehearsal', 'pilot'] as const) {
+    const practice = storage.keys().flatMap(key => /^flurbo\.(practice-[0-9a-f]{40})\.pending\.v1$/.exec(key)?.[1] ?? []) as PilotNamespace[];
+    for (const namespace of ['pilot', ...practice] as PilotNamespace[]) {
       const pending = readPilotPending(namespace);
       if (pending) { update({ namespace, pending, notice: 'An earlier transaction needs checking. Do not buy again.' }); return; }
     }

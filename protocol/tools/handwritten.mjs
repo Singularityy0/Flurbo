@@ -2,6 +2,8 @@
 // SDK, so they test every SDK (including the TypeScript reference) against the specification.
 const POOL = '0x28d5ee02b1eda6959ac3ee5a4f834237c84dee02';
 const NOW = 1_790_000_000;
+// A valid market name that is not the one being traded.
+const OTHER_MARKET = `practice-${'1'.repeat(40)}`;
 
 // Policy. Base inputs pass every check (worked through in specs/transactions.md terms):
 //   spend total 500,000 (j1 cost) + 1,300,000 (j2 limit) + 0 (j3 reverted) + 510,000 (candidate) = 2,310,000
@@ -30,7 +32,7 @@ const base = {
 };
 const policyCases = [
   ['passes every limit', {}, []],
-  ['market not in the allowlist', { policy: { markets: ['rehearsal'] } }, ['MARKET_NOT_ALLOWED']],
+  ['market not in the allowlist', { policy: { markets: [OTHER_MARKET] } }, ['MARKET_NOT_ALLOWED']],
   ['market closed', { market: { open: false } }, ['MARKET_CLOSED']],
   ['at the close time counts as closed', { now: 1_790_726_400, candidate: { quoteBlockTimestamp: 1_790_726_395 } }, ['MARKET_CLOSED']],
   ['too close to the close', { now: 1_790_725_800, candidate: { quoteBlockTimestamp: 1_790_725_790 } }, ['TOO_CLOSE_TO_CLOSE']],
@@ -68,7 +70,7 @@ const policyCases = [
   ['redeem disabled by default', { market: { resolved: true, open: false }, candidate: { action: 'redeem', limitAtoms: '0', slippageBps: 0 } }, ['ACTION_DISABLED']],
   ['redeem before resolution', { policy: { allowRedeem: true }, candidate: { action: 'redeem', limitAtoms: '0', slippageBps: 0 } }, ['MARKET_NOT_RESOLVED']],
   ['redeem after resolution', { policy: { allowRedeem: true }, market: { resolved: true, open: false }, candidate: { action: 'redeem', limitAtoms: '0', slippageBps: 0, quoteBlockTimestamp: 0 } }, []],
-  ['several violations in the specified order', { policy: { markets: ['rehearsal'], maxQuantityAtoms: '1', maxPending: 1 }, candidate: { slippageBps: 100, quoteBlockTimestamp: 1 } },
+  ['several violations in the specified order', { policy: { markets: [OTHER_MARKET], maxQuantityAtoms: '1', maxPending: 1 }, candidate: { slippageBps: 100, quoteBlockTimestamp: 1 } },
     ['MARKET_NOT_ALLOWED', 'QUANTITY_LIMIT', 'SLIPPAGE_LIMIT', 'QUOTE_STALE', 'PENDING_LIMIT']],
 ];
 const merge = (a, b) => {

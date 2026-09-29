@@ -130,7 +130,7 @@ function AccountRoute() {
   const authenticated = !!state.address && state.expiresAt !== null && state.expiresAt > Date.now();
   const checkingAccess = authenticated && !preview.access && !preview.error;
   const checking = state.restoring || checkingAccess;
-  const operatorPath = ['/account','/kuru','/events','/rehearsal','/evidence'].includes(location);
+  const operatorPath = ['/account','/kuru','/events','/evidence'].includes(location);
   // Same page choice as before; the page for this address starts loading during the checks.
   const locationKey: RouteKey | null = location==='/access' ? 'access' : location==='/fund' ? 'fund'
     : operatorPath ? (checking || !testingAccess ? null : location==='/evidence' ? 'evidence' : 'workspace')
@@ -193,7 +193,6 @@ function pageTitle(location: string) {
     : location === "/kuru" ? "Kuru order book | flurbo"
     : location === "/events" ? "Real events | flurbo"
     : location === "/evidence" ? "Evidence review | flurbo"
-    : location === "/rehearsal" ? "Testnet rehearsal | flurbo"
     : location === "/" ? "flurbo | combine what you know" : "Page not found | flurbo";
 }
 
@@ -230,7 +229,6 @@ export default function App() {
       <Route path="/history"><Redirect to="/portfolio" replace /></Route>
       <Route path="/kuru" component={AccountRoute} />
       <Route path="/events" component={AccountRoute} />
-      <Route path="/rehearsal" component={AccountRoute} />
       <Route path="/evidence" component={AccountRoute} />
       <Route component={() => <AppShell><NotFound /></AppShell>} />
     </Switch>

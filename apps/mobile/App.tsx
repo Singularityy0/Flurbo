@@ -9,6 +9,7 @@ import { externalWallet, type WalletKind } from './src/wallet';
 import { transactions } from './src/transactions';
 import { operations, prepareFaucet, type FaucetReview } from './src/operations';
 import { type PilotNamespace } from '../web/src/pilot';
+import { loadMarketDirectory, type MarketGroup } from '../web/src/market-directory';
 import { Markets } from './src/Markets';
 import { AccountLedger } from './src/AccountLedger';
 import { WhatIf } from './src/WhatIf';
@@ -75,7 +76,7 @@ function TransactionLookup() {
 }
 function Main() {
   const login = useSyncExternalStore(auth.subscribe, auth.getSnapshot), wallet = useSyncExternalStore(externalWallet.subscribe, externalWallet.getSnapshot);
-  const [ready, setReady] = useState(false), [initError, setInitError] = useState(''), [page, setPage] = useState<Page>('markets'), [namespace, setNamespace] = useState<PilotNamespace>('rehearsal');
+  const [ready, setReady] = useState(false), [initError, setInitError] = useState(''), [page, setPage] = useState<Page>('markets'), [namespace, setNamespace] = useState<PilotNamespace>('pilot'), [groups, setGroups] = useState<MarketGroup[]>([]);
   async function boot() {
     setInitError('');
     try { await initialize(); transactions.restore(); operations.restore(); setReady(true); }
@@ -93,6 +94,10 @@ function Main() {
   useEffect(() => {
     if (!login.address) { setPage('markets'); return; }
     void externalWallet.initialize();
+    // Collections come from the server directory; a removed collection simply disappears.
+    const c = new AbortController();
+    void loadMarketDirectory(c.signal).then(list => { if (!c.signal.aborted) setGroups(list); }).catch(() => undefined);
+    return () => c.abort();
   }, [login.address]);
   const kind: WalletKind = 'metamask';
   const owner = wallet.address;
@@ -106,7 +111,7 @@ function Main() {
         <Card><Heading>Your account starts with a passkey.</Heading><Copy>Sign in using the same passkey you use on flurbo.singu.online. MetaMask can be connected for trading after sign-in.</Copy><Button title={login.busy ? 'Opening passkey...' : 'Sign in with passkey'} disabled={login.busy || !allowed} onPress={() => void signIn()} /><Button secondary title="Create a Flurbo account" disabled={login.busy || !allowed} onPress={() => void signIn(true)} /><Button secondary title="Choose another passkey" disabled={login.busy || !allowed} onPress={() => void signIn(false, true)} /><Notice>{login.error || login.notice}</Notice>
           {!allowed && <Notice>Install the signed Flurbo build configured for flurbo.singu.online. Expo Go and browser previews cannot unlock this account.</Notice>}<Copy small>Android: use Google Password Manager with your existing Google account and screen lock. A localhost passkey belongs to a different site.</Copy></Card>
       </> : <><Notice>{initError}</Notice><Pending />
-        {['markets', 'whatif', 'portfolio', 'history', 'settlement'].includes(page) && <Choice value={namespace} options={[{ value: 'rehearsal', label: 'Practice markets' }, { value: 'pilot', label: 'Release events' }]} onChange={setNamespace} />}
+        {['markets', 'whatif', 'portfolio', 'history', 'settlement'].includes(page) && <Choice value={namespace} options={groups.length ? groups.map(g => ({ value: g.namespace, label: g.label })) : [{ value: 'pilot', label: 'Release events' }]} onChange={setNamespace} />}
         {page === 'markets' && <Markets namespace={namespace} kind={kind} onPortfolio={() => setPage('portfolio')} />}
         {page === 'whatif' && <WhatIf namespace={namespace} />}
         {(page === 'portfolio' || page === 'history') && <AccountLedger key={`${namespace}:${page}:${login.address}`} namespace={namespace} account={login.address!} history={page === 'history'} />}

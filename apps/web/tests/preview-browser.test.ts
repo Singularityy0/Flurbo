@@ -8,6 +8,8 @@ test('invite flow denies pending accounts, approved directory filters real sched
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const now=Math.floor(Date.now()/1000),f=pilotFixture(now,4),other=structuredClone(f.manifest);
+  // Practice collections are addressed by pool; this mode keeps the real-event wording.
+  f.manifest.publication.mode='deterministic-source-v1';
   other.publication.mode='rehearsal';other.pool='0x'+'bc'.repeat(20);other.publication.draft.closesAt=now-3600;
   other.publication.draft.events.forEach((e:any,i:number)=>e.question='Earlier question '+(i+1));
   const ns='practice-'+other.pool.slice(2);
@@ -20,8 +22,8 @@ test('invite flow denies pending accounts, approved directory filters real sched
       if(path==='/api/preview')return route.fulfill({json:{inviteOnly:true,applicationUrl}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:signedIn?{address:owner,method:'passkey',expiresAt:Date.now()+3600000}:null}});
       if(path==='/api/account/access')return route.fulfill({json:{approved,testingTools:false,applicationUrl}});
-      if(path==='/api/market-directory'){reads++;return route.fulfill({json:{schema:'flurbo.market-directory.v1',markets:[{namespace:'rehearsal',label:'Open questions',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt},{namespace:ns,label:'Earlier questions',pool:other.pool,closesAt:other.publication.draft.closesAt}]}});}
-      if(path==='/api/rehearsal/markets')return route.fulfill({json:await f.service.markets()});
+      if(path==='/api/market-directory'){reads++;return route.fulfill({json:{schema:'flurbo.market-directory.v1',markets:[{namespace:'practice-2222222222222222222222222222222222222222',label:'Open questions',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt},{namespace:ns,label:'Earlier questions',pool:other.pool,closesAt:other.publication.draft.closesAt}]}});}
+      if(path==='/api/practice-2222222222222222222222222222222222222222/markets')return route.fulfill({json:await f.service.markets()});
       if(path===`/api/${ns}/markets`)return route.fulfill(outage?{status:503,json:{error:'Unavailable'}}:{json:{...await f.service.markets(),manifest:other,open:false,resolved:true}});
       if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unused fixture endpoint'}});
       const file=path.startsWith('/assets/')?path.slice(1):'index.html';
@@ -39,7 +41,7 @@ test('invite flow denies pending accounts, approved directory filters real sched
     }
     await page.goto('https://flurbo.singu.online/markets');await page.waitForURL('**/login');assert.equal(reads,0);
     signedIn=true;
-    for(const path of ['/markets','/portfolio','/fund','/markets/rehearsal/0']){
+    for(const path of ['/markets','/portfolio','/fund','/markets/practice-2222222222222222222222222222222222222222/0']){
       await page.goto('https://flurbo.singu.online'+path);await page.getByRole('heading',{name:'Your account is ready',exact:true}).waitFor();assert.equal(reads,0);
     }
     assert.equal(await page.getByRole('link',{name:'Request access',exact:true}).count(),0);

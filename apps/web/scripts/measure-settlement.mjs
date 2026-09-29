@@ -9,7 +9,7 @@ import { measureSettlement } from '../server/settlement-latency.mjs';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 
 export async function runMeasurement({ paths = process.argv.slice(2), env = process.env } = {}) {
-  const files = paths.length ? paths : ['config/pilot-testnet.json', 'config/practice-rehearsal.json', 'target/deployments/showcase-v0-collections.json'];
+  const files = paths.length ? paths : ['config/pilot-testnet.json', 'target/deployments/showcase-v0-collections.json'];
   const manifests = [];
   for (const file of files) {
     const value = JSON.parse(await readFile(resolve(root, file), 'utf8'));

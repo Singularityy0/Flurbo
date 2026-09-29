@@ -61,4 +61,3 @@
 /* Shared with operator pages that still use these names. */
 .market-badge { font-size: 12px; }
 .ticket-wallet { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-3); }
-.portfolio-legacy { margin-top: var(--s-6); }

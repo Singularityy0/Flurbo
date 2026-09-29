@@ -5,8 +5,8 @@ import { pairAnalytics } from './pair-analytics.mjs';
 
 // Public reads only. Configuration, chain state and manual acceptance are separate claims.
 export async function checkMockReadiness({manifest,namespace,featured=false,request=fetch,rpc,model,now=()=>Math.floor(Date.now()/1000)}){
-  if(namespace!=='pilot'&&namespace!=='rehearsal'&&namespace!==`practice-${manifest.pool.slice(2)}`)throw Error('Invalid collection binding');
-  if((['rehearsal','ethereum-activity','deterministic-source-v1'].includes(manifest.publication.mode))!==(namespace!=='pilot')||namespace==='rehearsal'&&manifest.publication.mode!=='rehearsal')throw Error('Invalid collection mode');
+  if(namespace!=='pilot'&&namespace!==`practice-${manifest.pool.slice(2)}`)throw Error('Invalid collection binding');
+  if((['rehearsal','ethereum-activity','deterministic-source-v1'].includes(manifest.publication.mode))!==(namespace!=='pilot'))throw Error('Invalid collection mode');
   const service=pilotService({manifest,rpc,now}),checks=[];
   async function check(name,fn){
     try{checks.push({name,status:'pass',details:await fn()});}
@@ -32,7 +32,7 @@ export async function checkMockReadiness({manifest,namespace,featured=false,requ
     return 'All six requests returned HTTP 401 without a session.';
   });
   await check('Consumer pages and security headers',async()=>{
-    for(const path of ['/','/markets','/portfolio','/history',namespace==='pilot'?'/events':'/rehearsal?collection='+namespace]){
+    for(const path of ['/','/markets','/portfolio','/history',namespace==='pilot'?'/events':'/markets/'+namespace+'/0']){
       const response=await hosted(path);
       if(!response.ok||!response.headers.get('content-type')?.includes('text/html')||!response.headers.get('content-security-policy')?.includes("frame-ancestors 'none'")||response.headers.get('cache-control')!=='no-store')throw Error('Page unavailable');
       await response.arrayBuffer();

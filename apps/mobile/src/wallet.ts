@@ -75,7 +75,7 @@ export const externalWallet = {
 };
 export type WalletKind = 'metamask';
 export function legacyProvider(kind: WalletKind, market: 'original' | 'learning' = 'original'): Provider & { destroy(): void } {
-  return { ...tradingProvider(kind, 'rehearsal'), destroy() {} };
+  return { ...tradingProvider(kind, 'pilot'), destroy() {} };
 }
 export function tradingProvider(kind: WalletKind, namespace: PilotNamespace): Provider {
   const login = auth.getSnapshot().address;

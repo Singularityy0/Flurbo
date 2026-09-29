@@ -14,7 +14,7 @@ import { RedisSessionStore, redisCommand } from './redis-session.mjs';
 import { runComparison } from './learning-comparison.mjs';
 import { learningService, learningRpc, loadLearningModel } from './learning-pool.mjs';
 import { pilotEvidence } from './pilot.mjs';
-import { configurePilot, configureRehearsal } from './pilot-config.mjs';
+import { configurePilot } from './pilot-config.mjs';
 import { androidAssetLinks } from './native-association.mjs';
 import { configurePracticeCollections } from './practice-collections.mjs';
 import { loadSemanticConfig, semanticDiagnostics } from './semantic-validation.mjs';
@@ -31,11 +31,11 @@ const security = {
 export function productionServer(config, store, staticRoot = dist) {
   const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
     applications:config.applications, previewAccess:config.previewAccess===undefined?previewAccess():config.previewAccess, testingOperatorAccount:config.testingOperatorAccount, testFaucet:config.testFaucet, learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
-    learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, rehearsal: config.rehearsal, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions, challengeOptions:config.challengeOptions, settlementPackets:config.settlementPackets });
+    learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions, challengeOptions:config.challengeOptions, settlementPackets:config.settlementPackets });
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
     // Liveness only. This deliberately does not claim contracts or RPC are ready.
-    if (req.url === '/healthz' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ service: 'flurbo', chain_state: 'not_checked', learning_comparison: config.learningReport ? 'ready' : config.learningStatus || 'unavailable', learning_pool: config.learningPool ? 'configured' : 'unavailable', learning_model: config.learningModelStatus || 'unavailable', pilot_pool: config.pilot ? 'configured' : 'disabled', pilot_address: config.pilot?.manifest.pool || null, pilot_rules_hash: config.pilot?.manifest.rulesHash || null, rehearsal_pool: config.rehearsal ? 'configured' : 'disabled', rehearsal_address: config.rehearsal?.manifest.pool || null, rehearsal_rules_hash: config.rehearsal?.manifest.rulesHash || null, practice_collections: config.practiceCollections ? { active: config.practiceCollections.catalog.active, configured: [...config.practiceCollections.services].map(([namespace, service]) => ({ namespace, pool: service.manifest.pool, rulesHash: service.manifest.rulesHash, closesAt: service.manifest.publication.draft.closesAt })) } : null })); return; }
+    if (req.url === '/healthz' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ service: 'flurbo', chain_state: 'not_checked', learning_comparison: config.learningReport ? 'ready' : config.learningStatus || 'unavailable', learning_pool: config.learningPool ? 'configured' : 'unavailable', learning_model: config.learningModelStatus || 'unavailable', pilot_pool: config.pilot ? 'configured' : 'disabled', pilot_address: config.pilot?.manifest.pool || null, pilot_rules_hash: config.pilot?.manifest.rulesHash || null, practice_collections: config.practiceCollections ? { active: config.practiceCollections.catalog.active, configured: [...config.practiceCollections.services].map(([namespace, service]) => ({ namespace, pool: service.manifest.pool, rulesHash: service.manifest.rulesHash, closesAt: service.manifest.publication.draft.closesAt })) } : null })); return; }
     if (req.headers.host !== new URL(config.origin).host) { res.writeHead(421); res.end('Use https://flurbo.singu.online'); return; }
     if (req.url === '/.well-known/assetlinks.json' && ['GET', 'HEAD'].includes(req.method)) {
       const body = config.androidAssetLinks;
@@ -70,7 +70,7 @@ export function productionServer(config, store, staticRoot = dist) {
         }
         // Serve agent deep links on direct visits too; API session and invite gates still protect data.
         const agentPage = /^\/agents(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$/.test(pathname);
-        const page = agentPage || /^\/markets\/(?:rehearsal|pilot|practice-[0-9a-f]{40})\/[0-3](?:\/thesis)?$/.test(pathname) || ['/', '/docs', '/markets', '/fund', '/access', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/rehearsal', '/evidence'].includes(pathname);
+        const page = agentPage || /^\/markets\/(?:pilot|practice-[0-9a-f]{40})\/[0-3](?:\/thesis)?$/.test(pathname) || ['/', '/docs', '/markets', '/fund', '/access', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/evidence'].includes(pathname);
         const labPage=['/privacy-lab','/privacy-lab/'].includes(pathname);
         const labAsset=/^\/privacy-lab\/(?:assets\/[a-zA-Z0-9_.-]+|semaphore-8\.(?:wasm|zkey))$/.test(pathname);
         if(labPage||labAsset)res.setHeader('Content-Security-Policy',security['Content-Security-Policy'].replace("script-src 'self'","script-src 'self' 'wasm-unsafe-eval'")+"; worker-src 'self' blob:");
@@ -98,11 +98,8 @@ async function main() {
     config.pilotEvidence = pilotEvidence(store.command, config.origin);
     config.settlementPackets = createSettlementStores({command:store.command,origin:config.origin}).packetStore;
   config.pilot = await configurePilot({rpcUrl:config.rpcUrl,command:store.command});
-  config.rehearsal = await configureRehearsal({rpcUrl:config.rpcUrl,command:store.command});
-  config.practiceCollections=await configurePracticeCollections({rpcUrl:config.rpcUrl,command:store.command,rehearsal:config.rehearsal});
-  config.rehearsal=config.practiceCollections.legacy;
+  config.practiceCollections=await configurePracticeCollections({rpcUrl:config.rpcUrl,command:store.command});
   for(const service of config.practiceCollections.services.values())if(config.pilot&&(service.manifest.pool===config.pilot.manifest.pool||service.manifest.resolver===config.pilot.manifest.resolver))throw Error('Practice collections must be separate from the real pilot');
-  if(config.rehearsal&&config.pilot&&(config.rehearsal.manifest.pool===config.pilot.manifest.pool||config.rehearsal.manifest.resolver===config.pilot.manifest.resolver))throw new Error('Rehearsal and real pilot must be separate');
   // Invalid semantic configuration fails the deploy here instead of failing purchases later.
   const semantics = loadSemanticConfig();
   const semanticStatus = semanticDiagnostics(semantics, [['pilot', config.pilot], ...config.practiceCollections.services]
