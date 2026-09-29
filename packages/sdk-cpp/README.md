@@ -2,20 +2,37 @@
 
 Research evidence now uses `flurbo.agent-evidence.v2`, with full-capture provenance, independent publisher/HTTP timestamps and per-event citation coverage. Legacy records must be regenerated. Generic HTTP retrieval cannot establish publisher release time; operators must explicitly select per-event background research where appropriate through `research.evidenceRequirements`. See [the research protocol](../../protocol/specs/research.md). Oversized or incomplete HTTP responses now fail instead of returning a silently shortened body. C++ retrieval requests identity transfer content and rejects unsupported content encodings rather than treating compressed bytes as evidence.
 
-Purchase safety: the updated runtime requires the backend outcome-compatibility endpoint before approving or signing a new buy. Known collisions stop the purchase; unknown combinations abstain. Paper fills use the same check. Sell, redemption and already-signed recovery remain available. Review [configuration and rollout requirements](../../protocol/specs/semantics.md) before upgrading a live agent.
+Purchase safety: before approving or signing a new buy, the runtime asks the backend outcome-compatibility endpoint. When the server enforces compatibility rules, known collisions stop the purchase and unknown combinations abstain; if the endpoint cannot be reached, the buy does not proceed. The public testnet currently runs with these rules switched off, so every buy logs `SEMANTICS_DISABLED` and relies on your policy limits alone. Paper fills use the same check. Sell, redemption and already-signed recovery remain available. Review [configuration and rollout requirements](../../protocol/specs/semantics.md) before upgrading a live agent.
+
+Every configuration key, including research providers, `extraSources` and `evidenceRequirements`, is described in the [agent configuration reference](../../docs/AGENT_CONFIG_REFERENCE.md).
 
 
 C++ SDK and runtime for Flurbo agents on Monad testnet (chain 10143, test assets only), built against the shared protocol in [protocol/](../../protocol) and checked against the same golden fixtures as the TypeScript reference. Not published. Not a mainnet product and not a promise of profit.
 
 ## Setup
 
-GNU make, a C++20 compiler with `__int128` (GCC or Clang), and OpenSSL 3.2 or later (for deterministic ECDSA and Keccak-256). Tested with GCC 15.2 and OpenSSL 3.6 on Windows (MSYS2 UCRT64). Linux and macOS builds use the same sources and Makefile but were not run here. MSVC is not supported (no `__int128`).
+GNU make, a C++20 compiler with `__int128` (GCC or Clang), and OpenSSL 3.2 or later (for deterministic ECDSA and Keccak-256). Tested with GCC 15.2 and OpenSSL 3.6 on Windows (MSYS2 UCRT64), and with GCC 13.3 on Ubuntu 24.04 against OpenSSL 3.5 built from source. macOS uses the same sources and Makefile but was not run here. MSVC is not supported (no `__int128`).
 
 ```bash
 cd packages/sdk-cpp
 make                                   # Windows (MSYS2): mingw32-make, with C:\msys64\ucrt64\bin on PATH
 ./build/flurbo-agent-cpp init --config flurbo-agent.json
 ```
+
+### Linux with an older system OpenSSL
+
+Ubuntu 24.04 and Debian 12 ship OpenSSL 3.0, which lacks the deterministic ECDSA nonces this SDK signs with; the build then stops with "needs OpenSSL 3.2 or later". Build a newer OpenSSL into your home directory and point the build at it:
+
+```bash
+curl -LO https://github.com/openssl/openssl/releases/download/openssl-3.5.4/openssl-3.5.4.tar.gz
+tar xzf openssl-3.5.4.tar.gz && cd openssl-3.5.4
+./Configure --prefix="$HOME/openssl-3.5" --libdir=lib no-tests no-docs && make -j"$(nproc)" && make install_sw
+cd /path/to/Flurbo/packages/sdk-cpp
+export CPPFLAGS="-I$HOME/openssl-3.5/include" LDFLAGS="-L$HOME/openssl-3.5/lib -Wl,-rpath,$HOME/openssl-3.5/lib"
+make && make test
+```
+
+Pass `CPPFLAGS` and `LDFLAGS` through the environment as shown, not as `make` arguments, so the Makefile keeps its own include path. The rpath makes the runner and tests use that OpenSSL at run time without `LD_LIBRARY_PATH`.
 
 Dependencies: OpenSSL (Apache-2.0) for secp256k1 signing with RFC 6979 nonces, Keccak-256, SHA-256 and TLS. HTTPS verifies certificates and host names; on Windows the system root store is loaded. The JSON value type and the HTTP/1.1 client are part of the SDK. The protocol core (`core`, `policy`, `research`) does no I/O.
 

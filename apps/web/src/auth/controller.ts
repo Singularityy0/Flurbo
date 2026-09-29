@@ -49,9 +49,23 @@ export function deriveAccount(prfOutput: Uint8Array) {
   }
 }
 
+const PRF_PROVIDERS = "Use Chrome or Edge with Google Password Manager, Safari with iCloud Keychain, or a recent 1Password";
+// The provider only reports missing PRF after it has saved a passkey, so explain how to remove it.
+export const PRF_FAILED_SIGNUP_MESSAGE = `This passkey manager does not support the feature Mera needs (PRF), so Flurbo could not open an account. It may still have saved a passkey named for Flurbo: delete it in that password manager's settings, since it can never sign in. ${PRF_PROVIDERS}, then create your account again.`;
+const PRF_FAILED_SIGNIN_MESSAGE = `This passkey manager does not support the feature Mera needs (PRF), so this passkey cannot open a Flurbo account. ${PRF_PROVIDERS}. If you created this passkey with another manager, sign in there.`;
+export const PRF_UNSUPPORTED_MESSAGE = `This browser or passkey manager cannot create a Flurbo account: it lacks the passkey feature Mera needs (PRF). No passkey was created. ${PRF_PROVIDERS}, then try again.`;
+
+// Asks the browser before creating a passkey. Only an explicit "no" blocks sign-up; browsers that
+// cannot report capabilities continue to the normal flow and its existing PRF error handling.
+export async function prfExplicitlyUnsupported(credential: unknown = globalThis.PublicKeyCredential): Promise<boolean> {
+  const probe = (credential as { getClientCapabilities?: () => Promise<Record<string, boolean | undefined>> } | undefined)?.getClientCapabilities;
+  if (typeof probe !== "function") return false;
+  try { return (await probe.call(credential))["extension:prf"] === false; } catch { return false; }
+}
+
 function friendlyError(error: unknown, creating: boolean): string {
   if (isMeraError(error)) {
-    if (error.code === "PRF_UNAVAILABLE") return "This passkey provider does not support the account feature Mera needs (PRF). Try a compatible password manager or device. A passkey may have been saved, but Flurbo has not opened an account session.";
+    if (error.code === "PRF_UNAVAILABLE") return creating ? PRF_FAILED_SIGNUP_MESSAGE : PRF_FAILED_SIGNIN_MESSAGE;
     if (error.code === "PASSKEY_OPERATION_FAILED") return creating
       ? "Passkey setup was cancelled or could not finish. If your device saved a passkey, try Sign in before creating another."
       : "Sign-in was cancelled or could not finish. Try again, or choose another passkey.";
@@ -151,6 +165,12 @@ export class AuthController {
       this.#update({ error: "A passkey is already remembered here. Sign in, or confirm that you want a separate account." });
       return false;
     }
+    // Only the browser's own WebAuthn is probed; injected clients (mobile, tests) report their own errors.
+    if (mode === "signup" && !this.#client && await prfExplicitlyUnsupported()) {
+      this.#update({ error: PRF_UNSUPPORTED_MESSAGE });
+      return false;
+    }
+    if (this.#inFlight) return false;
     this.#endSession();
     this.#inFlight = true;
     const generation = ++this.#generation;

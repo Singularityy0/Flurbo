@@ -97,7 +97,7 @@ Stop on any failed command. Check the exact addresses, question wording, windows
 and policies in both output files. Files under `target/` are ignored artifacts.
 The approved selection is `config/pilot-alpha-selection.json`; see [the five-day alpha plan](ALPHA_TESTNET_LAUNCH.md). Keep a durable copy of the final public rules and manifest outside build caches.
 
-The fixed liquidity parameter is 10 AUSD. Initial subsidy is 13.862944 test AUSD
+The deployed pilot's liquidity parameter is 10 AUSD. Initial subsidy is 13.862944 test AUSD. New preparations default to 250 AUSD (`liquidityAtoms` in the prepared file), which the deploy script reads and verification checks; a two-question pool then needs about 346.6 test AUSD and a four-question pool about 693.2
 for two events or 20.794416 for three. It is consumed by funding the pool; gas,
 later trading, assertion bonds and Kuru seed inventory are additional.
 

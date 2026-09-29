@@ -10,7 +10,7 @@ import {walletKey, tradingWalletKey} from '../portfolio';
 import {TESTNET} from '../../server/network.mjs';
 import './funding.css';
 
-type Network = typeof TESTNET & {flurboFaucet?:boolean};
+type Network = typeof TESTNET & {flurboFaucet?:boolean;starterMon?:string|null};
 type Pending = {hash:string;owner:string;faucet:string};
 const uint = (v:unknown) => { if (typeof v !== 'string' || !/^0x[0-9a-f]+$/i.test(v)) throw Error('Balance unavailable. Try refreshing.'); return BigInt(v); };
 async function rpc(method:string, params:unknown[]) {
@@ -130,6 +130,25 @@ export default function Funding({expanded=false}:{expanded?:boolean}) {
     }catch(e){if(sending&&(e as any)?.code!==4001)setUncertain(true);setMessage(fundingError(e,sending));}
     finally{busyRef.current=false;setBusy(false);}
   }
+  // Free test MON is sent automatically once when an account links its first wallet. The page shows
+  // whether it was sent, offers a retry if the automatic send did not happen, or explains today's cap.
+  const [starter,setStarter]=useState<{status:'sent'|'available'|'exhausted'|'disabled';note?:string}|null>(null);
+  async function readStarter(){
+    try{const r=await fetch('/api/fund/starter',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});if(r.ok){const v=await r.json();if(['sent','available','exhausted','disabled'].includes(v.status))setStarter({status:v.status});}}catch{}
+  }
+  useEffect(()=>{if(owner&&network?.starterMon)void readStarter();},[owner,network?.starterMon,balances?.mon===0n]);
+  async function requestStarterMon() {
+    if(busyRef.current||!owner||!network?.starterMon)return;busyRef.current=true;setBusy(true);setMessage('');
+    try{
+      const response=await fetch('/api/fund/starter',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({wallet:owner}),signal:AbortSignal.timeout(30000)});
+      const result=await response.json().catch(()=>({}));
+      const reason=typeof result.error==='string'?result.error:'Free test MON could not be sent right now. Use the Monad faucet.';
+      if(!response.ok){setStarter(result.code==='DAILY_LIMIT'?{status:'exhausted',note:reason}:result.code==='ALREADY_SENT'?{status:'sent',note:reason}:{status:'available',note:reason});return;}
+      setStarter({status:'sent'});
+      setTimeout(()=>void readBalances().catch(()=>{}),5000);
+    }catch{setStarter({status:'available',note:'Free test MON could not be sent right now. Use the Monad faucet.'});}
+    finally{busyRef.current=false;setBusy(false);}
+  }
   async function checkStatus() {
     if(!pending||checkingRef.current)return;checkingRef.current=true;setChecking(true);
     try{
@@ -158,7 +177,7 @@ export default function Funding({expanded=false}:{expanded?:boolean}) {
       <div className="funding-actions"><button className={owner?'btn btn-secondary':'btn btn-primary'} disabled={busy||!network} onClick={()=>void connect(!!owner)}>{busy?'Check MetaMask...':owner?'Switch wallet':walletStatus==='checking'?'Checking wallet...':walletStatus==='unlinked'?'Link selected wallet':'Connect MetaMask'}</button>{owner&&<button className="text-link" disabled={busy} onClick={()=>void readBalances().catch(e=>setMessage(fundingError(e)))}>Refresh balances</button>}{owner&&!correctChain&&<button className="btn btn-secondary" disabled={busy} onClick={()=>void connect()}>Switch to Monad testnet</button>}</div>
     </section>
     <ol className="funding-steps">
-      <li className={monReady?'done':''}><div className="funding-step-head"><h2><span className="funding-step-index" aria-hidden="true">1</span>Get test MON</h2><span className={monReady?'status':'status status-attention'}>{monReady?'Done':'Needed'}</span></div>{monReady&&<p className="funding-ready">You have test MON for network fees.</p>}<p>MON pays the small network fee. Use the MetaMask address shown above.</p><div className="funding-actions"><a className="btn btn-secondary" href={TESTNET.monFaucet} target="_blank" rel="noreferrer">Open MON faucet <ArrowUpRight aria-hidden="true" strokeWidth={1.75}/></a>{owner&&<button className="text-link" onClick={()=>void navigator.clipboard.writeText(owner).then(()=>setMessage('MetaMask address copied.')).catch(()=>setMessage('Copy the MetaMask address shown above.'))}>Copy wallet address</button>}</div></li>
+      <li className={monReady?'done':''}><div className="funding-step-head"><h2><span className="funding-step-index" aria-hidden="true">1</span>Get test MON</h2><span className={monReady?'status':'status status-attention'}>{monReady?'Done':'Needed'}</span></div>{monReady&&<p className="funding-ready">You have test MON for network fees.</p>}<p>MON pays the small network fee. Use the MetaMask address shown above.</p>{network?.starterMon&&owner&&balances&&balances.mon<100_000_000_000_000_000n&&starter&&<p role="status" className="field-help">{starter.note??(starter.status==='sent'?(balances.mon===0n?`Flurbo sent you ${network.starterMon} test MON for network fees. It arrives within a minute; your balance updates automatically.`:'Your free test MON has been used. Use the Monad faucet for more.'):starter.status==='exhausted'?"Today's free test MON has run out. Use the Monad faucet, or try again tomorrow.":'')}</p>}<div className="funding-actions">{network?.starterMon&&owner&&balances&&balances.mon<100_000_000_000_000_000n&&starter?.status==='available'&&<button className="btn btn-primary" disabled={busy} onClick={()=>void requestStarterMon()}>Send me {network.starterMon} test MON</button>}<a className="btn btn-secondary" href={TESTNET.monFaucet} target="_blank" rel="noreferrer">Open MON faucet <ArrowUpRight aria-hidden="true" strokeWidth={1.75}/></a>{owner&&<button className="text-link" onClick={()=>void navigator.clipboard.writeText(owner).then(()=>setMessage('MetaMask address copied.')).catch(()=>setMessage('Copy the MetaMask address shown above.'))}>Copy wallet address</button>}</div></li>
       <li className={ausdReady?'done':''}><div className="funding-step-head"><h2><span className="funding-step-index" aria-hidden="true">2</span>Get test AUSD</h2><span className={ausdReady?'status':'status status-attention'}>{ausdReady?'Done':'Needed'}</span></div>{ausdReady&&<p className="funding-ready">Your wallet has test AUSD. You can review a prediction or top up below.</p>}<p>{network?.flurboFaucet?'Request 50 AUSD, once every 24 hours per wallet.':'Request test tokens from the AUSD faucet.'}</p>
         {empty&&<p role="status">The test AUSD dispenser needs a refill. Please try again later.</p>}
         {cooldown&&<p>Next request: {new Date(Number(balances!.nextClaim)*1000).toLocaleString()}.</p>}

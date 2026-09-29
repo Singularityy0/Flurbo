@@ -19,7 +19,7 @@ import {settlementPacketHandler,SETTLEMENT_PACKET_PATH} from './settlement-persi
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
-  applications = null, previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {}, settlementPackets = null } = {}) {
+  applications = null, previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {}, settlementPackets = null, starter = null } = {}) {
   const hosted = publicOrigin !== null;
   // Agent wallets cannot also be linked for manual MetaMask trading; with Redis the two claims exclude each other atomically.
   const links = walletLinks({command:store.command,isReserved:wallet=>agents?agents.isAgentWallet(wallet):false,reservedKey:store.command?agentWalletKey:null});
@@ -156,7 +156,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         const result=await agents.handle({method:req.method,path:url.pathname,input:req.method==='POST'?await body(req):undefined,login,origin,sessionDigest:digest(sid||'')});
         return send(res,result.status,result.body);
       }
-      if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? {...TESTNET, faucet:testFaucet || TESTNET.faucet, flurboFaucet:!!testFaucet} : { environment: 'local_fork', chain_id: 10143 });
+      if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? {...TESTNET, faucet:testFaucet || TESTNET.faucet, flurboFaucet:!!testFaucet, starterMon:starter?.amountMon ?? null} : { environment: 'local_fork', chain_id: 10143 });
       if(url.pathname==='/api/market-directory'&&req.method==='GET'&&!url.search){
         const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
@@ -178,6 +178,24 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         const agent=await agents.portfolio(login.address,origin);
         return send(res,200,{account:manual.account,wallets:manual.wallets,agentWallets:agent.wallets,agentExecutions:agent.executions});
       }
+      // One-time starter MON for an approved account's own linked wallet (see starter-funds.mjs).
+      if(url.pathname==='/api/fund/starter'){
+        const login=await getLogin();
+        if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
+        if(url.search)return send(res,400,{error:'Unexpected request.'});
+        if(req.method==='GET'){
+          if(!starter)return send(res,200,{status:'disabled'});
+          try{return send(res,200,await starter.status(login.address));}catch{return send(res,503,{error:'Free test MON status is unavailable.'});}
+        }
+        if(req.method!=='POST')return send(res,405,{error:'Method not allowed.'});
+        if(!starter)return send(res,503,{error:'Free test MON is not available. Use the Monad faucet.'});
+        const input=await body(req);
+        if(Object.keys(input).join(',')!=='wallet'||typeof input.wallet!=='string')return send(res,400,{error:'Choose your linked wallet.'});
+        const {wallets}=await links.list(login.address,origin);
+        if(!wallets.some(w=>w.toLowerCase()===input.wallet.toLowerCase()))return send(res,403,{error:'Link this wallet to your account first.'});
+        try{return send(res,200,await starter.send(login.address,input.wallet));}
+        catch(e){return send(res,e.status||503,{code:e.code||'UNAVAILABLE',error:e.status?e.message:'Free test MON could not be sent right now. Use the Monad faucet.'});}
+      }
       if (url.pathname.startsWith('/api/account/wallets')) {
         const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
@@ -188,7 +206,14 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         const input=await body(req);
         try {
           if(url.pathname==='/api/account/wallets/challenge'&&Object.keys(input).join(',')==='wallet')return send(res,200,await links.challenge(login.address,input.wallet,origin,sid));
-          if(url.pathname==='/api/account/wallets/verify'&&Object.keys(input).sort().join(',')==='id,signature'&&typeof input.id==='string'&&typeof input.signature==='string')return send(res,200,await links.verify(login.address,input.id,input.signature,origin,sid));
+          if(url.pathname==='/api/account/wallets/verify'&&Object.keys(input).sort().join(',')==='id,signature'&&typeof input.id==='string'&&typeof input.signature==='string'){
+            const before=starter?(await links.list(login.address,origin)).wallets:[];
+            const linked=await links.verify(login.address,input.id,input.signature,origin,sid);
+            // A newly linked wallet gets the one-time free test MON in the background; linking never waits on it.
+            const added=starter&&linked.wallets.find(w=>!before.includes(w));
+            if(added)void starter.send(login.address,added).catch(()=>{});
+            return send(res,200,linked);
+          }
         } catch(e) {
           const safe=/^(Choose a MetaMask|Too many linking|Wallet proof rejected|This MetaMask wallet|This account has reached)/.test(e.message);
           return send(res,safe?400:503,{error:safe?e.message:'Account wallet storage is unavailable. Retry linking shortly.'});

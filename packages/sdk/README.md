@@ -2,7 +2,9 @@
 
 Research evidence now uses `flurbo.agent-evidence.v2`: full-capture provenance, separate publication/transport timestamps, and cited evidence coverage for each event. Legacy captures must be regenerated. Generic HTTP capture has no verified publication time and defaults to abstention for release freshness; background research requires explicit per-event `research.evidenceRequirements` configuration. See [the research protocol and migration policy](../../protocol/specs/research.md). This does not change market settlement or transaction permissions.
 
-Purchase safety: the updated runtime requires the backend outcome-compatibility endpoint before approving or signing a new buy. Known collisions stop the purchase; unknown combinations abstain. Paper fills use the same check. Sell, redemption and already-signed recovery remain available. Review [configuration and rollout requirements](../../protocol/specs/semantics.md) before upgrading a live agent.
+Purchase safety: before approving or signing a new buy, the runtime asks the backend outcome-compatibility endpoint. When the server enforces compatibility rules, known collisions stop the purchase and unknown combinations abstain; if the endpoint cannot be reached, the buy does not proceed. The public testnet currently runs with these rules switched off, so every buy logs `SEMANTICS_DISABLED` and relies on your policy limits alone. Paper fills use the same check. Sell, redemption and already-signed recovery remain available. Review [configuration and rollout requirements](../../protocol/specs/semantics.md) before upgrading a live agent.
+
+Every configuration key, including research providers, `extraSources` and `evidenceRequirements`, is described in the [agent configuration reference](../../docs/AGENT_CONFIG_REFERENCE.md).
 
 
 TypeScript SDK and reference runtime for Flurbo agents on Monad testnet (chain 10143, test assets only). It is the reference implementation of the shared protocol in [protocol/](../../protocol). Not published to npm. Not a mainnet product and not a promise of profit.

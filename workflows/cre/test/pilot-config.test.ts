@@ -80,3 +80,10 @@ test('local resolver config ABI matches the web server ABI', async () => {
   const web = await import('../../../apps/web/server/settlement-publication.mjs');
   expect(resolverConfigAbi).toEqual(web.resolverConfigAbi);
 });
+
+test('new preparations default to deeper pools and reject unsafe liquidity', () => {
+  const input = fixture() as any;
+  expect(preparePilot(input, now).liquidityAtoms).toBe('250000000');
+  expect(preparePilot(input, now, '10000000').liquidityAtoms).toBe('10000000');
+  for (const bad of ['9999999', '0', '1e9', '1000000000001', '-5']) expect(() => preparePilot(input, now, bad)).toThrow(/Liquidity/);
+});

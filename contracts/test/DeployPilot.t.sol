@@ -7,7 +7,8 @@ import {MockCollateral} from "./helpers/MockCollateral.sol";
 
 interface PilotScriptVm { function chainId(uint256) external; function warp(uint256) external; function etch(address, bytes calldata) external; }
 contract PilotDeploymentHarness is DeployPilot {
-    function execute(address owner, R.Config memory c) external returns (PilotPool, R) { return deploy(owner,c); }
+    function execute(address owner, R.Config memory c) external returns (PilotPool, R) { return deploy(owner,c,10e6); }
+    function executeWith(address owner, R.Config memory c, uint256 liquidity) external returns (PilotPool, R) { return deploy(owner,c,liquidity); }
     function writeManifest(PilotPool, R) internal override {}
 }
 contract DeployPilotTest {
@@ -36,6 +37,17 @@ contract DeployPilotTest {
         assert(pool.funded() && pool.liquidity()==10e6 && pool.requiredFunding()==13_862_944);
         assert(cash.balanceOf(address(pool))==pool.requiredFunding() && cash.allowance(OWNER,address(pool))==0);
         assert(address(pool.baseTokens(1,2))!=address(0) && address(pool.baseTokens(2,2))!=address(0));
+    }
+    function testDeeperPoolFromPreparedLiquidity() public {
+        cash.mint(OWNER,400e6);
+        (PilotPool pool,)=script.executeWith(OWNER,config(),250e6);
+        // Funding is ceil(2 * 250 * ln 2) test AUSD, rounded up by the pool; allow one atom per event.
+        assert(pool.funded() && pool.liquidity()==250e6);
+        assert(pool.requiredFunding()>=346_573_591 && pool.requiredFunding()<=346_573_593);
+        assert(cash.balanceOf(address(pool))==pool.requiredFunding() && cash.allowance(OWNER,address(pool))==0);
+    }
+    function testRejectLiquidityOutOfRange() public {
+        try script.executeWith(OWNER,config(),5e6) { assert(false); } catch Error(string memory reason) { assert(keccak256(bytes(reason))==keccak256("prepared liquidity out of range")); }
     }
     function testRejectWrongNetworkAndStaleWindow() public {
         vm.chainId(143); (bool ok,)=address(script).call(abi.encodeCall(script.execute,(OWNER,config()))); assert(!ok);

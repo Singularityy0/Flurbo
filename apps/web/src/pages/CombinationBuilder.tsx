@@ -36,7 +36,7 @@ export default function CombinationBuilder({state,base,legs,answers,rule,scope,m
       {legs.length>=3&&<p className="field-help">Three questions is the most a combined prediction can hold.</p>}
       {legs.length>1&&<>
         <fieldset className="combination-rules" disabled={disabled}><legend>I win if...</legend>
-          {rules.map(r=><label key={r.value} className={rule===r.value?'selected':''}><input type="radio" name={'claim-rule-'+namespace} value={r.value} checked={rule===r.value} onChange={()=>onRule(r.value)}/><span><strong>{r.label}</strong><small>{r.detail}</small></span></label>)}
+          {rules.map(r=>{const needsThree=r.value==='AT_LEAST_TWO'&&legs.length<3;return <label key={r.value} className={(rule===r.value?'selected':'')+(needsThree?' unavailable':'')} title={needsThree?'Needs three questions. With two, it is the same as All (AND).':undefined}><input type="radio" name={'claim-rule-'+namespace} value={r.value} checked={rule===r.value} disabled={needsThree} onChange={()=>onRule(r.value)}/><span><strong>{r.label}</strong><small>{needsThree?'Needs three questions':r.detail}</small></span></label>;})}
         </fieldset>
         {legs.length===2&&rule==='AT_LEAST_TWO'&&<p className="field-help">With two questions, at least two means both, the same as All (AND).</p>}
         <details className="combination-scenarios" open><summary>See winning outcomes</summary>

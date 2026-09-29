@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -27,7 +28,10 @@ class Value {
   Value(unsigned v) : Value(static_cast<int64_t>(v)) {}
   Value(int64_t v) : type_(Type::Number), number_(static_cast<double>(v)), int_(v), integral_(true) {}
   Value(uint64_t v) : Value(static_cast<int64_t>(v)) {}
-  Value(long v) : Value(static_cast<int64_t>(v)) {}
+  // Where long is a distinct 32-bit type (Windows), accept it too. On Linux and macOS long is int64_t,
+  // so this overload must not exist there.
+  template <typename T> requires(std::is_same_v<T, long> && !std::is_same_v<long, int64_t>)
+  Value(T v) : Value(static_cast<int64_t>(v)) {}
   Value(double v);
   Value(const char* s) : type_(Type::String), string_(s) {}
   Value(std::string s) : type_(Type::String), string_(std::move(s)) {}

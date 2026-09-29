@@ -133,7 +133,7 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     if(!input || typeof input!=='object' || Array.isArray(input) || Object.keys(input).some(k=>!['owner','action','event','outcome','evidenceHash','evidenceURI','scope','mask','quantity','slippageBps','authorization','signature'].includes(k))) throw new Error('Invalid action');
     if((input.authorization||input.signature)&&(!manifest.challengePolicy||input.action!=='dispute'))throw Error('Unexpected challenge authorization');
     const owner=address(input.owner), s=await snapshot(), tag=tagFor(s);
-    let to=manifest.resolver, abi=resolverAbi, name=input.action, args=[], amount=0n, minimumReceived=0n, title=name, quotedCost=null;
+    let to=manifest.resolver, abi=resolverAbi, name=input.action, args=[], amount=0n, minimumReceived=0n, title=name, quotedCost=null, impact=null;
     if(['assertOutcome','dispute','vote'].includes(name)) {
       if(!Number.isInteger(input.event) || input.event<0 || input.event>=manifest.publication.draft.events.length || ![1,2,3].includes(input.outcome)
         || !/^0x[0-9a-f]{64}$/i.test(input.evidenceHash||'') || /^0x0{64}$/.test(input.evidenceHash) || !evidenceURI(input.evidenceURI)) throw new Error('Evidence and outcome required');
@@ -163,6 +163,8 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
       if(name!=='redeem') {
         if(![10,50,100].includes(input.slippageBps)) throw new Error('Choose a supported slippage limit');
         const quote=await read(to,abi,name==='buy'?'quoteBuy':'quoteSell',args,tag);
+        // Price impact for the ticket: this size against one share of the same claim, at the same block.
+        impact={quoteAtoms:quote.toString(),oneShareAtoms:(await read(to,abi,name==='buy'?'quoteBuy':'quoteSell',[input.scope,mask,1_000_000n],tag)).toString()};
         const limit=name==='buy'?(quote*BigInt(10000+input.slippageBps)+9999n)/10000n:quote*BigInt(10000-input.slippageBps)/10000n;
         const deadline=Math.min(s.timestamp+300,manifest.publication.draft.closesAt-1);
         args.push(limit,BigInt(deadline));
@@ -188,7 +190,7 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     let semanticAssessment=null;
     if(input.action==='buy')try{semanticAssessment=assessSemantics(manifest,{scope:input.scope,mask:input.mask,quantityAtoms:input.quantity});}catch{}
     return json({schema:'flurbo.pilot-review.v1',manifest,snapshot:s,expiresAt:s.timestamp+300,action:name,requested:input,title,semanticAssessment,
-      amountAtoms:amount.toString(),quotedCostAtoms:quotedCost?.toString()??null,minimumReceivedAtoms:minimumReceived.toString(),gasLimit:gasLimit.toString(),gasPrice:gasPrice.toString(),maximumFeeWei:(gasLimit*gasPrice).toString(),
+      amountAtoms:amount.toString(),quotedCostAtoms:quotedCost?.toString()??null,impact,minimumReceivedAtoms:minimumReceived.toString(),gasLimit:gasLimit.toString(),gasPrice:gasPrice.toString(),maximumFeeWei:(gasLimit*gasPrice).toString(),
       transaction,notice:name==='approve'?'Approve the exact token allowance, then review the intended action separately.':'Review the outcome, evidence and wallet before confirming.'});
   }
   async function position(owner,scope,mask) {
