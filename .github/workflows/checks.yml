@@ -76,12 +76,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.4.2'
-      - name: Settlement preparation types and rules
-        working-directory: workflows/cre
-        run: |
-          bun install --frozen-lockfile
-          bun run typecheck
-          bun test
       - name: Install dependencies and build contracts for the local chain
         run: |
           npm --prefix apps/web ci
@@ -89,6 +83,13 @@ jobs:
           npm --prefix contracts ci
           forge build
           python3 -m pip install --quiet -e packages/sdk-python
+      # Runs after apps/web is installed: the CRE tests import apps/web modules that resolve viem from apps/web/node_modules.
+      - name: Settlement preparation types and rules
+        working-directory: workflows/cre
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun test
       - name: Historical source-to-contract settlement replay (offline)
         run: node apps/web/scripts/replay-settlement-chain.mjs
       - name: TypeScript SDK
