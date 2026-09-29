@@ -20,7 +20,7 @@ export function starterConfig(env = process.env) {
   return { privateKey: `0x${hex}`, amount, dailyLimit };
 }
 
-export function starterFunds({ config, command, rpcUrl, now = () => Date.now(), client = null, wallet = null }) {
+export function starterFunds({ config, command, rpcUrl, now = () => Date.now(), client = null, wallet = null, sleep = ms => new Promise(r => setTimeout(r, ms)) }) {
   if (!config || !command) return null;
   const account = privateKeyToAccount(config.privateKey);
   const transport = http(rpcUrl, { retryCount: 0, timeout: 15_000 });
@@ -28,6 +28,12 @@ export function starterFunds({ config, command, rpcUrl, now = () => Date.now(), 
   const sender = wallet || createWalletClient({ account, chain: monadTestnet, transport });
   const low = LOW_BALANCE < config.amount ? LOW_BALANCE : config.amount;
   const accountKey = login => `${KEY}:account:${login}`, walletKey = target => `${KEY}:wallet:${target}`;
+  // A signed send whose broadcast failed or timed out without showing on chain. A retry rebroadcasts these
+  // exact bytes instead of signing a new transaction, so the same payment can land at most once.
+  const unsentKey = target => `${KEY}:unsent:${target}`;
+  const seen = hash => reader.getTransaction({ hash }).then(tx => !!tx, () => false);
+  // A just-broadcast transaction can take a moment to become visible; look a few times before giving up.
+  const arrived = async hash => { for (let i = 0; i < 4; i++) { if (i) await sleep(1500); if (await seen(hash)) return true; } return false; };
   const dayKey = () => `${KEY}:day:${new Date(now()).toISOString().slice(0, 10)}`;
   return {
     amountMon: formatEther(config.amount),
@@ -58,23 +64,35 @@ export function starterFunds({ config, command, rpcUrl, now = () => Date.now(), 
         await command('DEL', accountKey(login), walletKey(target));
         throw Object.assign(Error("Today's free test MON has run out. Use the Monad faucet, or try again tomorrow."), { status: 429, code: 'DAILY_LIMIT' });
       }
-      // Sign locally first so the hash is known before broadcasting. If the broadcast errors or times out,
-      // the chain is asked whether that exact transaction arrived: only a send that provably did not happen
-      // releases the reservation and its daily-cap slot, so a retry can never pay the same person twice.
-      let hash = null;
+      // Sign locally first so the hash is known before broadcasting. After a failed or timed-out broadcast the
+      // chain is checked for that exact transaction; if it is still not visible, the signed bytes are kept and a
+      // retry rebroadcasts them. A new transaction is signed only when the kept one can no longer land (its
+      // nonce was used by another send), so a retry can never pay the same person twice.
+      let serializedTransaction = null, hash = null, nonce = null;
       try {
-        const request = await sender.prepareTransactionRequest({ account, to: target, value: config.amount, chain: monadTestnet });
-        const serializedTransaction = await sender.signTransaction(request);
-        hash = keccak256(serializedTransaction);
-        await sender.sendRawTransaction({ serializedTransaction });
+        const kept = await command('GET', unsentKey(target));
+        if (kept !== null) {
+          const saved = JSON.parse(kept);
+          if (await seen(saved.hash)) hash = saved.hash;
+          else if (await reader.getTransactionCount({ address: account.address }) > saved.nonce) await command('DEL', unsentKey(target));
+          else ({ raw: serializedTransaction, hash, nonce } = saved);
+        }
+        if (hash === null) {
+          const request = await sender.prepareTransactionRequest({ account, to: target, value: config.amount, chain: monadTestnet });
+          nonce = request.nonce;
+          serializedTransaction = await sender.signTransaction(request);
+          hash = keccak256(serializedTransaction);
+        }
+        if (serializedTransaction !== null) await sender.sendRawTransaction({ serializedTransaction });
       } catch {
-        const arrived = hash !== null && await reader.getTransaction({ hash }).then(tx => !!tx, () => false);
-        if (!arrived) {
+        if (hash === null || !await arrived(hash)) {
+          if (serializedTransaction !== null) await command('SET', unsentKey(target), JSON.stringify({ raw: serializedTransaction, hash, nonce }), 'EX', 86400);
           await command('DEL', accountKey(login), walletKey(target));
           await command('DECR', day);
           throw Object.assign(Error('Free test MON could not be sent right now. Try again shortly or use the Monad faucet.'), { status: 503 });
         }
       }
+      await command('DEL', unsentKey(target));
       await command('SET', accountKey(login), JSON.stringify({ wallet: target, hash, at: now() }));
       return { hash, amountMon: formatEther(config.amount) };
     },
