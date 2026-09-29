@@ -75,3 +75,8 @@ describe('pilot publication commitments', () => {
     expect(preparePilot(a,now).draftHash).not.toBe(preparePilot(b,now).draftHash);
   });
 });
+
+test('local resolver config ABI matches the web server ABI', async () => {
+  const web = await import('../../../apps/web/server/settlement-publication.mjs');
+  expect(resolverConfigAbi).toEqual(web.resolverConfigAbi);
+});

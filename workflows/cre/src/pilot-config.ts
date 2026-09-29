@@ -4,8 +4,10 @@ import { eventDraftSchema, prepareEventDraft } from './event-draft';
 import { releaseTargetForEvent } from './github-release';
 import { validateRehearsalDraft } from './rehearsal';
 import { validateActivityDraft } from '../../../apps/web/shared/ethereum-activity.mjs';
-import { DETERMINISTIC_MODE, validateSettlementPublication, resolverConfigAbi, pilotRulesHash as committedPilotRulesHash } from '../../../apps/web/server/settlement-publication.mjs';
-export { resolverConfigAbi } from '../../../apps/web/server/settlement-publication.mjs';
+import { DETERMINISTIC_MODE, validateSettlementPublication, pilotRulesHash as committedPilotRulesHash } from '../../../apps/web/server/settlement-publication.mjs';
+
+// Declared locally so viem infers typed ABI parameters; test/pilot-config.test.ts checks it matches the web server's ABI.
+export const resolverConfigAbi = parseAbiParameters('(address collateral, bytes32 draftHash, uint64 closesAt, bytes32[] eventHashes, uint64[] observationEnds, address[] reviewers, uint128 bond, uint32 assertionPeriod, uint32 challengePeriod, uint32 votingPeriod) config');
 
 export const PILOT_CASH = '0xa9012a055bd4e0edff8ce09f960291c09d5322dc';
 export const VOID_POLICY = 'Valid event outcomes stay fixed. Each void event receives equal YES and NO weight, independently of other void events. Each claim pays its average truth-table payout across compatible states, rounded down to test AUSD atoms on each redemption. This is not a refund of purchase cost. Missing evidence, unresolved ambiguity and reviewer nonresponse produce VOID under the fixed deadlines. No creator override or reviewer replacement is permitted.';
