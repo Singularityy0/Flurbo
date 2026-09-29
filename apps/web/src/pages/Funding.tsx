@@ -132,6 +132,8 @@ export default function Funding({expanded=false}:{expanded?:boolean}) {
   const empty=balances && balances.stock<(network?.flurboFaucet?50000000n:10000000000n);
   const cooldown=balances&&balances.nextClaim>BigInt(Math.floor(Date.now()/1000));
   const monReady=!!balances&&balances.mon>0n, ausdReady=!!balances&&balances.ausd>0n;
+  // Say why the request button is disabled; the dispenser and cooldown cases have their own messages above.
+  const blockedReason=!owner||busy||empty||cooldown||uncertain?'':pending?'Your last request is still being checked. Use Check status below.':!correctChain?'Switch MetaMask to Monad testnet first.':!balances?'Balances are loading. If this persists, refresh balances.':balances.mon===0n?'Get test MON first, then refresh balances.':'';
   const content=<div className="funding-card">
     <section className="panel funding-wallet" aria-label="Your trading wallet">
       <div className="panel-head"><h2>Your trading wallet</h2>{owner&&<code className="address funding-address" title={owner}>{owner.slice(0,8)}…{owner.slice(-6)}</code>}</div>
@@ -146,7 +148,7 @@ export default function Funding({expanded=false}:{expanded?:boolean}) {
         {empty&&<p role="status">The test AUSD dispenser needs a refill. Please try again later.</p>}
         {cooldown&&<p>Next request: {new Date(Number(balances!.nextClaim)*1000).toLocaleString()}.</p>}
         <div className="funding-actions"><button className="btn btn-primary btn-lg" disabled={busy||!!pending||uncertain||!owner||!correctChain||!balances||balances.mon===0n||!!empty||!!cooldown} onClick={()=>void requestFunds()}>Request test AUSD</button></div>
-        {owner&&balances?.mon===0n&&<p className="field-help">Get test MON first, then refresh balances.</p>}
+        {blockedReason&&<p className="field-help">{blockedReason}</p>}
       </li>
     </ol>
     {pending&&<div className="funding-actions"><a className="text-link" href={`${TESTNET.explorer}/tx/${pending.hash}`} target="_blank" rel="noreferrer">View faucet transaction <ArrowUpRight aria-hidden="true" strokeWidth={1.75}/></a><button className="btn btn-secondary" disabled={checking} onClick={()=>void checkStatus()}>Check status</button></div>}
