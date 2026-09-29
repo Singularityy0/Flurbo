@@ -60,8 +60,13 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('chain')),'0x279f');
     mon='0x0';
     await page.getByRole('button',{name:'Refresh balances'}).click();
-    await page.getByText('Get test MON first, then refresh balances.').waitFor();
+    await page.getByText('Get test MON first. Balances update when you return to this page, or use Refresh balances.').waitFor();
     assert.equal(await page.getByRole('button',{name:'Request test AUSD',exact:true}).isDisabled(),true);
+    // Test MON arrives from the faucet in another tab. Coming back re-reads balances without a click.
+    mon='0xde0b6b3a7640000';
+    await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+    await page.getByText('Get test MON first',{exact:false}).waitFor({state:'detached'});
+    assert.equal(await page.getByRole('button',{name:'Request test AUSD',exact:true}).isDisabled(),false);
     mon='0xde0b6b3a7640000';stock='0x0';
     await page.getByRole('button',{name:'Refresh balances'}).click();
     await page.getByText('The test AUSD dispenser needs a refill. Please try again later.').waitFor();
