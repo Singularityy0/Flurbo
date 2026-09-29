@@ -170,6 +170,8 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     assert.equal((await request('/healthz')).json().learning_comparison,'ready');
     assert.equal((await request('/healthz')).json().pilot_pool,'disabled');
     assert.equal((await request('/healthz')).json().rehearsal_pool,undefined);
+    // The in-process settlement bot is opt-in; hosting without FLURBO_SETTLEMENT_BOT reports it disabled.
+    assert.equal((await request('/healthz')).json().settlement_bot,'disabled');
     const ns='practice-'+pool.slice(2),rulesHash='0x'+'44'.repeat(32);
     (config as any).practiceCollections={catalog:{active:ns},services:new Map([[ns,{manifest:{pool,rulesHash,publication:{draft:{closesAt:1800000000}}},secret:'must-not-leak'}]])};
     const health=(await request('/healthz')).json();
