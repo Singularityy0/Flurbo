@@ -289,7 +289,11 @@ for(const namespace of ['practice-'+'22'.repeat(20)])test('consumer markets pres
     assert.equal(unresolved.review.requested.scope,3);
     f.manifest.publication.draft.closesAt=originalClose;
     await page.goto('https://flurbo.singu.online/markets');
+    // Typing under the loading cover is dropped (the page is inert); wait for the directory to be usable.
+    await page.locator('.market-card').first().waitFor();
+    await page.waitForFunction(()=>{const root=document.querySelector('.app-root') as HTMLElement|null;return !!root&&!root.inert&&!document.querySelector('.contour-loader');});
     await page.getByRole('textbox',{name:'Search markets'}).fill('concert');
+    await page.waitForFunction(()=>document.querySelectorAll('.market-card').length===1);
     assert.equal(await page.locator('.market-card').count(),1);
     login=false;const before=reads;await page.goto('https://flurbo.singu.online/markets');await page.waitForURL('**/login');assert.equal(reads,before);
     assert.deepEqual(errors,[]);

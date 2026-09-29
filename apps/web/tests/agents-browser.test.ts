@@ -92,6 +92,9 @@ async function createAgentAndDecide(page:any){
     await page.goto(origin+'/agents');
     // Assisted agents are the secondary workflow; the primary form registers an agent that runs elsewhere.
     await page.getByRole('heading',{name:'Register an agent'}).waitFor();
+    // The page is inert under the loading cover, so typing there is dropped. Wait for the loaded page itself
+    // (agent list and market choices rendered, cover gone), not just for the cover to be absent.
+    await page.waitForFunction(()=>{const root=document.querySelector('.app-root') as HTMLElement|null;return !!root&&!root.inert&&!document.querySelector('.contour-loader')&&!!document.querySelector('.agents-list')&&!document.querySelector('.agents-rows-skeleton')&&!!document.querySelector('#register-agent input[type=checkbox]');});
     await page.getByText('Assisted agent: manual forecasts, paper trades and MetaMask approval').click();
     const assisted=page.locator('details').filter({has:page.getByRole('heading',{name:'Create an assisted agent'})});
     await assisted.getByLabel('Name').fill('Release relationship agent');
@@ -99,6 +102,8 @@ async function createAgentAndDecide(page:any){
     await assisted.getByRole('button',{name:'Create assisted agent'}).click();
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}$/);
     await page.getByRole('heading',{name:'Release relationship agent'}).waitFor();
+    // The agent page has its own loading cover; wait for it to lift before typing.
+    await page.waitForFunction(()=>{const root=document.querySelector('.app-root') as HTMLElement|null;return !!root&&!root.inert&&!document.querySelector('.contour-loader');});
 
     // A contradictory forecast is rejected, not displayed as coherent.
     await page.getByLabel('Chance A happens (%)').fill('60');await page.getByLabel('Chance B happens (%)').fill('55');await page.getByLabel('Chance both happen (%)').fill('80');

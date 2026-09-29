@@ -69,6 +69,9 @@ test('runtime setup keeps issued credentials across sections and exposes all SDK
       return asset(route,p);
     });
     await page.goto(origin+'/agents');
+    // The page is inert under the loading cover, so typing there is dropped. Wait for the loaded page itself
+    // (agent list and market choices rendered, cover gone), not just for the cover to be absent.
+    await page.waitForFunction(()=>{const root=document.querySelector('.app-root') as HTMLElement|null;return !!root&&!root.inert&&!document.querySelector('.contour-loader')&&!!document.querySelector('.agents-list')&&!document.querySelector('.agents-rows-skeleton')&&!!document.querySelector('#register-agent input[type=checkbox]');});
     const form=page.getByRole('form',{name:'Register an agent'});
     await form.getByLabel('Name',{exact:true}).fill('UX fixture agent');await form.getByRole('button',{name:'Register agent',exact:true}).click();
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}$/, {timeout:15000}).catch(async()=>{throw Error(await page.locator('main').innerText());});
