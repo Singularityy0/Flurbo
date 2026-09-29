@@ -239,13 +239,14 @@ TEST(recovery_and_effects) {
 
 TEST(research) {
   Value f = fixture("research");
-  const Value& c = f["context"];
-  ValidationContext ctx;
-  for (const auto& x : c["requestedEvents"].as_array()) ctx.requested_events.push_back(static_cast<unsigned>(x.as_int()));
-  for (const auto& x : c["evidence"].as_array()) ctx.evidence.push_back(Evidence::from_json(x));
-  ctx.now = c["now"].as_int();
-  ctx.max_evidence_age_seconds = c["maxEvidenceAgeSeconds"].as_int();
   for (const auto& k : f["cases"].as_array()) {
+    Value c = f["context"];
+    if (k["context"].is_object()) for (const auto& [key, value] : k["context"].members()) c.set(key, value);
+    ValidationContext ctx;
+    for (const auto& x : c["requestedEvents"].as_array()) ctx.requested_events.push_back(static_cast<unsigned>(x.as_int()));
+    for (const auto& x : c["evidence"].as_array()) ctx.evidence.push_back(Evidence::from_json(x));
+    ctx.now = c["now"].as_int(); ctx.max_evidence_age_seconds = c["maxEvidenceAgeSeconds"].as_int();
+    ctx.event_count = static_cast<unsigned>(c["eventCount"].as_int()); ctx.evidence_requirements = c["evidenceRequirements"];
     Validation v = validate_model_output(k["output"].as_string(), ctx);
     Value got = Value::object();
     if (v.ok) {

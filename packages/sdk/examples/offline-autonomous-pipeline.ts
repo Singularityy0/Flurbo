@@ -2,10 +2,11 @@
 // deterministic policy -> the transaction that would be signed. No network, no keys, no signer. The
 // forecaster here is a FIXTURE (a fixed reply), not AI; examples/ai-agent.ts uses a real model provider.
 // Run: node packages/sdk/examples/offline-autonomous-pipeline.ts
-import { createClient, fixtureTransport, FIXTURE_NAMESPACE, FIXTURE_NOW, claimKey, formatAtoms, evaluatePolicy, buildTransaction, buyLimit, MODEL_SCHEMA,
+import { createClient, fixtureTransport, FIXTURE_NAMESPACE, FIXTURE_NOW, claimKey, formatAtoms, evaluatePolicy, buildTransaction, buyLimit, MODEL_SCHEMA, EVIDENCE_SCHEMA,
   type Deployment, type QuoteResult, type Claim } from '../src/index.ts';
 import { fixtureRetriever, fixtureForecaster, researcher } from '../src/node/research.ts';
 import { jointEdgeStrategy } from '../src/node/runner.ts';
+import { createHash } from 'node:crypto';
 
 const client = createClient({ transport: fixtureTransport() });
 const [entry] = await client.directory();
@@ -13,8 +14,11 @@ const market = await client.market(entry.namespace);
 console.log(`${market.title} (FIXTURE data, not a live market)`);
 
 // 1. Research. Evidence records come from a retriever; the model can only cite their ids.
-const evidence = fixtureRetriever([{ id: 'src-1', url: 'https://example.org/fixture-release-notes', title: 'Fixture release notes', publisher: 'example.org',
-  publishedAt: FIXTURE_NOW - 3_600, contentSha256: '0'.repeat(64), excerpt: 'Both release branches were tagged on the same day (fixture text).' }]);
+const fixtureText = 'Both release branches were tagged on the same day (fixture text).';
+const evidence = fixtureRetriever([{ schema: EVIDENCE_SCHEMA, id: 'src-1', url: 'https://example.org/fixture-release-notes', requestedUrl: 'https://example.org/fixture-release-notes',
+  finalUrl: 'https://example.org/fixture-release-notes', title: 'Fixture release notes', publisher: 'example.org',
+  publisherReleasedAt: FIXTURE_NOW - 3_600, httpLastModified: null, completeDocument: true, capturedBytes: Buffer.byteLength(fixtureText), eventIds: [0, 1],
+  contentSha256: createHash('sha256').update(fixtureText).digest('hex'), excerpt: fixtureText }]);
 const forecaster = fixtureForecaster(() => JSON.stringify({ schema: MODEL_SCHEMA, abstain: false, abstainReason: null, events: [0, 1], statesPpm: [250_000, 100_000, 100_000, 550_000],
   evidenceIds: ['src-1'], assumptions: ['The two releases share a dependency.'], uncertainty: 'A late fix could split them.',
   explanation: 'Fixture reasoning: both branches were tagged together, so both releases are likely and linked.' }), 'offline-fixture (not AI)');

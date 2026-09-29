@@ -6,6 +6,7 @@ import { pairAnalytics } from './pair-analytics.mjs';
 import { claimAnalytics } from './claim-analytics.mjs';
 import { thesisAnalytics } from './thesis-analytics.mjs';
 import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
+import {DETERMINISTIC_MODE,validateSettlementManifest} from './settlement-publication.mjs';
 
 const payouts=({manifest,rpcUrl,command})=>payoutIndexWithFallback({manifest,command,rpc:pilotRpc(rpcUrl),
   fallbackRpc:new URL(rpcUrl).hostname==='testnet-rpc.monad.xyz'?null:pilotRpc('https://testnet-rpc.monad.xyz')});
@@ -19,7 +20,7 @@ export async function configurePilot({env=process.env,rpcUrl,command,read=readFi
     ? env.FLURBO_PILOT_MANIFEST_JSON
     : await read(new URL('../../../config/pilot-testnet.json',import.meta.url),'utf8');
   const service=pilotService({manifest:JSON.parse(raw),rpc:pilotRpc(rpcUrl)});
-  if(['rehearsal','ethereum-activity'].includes(service.manifest.publication.mode))throw new Error('New collections cannot replace the original pilot');
+  if(['rehearsal','ethereum-activity',DETERMINISTIC_MODE].includes(service.manifest.publication.mode))throw new Error('New collections cannot replace the original pilot');
   service.index=pilotIndex({manifest:service.manifest,rpc:pilotRpc(rpcUrl),command});
   service.payouts=payouts({manifest:service.manifest,rpcUrl,command});
   service.analytics=pairAnalytics({service,rpc:pilotRpc(rpcUrl)});
@@ -43,8 +44,9 @@ export async function configureRehearsal({env=process.env,rpcUrl,command}) {
 
 export async function configureCollection({manifest,rpcUrl,command}){
   if(manifest?.publication?.mode==='rehearsal')return configureRehearsal({env:{FLURBO_REHEARSAL_MANIFEST_JSON:JSON.stringify(manifest)},rpcUrl,command});
-  if(manifest?.publication?.mode!=='ethereum-activity')throw Error('Unsupported collection mode');
-  validateActivityDraft(manifest.publication.draft);
+  if(manifest?.publication?.mode===DETERMINISTIC_MODE)validateSettlementManifest(manifest);
+  else if(manifest?.publication?.mode==='ethereum-activity')validateActivityDraft(manifest.publication.draft);
+  else throw Error('Unsupported collection mode');
   const service=pilotService({manifest,rpc:pilotRpc(rpcUrl)});
   service.index=pilotIndex({manifest,rpc:pilotRpc(rpcUrl),command});
   service.payouts=payouts({manifest:service.manifest,rpcUrl,command});

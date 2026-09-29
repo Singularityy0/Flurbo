@@ -40,6 +40,31 @@ Add `--config flurbo-agent.json` to each. Ctrl+C ends the process at once; the j
 
 Control, custody and attribution are as described in [packages/sdk/README.md](../sdk/README.md). Credentials only read and report. Keys stay local. Policies are software checks, and pause and revocation are instructions to a compliant runtime, not on-chain freezes.
 
+## Evidence v2 and freshness
+
+The research runtime now requires `flurbo.agent-evidence.v2`. Custom retrievers must supply the full envelope in [the research protocol](../../protocol/specs/research.md): complete body capture, byte count and SHA-256, requested and final URLs, associated event indices, retrieval time, a separately established publisher release time (or explicit null), and HTTP Last-Modified (or explicit null). Legacy `publishedAt` records are not upgraded because their provenance and completeness cannot be recovered.
+
+The HTTP retriever rejects empty, interrupted, partial and oversized bodies. It hashes the entire completed response even when the displayed excerpt is shorter. It records Last-Modified only as HTTP metadata; generic retrieval cannot establish a release date. Missing publication evidence therefore makes release-sensitive research abstain before calling a model.
+
+Every requested event needs at least one cited, valid and fresh associated record. The default freshness basis is the publisher release time. For a source that is deliberately being used as background material, the operator may explicitly choose retrieval freshness for that event:
+
+```json
+{
+  "research": {
+    "evidenceRequirements": {
+      "pilot": [
+        { "event": 0, "freshness": "background" },
+        { "event": 1, "freshness": "background" }
+      ]
+    }
+  }
+}
+```
+
+Merge this fragment into the existing configuration. Unlisted events retain `release` freshness. Background retrieval does not prove a newly published result or authorize settlement. The lower-level `Researcher::research_with_requirements` accepts the same explicit policy; `research` keeps the release-sensitive default. Unusable sources remain abstentions rather than forecasts repaired by the SDK.
+
+The forecast v1 `observedAt` projection and the strategy's fresh-evidence count preserve this policy. A record associated with any requested release-sensitive event uses publication freshness, even if it also supplies background evidence. Only records whose associated requested events all explicitly select background use retrieval time. Unknown required release dates and unrelated citations are omitted from the v1 projection and cannot inflate its fresh-evidence count. Their original records and model citation IDs remain in the research result.
+
 ## Examples
 
 - `cargo run --example offline_pipeline`: offline pipeline with a fixture forecaster (not AI).

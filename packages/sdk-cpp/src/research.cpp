@@ -16,10 +16,59 @@ Evidence Evidence::from_json(const json::Value& v) {
   if (v["title"].is_string()) e.title = v["title"].as_string();
   if (v["publisher"].is_string()) e.publisher = v["publisher"].as_string();
   e.retrieved_at = v.integer("retrievedAt", 0);
-  if (v["publishedAt"].is_integer()) e.published_at = v["publishedAt"].as_int();
+  if (v["publisherReleasedAt"].is_integer()) e.publisher_released_at = v["publisherReleasedAt"].as_int();
+  if (v["httpLastModified"].is_integer()) e.http_last_modified = v["httpLastModified"].as_int();
   e.content_sha256 = v.str("contentSha256");
   e.excerpt = v.str("excerpt");
+  e.schema = v.str("schema"); e.requested_url = v.str("requestedUrl"); e.final_url = v.str("finalUrl");
+  e.complete_document = v["completeDocument"].is_bool() && v["completeDocument"].as_bool();
+  e.captured_bytes = v.integer("capturedBytes", 0);
+  e.valid_fields = v["title"].is_string() && v["publisher"].is_string() && v["retrievedAt"].is_integer() && v["capturedBytes"].is_integer()
+    && v.has("publisherReleasedAt") && (v["publisherReleasedAt"].is_null() || v["publisherReleasedAt"].is_integer())
+    && v.has("httpLastModified") && (v["httpLastModified"].is_null() || v["httpLastModified"].is_integer()) && v["eventIds"].is_array();
+  if (v["eventIds"].is_array()) for (const auto& id : v["eventIds"].as_array()) {
+    if (!id.is_integer() || id.as_int() < 0 || id.as_int() > 3) e.valid_fields = false;
+    else e.event_ids.push_back(static_cast<unsigned>(id.as_int()));
+  }
   return e;
+}
+
+bool citable_evidence(const Evidence& e, int64_t now, unsigned event_count) {
+  auto time = [](int64_t t) { return t >= 0 && t <= 9007199254740991LL; };
+  return e.valid_fields && e.schema == EVIDENCE_SCHEMA && e.title && e.publisher && !trim(e.id).empty() && js_len(trim(e.id)) <= 64 && !e.url.empty() && e.url == e.final_url
+    && !e.requested_url.empty() && e.complete_document && e.captured_bytes > 0 && e.captured_bytes <= 9007199254740991LL && !trim(e.excerpt).empty()
+    && e.content_sha256.size() == 64 && e.content_sha256.find_first_not_of("0123456789abcdef") == std::string::npos
+    && e.content_sha256 != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    && time(e.retrieved_at) && e.retrieved_at <= now && (!e.publisher_released_at || (time(*e.publisher_released_at) && *e.publisher_released_at <= e.retrieved_at))
+    && (!e.http_last_modified || time(*e.http_last_modified)) && !e.event_ids.empty()
+    && std::set<unsigned>(e.event_ids.begin(), e.event_ids.end()).size() == e.event_ids.size()
+    && std::all_of(e.event_ids.begin(), e.event_ids.end(), [&](unsigned i) { return i < event_count; });
+}
+
+std::string evidence_failure(const std::vector<Evidence>& cited, const ValidationContext& ctx) {
+  if (ctx.now < 0 || ctx.max_evidence_age_seconds < 0 || ctx.now > 9007199254740991LL || ctx.max_evidence_age_seconds > 9007199254740991LL
+    || !std::all_of(cited.begin(), cited.end(), [&](const Evidence& e) { return citable_evidence(e, ctx.now, ctx.event_count); })) return "invalid_evidence";
+  std::map<unsigned, std::string> requirements;
+  if (!ctx.evidence_requirements.is_null()) {
+    if (!ctx.evidence_requirements.is_array()) return "invalid_evidence";
+    for (const auto& r : ctx.evidence_requirements.as_array()) {
+      if (!r["event"].is_integer() || r["event"].as_int() < 0 || r["event"].as_int() >= ctx.event_count
+        || (r.str("freshness") != "release" && r.str("freshness") != "background")) return "invalid_evidence";
+      if (!requirements.emplace(static_cast<unsigned>(r["event"].as_int()), r.str("freshness")).second) return "invalid_evidence";
+    }
+  }
+  for (unsigned event : ctx.requested_events)
+    if (std::none_of(cited.begin(), cited.end(), [&](const Evidence& e) { return std::find(e.event_ids.begin(), e.event_ids.end(), event) != e.event_ids.end(); })) return "missing_event_evidence";
+  for (unsigned event : ctx.requested_events) {
+    bool fresh = false;
+    for (const auto& e : cited) {
+      if (std::find(e.event_ids.begin(), e.event_ids.end(), event) == e.event_ids.end()) continue;
+      auto observed = requirements[event] == "background" ? std::optional<int64_t>(e.retrieved_at) : e.publisher_released_at;
+      if (observed && ctx.now - *observed <= ctx.max_evidence_age_seconds) fresh = true;
+    }
+    if (!fresh) return "stale_evidence";
+  }
+  return "";
 }
 
 PromptEvent PromptEvent::from_json(const json::Value& v) {
@@ -125,6 +174,7 @@ Validation validate_model_output(const std::string& reply, const ValidationConte
   }
   if (states->size() != (size_t{1} << events->size()) || !range || sum != PPM) return abstain("invalid_distribution");
   if (ids.empty()) return abstain("no_evidence");
+  for (const auto& e : ctx.evidence) if (trim(e.id).empty() || js_len(trim(e.id)) > 64) return abstain("invalid_evidence");
   auto known = [&](const std::string& id) -> const Evidence* {
     for (const auto& e : ctx.evidence)
       if (e.id == id) return &e;
@@ -132,8 +182,12 @@ Validation validate_model_output(const std::string& reply, const ValidationConte
   };
   for (const auto& id : ids)
     if (!known(id)) return abstain("unknown_evidence");
-  if (std::none_of(ids.begin(), ids.end(), [&](const std::string& id) { return ctx.now - known(id)->observed_at() <= ctx.max_evidence_age_seconds; }))
-    return abstain("stale_evidence");
+  std::set<std::string> unique_ids;
+  for (const auto& e : ctx.evidence) if (!unique_ids.insert(e.id).second) return abstain("invalid_evidence");
+  std::vector<Evidence> cited;
+  for (const auto& id : ids) cited.push_back(*known(id));
+  auto failure = evidence_failure(cited, ctx);
+  if (!failure.empty()) return abstain(failure);
   Validation out;
   out.ok = true;
   out.output.events = ctx.requested_events;
@@ -154,19 +208,37 @@ static std::string clip(const std::string& s, size_t hi, size_t lo) {
   return n >= lo ? t : t + std::string(lo - n, '.');
 }
 
-json::Value forecast_from_model(const ModelOutput& o, const std::string& pool, const std::vector<Evidence>& evidence, const Provenance& p, int64_t now) {
+std::optional<int64_t> evidence_observed_at(const Evidence& e, const std::vector<unsigned>& requested_events, const json::Value& requirements) {
+  bool supported = false, all_background = true;
+  for (unsigned event : requested_events) {
+    if (std::find(e.event_ids.begin(), e.event_ids.end(), event) == e.event_ids.end()) continue;
+    supported = true; bool background = false;
+    if (requirements.is_array()) for (const auto& r : requirements.as_array()) if (r.integer("event", -1) == event && r.str("freshness") == "background") background = true;
+    all_background = all_background && background;
+  }
+  if (!supported) return std::nullopt;
+  return all_background ? std::optional<int64_t>(e.retrieved_at) : e.publisher_released_at;
+}
+
+json::Value forecast_from_model(const ModelOutput& o, const std::string& pool, const std::vector<Evidence>& evidence, const Provenance& p, int64_t now, const json::Value& requirements) {
   json::Value items = json::Value::array();
   for (const auto& id : o.evidence_ids)
     for (const auto& e : evidence) {
       if (e.id != id) continue;
+      auto observed = evidence_observed_at(e, o.events, requirements);
+      if (!observed) continue;
       bool https = e.url.rfind("https://", 0) == 0;
       json::Value item = json::Value::object();
       item.set("id", e.id);
       item.set("title", clip(e.title.value_or(e.url), 160, 3));
       item.set("source", clip(e.publisher.value_or("unknown"), 120, 2));
       item.set("url", https ? json::Value(e.url) : json::Value());
-      item.set("observedAt", iso(e.observed_at()));
-      item.set("note", clip((https ? "" : "Source " + e.url + ". ") + "Retrieved " + iso(e.retrieved_at) + "; content sha256 " + js_slice(e.content_sha256, 16) + ".", 600, 0));
+      item.set("observedAt", iso(*observed));
+      std::string associated;
+      for (auto event : e.event_ids) associated += (associated.empty() ? "" : ",") + std::to_string(event);
+      item.set("note", clip((https ? "" : "Source " + e.url + ". ") + "ObservedAt follows caller freshness policy; retrieved " + iso(e.retrieved_at) + "; publisher release " + (e.publisher_released_at ? iso(*e.publisher_released_at) : "unknown")
+        + "; HTTP Last-Modified " + (e.http_last_modified ? iso(*e.http_last_modified) : "unknown") + "; full capture " + std::to_string(e.captured_bytes)
+        + " bytes; sha256 " + e.content_sha256 + "; events " + associated + ".", 600, 0));
       items.push(item);
       break;
     }
@@ -199,12 +271,14 @@ static std::string escape(const std::string& s) {
     if ((c <= 0x08) || c == 0x0b || c == 0x0c || (c >= 0x0e && c <= 0x1f) || c == 0x7f) out += ' ';
     else if (c == '<') out += "&lt;";
     else if (c == '>') out += "&gt;";
+    else if (c == '&') out += "&amp;";
+    else if (c == '"') out += "&quot;";
     else out += static_cast<char>(c);
   }
   return out;
 }
 
-Prompt build_research_prompt(const std::string& title, const std::vector<PromptEvent>& events, const std::vector<Evidence>& evidence, int64_t now) {
+Prompt build_research_prompt(const std::string& title, const std::vector<PromptEvent>& events, const std::vector<Evidence>& evidence, int64_t now, const json::Value& requirements, unsigned event_count) {
   std::string reasons;
   for (size_t i = 0; i < 5; ++i) reasons += (i ? ", \"" : "\"") + std::string(MODEL_ABSTAIN_REASONS[i]) + "\"";
   std::string schema = MODEL_SCHEMA;
@@ -226,9 +300,16 @@ Prompt build_research_prompt(const std::string& title, const std::vector<PromptE
     listed += (listed.empty() ? "" : ", ") + std::to_string(e.index);
   }
   parts.push_back("Forecast events: [" + listed + "]");
+  for (const auto& event : events) {
+    std::string freshness = "release";
+    if (requirements.is_array()) for (const auto& r : requirements.as_array()) if (r.integer("event", -1) == event.index) freshness = r.str("freshness");
+    parts.push_back("Event " + std::to_string(event.index) + " evidence requirement: " + freshness + ".");
+  }
   for (const auto& e : evidence) {
-    std::string published = e.published_at && *e.published_at != 0 ? iso(*e.published_at) : "unknown";
-    parts.push_back("<evidence id=\"" + escape(e.id) + "\" url=\"" + escape(e.url) + "\" published=\"" + published + "\" retrieved=\"" + iso(e.retrieved_at) + "\">\n" +
+    if (!citable_evidence(e, now, event_count)) continue;
+    std::string published = e.publisher_released_at ? iso(*e.publisher_released_at) : "unknown", associated;
+    for (auto event : e.event_ids) associated += (associated.empty() ? "" : ",") + std::to_string(event);
+    parts.push_back("<evidence id=\"" + escape(e.id) + "\" url=\"" + escape(e.url) + "\" events=\"" + associated + "\" publisherReleasedAt=\"" + published + "\" retrieved=\"" + iso(e.retrieved_at) + "\">\n" +
                     escape(e.excerpt) + "\n</evidence>");
   }
   std::string user;

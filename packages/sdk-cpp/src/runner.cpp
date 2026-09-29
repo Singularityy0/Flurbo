@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include "flurbo/runtime.hpp"
+#include <set>
 
 namespace flurbo {
 
@@ -73,6 +74,16 @@ Value parse_config(const Value& c) {
   if (has_key_material(text) && (low.find("\"privatekey\"") != std::string::npos || low.find("\"secret\"") != std::string::npos))
     throw bad("secrets do not belong in the configuration file.");
   if (c["schedule"].integer("intervalSeconds") < 10 || c["schedule"].integer("heartbeatSeconds") < 5) throw bad("schedule too aggressive.");
+  if (c["research"].has("evidenceRequirements")) {
+    const auto& requirements = c["research"]["evidenceRequirements"];
+    if (!requirements.is_object()) throw bad("research.evidenceRequirements must map namespaces to lists.");
+    for (const auto& [name, list] : requirements.members()) {
+      if (std::none_of(c["markets"].as_array().begin(), c["markets"].as_array().end(), [&](const Value& m) { return m == Value(name); }) || !list.is_array()) throw bad("invalid evidence requirements namespace.");
+      std::set<int64_t> seen;
+      for (const auto& r : list.as_array()) if (!r["event"].is_integer() || r["event"].as_int() < 0 || r["event"].as_int() > 3
+        || !seen.insert(r["event"].as_int()).second || (r.str("freshness") != "release" && r.str("freshness") != "background")) throw bad("invalid or duplicate evidence requirement.");
+    }
+  }
   return c;
 }
 
@@ -419,7 +430,8 @@ void AgentRunner::decide_pair(const Deployment& d, const Value& detail, const st
   base.set("namespace", d.namespace_);
   base.set("createdAt", shared_->now());
   Value pair = Value(json::Array{Value(static_cast<int64_t>(ia)), Value(static_cast<int64_t>(ib))});
-  ResearchResult found = researcher_->research(d.pool, detail.str("title"), {events[a], events[b]}, sources, shared_->now());
+  ResearchResult found = researcher_->research(d.pool, detail.str("title"), {events[a], events[b]}, sources, shared_->now(),
+                                               config_["research"]["evidenceRequirements"][d.namespace_], d.event_count);
   Provenance provenance = found.provenance.value_or(Provenance{"custom", "unconfigured"});
   if (provenance.kind != "model" && provenance.kind != "fixture" && provenance.kind != "custom") provenance.kind = "custom";
   if (!found.ok) {

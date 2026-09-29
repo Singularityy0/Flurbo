@@ -8,8 +8,8 @@ use flurbo_sdk::claims::{claim_key, claim_valid, decode_claim, encode_claim, pay
 use flurbo_sdk::effects::{verify_effect, EffectIntent};
 use flurbo_sdk::policy::{effective_policy, evaluate_policy, FlurboPolicy, LocalPolicy, PolicyInput};
 use flurbo_sdk::recovery::{recovery_step, ChainView, RecoveryEntry};
-use flurbo_sdk::research::{validate_model_output, Evidence, Validation, ValidationContext};
-use flurbo_sdk::signer::{transaction_hash, unsigned_serialized, LocalKeySigner, Signer, Tx1559, to_hex};
+use flurbo_sdk::research::{validate_model_output, Evidence, EvidenceRequirement, Validation, ValidationContext};
+use flurbo_sdk::signer::{to_hex, transaction_hash, unsigned_serialized, LocalKeySigner, Signer, Tx1559};
 use flurbo_sdk::strategy::{candidate_claims, decide, JointForecast, Quote, StrategyConfig, StrategyMarket};
 use flurbo_sdk::u256::U256;
 use serde_json::{json, Value};
@@ -59,7 +59,12 @@ fn claims() {
         let u = |k: &str| p[k].as_u64().unwrap() as u32;
         let (n, d) = payout_fraction(u("scope"), i(&p["mask"]) as u32, u("events"), u("yesMask"), u("voidMask")).unwrap();
         let payout = i(&p["quantityAtoms"]) * n as i128 / d as i128;
-        assert_eq!((n.to_string(), d.to_string(), payout.to_string()), (p["numerator"].as_str().unwrap().into(), p["denominator"].as_str().unwrap().into(), p["payoutAtoms"].as_str().unwrap().into()), "{}", p);
+        assert_eq!(
+            (n.to_string(), d.to_string(), payout.to_string()),
+            (p["numerator"].as_str().unwrap().into(), p["denominator"].as_str().unwrap().into(), p["payoutAtoms"].as_str().unwrap().into()),
+            "{}",
+            p
+        );
     }
 }
 
@@ -82,11 +87,7 @@ fn word_of(v: &Value) -> U256 {
 }
 
 fn log_of(v: &Value) -> Log {
-    Log {
-        address: v["address"].as_str().unwrap().into(),
-        topics: v["topics"].as_array().unwrap().iter().map(|t| t.as_str().unwrap().to_string()).collect(),
-        data: v["data"].as_str().unwrap().into(),
-    }
+    Log { address: v["address"].as_str().unwrap().into(), topics: v["topics"].as_array().unwrap().iter().map(|t| t.as_str().unwrap().to_string()).collect(), data: v["data"].as_str().unwrap().into() }
 }
 
 #[test]
@@ -194,11 +195,22 @@ fn recovery_and_effects() {
 #[test]
 fn research() {
     let f = fixture("research");
-    let ctx = &f["context"];
-    let evidence: Vec<Evidence> = serde_json::from_value(ctx["evidence"].clone()).unwrap();
-    let requested: Vec<u32> = serde_json::from_value(ctx["requestedEvents"].clone()).unwrap();
-    let vctx = ValidationContext { requested_events: &requested, evidence: &evidence, now: ctx["now"].as_i64().unwrap(), max_evidence_age_seconds: ctx["maxEvidenceAgeSeconds"].as_i64().unwrap() };
     for c in f["cases"].as_array().unwrap() {
+        let mut ctx = f["context"].clone();
+        if let Some(overrides) = c["context"].as_object() {
+            ctx.as_object_mut().unwrap().extend(overrides.clone());
+        }
+        let evidence: Vec<Evidence> = serde_json::from_value(ctx["evidence"].clone()).unwrap();
+        let requested: Vec<u32> = serde_json::from_value(ctx["requestedEvents"].clone()).unwrap();
+        let requirements: Vec<EvidenceRequirement> = serde_json::from_value(ctx.get("evidenceRequirements").cloned().unwrap_or(json!([]))).unwrap();
+        let vctx = ValidationContext {
+            requested_events: &requested,
+            event_count: ctx["eventCount"].as_u64().unwrap() as u32,
+            evidence: &evidence,
+            now: ctx["now"].as_i64().unwrap(),
+            max_evidence_age_seconds: ctx["maxEvidenceAgeSeconds"].as_i64().unwrap(),
+            evidence_requirements: &requirements,
+        };
         let got = match validate_model_output(c["output"].as_str().unwrap(), &vctx) {
             Validation::Ok(o) => json!({"status": "ok", "statesPpm": o.states_ppm.iter().map(|p| *p as i64).collect::<Vec<_>>(), "evidenceIds": o.evidence_ids}),
             Validation::Abstain { reason, model_reason: Some(m) } => json!({"status": "abstain", "reason": reason, "modelReason": m}),

@@ -51,7 +51,7 @@ class NumberedDocTemplate(BaseDocTemplate):
             bottomMargin=20 * mm,
             title="Flurbo: A Coherent Market for Related Events",
             author="Flurbo Research and Engineering",
-            subject="Technical Litepaper, Version 0.1",
+            subject="Technical Litepaper, Version 0.2",
         )
         frame = Frame(
             self.leftMargin,
@@ -75,7 +75,7 @@ def draw_page(canvas, doc):
         canvas.drawImage(ImageReader(LOGO), 22 * mm, A4[1] - 15.7 * mm, width=27 * mm, height=6.75 * mm, mask="auto", preserveAspectRatio=True)
         canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(MOSS)
-        canvas.drawRightString(A4[0] - 22 * mm, A4[1] - 13.8 * mm, "TECHNICAL LITEPAPER  |  VERSION 0.1")
+        canvas.drawRightString(A4[0] - 22 * mm, A4[1] - 13.8 * mm, "TECHNICAL LITEPAPER  |  VERSION 0.2")
         canvas.setStrokeColor(LINE)
         canvas.setLineWidth(0.5)
         canvas.line(22 * mm, A4[1] - 17 * mm, A4[0] - 22 * mm, A4[1] - 17 * mm)
@@ -90,7 +90,7 @@ def draw_page(canvas, doc):
 def styles():
     base = getSampleStyleSheet()
     return {
-        "h1": ParagraphStyle("h1", parent=base["Heading1"], fontName="Helvetica-Bold", fontSize=24, leading=28, textColor=FOREST, spaceBefore=8, spaceAfter=11),
+        "h1": ParagraphStyle("h1", parent=base["Heading1"], fontName="Helvetica-Bold", fontSize=24, leading=28, textColor=FOREST, spaceBefore=8, spaceAfter=11, keepWithNext=True),
         "h2": ParagraphStyle("h2", parent=base["Heading2"], fontName="Helvetica-Bold", fontSize=16, leading=20, textColor=FOREST, spaceBefore=14, spaceAfter=7, keepWithNext=True),
         "h3": ParagraphStyle("h3", parent=base["Heading3"], fontName="Helvetica-Bold", fontSize=11.5, leading=14, textColor=FOREST, spaceBefore=10, spaceAfter=5, keepWithNext=True),
         "body": ParagraphStyle("body", parent=base["BodyText"], fontName="Helvetica", fontSize=9.1, leading=13.1, textColor=FOREST, alignment=TA_LEFT, spaceAfter=6),
@@ -175,11 +175,12 @@ class FactoredFigure(Flowable):
 
 def parse_table(lines, style):
     rows = []
+    header_style = ParagraphStyle("tableheader", parent=style["table"], textColor=IVORY, fontName="Helvetica-Bold")
     for line in lines:
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if all(set(c) <= {"-", ":"} for c in cells):
             continue
-        rows.append([Paragraph(rich(c), style["table"]) for c in cells])
+        rows.append([Paragraph(rich(c), header_style if not rows else style["table"]) for c in cells])
     widths = [None] * len(rows[0])
     table = Table(rows, colWidths=widths, repeatRows=1, hAlign="LEFT")
     table.setStyle(TableStyle([
@@ -202,8 +203,8 @@ def cover(story, style):
     story.append(Image(str(LOGO), width=108 * mm, height=27 * mm, mask="auto"))
     story.append(Spacer(1, 12 * mm))
     story.append(Paragraph("A Coherent Market<br/>for Related Events", ParagraphStyle("covertitle", fontName="Helvetica-Bold", fontSize=35, leading=38, textColor=FOREST, spaceAfter=12)))
-    story.append(Paragraph("Technical Litepaper  |  Version 0.1", ParagraphStyle("coversub", fontName="Helvetica", fontSize=12, leading=15, textColor=MOSS, spaceAfter=5)))
-    story.append(Paragraph("28 September 2026", ParagraphStyle("coverdate", fontName="Helvetica", fontSize=9, leading=12, textColor=MOSS, spaceAfter=36)))
+    story.append(Paragraph("Technical Litepaper  |  Version 0.2", ParagraphStyle("coversub", fontName="Helvetica", fontSize=12, leading=15, textColor=MOSS, spaceAfter=5)))
+    story.append(Paragraph("29 September 2026", ParagraphStyle("coverdate", fontName="Helvetica", fontSize=9, leading=12, textColor=MOSS, spaceAfter=36)))
     story.append(Table([[Paragraph("MONAD PUBLIC TESTNET", style["body"]), Paragraph("TEST ASSETS ONLY", style["body"]) ]], colWidths=[72*mm,72*mm], style=TableStyle([
         ("LINEABOVE",(0,0),(-1,0),0.6,LINE),("LINEBELOW",(0,0),(-1,0),0.6,LINE),
         ("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7),
@@ -246,7 +247,7 @@ def build_story(text: str):
             flush(); kind = stripped[3:].strip(); block = []; i += 1
             while i < len(lines) and not lines[i].strip().startswith("```"):
                 block.append(lines[i]); i += 1
-            story.append(Paragraph("<br/>".join(html.escape(x) for x in block), st["equation"] if kind == "equation" else st["code"])); i += 1; continue
+            story.append(KeepTogether([Paragraph("<br/>".join(html.escape(x) for x in block), st["equation"] if kind == "equation" else st["code"])])); i += 1; continue
         if stripped.startswith("|"):
             flush(); block = []
             while i < len(lines) and lines[i].strip().startswith("|"):

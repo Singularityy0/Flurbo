@@ -15,10 +15,11 @@ import {agentWalletKey} from './agents/agent-store.mjs';
 import {agentRpc} from './agents/agent-market.mjs';
 import {assessSemantics,activeSemanticConfig,semanticDiagnostics} from './semantic-validation.mjs';
 import {ApplicationError} from './access-applications.mjs';
+import {settlementPacketHandler,SETTLEMENT_PACKET_PATH} from './settlement-persistence.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
-  applications = null, previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {} } = {}) {
+  applications = null, previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {}, settlementPackets = null } = {}) {
   const hosted = publicOrigin !== null;
   // Agent wallets cannot also be linked for manual MetaMask trading; with Redis the two claims exclude each other atomically.
   const links = walletLinks({command:store.command,isReserved:wallet=>agents?agents.isAgentWallet(wallet):false,reservedKey:store.command?agentWalletKey:null});
@@ -43,6 +44,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
   // Anonymous/public traffic never consumes authenticated account capacity.
   const limits=requestLimits({command:store.command});
+  const publicPackets=settlementPackets?settlementPacketHandler(settlementPackets):null;
   const send = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(body)); };
   const cookie = (name, value, age) => `${name}=${value}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=${age}${hosted ? '; Secure' : ''}`;
   const toolsCookie = (session, sid) => cookie('flurbo_tools', isTestingOperator(session, testingOperatorAccount) ? sid : '', isTestingOperator(session, testingOperatorAccount) ? Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000)) : 0).replace('Path=/api;', 'Path=/;');
@@ -56,6 +58,13 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
     if (!req.url?.startsWith('/api/')) return next();
     const host = req.headers.host;
     if (hosted ? host !== new URL(publicOrigin).host : !hosts.includes(host)) return send(res, 403, { error: 'Unsupported application host' });
+    // Published immutable packets must be readable without a login, including by
+    // counterparties following the evidence URI from outside the application.
+    if(publicPackets&&req.url.startsWith(SETTLEMENT_PACKET_PATH)){
+      try{limits.localTake('public-settlement-packets',60);await publicPackets(req,res);}
+      catch(error){if(error instanceof CapacityError){res.setHeader('Retry-After',String(error.retryAfter));return send(res,429,{error:'Public evidence request limit reached.'});}return send(res,503,{error:'Public evidence unavailable.'});}
+      return;
+    }
     // Headless agent runtimes authenticate with a bearer credential only. Cookies are never read on these
     // routes, so the browser same-origin rules below do not apply; browsers are refused instead.
     if (req.url.startsWith('/api/agent-runtime/')) {

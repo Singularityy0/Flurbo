@@ -13,15 +13,19 @@
 namespace flurbo {
 
 constexpr const char* MODEL_SCHEMA = "flurbo.agent-model-forecast.v1";
+constexpr const char* EVIDENCE_SCHEMA = "flurbo.agent-evidence.v2";
 extern const char* const MODEL_ABSTAIN_REASONS[5];
 
 struct Evidence {
   std::string id, url;
   std::optional<std::string> title, publisher;
   int64_t retrieved_at = 0;
-  std::optional<int64_t> published_at;
+  std::optional<int64_t> publisher_released_at, http_last_modified;
   std::string content_sha256, excerpt;
-  int64_t observed_at() const { return published_at.value_or(retrieved_at); }
+  std::string schema, requested_url, final_url;
+  bool complete_document = false, valid_fields = true;
+  int64_t captured_bytes = 0;
+  std::vector<unsigned> event_ids;
   static Evidence from_json(const json::Value& v);
 };
 
@@ -51,9 +55,14 @@ struct ValidationContext {
   std::vector<Evidence> evidence;
   int64_t now = 0;
   int64_t max_evidence_age_seconds = 0;
+  unsigned event_count = 4;
+  json::Value evidence_requirements;
 };
 
 Validation validate_model_output(const std::string& reply, const ValidationContext& ctx);
+bool citable_evidence(const Evidence& e, int64_t now, unsigned event_count);
+std::string evidence_failure(const std::vector<Evidence>& cited, const ValidationContext& ctx);
+std::optional<int64_t> evidence_observed_at(const Evidence& e, const std::vector<unsigned>& requested_events, const json::Value& requirements = json::Value());
 
 struct Provenance {
   std::string kind, name;  // kind: model, fixture or custom
@@ -61,13 +70,15 @@ struct Provenance {
 };
 
 // A validated output as a flurbo.agent-forecast.v1 document. Evidence comes from retrieval records.
-json::Value forecast_from_model(const ModelOutput& o, const std::string& pool, const std::vector<Evidence>& evidence, const Provenance& p, int64_t now);
+json::Value forecast_from_model(const ModelOutput& o, const std::string& pool, const std::vector<Evidence>& evidence, const Provenance& p, int64_t now,
+                                const json::Value& requirements = json::Value());
 
 struct Prompt {
   std::string system, user;
 };
 // Evidence text is escaped so it cannot close its own block. The model has no tools or wallet access.
-Prompt build_research_prompt(const std::string& title, const std::vector<PromptEvent>& events, const std::vector<Evidence>& evidence, int64_t now);
+Prompt build_research_prompt(const std::string& title, const std::vector<PromptEvent>& events, const std::vector<Evidence>& evidence, int64_t now,
+                            const json::Value& requirements = json::Value(), unsigned event_count = 4);
 // Evidence ids cited in a prompt's user text, in order (for custom rule-based research).
 std::vector<std::string> prompt_evidence_ids(const std::string& user);
 

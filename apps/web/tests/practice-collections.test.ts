@@ -5,6 +5,7 @@ import { configurePracticeCollections,practiceNamespace } from '../server/practi
 import { pilotFixture,owner,hash } from './pilot-fixture.ts';
 import { pendingKeyFor,readPilotPending,checkPilotPending,pilotRequest } from '../src/pilot.ts';
 import {ACTIVITY_METRICS,activityEvent} from '../shared/ethereum-activity.mjs';
+import {deterministicManifest} from './deterministic-fixture.ts';
 const original=JSON.parse(await readFile(new URL('../../../config/practice-rehearsal.json',import.meta.url),'utf8'));
 const options={rpcUrl:'https://testnet-rpc.monad.xyz',command:async()=>null};
 test('featured collections preserve the original alias and reject duplicates or rebinding',async()=>{
@@ -49,4 +50,30 @@ test('real Showcase joins October without changing the legacy collection or acce
   assert.equal(registry.services.get('rehearsal').manifest.pool,original.pool);assert.equal(registry.catalog.active,practiceNamespace(showcase.pool));
   showcase.publication.draft.events[0].source.selectionRule='Different block';
   await assert.rejects(configurePracticeCollections({...options,env:{...env,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify(rows)}}),/source changed/);
+});
+
+test('deterministic collection registration validates its full rule commitment and preserves legacy aliases',async()=>{
+  const manifest=deterministicManifest(),env={FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'Source test',manifest}]),FLURBO_PRACTICE_ACTIVE_POOL:manifest.pool};
+  const registry=await configurePracticeCollections({...options,env});
+  assert.equal(registry.catalog.active,practiceNamespace(manifest.pool));assert.equal(registry.services.get('rehearsal').manifest.pool,original.pool);
+  manifest.publication.settlementRules[0].decision.value='4.3';
+  await assert.rejects(configurePracticeCollections({...options,env:{...env,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'Source test',manifest}])}}),/committed draft/);
+});
+
+test('deterministic browser reviews and pending recovery use their pool namespace',async()=>{
+  const f=pilotFixture();f.options.allowance=1000000n;
+  const review=await f.service.prepare({owner,action:'buy',scope:3,mask:'8',quantity:'1000000',slippageBps:50});
+  // Isolate browser routing from the server commitment checks tested above.
+  review.manifest.publication.mode='deterministic-source-v1';
+  const saved={review,nonce:'0x79' as const,hash,started:Date.now(),login:owner},namespace=practiceNamespace(f.manifest.pool);
+  const db=new Map<string,string>(),descriptor=Object.getOwnPropertyDescriptor(globalThis,'localStorage'),fetch=globalThis.fetch;
+  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:(key:string)=>db.get(key)??null}});
+  try{
+    db.set(pendingKeyFor(namespace),JSON.stringify(saved));assert.equal(readPilotPending(namespace)?.hash,hash);
+    db.set(pendingKeyFor('pilot'),JSON.stringify(saved));assert.throws(()=>readPilotPending('pilot'),/different market/);
+    globalThis.fetch=async(url:any)=>{assert.ok(String(url).startsWith('/api/'+namespace+'/'));return Response.json({manifest:review.manifest});};
+    assert.equal((await pilotRequest<any>('status',undefined,namespace)).manifest.pool,f.manifest.pool);
+    globalThis.fetch=async(url:any)=>{assert.equal(String(url),'/api/'+namespace+'/rpc');return Response.json({result:null});};
+    assert.equal(await checkPilotPending(saved),'pending');
+  }finally{globalThis.fetch=fetch;if(descriptor)Object.defineProperty(globalThis,'localStorage',descriptor);else delete (globalThis as any).localStorage;}
 });

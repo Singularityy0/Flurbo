@@ -18,6 +18,7 @@ import { configurePilot, configureRehearsal } from './pilot-config.mjs';
 import { androidAssetLinks } from './native-association.mjs';
 import { configurePracticeCollections } from './practice-collections.mjs';
 import { loadSemanticConfig, semanticDiagnostics } from './semantic-validation.mjs';
+import { createSettlementStores } from './settlement-persistence.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -30,7 +31,7 @@ const security = {
 export function productionServer(config, store, staticRoot = dist) {
   const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
     applications:config.applications, previewAccess:config.previewAccess===undefined?previewAccess():config.previewAccess, testingOperatorAccount:config.testingOperatorAccount, testFaucet:config.testFaucet, learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
-    learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, rehearsal: config.rehearsal, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions, challengeOptions:config.challengeOptions });
+    learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, rehearsal: config.rehearsal, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions, challengeOptions:config.challengeOptions, settlementPackets:config.settlementPackets });
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
     // Liveness only. This deliberately does not claim contracts or RPC are ready.
@@ -94,7 +95,8 @@ async function main() {
   const store = new RedisSessionStore(redisCommand());
   await store.command('PING');
   installRpcCapacity({command:store.command});
-  config.pilotEvidence = pilotEvidence(store.command, config.origin);
+    config.pilotEvidence = pilotEvidence(store.command, config.origin);
+    config.settlementPackets = createSettlementStores({command:store.command,origin:config.origin}).packetStore;
   config.pilot = await configurePilot({rpcUrl:config.rpcUrl,command:store.command});
   config.rehearsal = await configureRehearsal({rpcUrl:config.rpcUrl,command:store.command});
   config.practiceCollections=await configurePracticeCollections({rpcUrl:config.rpcUrl,command:store.command,rehearsal:config.rehearsal});

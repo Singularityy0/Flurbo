@@ -37,6 +37,9 @@ jobs:
           FLURBO_RESOLUTION_EXECUTE: ${{ vars.FLURBO_RESOLUTION_EXECUTE }}
           # Proposals are off unless this is exactly true, independently of execution.
           FLURBO_RESOLUTION_PROPOSALS: ${{ vars.FLURBO_RESOLUTION_PROPOSALS }}
+          # Reviewed deterministic-source markets opt in explicitly. This does not enable execution.
+          FLURBO_RESOLUTION_SOURCE_MODE: ${{ vars.FLURBO_RESOLUTION_SOURCE_MODE }}
+          FLURBO_RESOLUTION_EVIDENCE_ORIGIN: ${{ vars.FLURBO_RESOLUTION_EVIDENCE_ORIGIN }}
           FLURBO_RESOLUTION_POOL: ${{ vars.FLURBO_RESOLUTION_POOL }}
           FLURBO_RESOLUTION_RULES_HASH: ${{ vars.FLURBO_RESOLUTION_RULES_HASH }}
           FLURBO_RESOLUTION_SIGNER_ADDRESS: ${{ vars.FLURBO_RESOLUTION_SIGNER_ADDRESS }}

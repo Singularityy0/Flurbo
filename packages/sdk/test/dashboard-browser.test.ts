@@ -10,6 +10,7 @@ import { agentRunner, defaultConfig } from '../src/node/runner.ts';
 import { localKeySigner } from '../src/node/signer.ts';
 import { fixtureRetriever, fixtureForecaster } from '../src/node/research.ts';
 import { MODEL_SCHEMA } from '../src/research.ts';
+import { evidenceFixture } from './evidence-fixture.ts';
 
 // The /agents dashboard in a real browser against the real local stack: set up an agent in the UI, run it
 // outside the browser, then see its status and verified trades. Needs a built dashboard (npm run build in
@@ -33,9 +34,10 @@ test('dashboard: register, link the wallet, issue a credential, then watch a run
     await form.getByRole('button', { name: 'Register agent' }).click();
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}$/);
     const agentUrl = page.url();
-    await page.getByText('The runtime has not connected yet').waitFor();
+    await page.getByRole('region', { name: 'Runtime status' }).getByText('The runtime has not connected yet').waitFor();
     await page.getByText('Closing this page does not stop the agent', { exact: false }).waitFor();
     // Link the wallet with a real ownership proof.
+    await page.getByRole('navigation', { name: 'Agent sections' }).getByRole('button', { name: 'Setup', exact: true }).click();
     const key = generatePrivateKey(), signer = localKeySigner(key);
     const walletCard = page.getByRole('region', { name: 'Agent wallet' });
     await walletCard.getByLabel('Wallet address').fill(signer.address);
@@ -54,37 +56,43 @@ test('dashboard: register, link the wallet, issue a credential, then watch a run
     assert.equal(await creds.getByText(token).count(), 0, 'the token is not shown again');
     await page.reload();
     assert.equal(await page.getByText(token).count(), 0, 'not after a reload either');
+    await page.getByRole('navigation', { name: 'Agent sections' }).getByRole('button', { name: 'Setup', exact: true }).click();
     // Every language is available with its own runner and README, and no setup text contains a secret.
     const setup = page.getByRole('region', { name: 'Run the agent' });
     for (const [tab, runner, readme] of [['TypeScript', 'bin/flurbo-agent.ts start', 'packages/sdk/README.md'], ['Python', 'python -m flurbo_sdk start', 'packages/sdk-python/README.md'],
       ['Rust', 'flurbo-agent-rs start', 'packages/sdk-rust/README.md'], ['C++', 'flurbo-agent-cpp start', 'packages/sdk-cpp/README.md']]) {
       await setup.getByRole('tab', { name: tab, exact: true }).click();
       const text = await setup.innerText();
-      assert.ok(text.includes(runner) && text.includes(readme), `${tab} setup`);
+      assert.ok(text.includes(runner), `${tab} runner setup`);
+      assert.ok((await setup.getByRole('link', { name: /Read the SDK guide/ }).getAttribute('href'))?.endsWith(readme), `${tab} README link`);
       assert.ok(!text.includes('not complete yet') && !text.includes(token), `${tab} setup text`);
     }
     // Allow live trades, then run the agent outside the browser.
+    await page.getByRole('navigation', { name: 'Agent sections' }).getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('button', { name: 'Allow live testnet trades' }).click();
+    await page.getByRole('button', { name: 'Confirm live testnet trades', exact: true }).click();
     await page.getByText('Currently: allowed here').waitFor();
     await stack.setNativeBalance(signer.address, 10n ** 19n); await stack.mint(signer.address, 20_000_000n);
     const reply = JSON.stringify({ schema: MODEL_SCHEMA, abstain: false, abstainReason: null, events: [0, 1], statesPpm: [50_000, 50_000, 50_000, 850_000], evidenceIds: ['src-1'],
       assumptions: ['Shared release process.'], uncertainty: 'A late blocker.', explanation: 'Both release candidates are tagged together (fixture reply).' });
     const runner = agentRunner({ config: { ...defaultConfig(), api: { baseUrl: stack.apiUrl, credentialEnv: 'T' }, chain: { rpcUrl: stack.rpcUrl }, stateDir: dir, mode: 'live',
       schedule: { intervalSeconds: 30, heartbeatSeconds: 10, waitSeconds: 30 }, policy: { ...defaultConfig().policy, minSecondsBeforeClose: 600 } },
-      env: { T: token }, signer, retriever: fixtureRetriever([{ id: 'src-1', url: 'https://example.org/releases', title: 'Release notes', publisher: 'example.org', publishedAt: null, contentSha256: '0'.repeat(64), excerpt: 'Tagged.' }]),
+      env: { T: token }, signer, retriever: fixtureRetriever([evidenceFixture()]),
       forecaster: fixtureForecaster(() => reply, 'dashboard-fixture'), log: () => {} });
     await runner.cycle();
     // Direct URL and refresh show what the runtime reported and what Flurbo verified.
     await page.goto(agentUrl);
-    await page.getByText('Runtime connected', { exact: false }).waitFor();
+    await page.getByRole('region', { name: 'Runtime status' }).getByText('Runtime connected', { exact: false }).waitFor();
     const verified = page.getByRole('region', { name: 'Verified trades' });
     await verified.getByText('1, paid', { exact: false }).waitFor();
     await verified.getByText('Verified on-chain').first().waitFor();
+    await page.getByRole('navigation', { name: 'Agent sections' }).getByRole('button', { name: 'Activity', exact: true }).click();
     const decisions = page.getByRole('region', { name: 'Decisions' });
     await decisions.getByText('Traded').first().waitFor();
     await decisions.getByText('fixture dashboard-fixture (not AI)', { exact: false }).first().waitFor();
     await decisions.getByText('not verified by Flurbo', { exact: false }).waitFor();
     // Pause is an instruction, explained as such.
+    await page.getByRole('navigation', { name: 'Agent sections' }).getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('button', { name: 'Pause new actions' }).click();
     await page.getByRole('button', { name: 'Resume new actions' }).waitFor();
     await page.getByText('It is not an on-chain freeze', { exact: false }).waitFor();

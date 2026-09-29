@@ -8,7 +8,7 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use flurbo_sdk::research::{Evidence, Prompt, PromptEvent, MODEL_SCHEMA};
+use flurbo_sdk::research::{Evidence, EvidenceRequirement, Prompt, PromptEvent, EVIDENCE_SCHEMA, MODEL_SCHEMA};
 use flurbo_sdk::runtime::cli::main_with;
 use flurbo_sdk::runtime::config::{default_config, parse_config};
 use flurbo_sdk::runtime::headless::{is_stop, RuntimeClient};
@@ -100,17 +100,91 @@ fn retrieval_allowlist_redirects_and_text() {
         if path == "/redirect" {
             return (302, h(&[("Location", "https://evil.example/page")]), String::new());
         }
-        (200, h(&[("Content-Type", "text/html"), ("Last-Modified", "Sat, 26 Sep 2026 10:00:00 GMT")]), "<html><title>Release 1.0</title><script>steal()</script><p>Tagged &amp; released</p></html>".into())
+        (
+            200,
+            h(&[("Content-Type", "text/html"), ("Last-Modified", "Sat, 26 Sep 2026 10:00:00 GMT")]),
+            "<html><title>Release 1.0</title><script>steal()</script><p>Tagged &amp; released</p></html>".into(),
+        )
     }));
     let local = HttpRetriever::new(&[], true);
     let got = local.retrieve(&[Source { event: 0, url: format!("{}/a", server.url) }, Source { event: 0, url: format!("{}/redirect", server.url) }], 1_790_000_000);
     assert_eq!(got.len(), 1, "a redirect to another host is never followed");
     assert_eq!((got[0].id.as_str(), got[0].title.as_deref(), got[0].excerpt.as_str()), ("src-1", Some("Release 1.0"), "Release 1.0 Tagged & released"));
-    assert_eq!(got[0].published_at, Some(1_790_416_800));
+    assert_eq!(got[0].publisher_released_at, None, "HTTP modification metadata is not a publication date");
+    assert_eq!(got[0].http_last_modified, Some(1_790_416_800));
+    assert_eq!(got[0].event_ids, vec![0]);
+    assert!(got[0].complete_document && got[0].captured_bytes > 0);
     assert!(HttpRetriever::new(&[], false).retrieve(&[Source { event: 0, url: format!("{}/a", server.url) }], 0).is_empty(), "plain HTTP only when allowed");
     assert!(HttpRetriever::new(&["allowed.example".into()], false).retrieve(&[Source { event: 0, url: "https://other.example/x".into() }], 0).is_empty());
     assert!(!server.calls().iter().any(|c| c.path.contains("evil")));
     assert_eq!(extract_text("<style>x{}</style><b>a</b>  b", "text/html"), "a b");
+    assert_eq!(extract_text("İ <SCRIPT>ignore</SCRIPT><b>official value</b>", "text/html"), "İ official value");
+}
+
+#[test]
+fn retrieval_requires_complete_nonempty_body_and_preserves_provenance() {
+    let body = "Official value: 4.2. ".repeat(300);
+    let expected_body = body.clone();
+    let server = Server::start(Box::new(move |path, _| match path {
+        "/redirect" => (302, h(&[("Location", "/full")]), String::new()),
+        "/empty" => (200, h(&[("Content-Type", "text/plain")]), String::new()),
+        "/blank" => (200, h(&[("Content-Type", "text/html")]), "<script>no evidence</script>".into()),
+        "/partial" => (206, h(&[("Content-Type", "text/plain")]), "partial source".into()),
+        "/range" => (200, h(&[("Content-Type", "text/plain"), ("Content-Range", "bytes 0-13/100")]), "partial source".into()),
+        _ => (200, h(&[("Content-Type", "text/plain"), ("Last-Modified", "Sat, 26 Sep 2026 10:00:00 GMT")]), body.clone()),
+    }));
+    let source = |path: &str| Source { event: 1, url: format!("{}{}", server.url, path) };
+    let retriever = HttpRetriever::new(&[], true);
+    for path in ["/empty", "/blank", "/partial", "/range"] {
+        assert!(retriever.retrieve(&[source(path)], 1_790_500_000).is_empty(), "{path}");
+    }
+    assert!(HttpRetriever::new(&[], true).with_max_bytes(64).retrieve(&[source("/full")], 1_790_500_000).is_empty(), "oversized first response chunk cannot produce a fresh empty or truncated record");
+    let got = HttpRetriever::new(&[], true).with_max_bytes(expected_body.len()).retrieve(&[source("/redirect")], 1_790_500_000);
+    assert_eq!(got.len(), 1, "a complete body exactly at the limit is accepted");
+    let record = &got[0];
+    assert_eq!(record.schema, EVIDENCE_SCHEMA);
+    assert_eq!(record.requested_url, source("/redirect").url);
+    assert_eq!(record.final_url, source("/full").url);
+    assert_eq!(record.url, record.final_url);
+    assert_eq!(record.publisher_released_at, None);
+    assert_eq!(record.event_ids, vec![1]);
+    assert_eq!(record.captured_bytes, expected_body.len() as u64);
+    assert_eq!(record.excerpt.len(), 4000);
+    use sha3::Digest;
+    let full_hash: String = k256::sha2::Sha256::digest(expected_body.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(record.content_sha256, full_hash, "hash binds the full source, not the display excerpt");
+}
+
+#[test]
+fn retrieval_rejects_interrupted_and_late_overflow_streams() {
+    fn retrieve_raw(chunks: Vec<Vec<u8>>, max_bytes: usize) -> Vec<Evidence> {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://127.0.0.1:{}/source", listener.local_addr().unwrap().port());
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap() == 0 || line == "\r\n" {
+                    break;
+                }
+            }
+            for chunk in chunks {
+                if stream.write_all(&chunk).is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        });
+        let got = HttpRetriever::new(&[], true).with_max_bytes(max_bytes).retrieve(&[Source { event: 0, url }], 1_790_500_000);
+        handle.join().unwrap();
+        got
+    }
+    let broken = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 100\r\nConnection: close\r\n\r\npartial".to_vec();
+    assert!(retrieve_raw(vec![broken], 200).is_empty(), "EOF before declared body length is a source failure");
+    let header = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n".to_vec();
+    assert!(retrieve_raw(vec![header.clone(), b"4\r\ntext\r\n".to_vec()], 200).is_empty(), "missing chunk terminator is a source failure");
+    assert!(retrieve_raw(vec![header, b"4\r\ntext\r\n".to_vec(), b"4\r\nmore\r\n0\r\n\r\n".to_vec()], 6).is_empty(), "overflow in later chunks also fails closed");
 }
 
 #[test]
@@ -149,14 +223,21 @@ fn providers_configuration_retries_limits_and_wire_formats() {
 
 fn evidence() -> Vec<Evidence> {
     vec![Evidence {
+        schema: EVIDENCE_SCHEMA.into(),
         id: "src-1".into(),
         url: "https://example.org/x".into(),
+        requested_url: "https://example.org/x".into(),
+        final_url: "https://example.org/x".into(),
         title: Some("x source".into()),
         publisher: Some("example.org".into()),
         retrieved_at: 0,
-        published_at: None,
+        publisher_released_at: Some(1_790_000_000),
+        http_last_modified: None,
         content_sha256: "0".repeat(64),
         excerpt: "t".into(),
+        complete_document: true,
+        captured_bytes: 1,
+        event_ids: vec![0, 1],
     }]
 }
 
@@ -195,6 +276,96 @@ fn research_budgets() {
     assert_eq!((reason(run()), *calls.lock().unwrap()), ("request_budget_exhausted".to_string(), 2), "the hourly budget holds across cycles");
     let none = Researcher::new(Box::new(FixtureRetriever { records: vec![] }), Err(flurbo_sdk::FlurboError::new("provider_not_configured", "No provider.")), 1, 1, 1);
     assert_eq!(reason(none.research("0x", "t", &events, &[], 0)), "provider_not_configured");
+}
+
+#[test]
+fn research_preflight_requires_each_event_and_explicit_background_policy() {
+    let calls = Arc::new(Mutex::new(0));
+    let counter = calls.clone();
+    let forecaster = FixtureForecaster {
+        name: "fixture".into(),
+        reply: Box::new(move |p| {
+            *counter.lock().unwrap() += 1;
+            assert!(p.user.contains("evidence requirement: background"));
+            Ok(json!({"schema": MODEL_SCHEMA, "abstain": false, "abstainReason": null, "events": [0, 1], "statesPpm": [250000, 250000, 250000, 250000], "evidenceIds": ["src-1"],
+            "assumptions": [], "uncertainty": "Unknown.", "explanation": "Evenly uncertain about both."})
+            .to_string())
+        }),
+    };
+    let mut records = evidence();
+    records[0].publisher_released_at = None;
+    records[0].http_last_modified = Some(1_790_000_000);
+    let events: Vec<PromptEvent> = (0..2).map(|index| PromptEvent { index, question: "q".into(), yes_rule: "y".into(), no_rule: "n".into(), observation_ends_at: 1_800_000_000 }).collect();
+    let r = Researcher::new(Box::new(FixtureRetriever { records }), Ok(Box::new(forecaster)), 86_400, 1, 1);
+    let reason = |x: Research| match x {
+        Research::Abstain { reason, .. } => reason,
+        Research::Ok { .. } => "ok".into(),
+    };
+    assert_eq!(reason(r.research("0x", "t", &events, &[], 1_790_000_000)), "stale_evidence", "fresh retrieval and Last-Modified cannot substitute for a release date");
+    let one = [EvidenceRequirement { event: 0, freshness: "background".into() }];
+    assert_eq!(reason(r.research_with_requirements("0x", "t", &events, &[], 1_790_000_000, 2, &one)), "stale_evidence", "event 1 still defaults to release freshness");
+    assert_eq!(*calls.lock().unwrap(), 0, "unusable sources never reach a model or consume its budget");
+    let both: Vec<EvidenceRequirement> = (0..2).map(|event| EvidenceRequirement { event, freshness: "background".into() }).collect();
+    assert_eq!(reason(r.research_with_requirements("0x", "t", &events, &[], 1_790_000_000, 2, &both)), "ok");
+    assert_eq!(*calls.lock().unwrap(), 1);
+    let mut config = default_config();
+    config["research"]["evidenceRequirements"] = json!({"pilot": both});
+    assert_eq!(parse_config(&config).unwrap().research.evidence_requirements["pilot"].len(), 2);
+    for invalid in [
+        json!({"pilot": [{"event": 0, "freshness": "lastModified"}]}),
+        json!({"other": [{"event": 0, "freshness": "background"}]}),
+        json!({"pilot": [{"event": 0, "freshness": "background"}, {"event": 0, "freshness": "release"}]}),
+    ] {
+        config["research"]["evidenceRequirements"] = invalid;
+        assert!(parse_config(&config).is_err());
+    }
+}
+
+#[test]
+fn forecast_projection_and_strategy_count_never_refresh_old_or_unrelated_citations() {
+    use flurbo_sdk::research::{forecast_from_model_with_requirements, ModelOutput, Provenance};
+    let now = 1_790_000_000;
+    let mut records = evidence();
+    records[0].retrieved_at = now;
+    records[0].publisher_released_at = Some(now - 100_000);
+    let mut fresh = records[0].clone();
+    fresh.id = "fresh".into();
+    fresh.publisher_released_at = Some(now - 100);
+    records.push(fresh);
+    let mut unrelated = records[1].clone();
+    unrelated.id = "unrelated".into();
+    unrelated.event_ids = vec![2];
+    records.push(unrelated);
+    let output = ModelOutput {
+        events: vec![0, 1],
+        states_ppm: vec![250_000; 4],
+        evidence_ids: vec!["src-1".into(), "fresh".into(), "unrelated".into()],
+        assumptions: vec![],
+        uncertainty: "Unknown.".into(),
+        explanation: "Evenly uncertain about both.".into(),
+    };
+    let provider = Provenance { kind: "fixture".into(), name: "fixture".into() };
+    let default = forecast_from_model_with_requirements(&output, "0x", &records, &provider, now, &[]);
+    assert_eq!(default["evidence"][0]["observedAt"], flurbo_sdk::time::iso(now - 100_000));
+    assert_eq!(default["evidence"].as_array().unwrap().len(), 2, "an unrelated citation is omitted from the v1 projection");
+    let both: Vec<EvidenceRequirement> = (0..2).map(|event| EvidenceRequirement { event, freshness: "background".into() }).collect();
+    let background = forecast_from_model_with_requirements(&output, "0x", &records, &provider, now, &both);
+    assert_eq!(background["evidence"][0]["observedAt"], flurbo_sdk::time::iso(now));
+    let mixed = forecast_from_model_with_requirements(&output, "0x", &records, &provider, now, &both[..1]);
+    assert_eq!(mixed["evidence"][0]["observedAt"], flurbo_sdk::time::iso(now - 100_000));
+    records[0].publisher_released_at = None;
+    let missing = forecast_from_model_with_requirements(&output, "0x", &records, &provider, now, &both[..1]);
+    assert_eq!(missing["evidence"].as_array().unwrap().len(), 1, "missing publication and unrelated records are omitted, never mapped to an invented timestamp");
+    assert_eq!(missing["evidence"][0]["id"], "fresh");
+    let reply = json!({"schema": MODEL_SCHEMA, "abstain": false, "abstainReason": null, "events": [0, 1], "statesPpm": [250000, 250000, 250000, 250000], "evidenceIds": output.evidence_ids,
+        "assumptions": [], "uncertainty": "Unknown.", "explanation": "Evenly uncertain about both."})
+    .to_string();
+    let r = Researcher::new(Box::new(FixtureRetriever { records }), Ok(Box::new(FixtureForecaster::fixed(&reply, "fixture"))), 86_400, 5, 5);
+    let events: Vec<PromptEvent> = (0..2).map(|index| PromptEvent { index, question: "q".into(), yes_rule: "y".into(), no_rule: "n".into(), observation_ends_at: 1_800_000_000 }).collect();
+    match r.research_with_requirements("0x", "t", &events, &[], now, 3, &both[..1]) {
+        Research::Ok { fresh_evidence, .. } => assert_eq!(fresh_evidence, 1, "one fresh relevant release; the mixed undated and unrelated records cannot inflate minEvidence"),
+        other => panic!("{:?}", other),
+    }
 }
 
 #[test]
@@ -262,28 +433,56 @@ const WALLET: &str = "0x2222222222222222222222222222222222222222";
 
 #[test]
 fn semantic_collision_blocks_custom_execute_and_sign() {
-    use flurbo_sdk::runtime::executor::{Executor, FixedControls, ExecutionRequest};
-    use flurbo_sdk::runtime::chain::{ChainReader, Block};
+    use flurbo_sdk::claims::ClaimRef;
+    use flurbo_sdk::runtime::chain::{Block, ChainReader};
+    use flurbo_sdk::runtime::executor::{ExecutionRequest, Executor, FixedControls};
     use flurbo_sdk::runtime::rpc::JsonRpc;
     use flurbo_sdk::transaction::Claim;
-    use flurbo_sdk::claims::ClaimRef;
-    let f:Value=serde_json::from_str(include_str!("../../../protocol/fixtures/semantics.json")).unwrap();
-    let d=serde_json::from_value::<flurbo_sdk::protocol::Deployment>(f["deployment"].clone()).unwrap();
-    let mut result=f["cases"][0]["result"].clone();
-    let now=flurbo_sdk::time::now_seconds();result["checkedAt"]=json!(now);result["expiresAt"]=json!(now+60);
-    let server=Server::start(Box::new(move |_,_|(200,h(&[("Content-Type","application/json")]),result.to_string())));
-    let signer=Arc::new(LocalKeySigner::new(&format!("0x{}","01".repeat(32))).unwrap());
-    let dir=std::env::temp_dir().join(format!("flurbo-semantic-sign-{}",std::process::id()));
-    let journal=Arc::new(FileJournal::new(&dir,&signer.address()).unwrap());
-    let mut e=entry("collision".into(),0);e.action="buy".into();e.status="planned".into();e.claim=Some(ClaimRef{scope:3,mask:"8".into()});e.quantity_atoms="1000000".into();
-    journal.locked(|j|{j.entries=vec![e.clone()];Ok(())}).unwrap();
-    let ex=Executor::new(Arc::new(ChainReader::new(Box::new(JsonRpc::new("http://127.0.0.1:9",Duration::from_secs(1)).unwrap()))),signer,journal.clone(),Some(Arc::new(RuntimeClient::new(&server.url,TOKEN).unwrap())),Arc::new(FixedControls{policy:parse_config(&default_config()).unwrap().policy,allowed:true}),Duration::ZERO);
-    assert!(ex.sign("collision",&d).unwrap().is_none());
-    assert_eq!(journal.read().unwrap().entries[0].note.as_deref(),Some("SEMANTIC_COLLISION"));
-    let c=ExecutionRequest{decision_id:"test".into(),deployment:d,action:"buy".into(),claim:Claim{scope:3,mask:8},quantity_atoms:1000000,slippage_bps:50,quote_atoms:500000,quote_block:Block{number:1,hash:"0x".into(),timestamp:now}};
-    assert_eq!(ex.execute(&c).unwrap().reason.as_deref(),Some("SEMANTIC_COLLISION"));
+    let f: Value = serde_json::from_str(include_str!("../../../protocol/fixtures/semantics.json")).unwrap();
+    let d = serde_json::from_value::<flurbo_sdk::protocol::Deployment>(f["deployment"].clone()).unwrap();
+    let mut result = f["cases"][0]["result"].clone();
+    let now = flurbo_sdk::time::now_seconds();
+    result["checkedAt"] = json!(now);
+    result["expiresAt"] = json!(now + 60);
+    let server = Server::start(Box::new(move |_, _| (200, h(&[("Content-Type", "application/json")]), result.to_string())));
+    let signer = Arc::new(LocalKeySigner::new(&format!("0x{}", "01".repeat(32))).unwrap());
+    let dir = std::env::temp_dir().join(format!("flurbo-semantic-sign-{}", std::process::id()));
+    let journal = Arc::new(FileJournal::new(&dir, &signer.address()).unwrap());
+    let mut e = entry("collision".into(), 0);
+    e.action = "buy".into();
+    e.status = "planned".into();
+    e.claim = Some(ClaimRef { scope: 3, mask: "8".into() });
+    e.quantity_atoms = "1000000".into();
+    journal
+        .locked(|j| {
+            j.entries = vec![e.clone()];
+            Ok(())
+        })
+        .unwrap();
+    let ex = Executor::new(
+        Arc::new(ChainReader::new(Box::new(JsonRpc::new("http://127.0.0.1:9", Duration::from_secs(1)).unwrap()))),
+        signer,
+        journal.clone(),
+        Some(Arc::new(RuntimeClient::new(&server.url, TOKEN).unwrap())),
+        Arc::new(FixedControls { policy: parse_config(&default_config()).unwrap().policy, allowed: true }),
+        Duration::ZERO,
+    );
+    assert!(ex.sign("collision", &d).unwrap().is_none());
+    assert_eq!(journal.read().unwrap().entries[0].note.as_deref(), Some("SEMANTIC_COLLISION"));
+    let c = ExecutionRequest {
+        decision_id: "test".into(),
+        deployment: d,
+        action: "buy".into(),
+        claim: Claim { scope: 3, mask: 8 },
+        quantity_atoms: 1000000,
+        slippage_bps: 50,
+        quote_atoms: 500000,
+        quote_block: Block { number: 1, hash: "0x".into(), timestamp: now },
+    };
+    assert_eq!(ex.execute(&c).unwrap().reason.as_deref(), Some("SEMANTIC_COLLISION"));
     assert!(journal.read().unwrap().entries[0].raw_transaction.is_none());
-    std::fs::remove_file(dir.join("journal.json")).unwrap();std::fs::remove_dir(dir).unwrap();
+    std::fs::remove_file(dir.join("journal.json")).unwrap();
+    std::fs::remove_dir(dir).unwrap();
 }
 
 /// Runs only as a child process of `journal_lock_serialises_separate_processes`.
@@ -307,9 +506,7 @@ fn journal_lock_serialises_separate_processes() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let exe = std::env::current_exe().unwrap();
-    let children: Vec<_> = (0..3)
-        .map(|_| Command::new(&exe).args(["--exact", "journal_child_writer", "--test-threads", "1"]).env("FLURBO_JOURNAL_CHILD_DIR", &dir).spawn().unwrap())
-        .collect();
+    let children: Vec<_> = (0..3).map(|_| Command::new(&exe).args(["--exact", "journal_child_writer", "--test-threads", "1"]).env("FLURBO_JOURNAL_CHILD_DIR", &dir).spawn().unwrap()).collect();
     for mut c in children {
         assert!(c.wait().unwrap().success());
     }
@@ -413,25 +610,45 @@ fn signer_cli_and_configuration() {
 
 #[test]
 fn semantic_disabled_passes_guard_but_failures_never_do() {
-    use flurbo_sdk::runtime::executor::{Executor, FixedControls};
-    use flurbo_sdk::runtime::chain::ChainReader;
-    use flurbo_sdk::runtime::rpc::JsonRpc;
     use flurbo_sdk::claims::ClaimRef;
-    let f:Value=serde_json::from_str(include_str!("../../../protocol/fixtures/semantics.json")).unwrap();
-    let d=serde_json::from_value::<flurbo_sdk::protocol::Deployment>(f["deployment"].clone()).unwrap();
-    let mut disabled=f["cases"].as_array().unwrap().iter().find(|c|c["name"]=="disabled proceeds without semantic assurance").unwrap()["result"].clone();
-    let now=flurbo_sdk::time::now_seconds();disabled["checkedAt"]=json!(now);disabled["expiresAt"]=json!(now+60);
-    for (status,body,blocked) in [(200,disabled.to_string(),false),(503,json!({"code":"SEMANTICS_UNAVAILABLE"}).to_string(),true),(200,json!({"code":"SEMANTICS_UNAVAILABLE"}).to_string(),true)] {
-        let server=Server::start(Box::new(move |_,_|(status,h(&[("Content-Type","application/json")]),body.clone())));
-        let signer=Arc::new(LocalKeySigner::new(&format!("0x{}","01".repeat(32))).unwrap());
-        let dir=std::env::temp_dir().join(format!("flurbo-semantic-disabled-{}-{}-{}",std::process::id(),status,blocked));
-        let journal=Arc::new(FileJournal::new(&dir,&signer.address()).unwrap());
-        let mut e=entry("disabled".into(),0);e.action="buy".into();e.status="planned".into();e.claim=Some(ClaimRef{scope:3,mask:"8".into()});e.quantity_atoms="1000000".into();
-        journal.locked(|j|{j.entries=vec![e.clone()];Ok(())}).unwrap();
-        let ex=Executor::new(Arc::new(ChainReader::new(Box::new(JsonRpc::new("http://127.0.0.1:9",Duration::from_secs(1)).unwrap()))),signer,journal.clone(),Some(Arc::new(RuntimeClient::new(&server.url,TOKEN).unwrap())),Arc::new(FixedControls{policy:parse_config(&default_config()).unwrap().policy,allowed:true}),Duration::ZERO);
-        let _=ex.sign("disabled",&d);
-        let note=journal.read().unwrap().entries[0].note.clone();
-        assert_eq!(note.as_deref()==Some("SEMANTICS_UNAVAILABLE"),blocked,"{status} {note:?}");
-        let _=std::fs::remove_dir_all(dir);
+    use flurbo_sdk::runtime::chain::ChainReader;
+    use flurbo_sdk::runtime::executor::{Executor, FixedControls};
+    use flurbo_sdk::runtime::rpc::JsonRpc;
+    let f: Value = serde_json::from_str(include_str!("../../../protocol/fixtures/semantics.json")).unwrap();
+    let d = serde_json::from_value::<flurbo_sdk::protocol::Deployment>(f["deployment"].clone()).unwrap();
+    let mut disabled = f["cases"].as_array().unwrap().iter().find(|c| c["name"] == "disabled proceeds without semantic assurance").unwrap()["result"].clone();
+    let now = flurbo_sdk::time::now_seconds();
+    disabled["checkedAt"] = json!(now);
+    disabled["expiresAt"] = json!(now + 60);
+    for (status, body, blocked) in
+        [(200, disabled.to_string(), false), (503, json!({"code":"SEMANTICS_UNAVAILABLE"}).to_string(), true), (200, json!({"code":"SEMANTICS_UNAVAILABLE"}).to_string(), true)]
+    {
+        let server = Server::start(Box::new(move |_, _| (status, h(&[("Content-Type", "application/json")]), body.clone())));
+        let signer = Arc::new(LocalKeySigner::new(&format!("0x{}", "01".repeat(32))).unwrap());
+        let dir = std::env::temp_dir().join(format!("flurbo-semantic-disabled-{}-{}-{}", std::process::id(), status, blocked));
+        let journal = Arc::new(FileJournal::new(&dir, &signer.address()).unwrap());
+        let mut e = entry("disabled".into(), 0);
+        e.action = "buy".into();
+        e.status = "planned".into();
+        e.claim = Some(ClaimRef { scope: 3, mask: "8".into() });
+        e.quantity_atoms = "1000000".into();
+        journal
+            .locked(|j| {
+                j.entries = vec![e.clone()];
+                Ok(())
+            })
+            .unwrap();
+        let ex = Executor::new(
+            Arc::new(ChainReader::new(Box::new(JsonRpc::new("http://127.0.0.1:9", Duration::from_secs(1)).unwrap()))),
+            signer,
+            journal.clone(),
+            Some(Arc::new(RuntimeClient::new(&server.url, TOKEN).unwrap())),
+            Arc::new(FixedControls { policy: parse_config(&default_config()).unwrap().policy, allowed: true }),
+            Duration::ZERO,
+        );
+        let _ = ex.sign("disabled", &d);
+        let note = journal.read().unwrap().entries[0].note.clone();
+        assert_eq!(note.as_deref() == Some("SEMANTICS_UNAVAILABLE"), blocked, "{status} {note:?}");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

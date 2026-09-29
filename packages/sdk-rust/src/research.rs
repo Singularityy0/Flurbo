@@ -7,34 +7,61 @@ use crate::amounts::PPM;
 use crate::time::iso;
 
 pub const MODEL_SCHEMA: &str = "flurbo.agent-model-forecast.v1";
+pub const EVIDENCE_SCHEMA: &str = "flurbo.agent-evidence.v2";
 pub const MODEL_ABSTAIN_REASONS: [&str; 5] = ["insufficient_evidence", "contradictory_evidence", "stale_evidence", "ambiguous_rules", "other"];
 const KEYS: [&str; 9] = ["schema", "abstain", "abstainReason", "events", "statesPpm", "evidenceIds", "assumptions", "uncertainty", "explanation"];
 const SAFE: f64 = 9_007_199_254_740_991.0;
 
 /// One retrieved source. The excerpt is untrusted text.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Evidence {
+    #[serde(default)]
+    pub schema: String,
+    #[serde(default, deserialize_with = "decode_evidence_id")]
     pub id: String,
     #[serde(default)]
     pub url: String,
+    #[serde(default)]
+    pub requested_url: String,
+    #[serde(default)]
+    pub final_url: String,
     #[serde(default)]
     pub title: Option<String>,
     #[serde(default)]
     pub publisher: Option<String>,
     pub retrieved_at: i64,
-    #[serde(default)]
-    pub published_at: Option<i64>,
+    #[serde(default = "missing_timestamp")]
+    pub publisher_released_at: Option<i64>,
+    #[serde(default = "missing_timestamp")]
+    pub http_last_modified: Option<i64>,
     #[serde(default)]
     pub content_sha256: String,
     #[serde(default)]
     pub excerpt: String,
+    #[serde(default)]
+    pub complete_document: bool,
+    #[serde(default)]
+    pub captured_bytes: u64,
+    #[serde(default)]
+    pub event_ids: Vec<u32>,
 }
 
-impl Evidence {
-    pub fn observed_at(&self) -> i64 {
-        self.published_at.unwrap_or(self.retrieved_at)
-    }
+// Retain an invalid sentinel for malformed raw IDs so the validator can abstain
+// consistently, even when the malformed record was not cited by the model.
+fn decode_evidence_id<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    Ok(Value::deserialize(deserializer)?.as_str().unwrap_or("").to_string())
+}
+
+// An explicit null means unknown; an omitted v2 timestamp is an invalid envelope.
+fn missing_timestamp() -> Option<i64> {
+    Some(-1)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EvidenceRequirement {
+    pub event: u32,
+    pub freshness: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,9 +92,66 @@ pub enum Validation {
 
 pub struct ValidationContext<'a> {
     pub requested_events: &'a [u32],
+    pub event_count: u32,
     pub evidence: &'a [Evidence],
     pub now: i64,
     pub max_evidence_age_seconds: i64,
+    pub evidence_requirements: &'a [EvidenceRequirement],
+}
+
+fn timestamp(t: i64) -> bool {
+    t >= 0 && t <= SAFE as i64
+}
+
+/// Old records remain readable, but missing provenance is never upgraded to v2.
+pub fn is_citable_evidence(e: &Evidence, now: i64, event_count: u32) -> bool {
+    e.schema == EVIDENCE_SCHEMA
+        && (1..=64).contains(&js_len(e.id.trim()))
+        && e.url == e.final_url
+        && !e.final_url.is_empty()
+        && !e.requested_url.is_empty()
+        && e.title.is_some()
+        && e.publisher.is_some()
+        && e.complete_document
+        && e.captured_bytes > 0
+        && e.captured_bytes <= SAFE as u64
+        && !e.excerpt.trim().is_empty()
+        && e.content_sha256.len() == 64
+        && e.content_sha256.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        && e.content_sha256 != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        && timestamp(e.retrieved_at)
+        && e.retrieved_at <= now
+        && e.publisher_released_at.is_none_or(|t| timestamp(t) && t <= e.retrieved_at)
+        && e.http_last_modified.is_none_or(timestamp)
+        && !e.event_ids.is_empty()
+        && e.event_ids.iter().all(|i| *i < event_count)
+        && !(1..e.event_ids.len()).any(|i| e.event_ids[..i].contains(&e.event_ids[i]))
+}
+
+pub fn evidence_failure(cited: &[&Evidence], ctx: &ValidationContext) -> Option<&'static str> {
+    if !timestamp(ctx.now)
+        || !timestamp(ctx.max_evidence_age_seconds)
+        || cited.iter().any(|e| !is_citable_evidence(e, ctx.now, ctx.event_count))
+        || ctx.evidence_requirements.iter().any(|r| r.event >= ctx.event_count || !["release", "background"].contains(&r.freshness.as_str()))
+        || (1..ctx.evidence_requirements.len()).any(|i| ctx.evidence_requirements[..i].iter().any(|r| r.event == ctx.evidence_requirements[i].event))
+    {
+        return Some("invalid_evidence");
+    }
+    if ctx.requested_events.iter().any(|event| !cited.iter().any(|e| e.event_ids.contains(event))) {
+        return Some("missing_event_evidence");
+    }
+    for event in ctx.requested_events {
+        if !cited.iter().any(|e| evidence_fresh_for(e, *event, ctx)) {
+            return Some("stale_evidence");
+        }
+    }
+    None
+}
+
+pub fn evidence_fresh_for(e: &Evidence, event: u32, ctx: &ValidationContext) -> bool {
+    let basis = ctx.evidence_requirements.iter().find(|r| r.event == event).map(|r| r.freshness.as_str()).unwrap_or("release");
+    let observed = if basis == "background" { Some(e.retrieved_at) } else { e.publisher_released_at };
+    e.event_ids.contains(&event) && observed.is_some_and(|t| ctx.now - t <= ctx.max_evidence_age_seconds)
 }
 
 fn abstain(reason: &'static str) -> Validation {
@@ -159,21 +243,20 @@ pub fn validate_model_output(reply: &str, ctx: &ValidationContext) -> Validation
     if evidence_ids.is_empty() {
         return abstain("no_evidence");
     }
+    if ctx.evidence.iter().any(|e| !(1..=64).contains(&js_len(e.id.trim()))) {
+        return abstain("invalid_evidence");
+    }
     let known = |id: &str| ctx.evidence.iter().find(|e| e.id == id);
     if evidence_ids.iter().any(|i| known(i).is_none()) {
         return abstain("unknown_evidence");
     }
-    if !evidence_ids.iter().any(|i| ctx.now - known(i).unwrap().observed_at() <= ctx.max_evidence_age_seconds) {
-        return abstain("stale_evidence");
+    if (1..ctx.evidence.len()).any(|i| ctx.evidence[..i].iter().any(|e| e.id == ctx.evidence[i].id)) {
+        return abstain("invalid_evidence");
     }
-    Validation::Ok(ModelOutput {
-        events: ctx.requested_events.to_vec(),
-        states_ppm: states,
-        evidence_ids,
-        assumptions,
-        uncertainty,
-        explanation,
-    })
+    if let Some(reason) = evidence_failure(&evidence_ids.iter().map(|i| known(i).unwrap()).collect::<Vec<_>>(), ctx) {
+        return abstain(reason);
+    }
+    Validation::Ok(ModelOutput { events: ctx.requested_events.to_vec(), states_ppm: states, evidence_ids, assumptions, uncertainty, explanation })
 }
 
 fn clip(s: &str, hi: usize, lo: usize) -> String {
@@ -195,21 +278,43 @@ pub struct Provenance {
 
 /// A validated output as a flurbo.agent-forecast.v1 document. Evidence comes from retrieval records.
 pub fn forecast_from_model(output: &ModelOutput, pool: &str, evidence: &[Evidence], provider: &Provenance, now: i64) -> Value {
+    forecast_from_model_with_requirements(output, pool, evidence, provider, now, &[])
+}
+
+/// A v1 projection has one timestamp, so mixed release/background records retain the stricter basis.
+pub fn evidence_uses_publication(e: &Evidence, events: &[u32], requirements: &[EvidenceRequirement]) -> bool {
+    let mut supported = events.iter().filter(|event| e.event_ids.contains(event)).peekable();
+    supported.peek().is_none() || supported.any(|event| !requirements.iter().any(|r| r.event == *event && r.freshness == "background"))
+}
+
+pub fn projected_evidence_time(e: &Evidence, events: &[u32], requirements: &[EvidenceRequirement]) -> Option<i64> {
+    if !events.iter().any(|event| e.event_ids.contains(event)) {
+        return None;
+    }
+    if evidence_uses_publication(e, events, requirements) {
+        e.publisher_released_at
+    } else {
+        Some(e.retrieved_at)
+    }
+}
+
+pub fn forecast_from_model_with_requirements(output: &ModelOutput, pool: &str, evidence: &[Evidence], provider: &Provenance, now: i64, requirements: &[EvidenceRequirement]) -> Value {
     let cited: Vec<&Evidence> = output.evidence_ids.iter().filter_map(|i| evidence.iter().find(|e| &e.id == i)).collect();
     let kind = if provider.kind == "fixture" { "fixture" } else { "provider" };
     let items: Vec<Value> = cited
         .iter()
-        .map(|e| {
+        .filter_map(|e| {
+            let observed = projected_evidence_time(e, &output.events, requirements)?;
             let https = e.url.starts_with("https://");
             let prefix = if https { String::new() } else { format!("Source {}. ", e.url) };
-            json!({
+            Some(json!({
                 "id": e.id,
                 "title": clip(e.title.as_deref().unwrap_or(&e.url), 160, 3),
                 "source": clip(e.publisher.as_deref().unwrap_or("unknown"), 120, 2),
                 "url": if https { Value::String(e.url.clone()) } else { Value::Null },
-                "observedAt": iso(e.observed_at()),
-                "note": clip(&format!("{}Retrieved {}; content sha256 {}.", prefix, iso(e.retrieved_at), js_slice(&e.content_sha256, 16)), 600, 0),
-            })
+                "observedAt": iso(observed),
+                "note": clip(&format!("{}Freshness basis: {}; retrieved {}; publisher release {}; HTTP Last-Modified {}; full capture {} bytes; sha256 {}; events {}.", prefix, if evidence_uses_publication(e, &output.events, requirements) { "publication" } else { "background retrieval" }, iso(e.retrieved_at), e.publisher_released_at.map(iso).unwrap_or_else(|| "unknown".into()), e.http_last_modified.map(iso).unwrap_or_else(|| "unknown".into()), e.captured_bytes, e.content_sha256, e.event_ids.iter().map(u32::to_string).collect::<Vec<_>>().join(",")), 600, 0),
+            }))
         })
         .collect();
     json!({
@@ -232,6 +337,8 @@ fn escape(s: &str) -> String {
             0x00..=0x08 | 0x0b | 0x0c | 0x0e..=0x1f | 0x7f => " ".to_string(),
             _ if c == '<' => "&lt;".to_string(),
             _ if c == '>' => "&gt;".to_string(),
+            _ if c == '&' => "&amp;".to_string(),
+            _ if c == '"' => "&quot;".to_string(),
             _ => c.to_string(),
         })
         .collect()
@@ -246,6 +353,10 @@ pub struct Prompt {
 
 /// Evidence text is escaped so it cannot close its own block.
 pub fn build_research_prompt(title: &str, events: &[PromptEvent], evidence: &[Evidence], now: i64) -> Prompt {
+    build_research_prompt_with_requirements(title, events, evidence, now, events.iter().map(|e| e.index + 1).max().unwrap_or(0), &[])
+}
+
+pub fn build_research_prompt_with_requirements(title: &str, events: &[PromptEvent], evidence: &[Evidence], now: i64, event_count: u32, requirements: &[EvidenceRequirement]) -> Prompt {
     let reasons = MODEL_ABSTAIN_REASONS.iter().map(|r| format!("\"{}\"", r)).collect::<Vec<_>>().join(", ");
     let system = [
         "You estimate probabilities for prediction market questions from supplied evidence.".to_string(),
@@ -261,22 +372,20 @@ pub fn build_research_prompt(title: &str, events: &[PromptEvent], evidence: &[Ev
     .join("\n");
     let mut parts = vec![format!("Current time: {}", iso(now)), format!("Market: {}", escape(title))];
     for e in events {
-        parts.push(format!(
-            "Event {}: {}\n  YES rule: {}\n  NO rule: {}\n  Observation ends: {}",
-            e.index,
-            escape(&e.question),
-            escape(&e.yes_rule),
-            escape(&e.no_rule),
-            iso(e.observation_ends_at)
-        ));
+        parts.push(format!("Event {}: {}\n  YES rule: {}\n  NO rule: {}\n  Observation ends: {}", e.index, escape(&e.question), escape(&e.yes_rule), escape(&e.no_rule), iso(e.observation_ends_at)));
     }
     parts.push(format!("Forecast events: [{}]", events.iter().map(|e| e.index.to_string()).collect::<Vec<_>>().join(", ")));
-    for e in evidence {
-        let published = e.published_at.filter(|p| *p != 0).map(iso).unwrap_or_else(|| "unknown".into());
+    for e in events {
+        let requirement = requirements.iter().find(|r| r.event == e.index).map(|r| r.freshness.as_str()).unwrap_or("release");
+        parts.push(format!("Event {} evidence requirement: {}.", e.index, requirement));
+    }
+    for e in evidence.iter().filter(|e| is_citable_evidence(e, now, event_count)) {
+        let published = e.publisher_released_at.map(iso).unwrap_or_else(|| "unknown".into());
         parts.push(format!(
-            "<evidence id=\"{}\" url=\"{}\" published=\"{}\" retrieved=\"{}\">\n{}\n</evidence>",
+            "<evidence id=\"{}\" url=\"{}\" events=\"{}\" publisherReleasedAt=\"{}\" retrieved=\"{}\">\n{}\n</evidence>",
             escape(&e.id),
             escape(&e.url),
+            e.event_ids.iter().map(u32::to_string).collect::<Vec<_>>().join(","),
             published,
             iso(e.retrieved_at),
             escape(&e.excerpt)

@@ -1,5 +1,7 @@
 # flurbo-sdk for Python (0.2.0b0, private)
 
+Research evidence now uses `flurbo.agent-evidence.v2`: complete capture provenance, separate publisher and HTTP timestamps, and cited evidence coverage for every event. Regenerate legacy records; missing provenance cannot be filled in from retrieval time. Generic HTTP retrieval has no verified publication time and therefore abstains under the default release-freshness policy. Background research requires an explicit per-event `research.evidenceRequirements` configuration. Forecast freshness keeps that policy basis through the trade checks. See the [research protocol and migration policy](../../protocol/specs/research.md). This does not change settlement or transaction permissions.
+
 Purchase safety: the updated runtime requires the backend outcome-compatibility endpoint before approving or signing a new buy. Known collisions stop the purchase; unknown combinations abstain. Paper fills use the same check. Sell, redemption and already-signed recovery remain available. Review [configuration and rollout requirements](../../protocol/specs/semantics.md) before upgrading a live agent.
 
 

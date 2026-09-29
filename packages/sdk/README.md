@@ -1,5 +1,7 @@
 # @flurbo/sdk (0.2.0-beta, private)
 
+Research evidence now uses `flurbo.agent-evidence.v2`: full-capture provenance, separate publication/transport timestamps, and cited evidence coverage for each event. Legacy captures must be regenerated. Generic HTTP capture has no verified publication time and defaults to abstention for release freshness; background research requires explicit per-event `research.evidenceRequirements` configuration. See [the research protocol and migration policy](../../protocol/specs/research.md). This does not change market settlement or transaction permissions.
+
 Purchase safety: the updated runtime requires the backend outcome-compatibility endpoint before approving or signing a new buy. Known collisions stop the purchase; unknown combinations abstain. Paper fills use the same check. Sell, redemption and already-signed recovery remain available. Review [configuration and rollout requirements](../../protocol/specs/semantics.md) before upgrading a live agent.
 
 

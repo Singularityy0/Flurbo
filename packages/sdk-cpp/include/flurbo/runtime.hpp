@@ -357,7 +357,8 @@ class Researcher {
   Researcher(std::shared_ptr<Retriever> retriever, std::shared_ptr<Forecaster> forecaster, int64_t max_age, unsigned per_cycle, size_t per_hour,
              std::optional<Error> unconfigured = std::nullopt);
   void reset_cycle();
-  ResearchResult research(const std::string& pool, const std::string& title, const std::vector<PromptEvent>& events, const std::vector<Source>& sources, int64_t now);
+  ResearchResult research(const std::string& pool, const std::string& title, const std::vector<PromptEvent>& events, const std::vector<Source>& sources, int64_t now,
+                          const json::Value& requirements = json::Value(), unsigned event_count = 4);
 
  private:
   std::shared_ptr<Retriever> retriever_;

@@ -14,7 +14,10 @@ use sha3::Digest;
 
 use super::http::{agent, is_loopback, is_timeout, join, url_parts};
 use crate::error::{FlurboError, Result};
-use crate::research::{build_research_prompt, forecast_from_model, js_slice, validate_model_output, Evidence, ModelOutput, Prompt, PromptEvent, Provenance, Validation, ValidationContext};
+use crate::research::{
+    build_research_prompt_with_requirements, evidence_failure, forecast_from_model_with_requirements, is_citable_evidence, js_slice, projected_evidence_time, validate_model_output, Evidence,
+    EvidenceRequirement, ModelOutput, Prompt, PromptEvent, Provenance, Validation, ValidationContext, EVIDENCE_SCHEMA,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Source {
@@ -43,7 +46,8 @@ fn collapse(s: &str) -> String {
 }
 
 fn strip_blocks(body: &str, tag: &str) -> String {
-    let lower = body.to_lowercase();
+    // HTML tag names are ASCII. Preserve byte offsets in non-ASCII source text.
+    let lower = body.to_ascii_lowercase();
     let (open, close) = (format!("<{}", tag), format!("</{}>", tag));
     let mut out = String::new();
     let mut at = 0;
@@ -92,7 +96,7 @@ pub fn extract_text(body: &str, content_type: &str) -> String {
 }
 
 fn title_of(text: &str) -> Option<String> {
-    let lower = text.to_lowercase();
+    let lower = text.to_ascii_lowercase();
     let start = lower.find("<title")?;
     let open_end = lower[start..].find('>')? + start + 1;
     let close = lower[open_end..].find('<')? + open_end;
@@ -112,13 +116,7 @@ pub struct HttpRetriever {
 
 impl HttpRetriever {
     pub fn new(allow_hosts: &[String], allow_local_http: bool) -> Self {
-        HttpRetriever {
-            allow: allow_hosts.iter().map(|h| h.to_lowercase()).collect(),
-            allow_local_http,
-            max_bytes: 300_000,
-            max_sources: 6,
-            agent: agent(Duration::from_secs(10)),
-        }
+        HttpRetriever { allow: allow_hosts.iter().map(|h| h.to_lowercase()).collect(), allow_local_http, max_bytes: 300_000, max_sources: 6, agent: agent(Duration::from_secs(10)) }
     }
 
     fn allowed(&self, url: &str) -> bool {
@@ -126,7 +124,13 @@ impl HttpRetriever {
         !u.has_userinfo && ((u.scheme == "https" && self.allow.contains(&u.host)) || (self.allow_local_http && u.scheme == "http" && u.host != "::1" && is_loopback(&u.host)))
     }
 
-    fn get(&self, url: &str) -> Option<ureq::Response> {
+    /// Limit the complete body, not just its excerpt. Oversized sources are unusable.
+    pub fn with_max_bytes(mut self, max_bytes: usize) -> Self {
+        self.max_bytes = max_bytes;
+        self
+    }
+
+    fn get(&self, url: &str) -> Option<(ureq::Response, String)> {
         let mut url = url.to_string();
         for _ in 0..4 {
             if !self.allowed(&url) {
@@ -137,7 +141,7 @@ impl HttpRetriever {
                 url = join(&url, r.header("Location")?); // redirects are followed by hand, re-checking the allowlist
                 continue;
             }
-            return Some(r);
+            return Some((r, url));
         }
         None
     }
@@ -148,28 +152,40 @@ impl Retriever for HttpRetriever {
         let mut out = Vec::new();
         for source in sources.iter().take(self.max_sources) {
             // A failed source is skipped; research abstains if nothing usable remains.
-            let Some(r) = self.get(&source.url) else { continue };
+            let Some((r, final_url)) = self.get(&source.url) else { continue };
             let content_type = r.header("Content-Type").unwrap_or("").to_lowercase();
             let textual = content_type.contains("text/") || content_type.contains("application/json") || content_type.contains("application/xhtml");
-            if r.status() != 200 || !textual {
+            if r.status() != 200 || !textual || r.header("Content-Range").is_some() {
                 continue;
             }
             let modified = r.header("Last-Modified").map(String::from);
             let mut raw = Vec::new();
-            if r.into_reader().take(self.max_bytes as u64).read_to_end(&mut raw).is_err() {
+            // Read one extra byte to distinguish a complete bounded response from truncation.
+            if r.into_reader().take((self.max_bytes as u64).saturating_add(1)).read_to_end(&mut raw).is_err() || raw.is_empty() || raw.len() > self.max_bytes {
                 continue;
             }
             let text = String::from_utf8_lossy(&raw).to_string();
+            let excerpt = js_slice(&extract_text(&text, &content_type), 4000);
+            if excerpt.trim().is_empty() {
+                continue;
+            }
             let digest = sha2_hex(&raw);
             out.push(Evidence {
+                schema: EVIDENCE_SCHEMA.into(),
                 id: format!("src-{}", out.len() + 1),
-                url: source.url.clone(),
-                title: Some(title_of(&text).unwrap_or_else(|| source.url.clone())),
-                publisher: url_parts(&source.url).map(|u| u.origin.split("://").nth(1).unwrap_or("").to_string()),
+                url: final_url.clone(),
+                requested_url: source.url.clone(),
+                title: Some(title_of(&text).unwrap_or_else(|| final_url.clone())),
+                publisher: url_parts(&final_url).map(|u| u.origin.split("://").nth(1).unwrap_or("").to_string()),
+                final_url,
                 retrieved_at: now,
-                published_at: modified.as_deref().and_then(crate::time::parse_http_date),
+                publisher_released_at: None,
+                http_last_modified: modified.as_deref().and_then(crate::time::parse_http_date).filter(|t| *t >= 0),
                 content_sha256: digest,
-                excerpt: js_slice(&extract_text(&text, &content_type), 4000),
+                excerpt,
+                complete_document: true,
+                captured_bytes: raw.len() as u64,
+                event_ids: vec![source.event],
             });
         }
         out
@@ -385,6 +401,10 @@ impl Researcher {
     }
 
     pub fn research(&self, pool: &str, title: &str, events: &[PromptEvent], sources: &[Source], t: i64) -> Research {
+        self.research_with_requirements(pool, title, events, sources, t, events.iter().map(|e| e.index + 1).max().unwrap_or(0), &[])
+    }
+
+    pub fn research_with_requirements(&self, pool: &str, title: &str, events: &[PromptEvent], sources: &[Source], t: i64, event_count: u32, requirements: &[EvidenceRequirement]) -> Research {
         let f = match &self.forecaster {
             Ok(f) => f,
             Err(e) => return Research::Abstain { reason: e.code.clone(), detail: e.message.clone(), model_reason: None, evidence: vec![], provenance: None },
@@ -394,31 +414,62 @@ impl Researcher {
             let mut c = self.counts.lock().unwrap();
             c.1.retain(|x| *x > t - 3600);
             if c.0 >= self.per_cycle || c.1.len() >= self.per_hour {
-                return Research::Abstain { reason: "request_budget_exhausted".into(), detail: "The research request budget is used up.".into(), model_reason: None, evidence: vec![], provenance: Some(provenance) };
+                return Research::Abstain {
+                    reason: "request_budget_exhausted".into(),
+                    detail: "The research request budget is used up.".into(),
+                    model_reason: None,
+                    evidence: vec![],
+                    provenance: Some(provenance),
+                };
             }
         }
         let evidence = self.retriever.retrieve(sources, t);
         if evidence.is_empty() {
-            return Research::Abstain { reason: "no_sources".into(), detail: "No evidence could be retrieved from the allowed sources.".into(), model_reason: None, evidence, provenance: Some(provenance) };
+            return Research::Abstain {
+                reason: "no_sources".into(),
+                detail: "No evidence could be retrieved from the allowed sources.".into(),
+                model_reason: None,
+                evidence,
+                provenance: Some(provenance),
+            };
+        }
+        let requested: Vec<u32> = events.iter().map(|e| e.index).collect();
+        let ctx = ValidationContext { requested_events: &requested, event_count, evidence: &evidence, now: t, max_evidence_age_seconds: self.max_age, evidence_requirements: requirements };
+        let usable: Vec<&Evidence> = evidence.iter().filter(|e| is_citable_evidence(e, t, event_count)).collect();
+        let failure = if usable.is_empty() { Some("invalid_evidence") } else { evidence_failure(&usable, &ctx) };
+        if let Some(reason) = failure {
+            return Research::Abstain {
+                reason: reason.into(),
+                detail: "Retrieved evidence does not satisfy every event's requirements.".into(),
+                model_reason: None,
+                evidence,
+                provenance: Some(provenance),
+            };
         }
         {
             let mut c = self.counts.lock().unwrap();
             c.0 += 1;
             c.1.push(t);
         }
-        let reply = match f.complete(&build_research_prompt(title, events, &evidence, t)) {
+        let reply = match f.complete(&build_research_prompt_with_requirements(title, events, &evidence, t, event_count, requirements)) {
             Ok(r) => r,
             Err(e) => return Research::Abstain { reason: e.code.clone(), detail: e.message.clone(), model_reason: None, evidence, provenance: Some(provenance) },
         };
-        let requested: Vec<u32> = events.iter().map(|e| e.index).collect();
-        let ctx = ValidationContext { requested_events: &requested, evidence: &evidence, now: t, max_evidence_age_seconds: self.max_age };
         match validate_model_output(&reply, &ctx) {
             Validation::Abstain { reason, model_reason } => {
                 Research::Abstain { reason: reason.into(), detail: format!("The forecast was not used: {}.", reason), model_reason, evidence, provenance: Some(provenance) }
             }
             Validation::Ok(output) => {
-                let fresh = output.evidence_ids.iter().filter(|i| evidence.iter().any(|e| &e.id == *i && t - e.observed_at() <= self.max_age)).count() as u32;
-                let forecast = forecast_from_model(&output, pool, &evidence, &provenance, t);
+                let fresh = output
+                    .evidence_ids
+                    .iter()
+                    .filter(|i| {
+                        evidence.iter().any(|e| {
+                            &e.id == *i && requested.iter().any(|event| e.event_ids.contains(event)) && projected_evidence_time(e, &requested, requirements).is_some_and(|at| t - at <= self.max_age)
+                        })
+                    })
+                    .count() as u32;
+                let forecast = forecast_from_model_with_requirements(&output, pool, &evidence, &provenance, t, requirements);
                 Research::Ok { output, fresh_evidence: fresh, forecast, evidence, provenance }
             }
         }

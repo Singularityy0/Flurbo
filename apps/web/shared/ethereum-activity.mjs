@@ -2,6 +2,14 @@
 export const ACTIVITY_MODE='ethereum-activity';
 export const ACTIVITY_TITLE='Showcase v0';
 export const ACTIVITY_METRICS=['fullness','transactions','fees','blobs'];
+export const TEST_ACTIVITY_METRICS=['fullness','transactions'];
+// A separate, fixed recipe for the two-event automation acceptance collection.
+// Keep legacy Showcase identity and rule validation byte-for-byte compatible.
+export function activityMetrics(draft){
+  if(draft?.title===ACTIVITY_TITLE&&draft.clusterId===`showcase-v0-${draft.closesAt}`)return ACTIVITY_METRICS;
+  if(draft?.title==='Test'&&draft.clusterId===`ethereum-test-v1-${draft.closesAt}`)return TEST_ACTIVITY_METRICS;
+  throw Error('Unsupported Ethereum activity collection');
+}
 export function activityEvent(metric,target){
   const bit=ACTIVITY_METRICS.indexOf(metric);
   if(bit<0||!Number.isSafeInteger(target)||target<=0)throw Error('Invalid Ethereum activity target');
@@ -16,10 +24,11 @@ export function activityEvent(metric,target){
       revisionRule:'Archive the first corroborated observation. Conflicting later data requires a challenge, never silent evidence replacement. Missing or unfinalized evidence leaves the assertion unset; fixed contract deadlines and VOID rules apply.'}};
 }
 export function validateActivityDraft(draft){
-  if(draft?.title!==ACTIVITY_TITLE||draft.clusterId!==`showcase-v0-${draft.closesAt}`||draft.events?.length!==4)throw Error('Invalid showcase draft');
+  const metrics=activityMetrics(draft);
+  if(draft.events?.length!==metrics.length)throw Error('Invalid activity event count');
   const target=draft.closesAt+120;
-  for(let i=0;i<4;i++){
-    const actual=draft.events[i],expected=activityEvent(ACTIVITY_METRICS[i],target);
+  for(let i=0;i<metrics.length;i++){
+    const actual=draft.events[i],expected=activityEvent(metrics[i],target);
     for(const key of ['id','question','yesRule','noRule','observationStartsAt','observationEndsAt'])if(actual?.[key]!==expected[key])throw Error('Ethereum activity rule changed');
     if(Object.keys(actual.source||{}).length!==Object.keys(expected.source).length||Object.entries(expected.source).some(([k,v])=>actual.source[k]!==v))throw Error('Ethereum activity source changed');
   }

@@ -5,6 +5,7 @@ import { settlementLease } from '../server/settlement-store.mjs';
 import { notifyPool, runNotifications, watchdog } from '../scripts/notify-settlement.mjs';
 import { monitorIdentity } from '../server/settlement-monitor.mjs';
 import { pilotFixture, hash } from './pilot-fixture.ts';
+import { deterministicManifest } from './deterministic-fixture.ts';
 
 const config = { from: 'alerts@example.com', to: ['operator@example.com'], key: 're_test-secret' };
 const identity = 'test-pool';
@@ -172,6 +173,16 @@ test('runner handles both pools, signals failed reads to watchdog, and redacts c
   const extraEnv={...env,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'October practice',manifest:extra}])};
   const before=output.length;assert.equal(await runNotifications({...options,env:extraEnv}),0);
   assert.equal(output.length-before,3);assert.ok(output.some(line=>JSON.parse(line).pool===extra.pool));
+  const general=deterministicManifest();general.pool='0x'+'ac'.repeat(20);general.codeHashes[general.pool]=pilot.codeHashes[pilot.pool];
+  // The resolver address remains committed; this extra does not share either configured pool or resolver.
+  const {settlementBindings,pilotRulesHash}=await import('../server/settlement-publication.mjs');
+  general.resolver='0x'+'ad'.repeat(20);general.codeHashes[general.resolver]=pilot.codeHashes[pilot.resolver];
+  general.rulesHash=pilotRulesHash(settlementBindings(general.publication).config,general.resolver,general.publication.creator);
+  const generalEnv={...env,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'Source test',manifest:general}])};
+  const generalBefore=output.length;assert.equal(await runNotifications({...options,env:generalEnv}),0);assert.equal(output.length-generalBefore,3);
+  general.publication.settlementRules[0].decision.value='4.3';
+  assert.equal(await runNotifications({...options,env:{...generalEnv,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'Source test',manifest:general}])}}),2);
+  assert.equal(await runNotifications({...options,env:generalEnv}),0);
   assert.ok(!pings.at(-1)!.endsWith('/fail'));
   assert.equal(await runNotifications({...options,env:{...env,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'Duplicate',manifest:rehearsal}])}}),2);
   assert.equal(await runNotifications({ ...options, inspect: async () => { throw new Error('storage-secret'); } }), 2);

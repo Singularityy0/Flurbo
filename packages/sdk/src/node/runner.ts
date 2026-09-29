@@ -11,7 +11,7 @@ import { parsePairAnalytics, type Market, type PairImplied, type QuoteResult } f
 import { effectivePolicy, type PolicyConfig, type FlurboPolicy } from '../policy.ts';
 import { STRATEGY, candidateClaims, decide, assertConfig, type StrategyConfig, type Decision } from '../strategy.ts';
 import type { Deployment } from '../protocol.ts';
-import type { ResearchQuestion } from '../research.ts';
+import type { ResearchQuestion, EvidenceRequirement } from '../research.ts';
 import { chainReader, type ChainReader, type Block } from './chain.ts';
 import { executor, type Executor, type ExecutionResult } from './executor.ts';
 import { runtimeClient, RuntimeApiError, type RuntimeClient, type RuntimePolicy } from './headless.ts';
@@ -37,6 +37,7 @@ export type AgentConfig = {
       // A fixed reply read from a file, for offline runs and demonstrations. Always reported as a fixture, not AI.
       | { kind: 'fixture'; replyFile: string } | { kind: 'none' };
     perCycle: number; perHour: number; maxEvidenceAgeDays: number;
+    evidenceRequirements?: Record<string, EvidenceRequirement[]>;
   };
   strategy: { id: 'joint-edge'; quantityAtoms: string; slippageBps: 10 | 50 | 100; minEdgeBps: number; minEdgeAtoms: string; maxCostAtoms: string; includeSingles: boolean; minEvidence: number };
   policy: PolicyConfig; policyMaxAgeSeconds: number; paperBudgetAtoms: string;
@@ -70,6 +71,13 @@ export function parseConfig(value: unknown): AgentConfig {
   if (!/^[A-Z_][A-Z0-9_]*$/.test(c.signer.keyEnv)) bad('signer.keyEnv must name an environment variable.');
   if (JSON.stringify(c).match(/0x[0-9a-fA-F]{64}(?![0-9a-fA-F])/) && /"privateKey"|"secret"/i.test(JSON.stringify(c))) bad('secrets do not belong in the configuration file.');
   if (c.schedule.intervalSeconds < 10 || c.schedule.heartbeatSeconds < 5) bad('schedule too aggressive.');
+  if (c.research.evidenceRequirements !== undefined) {
+    if (!c.research.evidenceRequirements || typeof c.research.evidenceRequirements !== 'object' || Array.isArray(c.research.evidenceRequirements)) bad('research.evidenceRequirements must map market namespaces to requirements.');
+    for (const [namespace, requirements] of Object.entries(c.research.evidenceRequirements)) {
+      if (!c.markets.includes(namespace) || !Array.isArray(requirements) || requirements.some(r => !r || !Number.isSafeInteger(r.event) || r.event < 0 || r.event > 3
+        || !['release', 'background'].includes(r.freshness)) || new Set(requirements.map(r => r.event)).size !== requirements.length) bad('invalid or duplicate evidence requirement.');
+    }
+  }
   assertConfig(strategyConfig(c));
   return c;
 }
@@ -225,7 +233,8 @@ export function agentRunner(o: RunnerOptions) {
       const sources = [...detail.events.filter((e: any) => e.index === a || e.index === b).filter((e: any) => e.source?.referenceUrl).map((e: any) => ({ event: e.index, url: e.source.referenceUrl })),
         ...(config.research.retriever.extraSources?.[d.namespace] ?? []).filter(s => s.event === a || s.event === b)];
       const base = { schema: 'flurbo.agent-runtime-decision.v1', decisionId, namespace: d.namespace, createdAt: now() };
-      const found = await research.research({ pool: d.pool, title: market.title, eventCount: market.events.length, events: pair, sources });
+      const found = await research.research({ pool: d.pool, title: market.title, eventCount: market.events.length, events: pair, sources,
+        evidenceRequirements: config.research.evidenceRequirements?.[d.namespace] });
       const provenance = found.provenance ?? { kind: 'custom', name: 'unconfigured' };
       if (found.status === 'abstain') {
         log('research_abstained', { namespace: d.namespace, events: [a, b], reason: found.reason });

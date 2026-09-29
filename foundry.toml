@@ -27,3 +27,9 @@ fs_permissions = [{ access = "read", path = "./config" }]
 script = "contracts/script"
 broadcast = "target/broadcast"
 fs_permissions = [{ access = "read", path = "./config" }, { access = "read-write", path = "./target/deployments" }]
+
+# Opt-in retrospective source-to-EVM rehearsal. No fork, RPC or broadcast.
+[profile.settlement_replay]
+test = "contracts/replay"
+ffi = false
+fs_permissions = [{ access = "read", path = "./target/settlement-replay" }]

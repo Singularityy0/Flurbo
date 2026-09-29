@@ -12,6 +12,7 @@ import { localKeySigner, signerFromEnv } from '../src/node/signer.ts';
 import { main } from '../src/node/cli.ts';
 import { parseConfig, defaultConfig } from '../src/node/runner.ts';
 import { MODEL_SCHEMA } from '../src/research.ts';
+import { evidenceFixture } from './evidence-fixture.ts';
 
 const TOKEN = 'fla1_0123456789abcdef_' + 'A'.repeat(43);
 type Call = { url: string; init: RequestInit };
@@ -26,7 +27,7 @@ test('retrieval: only allowlisted HTTPS hosts, redirects re-checked, bounded, te
   const r = httpRetriever({ allowHosts: ['allowed.example'], fetch: f });
   const got = await r.retrieve([{ event: 0, url: 'https://allowed.example/a' }, { event: 1, url: 'http://allowed.example/b' }, { event: 1, url: 'https://evil.example/c' }, { event: 0, url: 'https://allowed.example/redirect' }], 1_790_000_000);
   assert.equal(got.length, 1, 'plain HTTP, other hosts and redirects to other hosts are skipped');
-  assert.deepEqual([got[0].id, got[0].title, got[0].excerpt, got[0].publishedAt], ['src-1', 'Release 1.0', 'Release 1.0 Tagged & released', Date.parse('Sat, 26 Sep 2026 10:00:00 GMT') / 1000]);
+  assert.deepEqual([got[0].id, got[0].title, got[0].excerpt, got[0].publisherReleasedAt, got[0].httpLastModified], ['src-1', 'Release 1.0', 'Release 1.0 Tagged & released', null, Date.parse('Sat, 26 Sep 2026 10:00:00 GMT') / 1000]);
   assert.ok(!calls.some(c => c.url.includes('evil.example')), 'a redirect to another host is never followed');
   assert.equal(extractText('<style>x{}</style><b>a</b>  b'), 'a b');
 });
@@ -57,7 +58,7 @@ test('model providers: timeouts, bounded retries, rate limits and missing config
 test('research budgets and missing providers abstain without calling anything', async () => {
   const good = JSON.stringify({ schema: MODEL_SCHEMA, abstain: false, abstainReason: null, events: [0, 1], statesPpm: [250000, 250000, 250000, 250000], evidenceIds: ['src-1'], assumptions: [], uncertainty: 'Unknown.', explanation: 'Evenly uncertain about both.' });
   let calls = 0;
-  const r = researcher({ retriever: fixtureRetriever([{ id: 'src-1', url: 'https://example.org/x', title: 'x source', publisher: 'example.org', publishedAt: null, contentSha256: '0'.repeat(64), excerpt: 'text' }]),
+  const r = researcher({ retriever: fixtureRetriever([evidenceFixture({ publisherReleasedAt: 1_790_000_000 - 60 })]),
     forecaster: fixtureForecaster(() => { calls++; return good; }), maxEvidenceAgeSeconds: 86_400, perCycle: 1, perHour: 2, now: () => 1_790_000_000 });
   const input = { pool: '0x' + '11'.repeat(20), title: 't', eventCount: 2, events: [0, 1].map(index => ({ index, question: 'q', yesRule: 'y', noRule: 'n', observationEndsAt: 1_800_000_000 })), sources: [] };
   assert.equal((await r.research(input)).status, 'ok');

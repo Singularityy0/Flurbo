@@ -281,9 +281,7 @@ fn forecaster_from(config: &AgentConfig, dir: &Path, env: &dyn Fn(&str) -> Optio
             let key = api_key_env.as_deref().and_then(env);
             Ok(Box::new(OpenAiCompatible::new(base_url, model, key, timeout(*timeout_ms), max_retries.unwrap_or(2))?))
         }
-        ProviderConfig::Anthropic { model, api_key_env, timeout_ms, max_retries } => {
-            Ok(Box::new(AnthropicMessages::new(model, env(api_key_env), timeout(*timeout_ms), max_retries.unwrap_or(2))?))
-        }
+        ProviderConfig::Anthropic { model, api_key_env, timeout_ms, max_retries } => Ok(Box::new(AnthropicMessages::new(model, env(api_key_env), timeout(*timeout_ms), max_retries.unwrap_or(2))?)),
         ProviderConfig::Fixture { reply_file } => {
             let path = dir.join("..").join(reply_file);
             let name = format!("fixture:{}", path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
@@ -327,10 +325,7 @@ impl AgentRunner {
                 Some(s) => s,
                 None => {
                     let key = lookup(&config.signer.key_env).ok_or_else(|| {
-                        FlurboError::invalid(format!(
-                            "Set {} to the dedicated agent wallet key (testnet only). Never use a deployer, settlement, reviewer or personal wallet.",
-                            config.signer.key_env
-                        ))
+                        FlurboError::invalid(format!("Set {} to the dedicated agent wallet key (testnet only). Never use a deployer, settlement, reviewer or personal wallet.", config.signer.key_env))
                     })?;
                     Arc::new(LocalKeySigner::new(key.trim())?)
                 }
@@ -357,9 +352,8 @@ impl AgentRunner {
             log: log.unwrap_or_else(|| Box::new(default_log)),
             clock,
         });
-        let executor = signer.as_ref().map(|s| {
-            Executor::new(chain.clone(), s.clone(), journal.clone(), client.clone(), shared.clone() as Arc<dyn Controls>, Duration::from_secs(config.schedule.wait_seconds))
-        });
+        let executor =
+            signer.as_ref().map(|s| Executor::new(chain.clone(), s.clone(), journal.clone(), client.clone(), shared.clone() as Arc<dyn Controls>, Duration::from_secs(config.schedule.wait_seconds)));
         Ok(AgentRunner {
             paper: PaperBook { file: dir.join("paper.json"), budget: config.paper_budget_atoms.parse().unwrap_or(0) },
             outbox_file: dir.join("outbox.json"),
@@ -531,7 +525,8 @@ impl AgentRunner {
             v
         };
         let title = detail["title"].as_str().unwrap_or("");
-        let found = self.researcher.research(&d.pool, title, &[events[a].clone(), events[b].clone()], &sources, self.now());
+        let requirements = self.config.research.evidence_requirements.get(&d.namespace).map(Vec::as_slice).unwrap_or(&[]);
+        let found = self.researcher.research_with_requirements(&d.pool, title, &[events[a].clone(), events[b].clone()], &sources, self.now(), d.event_count, requirements);
         let (output, fresh, forecast_doc, provenance) = match found {
             Research::Abstain { reason, detail, provenance, .. } => {
                 let p = provenance.unwrap_or(Provenance { kind: "custom".into(), name: "unconfigured".into() });
@@ -571,11 +566,13 @@ impl AgentRunner {
         let candidate = json!({"claim": claim, "quantityAtoms": p.quantity_atoms.to_string(), "quoteAtoms": p.quote_atoms.to_string(), "slippageBps": p.slippage_bps as i64,
             "edgeAtoms": p.edge_atoms.map(|e| e.to_string()), "edgeBps": p.edge_bps.map(|e| e as i64), "quoteBlock": head.number.to_string()});
         if self.config.mode == "paper" {
-            let response=self.client.as_ref().and_then(|c|c.validate_trade(&d.namespace,p.scope,p.mask,&p.quantity_atoms.to_string()).ok());
-            let reason=response.as_ref().map(|r|crate::semantics::semantic_error(r,d,p.scope,p.mask,&p.quantity_atoms.to_string(),self.now())).unwrap_or(Some("SEMANTICS_UNAVAILABLE"));
-            if reason.is_none() && response.as_ref().is_some_and(crate::semantics::semantics_disabled) { self.log("SEMANTICS_DISABLED",json!({"namespace":d.namespace})); }
-            if let Some(reason)=reason {
-                self.log(reason,json!({"namespace":d.namespace}));
+            let response = self.client.as_ref().and_then(|c| c.validate_trade(&d.namespace, p.scope, p.mask, &p.quantity_atoms.to_string()).ok());
+            let reason = response.as_ref().map(|r| crate::semantics::semantic_error(r, d, p.scope, p.mask, &p.quantity_atoms.to_string(), self.now())).unwrap_or(Some("SEMANTICS_UNAVAILABLE"));
+            if reason.is_none() && response.as_ref().is_some_and(crate::semantics::semantics_disabled) {
+                self.log("SEMANTICS_DISABLED", json!({"namespace":d.namespace}));
+            }
+            if let Some(reason) = reason {
+                self.log(reason, json!({"namespace":d.namespace}));
                 self.report_decision(with(json!({"outcome":"abstain","reasons":[reason],"provenance":provenance,"forecast":forecast_doc,"candidate":candidate,"summary":"The purchase did not pass outcome compatibility checks."})));
                 return Ok(());
             }

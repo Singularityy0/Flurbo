@@ -93,7 +93,7 @@ std::vector<Evidence> HttpRetriever::retrieve(const std::vector<Source>& sources
       std::string url = sources[i].url;
       std::optional<HttpResponse> r;
       for (int hop = 0; hop < 4 && allowed(url); ++hop) {
-        HttpResponse resp = http_request({"GET", url, {{"Accept", "text/html,application/json,text/plain"}}, "", 10000, 300000});
+        HttpResponse resp = http_request({"GET", url, {{"Accept", "text/html,application/json,text/plain"}, {"Accept-Encoding", "identity"}}, "", 10000, 300000});
         auto location = resp.header("Location");
         if (resp.status >= 300 && resp.status < 400 && location) {
           url = join_url(url, *location);  // redirects are followed by hand, re-checking the allowlist
@@ -102,19 +102,23 @@ std::vector<Evidence> HttpRetriever::retrieve(const std::vector<Source>& sources
         r = resp;
         break;
       }
-      if (!r || r->status != 200) continue;
+      if (!r || r->status != 200 || r->header("Content-Range") || r->body.empty()) continue;
+      if (auto encoding = r->header("Content-Encoding"); encoding && lower(*encoding) != "identity") continue;
       std::string type = lower(r->header("Content-Type").value_or(""));
       if (type.find("text/") == std::string::npos && type.find("application/json") == std::string::npos && type.find("application/xhtml") == std::string::npos) continue;
       Evidence e;
+      e.schema = EVIDENCE_SCHEMA; e.requested_url = sources[i].url; e.final_url = url;
+      e.complete_document = true; e.captured_bytes = static_cast<int64_t>(r->body.size()); e.event_ids = {sources[i].event};
       e.id = "src-" + std::to_string(out.size() + 1);
-      e.url = sources[i].url;
-      e.title = title_of(r->body).value_or(sources[i].url);
-      auto u = parse_url(sources[i].url);
+      e.url = url;
+      e.title = title_of(r->body).value_or(url);
+      auto u = parse_url(url);
       e.publisher = u ? u->origin.substr(u->origin.find("://") + 3) : "";
       e.retrieved_at = now;
-      if (auto modified = r->header("Last-Modified")) e.published_at = parse_http_date(*modified);
+      if (auto modified = r->header("Last-Modified")) { auto timestamp = parse_http_date(*modified); if (timestamp && *timestamp >= 0) e.http_last_modified = timestamp; }
       e.content_sha256 = sha256_hex(r->body);
       e.excerpt = js_slice(extract_text(r->body, type), 4000);
+      if (trim(e.excerpt).empty()) continue;
       out.push_back(e);
     } catch (const Error&) {
     }
@@ -233,7 +237,8 @@ void Researcher::reset_cycle() {
   cycle_ = 0;
 }
 
-ResearchResult Researcher::research(const std::string& pool, const std::string& title, const std::vector<PromptEvent>& events, const std::vector<Source>& sources, int64_t t) {
+ResearchResult Researcher::research(const std::string& pool, const std::string& title, const std::vector<PromptEvent>& events, const std::vector<Source>& sources, int64_t t,
+                                  const json::Value& requirements, unsigned event_count) {
   ResearchResult r;
   if (!forecaster_) {
     r.reason = unconfigured_ ? unconfigured_->code : "provider_not_configured";
@@ -256,6 +261,14 @@ ResearchResult Researcher::research(const std::string& pool, const std::string& 
     r.detail = "No evidence could be retrieved from the allowed sources.";
     return r;
   }
+  ValidationContext ctx;
+  for (const auto& e : events) ctx.requested_events.push_back(e.index);
+  ctx.evidence = r.evidence; ctx.now = t; ctx.max_evidence_age_seconds = max_age_;
+  ctx.event_count = event_count; ctx.evidence_requirements = requirements;
+  std::vector<Evidence> usable;
+  for (const auto& e : r.evidence) if (citable_evidence(e, t, event_count)) usable.push_back(e);
+  auto failure = usable.empty() ? "invalid_evidence" : evidence_failure(usable, ctx);
+  if (!failure.empty()) { r.reason = failure; r.detail = "Evidence requirements failed: " + failure + "."; return r; }
   {
     std::lock_guard<std::mutex> g(m_);
     ++cycle_;
@@ -263,7 +276,7 @@ ResearchResult Researcher::research(const std::string& pool, const std::string& 
   }
   std::string reply;
   try {
-    reply = forecaster_->complete(build_research_prompt(title, events, r.evidence, t));
+    reply = forecaster_->complete(build_research_prompt(title, events, usable, t, requirements, event_count));
   } catch (const Error& e) {
     r.reason = e.code;
     r.detail = e.what();
@@ -273,11 +286,6 @@ ResearchResult Researcher::research(const std::string& pool, const std::string& 
     r.detail = "The model provider failed.";
     return r;
   }
-  ValidationContext ctx;
-  for (const auto& e : events) ctx.requested_events.push_back(e.index);
-  ctx.evidence = r.evidence;
-  ctx.now = t;
-  ctx.max_evidence_age_seconds = max_age_;
   Validation v = validate_model_output(reply, ctx);
   if (!v.ok) {
     r.reason = v.reason;
@@ -288,9 +296,11 @@ ResearchResult Researcher::research(const std::string& pool, const std::string& 
   r.ok = true;
   r.output = v.output;
   for (const auto& id : v.output.evidence_ids)
-    for (const auto& e : r.evidence)
-      if (e.id == id && t - e.observed_at() <= max_age_) ++r.fresh_evidence;
-  r.forecast = forecast_from_model(v.output, pool, r.evidence, *r.provenance, t);
+    for (const auto& e : r.evidence) {
+      auto observed = evidence_observed_at(e, v.output.events, requirements);
+      if (e.id == id && observed && t - *observed <= max_age_) ++r.fresh_evidence;
+    }
+  r.forecast = forecast_from_model(v.output, pool, r.evidence, *r.provenance, t, requirements);
   return r;
 }
 

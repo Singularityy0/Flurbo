@@ -114,7 +114,7 @@ class Providers(unittest.TestCase):
         good = json.dumps({"schema": MODEL_SCHEMA, "abstain": False, "abstainReason": None, "events": [0, 1], "statesPpm": [250000] * 4, "evidenceIds": ["src-1"],
                            "assumptions": [], "uncertainty": "Unknown.", "explanation": "Evenly uncertain about both."})
         calls = []
-        r = Researcher(FixtureRetriever([{"id": "src-1", "url": "https://example.org/x", "title": "x source", "publisher": "example.org", "publishedAt": None, "contentSha256": "0" * 64, "excerpt": "t"}]),
+        r = Researcher(FixtureRetriever([{"schema": "flurbo.agent-evidence.v2", "id": "src-1", "url": "https://example.org/x", "requestedUrl": "https://example.org/x", "finalUrl": "https://example.org/x", "title": "x source", "publisher": "example.org", "publisherReleasedAt": 1_790_000_000, "httpLastModified": None, "completeDocument": True, "capturedBytes": 1, "eventIds": [0, 1], "contentSha256": "0" * 64, "excerpt": "t"}]),
                        FixtureForecaster(lambda p: calls.append(1) or good), 86_400, 1, 2, now=lambda: 1_790_000_000)
         args = ("0x" + "11" * 20, "t", 2, [{"index": i, "question": "q", "yesRule": "y", "noRule": "n", "observationEndsAt": 1_800_000_000} for i in (0, 1)], [])
         self.assertEqual(r.research(*args)["status"], "ok")

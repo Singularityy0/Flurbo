@@ -1,5 +1,7 @@
-import { encodeAbiParameters, keccak256, parseAbiParameters } from 'viem';
+import { keccak256 } from 'viem';
 import { z } from 'zod';
+import { encodeEventDraft } from '../../../apps/web/server/settlement-publication.mjs';
+export { eventDraftAbi } from '../../../apps/web/server/settlement-publication.mjs';
 
 const text = (max: number) => z.string().min(1).max(max)
   .refine(value => value === value.trim(), 'Remove leading or trailing whitespace')
@@ -66,22 +68,10 @@ export type EventDraft = z.infer<typeof eventDraftSchema>;
 
 // Explicit ABI field order makes commitments independent of JSON key order.
 // This is a draft-domain commitment, NOT an existing pool settlementRulesHash.
-export const eventDraftAbi = parseAbiParameters(
-  'string domain, uint256 chainId, string clusterId, string title, uint64 closesAt, '
-  + '(string id, string question, string yesRule, string noRule, uint64 observationStartsAt, uint64 observationEndsAt, '
-  + '(string publisher, string referenceUrl, string recordId, string selectionRule, string finalityRule, string revisionRule) source)[] events, '
-  + 'bool hasExceptionPolicy, string exceptionPolicy, string disputeModel, bool hasDisputePolicy, string disputePolicy',
-);
-
 export function prepareEventDraft(input: unknown, now: number) {
   const draft = eventDraftSchema.parse(input);
   timestamp.parse(now);
-  const preimage = encodeAbiParameters(eventDraftAbi, [
-    draft.schema, BigInt(draft.chainId), draft.clusterId, draft.title, BigInt(draft.closesAt),
-    draft.events.map(event => ({ ...event, observationStartsAt: BigInt(event.observationStartsAt), observationEndsAt: BigInt(event.observationEndsAt) })),
-    draft.exceptionPolicy !== null, draft.exceptionPolicy ?? '', draft.disputeModel,
-    draft.disputePolicy !== null, draft.disputePolicy ?? '',
-  ]);
+  const preimage = encodeEventDraft(draft);
   const blockers = [
     'No authenticated official-source report is attached to this draft.',
     'Rule text requires review; schema validation does not establish that outcomes are unambiguous or independent.',

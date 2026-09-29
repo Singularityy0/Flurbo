@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {activityOutcome,ACTIVITY_METRICS,validateActivityDraft} from '../shared/ethereum-activity.mjs';
+import {activityOutcome,activityMetrics,validateActivityDraft} from '../shared/ethereum-activity.mjs';
 export const ETHEREUM_SOURCES=['https://ethereum-rpc.publicnode.com','https://eth.drpc.org'];
 const hash=v=>typeof v==='string'&&/^0x[0-9a-f]{64}$/.test(v);
 const uint=v=>{if(typeof v!=='string'||!/^0x(?:0|[1-9a-f][0-9a-f]*)$/.test(v)||v.length>66)throw Error('Invalid Ethereum quantity');return BigInt(v);};
@@ -48,12 +48,12 @@ export async function observeEthereumActivity(draft,{rpcs=ETHEREUM_SOURCES.map(u
   const first=observations[0];
   if(JSON.stringify(serialize({block:first.block,parent:first.parent}))!==JSON.stringify(serialize({block:observations[1].block,parent:observations[1].parent})))throw Error('Ethereum providers disagree');
   const report={schema:'flurbo.ethereum-activity-evidence.v1',target,fetchedAt:now,
-    block:serialize(first.block),parent:serialize(first.parent),outcomes:ACTIVITY_METRICS.map(metric=>activityOutcome(metric,first.block,first.parent)),
+    block:serialize(first.block),parent:serialize(first.parent),outcomes:activityMetrics(draft).map(metric=>activityOutcome(metric,first.block,first.parent)),
     sources:observations.map((o,i)=>({endpoint:ETHEREUM_SOURCES[i],finalized:o.finalized})),
     notice:'Corroborated RPC observations, not a cryptographic proof. Bonded assertions remain challengeable.'};
   return {...report,digest:createHash('sha256').update(JSON.stringify(report)).digest('hex')};
 }
-// A single immutable snapshot serves all four assertions, even across worker runs.
+// A single immutable snapshot serves the collection's assertions across worker runs.
 export async function activityEvidence(manifest,command,archive,owner,observeFn=observeEthereumActivity){
   validateActivityDraft(manifest.publication.draft);
   const key=`flurbo:activity:v1:${manifest.pool}:${manifest.rulesHash}`;
@@ -61,9 +61,9 @@ export async function activityEvidence(manifest,command,archive,owner,observeFn=
   if(!raw){const report=await observeFn(manifest.publication.draft);await command('SET',key,JSON.stringify(report),'NX');raw=await command('GET',key);}
   const saved=JSON.parse(raw),{digest,...report}=saved;
   if(createHash('sha256').update(JSON.stringify(report)).digest('hex')!==digest||report.target!==manifest.publication.draft.closesAt+120||report.schema!=='flurbo.ethereum-activity-evidence.v1'
-    ||report.outcomes?.length!==4||report.outcomes.some(o=>![1,2].includes(o)))throw Error('Stored Ethereum observation mismatch');
+    ||report.outcomes?.length!==activityMetrics(manifest.publication.draft).length||report.outcomes.some(o=>![1,2].includes(o)))throw Error('Stored Ethereum observation mismatch');
   return async event=>{
-    if(!Number.isInteger(event)||event<0||event>3)throw Error('Invalid event');
+    if(!Number.isInteger(event)||event<0||event>=report.outcomes.length)throw Error('Invalid event');
     const q=manifest.publication.draft.events[event],outcome=report.outcomes[event];
     const evidence=await archive.put({eventId:q.id,outcome,statement:`Ethereum block ${report.block.number}: ${q.question} Source-checked result: ${outcome===2?'YES':'NO'}. Rules and archived measurements determine this proposal.`,
       sourceURL:`https://etherscan.io/block/${report.block.number}`,attachment:JSON.stringify({rulesHash:manifest.rulesHash,report:saved})},owner,manifest.draftHash);

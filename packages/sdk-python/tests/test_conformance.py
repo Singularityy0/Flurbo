@@ -120,7 +120,7 @@ class Research(unittest.TestCase):
     def test_model_output_validation(self):
         f = fixture("research")
         for c in f["cases"]:
-            r = validate_model_output(c["output"], f["context"])
+            r = validate_model_output(c["output"], {**f["context"], **c.get("context", {})})
             got = {"status": "ok", "statesPpm": r["output"]["statesPpm"], "evidenceIds": r["output"]["evidenceIds"]} if r["status"] == "ok" else r
             self.assertEqual(got, c["expect"], c["name"])
 

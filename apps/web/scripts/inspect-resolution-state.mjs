@@ -35,6 +35,7 @@ export async function inspectResolutionState({ command, rpc, manifests, signer, 
     pools.push({ pool: entry?.pool ?? null, schema: entry?.schema ?? null,
       pending: entry?.pending ? { hash: entry.pending.hash, action: entry.pending.action ?? null, event: entry.pending.event ?? null, outcome: entry.pending.outcome ?? null, chain } : null,
       ownedEvents: Object.keys(entry?.owned || {}).map(Number),
+      owned: Object.fromEntries(Object.entries(entry?.owned || {}).map(([event, value]) => [event, { outcome: value?.outcome, evidenceHash: value?.evidenceHash }])),
       deferred: Object.fromEntries(Object.entries(entry?.deferred || {}).map(([k, v]) => [k, iso(v)])),
       last: entry?.last ? { hash: entry.last.hash, success: entry.last.success, at: iso(entry.last.at) } : null });
   }
