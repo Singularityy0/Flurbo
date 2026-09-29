@@ -9,7 +9,7 @@ import { useAuth } from '../auth/context';
 import { describeClaim, walletKey, tradingWalletKey } from '../portfolio';
 import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
 import {watchTradingWallet} from '../auth/trading-session';
-import { readCheckout, saveCheckout, clearCheckout, assertCheckoutBinding, type CheckoutDraft } from '../checkout';
+import { readCheckout, restorableCheckout, markCheckoutVisited, saveCheckout, clearCheckout, assertCheckoutBinding, type CheckoutDraft } from '../checkout';
 import { rememberConfirmedClaim } from '../pilot-claims';
 import {encodeClaim, type ClaimRule} from '../../shared/claims.mjs';
 import SegmentedControl from '../components/ui/SegmentedControl';
@@ -30,7 +30,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,tradingClosed=f
   const pilotRequest=<T,>(path:string,input?:unknown)=>request<T>(path,input,namespace);
   const readPilotPending=()=>readPending(namespace),pilotPendingKey=pendingKeyFor(namespace);
   const {controller,state:auth}=useAuth();
-  const [restored]=useState(()=>{try{const draft=consumer&&auth.address?readCheckout(namespace,auth.address):null;return draft?.event===consumer?.event&&draft?.yes===consumer?.yes?draft:null;}catch{return null;}});
+  const [restored]=useState(()=>{try{const draft=consumer&&auth.address?restorableCheckout(namespace,auth.address,readCheckout(namespace,auth.address),!!readPilotPending()):null;return draft?.event===consumer?.event&&draft?.yes===consumer?.yes?draft:null;}catch{return null;}});
   const [state,setState]=useState<PilotState|null>(null),[notice,setNotice]=useState('Loading the real-event pilot...');
   const [wallets,setWallets]=useState<BrowserWallet[]>([]),[choice,setChoice]=useState('0'),[owner,setOwner]=useState('');
   const [walletStatus,setWalletStatus]=useState('checking');
@@ -110,6 +110,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,tradingClosed=f
   },[!!challenge,owner]);
   useEffect(()=>{setPosition(null);},[owner,scope,mask]);
   useEffect(()=>{setCompleted(false);},[scope,mask,quantity,side]);
+  useEffect(()=>{if(consumer&&auth.address)markCheckoutVisited(namespace,auth.address);},[!!consumer,namespace,auth.address]);
   useEffect(()=>{
     if(!consumer||!auth.address)return;
     try{
@@ -374,7 +375,7 @@ export default function Pilot({onBusy,namespace='pilot',consumer,tradingClosed=f
         return <p className={`ticket-status${failed?' ticket-status-error':''}`} role="status">{failed&&<TriangleAlert aria-hidden="true" strokeWidth={1.75}/>}{busy?'Working...':quantityError||consumerNotice(notice)}</p>;})()}
       {!pending&&!completed&&owner&&!overTradeLimit&&<div className="ticket-quote-state"><p role="status" className="field-help">{quoting?'Getting your price...':!review?'Enter your shares to get a price, or refresh the price below.':''}</p>{quoting&&<span className="progress-line" aria-hidden="true"/>}</div>}
       {!pending&&!completed&&owner&&<button className="text-link ticket-refresh" disabled={busy||quoting||overTradeLimit} onClick={()=>setQuoteTick(n=>n+1)}>Refresh price</button>}
-      {completed&&<section className="ticket-review ticket-done"><h3>{side==='buy'?'Purchase complete':side==='sell'?'Sale complete':'Payout collected'}</h3><p>Your transaction is confirmed. There is no need to submit it again.</p><div className="pilot-actions"><a href="/portfolio" className="btn btn-primary">View portfolio</a><button className="btn btn-secondary" onClick={()=>setCompleted(false)}>Make another trade</button></div></section>}
+      {completed&&<section className="ticket-review ticket-done"><h3>{side==='buy'?'Purchase complete':side==='sell'?'Sale complete':'Payout collected'}</h3><p>Your transaction is confirmed. There is no need to submit it again.</p><div className="pilot-actions"><a href="/portfolio" className="btn btn-primary">View portfolio</a><button className="btn btn-secondary" onClick={()=>{setCompleted(false);setLegs([consumer.event]);setRule('AND');setAnswers({[consumer.event]:consumer.yes});}}>Make another trade</button></div></section>}
 
       {review&&!pending&&!completed&&<section className="ticket-review" aria-label="Transaction review"><h3>{reviewTitle}</h3><p className="review-claim">{shares(reviewQuantity)} · {consumerClaim(review.requested,state)}</p>
         {review.action!=='redeem'&&<dl className="review-figures">
