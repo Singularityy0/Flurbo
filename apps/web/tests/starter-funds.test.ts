@@ -5,10 +5,10 @@ import { starterConfig, starterFunds } from '../server/starter-funds.mjs';
 
 const KEY = '0x' + '12'.repeat(32), A = '0x' + 'a1'.repeat(20), B = '0x' + 'b2'.repeat(20), W1 = '0x' + 'c3'.repeat(20), W2 = '0x' + 'd4'.repeat(20);
 
-function harness({ balance = 0n, failSend = false, limit = '50' } = {}) {
+function harness({ balance = 0n, failSend = false, lostReply = false, limit = '50' } = {}) {
   const db = new Map<string, string>(), sent: any[] = [], clock = { now: Date.parse('2026-10-02T10:00:00Z') };
   const command = async (op: string, ...args: any[]) => {
-    if (op === 'INCR') { const n = Number(db.get(args[0]) || 0) + 1; db.set(args[0], String(n)); return n; }
+    if (op === 'INCR' || op === 'DECR') { const n = Number(db.get(args[0]) || 0) + (op === 'INCR' ? 1 : -1); db.set(args[0], String(n)); return n; }
     if (op === 'EXPIRE') return 1;
     if (op === 'GET') return db.get(args[0]) ?? null;
     if (op === 'DEL') { let n = 0; for (const k of args) n += db.delete(k) ? 1 : 0; return n; }
@@ -16,8 +16,20 @@ function harness({ balance = 0n, failSend = false, limit = '50' } = {}) {
     throw Error('unexpected ' + op);
   };
   const state = { balance };
-  const client: any = { getChainId: async () => 10143, getBalance: async () => state.balance };
-  const wallet: any = { sendTransaction: async (tx: any) => { if (failSend) throw Error('rpc down'); sent.push(tx); return '0x' + String(sent.length).padStart(64, '0'); } };
+  const onChain = new Set<string>();
+  const client: any = { getChainId: async () => 10143, getBalance: async () => state.balance,
+    getTransaction: async ({ hash }: any) => { if (!onChain.has(hash)) throw Error('not found'); return { hash }; } };
+  const wallet: any = {
+    prepareTransactionRequest: async (tx: any) => ({ ...tx, nonce: sent.length }),
+    signTransaction: async (tx: any) => '0x02' + tx.to.slice(2) + String(tx.nonce).padStart(4, '0'),
+    sendRawTransaction: async ({ serializedTransaction }: any) => {
+      if (failSend) throw Error('rpc down');
+      sent.push({ to: '0x' + serializedTransaction.slice(4, 44), value: parseEther('0.5') });
+      const { keccak256 } = await import('viem'); onChain.add(keccak256(serializedTransaction));
+      if (lostReply) throw Error('timeout');
+      return keccak256(serializedTransaction);
+    },
+  };
   const starter = starterFunds({ config: starterConfig({ FLURBO_STARTER_PRIVATE_KEY: KEY, FLURBO_STARTER_DAILY_LIMIT: limit }), command,
     rpcUrl: 'https://testnet-rpc.monad.xyz', client, wallet, now: () => clock.now })!;
   const dayCount = () => [...db.entries()].filter(([k]) => k.includes(':day:')).map(([, v]) => Number(v))[0] ?? 0;
@@ -60,6 +72,8 @@ test('funded wallets, the daily cap and failed sends are handled without losing 
   const failing = harness({ failSend: true });
   await assert.rejects(failing.starter.send(A, W1), (e: any) => e.status === 503);
   assert.equal([...failing.db.keys()].some(k => k.includes(':account:') || k.includes(':wallet:')), false);
+  assert.equal(failing.dayCount(), 0, 'a send that never happened gives its daily-cap slot back');
+  assert.equal(capped.dayCount(), 1, 'a refused request over the cap does not inflate the count');
   await assert.rejects(harness().starter.send('bad', W1), (e: any) => e.status === 400);
 });
 
@@ -141,4 +155,14 @@ test('linking a new wallet sends the free MON automatically, once, without block
     await new Promise(r => setTimeout(r, 20));
     assert.equal(sends.length, 1);
   } finally { server.closeAllConnections(); await new Promise<void>(r => server.close(() => r())); }
+});
+
+test('a broadcast whose reply is lost still counts as sent, so a retry cannot pay twice', async () => {
+  const h = harness({ lostReply: true });
+  const result = await h.starter.send(A, W1);
+  assert.match(result.hash, /^0x[0-9a-f]{64}$/);
+  assert.equal(h.sent.length, 1);
+  assert.equal((await h.starter.status(A)).status, 'sent');
+  await assert.rejects(h.starter.send(A, W1), (e: any) => e.code === 'ALREADY_SENT');
+  assert.equal(h.dayCount(), 1);
 });

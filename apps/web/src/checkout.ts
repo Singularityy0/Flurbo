@@ -27,6 +27,15 @@ export function saveCheckout(namespace:PilotNamespace,login:string,draft:Checkou
   if(!valid(draft))throw new Error('Invalid prediction draft.');
   localStorage.setItem(key(namespace,login),JSON.stringify(draft));
 }
+// Pages opened earlier in this page load (a full reload clears it). A combined draft is recovery for a reload;
+// returning to a market from elsewhere in the app starts from the single answer the user chose, unless a
+// transaction for the combination may still be pending or it came from the thesis explorer (bound to a pool).
+const visited=new Set<string>();
+export function markCheckoutVisited(namespace:PilotNamespace,login:string){visited.add(key(namespace,login));}
+export function restorableCheckout(namespace:PilotNamespace,login:string,draft:CheckoutDraft|null,hasPending:boolean):CheckoutDraft|null{
+  if(!draft)return null;
+  return draft.legs.length>1&&!draft.binding&&!hasPending&&visited.has(key(namespace,login))?null:draft;
+}
 export function clearCheckout(namespace:PilotNamespace,login:string){localStorage.removeItem(key(namespace,login));}
 export function assertCheckoutBinding(draft:CheckoutDraft|null,manifest:{pool:string;rulesHash:string}){
   if(draft?.binding&&(draft.binding.pool.toLowerCase()!==manifest.pool.toLowerCase()||draft.binding.rulesHash.toLowerCase()!==manifest.rulesHash.toLowerCase()))throw Error('This thesis belongs to a different market version. Return to the explorer and compare again.');

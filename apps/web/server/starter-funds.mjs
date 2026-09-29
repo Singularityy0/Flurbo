@@ -1,4 +1,4 @@
-import { createPublicClient, createWalletClient, http, parseEther, formatEther } from 'viem';
+import { createPublicClient, createWalletClient, http, parseEther, formatEther, keccak256 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { monadTestnet } from 'viem/chains';
 
@@ -54,15 +54,26 @@ export function starterFunds({ config, command, rpcUrl, now = () => Date.now(), 
       const day = dayKey(), count = Number(await command('INCR', day));
       await command('EXPIRE', day, 172800);
       if (count > config.dailyLimit) {
+        await command('DECR', day);
         await command('DEL', accountKey(login), walletKey(target));
         throw Object.assign(Error("Today's free test MON has run out. Use the Monad faucet, or try again tomorrow."), { status: 429, code: 'DAILY_LIMIT' });
       }
-      let hash;
-      try { hash = await sender.sendTransaction({ account, to: target, value: config.amount, chain: monadTestnet }); }
-      catch {
-        // Nothing was broadcast, so release the reservation for a later retry.
-        await command('DEL', accountKey(login), walletKey(target));
-        throw Object.assign(Error('Free test MON could not be sent right now. Try again shortly or use the Monad faucet.'), { status: 503 });
+      // Sign locally first so the hash is known before broadcasting. If the broadcast errors or times out,
+      // the chain is asked whether that exact transaction arrived: only a send that provably did not happen
+      // releases the reservation and its daily-cap slot, so a retry can never pay the same person twice.
+      let hash = null;
+      try {
+        const request = await sender.prepareTransactionRequest({ account, to: target, value: config.amount, chain: monadTestnet });
+        const serializedTransaction = await sender.signTransaction(request);
+        hash = keccak256(serializedTransaction);
+        await sender.sendRawTransaction({ serializedTransaction });
+      } catch {
+        const arrived = hash !== null && await reader.getTransaction({ hash }).then(tx => !!tx, () => false);
+        if (!arrived) {
+          await command('DEL', accountKey(login), walletKey(target));
+          await command('DECR', day);
+          throw Object.assign(Error('Free test MON could not be sent right now. Try again shortly or use the Monad faucet.'), { status: 503 });
+        }
       }
       await command('SET', accountKey(login), JSON.stringify({ wallet: target, hash, at: now() }));
       return { hash, amountMon: formatEther(config.amount) };
