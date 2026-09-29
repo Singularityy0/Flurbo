@@ -5,7 +5,7 @@ import { starterConfig, starterFunds } from '../server/starter-funds.mjs';
 
 const KEY = '0x' + '12'.repeat(32), A = '0x' + 'a1'.repeat(20), B = '0x' + 'b2'.repeat(20), W1 = '0x' + 'c3'.repeat(20), W2 = '0x' + 'd4'.repeat(20);
 
-function harness({ balance = 0n, failSend = false, lostReply = false, limit = '50' } = {}) {
+function harness({ balance = 0n, failSend = false, lostReply = false, visibleAfter = 0, limit = '50' } = {}) {
   const db = new Map<string, string>(), sent: any[] = [], clock = { now: Date.parse('2026-10-02T10:00:00Z') };
   const command = async (op: string, ...args: any[]) => {
     if (op === 'INCR' || op === 'DECR') { const n = Number(db.get(args[0]) || 0) + (op === 'INCR' ? 1 : -1); db.set(args[0], String(n)); return n; }
@@ -15,25 +15,36 @@ function harness({ balance = 0n, failSend = false, lostReply = false, limit = '5
     if (op === 'SET') { if (args[2] === 'NX' && db.has(args[0])) return null; db.set(args[0], args[1]); return 'OK'; }
     throw Error('unexpected ' + op);
   };
-  const state = { balance };
-  const onChain = new Set<string>();
+  // A small chain: broadcast transactions use up their nonce; each becomes visible to lookups only after
+  // `visibleAfter` further lookups, like a node that has not indexed it yet.
+  const state = { balance, failSend, lostReply, visibleAfter };
+  const broadcast = new Map<string, { nonce: number; lookups: number }>(), used = new Set<number>();
   const client: any = { getChainId: async () => 10143, getBalance: async () => state.balance,
-    getTransaction: async ({ hash }: any) => { if (!onChain.has(hash)) throw Error('not found'); return { hash }; } };
+    getTransactionCount: async () => used.size,
+    getTransaction: async ({ hash }: any) => {
+      const tx = broadcast.get(hash);
+      if (!tx || tx.lookups++ < state.visibleAfter) throw Error('not found');
+      return { hash };
+    } };
   const wallet: any = {
-    prepareTransactionRequest: async (tx: any) => ({ ...tx, nonce: sent.length }),
+    prepareTransactionRequest: async (tx: any) => { let nonce = 0; while (used.has(nonce)) nonce++; return { ...tx, nonce }; },
     signTransaction: async (tx: any) => '0x02' + tx.to.slice(2) + String(tx.nonce).padStart(4, '0'),
     sendRawTransaction: async ({ serializedTransaction }: any) => {
-      if (failSend) throw Error('rpc down');
-      sent.push({ to: '0x' + serializedTransaction.slice(4, 44), value: parseEther('0.5') });
-      const { keccak256 } = await import('viem'); onChain.add(keccak256(serializedTransaction));
-      if (lostReply) throw Error('timeout');
-      return keccak256(serializedTransaction);
+      if (state.failSend) throw Error('rpc down');
+      const { keccak256 } = await import('viem'), hash = keccak256(serializedTransaction), nonce = Number(serializedTransaction.slice(-4));
+      if (broadcast.has(hash)) throw Error('already known');
+      if (used.has(nonce)) throw Error('nonce too low');
+      used.add(nonce); broadcast.set(hash, { nonce, lookups: 0 });
+      sent.push({ to: '0x' + serializedTransaction.slice(4, 44), value: parseEther('0.5'), hash });
+      if (state.lostReply) throw Error('timeout');
+      return hash;
     },
   };
   const starter = starterFunds({ config: starterConfig({ FLURBO_STARTER_PRIVATE_KEY: KEY, FLURBO_STARTER_DAILY_LIMIT: limit }), command,
-    rpcUrl: 'https://testnet-rpc.monad.xyz', client, wallet, now: () => clock.now })!;
+    rpcUrl: 'https://testnet-rpc.monad.xyz', client, wallet, now: () => clock.now, sleep: async () => {} })!;
   const dayCount = () => [...db.entries()].filter(([k]) => k.includes(':day:')).map(([, v]) => Number(v))[0] ?? 0;
-  return { starter, db, sent, state, clock, dayCount };
+  const kept = () => [...db.keys()].filter(k => k.includes(':unsent:')).length;
+  return { starter, db, sent, state, clock, dayCount, kept };
 }
 
 test('configuration is off without a key and rejects unsafe values', () => {
@@ -160,9 +171,47 @@ test('linking a new wallet sends the free MON automatically, once, without block
 test('a broadcast whose reply is lost still counts as sent, so a retry cannot pay twice', async () => {
   const h = harness({ lostReply: true });
   const result = await h.starter.send(A, W1);
-  assert.match(result.hash, /^0x[0-9a-f]{64}$/);
+  assert.equal(result.hash, h.sent[0].hash);
   assert.equal(h.sent.length, 1);
   assert.equal((await h.starter.status(A)).status, 'sent');
   await assert.rejects(h.starter.send(A, W1), (e: any) => e.code === 'ALREADY_SENT');
-  assert.equal(h.dayCount(), 1);
+  assert.equal(h.dayCount(), 1); assert.equal(h.kept(), 0);
+});
+
+test('a transaction that becomes visible a few seconds late is still recognised', async () => {
+  const h = harness({ lostReply: true, visibleAfter: 2 });
+  await h.starter.send(A, W1);
+  assert.equal(h.sent.length, 1); assert.equal((await h.starter.status(A)).status, 'sent'); assert.equal(h.kept(), 0);
+});
+
+test('a send that landed but stayed invisible is recognised on retry, never sent again', async () => {
+  const h = harness({ lostReply: true, visibleAfter: 99 });
+  await assert.rejects(h.starter.send(A, W1), (e: any) => e.status === 503);
+  assert.equal(h.sent.length, 1); assert.equal(h.kept(), 1); assert.equal(h.dayCount(), 0);
+  h.state.lostReply = false; h.state.visibleAfter = 0;
+  const retry = await h.starter.send(A, W1);
+  assert.equal(retry.hash, h.sent[0].hash);
+  assert.equal(h.sent.length, 1, 'no second payment');
+  assert.equal(h.kept(), 0); assert.equal(h.dayCount(), 1);
+});
+
+test('a retry rebroadcasts the same signed transaction instead of signing a new one', async () => {
+  const h = harness({ failSend: true });
+  await assert.rejects(h.starter.send(A, W1), (e: any) => e.status === 503);
+  const keptHash = JSON.parse([...h.db.entries()].find(([k]) => k.includes(':unsent:'))![1]).hash;
+  h.state.failSend = false;
+  const retry = await h.starter.send(A, W1);
+  assert.equal(retry.hash, keptHash);
+  assert.equal(h.sent.length, 1); assert.equal(h.kept(), 0);
+});
+
+test('a kept transaction whose nonce was used by another send is replaced by a fresh one', async () => {
+  const h = harness({ failSend: true });
+  await assert.rejects(h.starter.send(A, W1), (e: any) => e.status === 503);
+  h.state.failSend = false;
+  await h.starter.send(B, W2); // takes the same nonce, so the kept transaction can never land
+  const retry = await h.starter.send(A, W1);
+  assert.equal(h.sent.length, 2);
+  assert.deepEqual(h.sent.map(t => t.to), [W2, W1]);
+  assert.equal(retry.hash, h.sent[1].hash); assert.equal(h.kept(), 0);
 });
