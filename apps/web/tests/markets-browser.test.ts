@@ -166,6 +166,8 @@ for(const namespace of ['practice-'+'22'.repeat(20)])test('consumer markets pres
     assert.equal(await page.getByLabel('Shares',{exact:true}).inputValue(),'5');
     assert.equal(await page.getByRole('radiogroup',{name:'Your answer'}).getByRole('radio',{name:'No',exact:true}).getAttribute('aria-checked'),'true');
     await page.getByRole('button',{name:'Buy 5 shares',exact:true}).waitFor();
+    // A multi-share review shows the average price against one share of the same claim.
+    await page.getByText(/test AUSD, \d+\.\d% above the price of one share/).waitFor();
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('connect.requests')),connectionsBeforeReload);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('link.signatures')),'1');
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('pilot.sends')),'1');

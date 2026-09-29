@@ -25,10 +25,20 @@ export type HoldingWitness={holder:string;scope:number;mask:string;wrapped:boole
 export type HolderAuthorization=HoldingWitness&{accountCommitment:Hex;challenger:string;nonce:string;deadline:string};
 export type PilotInput={owner:string;action:string;event?:number;outcome?:number;evidenceHash?:string;evidenceURI?:string;scope?:number;mask?:string;quantity?:string;slippageBps?:number;stake?:HoldingWitness;authorization?:HolderAuthorization;signature?:Hex};
 export type PilotReview={schema:string;manifest:PilotManifest;snapshot:PilotState['snapshot'];expiresAt:number;action:string;requested:PilotInput;title:string;amountAtoms:string;minimumReceivedAtoms?:string;
-  gasLimit:string;gasPrice:string;maximumFeeWei:string;semanticAssessment?:SemanticAssessment|null;quotedCostAtoms?:string|null;
+  gasLimit:string;gasPrice:string;maximumFeeWei:string;semanticAssessment?:SemanticAssessment|null;impact?:{quoteAtoms:string;oneShareAtoms:string}|null;quotedCostAtoms?:string|null;
   transaction:{from:Hex;to:Hex;data:Hex;value:Hex;chainId:Hex};notice:string};
 export type PilotPending={review:PilotReview;nonce:Hex;hash:Hex|null;started:number;login:string};
 export const pilotPendingKey='flurbo.pilot.pending.v1';
+// Average price per share for this size against one share of the same claim, in basis points
+// (worse than one share: above it for a buy, below it for a sale). Null for one share or no quote.
+export function priceImpact(review:Pick<PilotReview,'impact'|'requested'|'action'>):{averageAtoms:bigint;bps:number}|null{
+  try{
+    const quantity=BigInt(review.requested?.quantity??'0'),quote=BigInt(review.impact?.quoteAtoms??'0'),one=BigInt(review.impact?.oneShareAtoms??'0');
+    if(quantity<=1_000_000n||quote<=0n||one<=0n||!['buy','sell','approve'].includes(review.action))return null;
+    const averageAtoms=quote*1_000_000n/quantity,worse=review.requested.action==='sell'?one-averageAtoms:averageAtoms-one;
+    return {averageAtoms,bps:Number(worse*10_000n/one)};
+  }catch{return null;}
+}
 const practiceModes = ['rehearsal','ethereum-activity','deterministic-source-v1'];
 export type PilotNamespace='pilot'|`practice-${string}`;
 export const isPracticeNamespace=(value:string):value is Exclude<PilotNamespace,'pilot'>=>/^practice-[0-9a-f]{40}$/.test(value);

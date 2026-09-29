@@ -32,9 +32,14 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
       window.addEventListener('eip6963:requestProvider',()=>window.dispatchEvent(new CustomEvent('eip6963:announceProvider',{detail:{info:{name:'MetaMask',rdns:'io.metamask'},provider:metamask}})));
     },{owner,hash});
     let mon='0xde0b6b3a7640000',stock='0x3b9aca00',receipt:any=null;
+    const starterRequests:any[]=[];
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
-      if(path==='/api/network')return route.fulfill({json:{...TESTNET,flurboFaucet:true}});
+      if(path==='/api/network')return route.fulfill({json:{...TESTNET,flurboFaucet:true,starterMon:'0.3'}});
+      if(path==='/api/fund/starter'&&route.request().method()==='GET')return route.fulfill({json:{status:starterRequests.length>=2?'sent':'available',amountMon:'0.3'}});
+      if(path==='/api/fund/starter'){starterRequests.push(route.request().postDataJSON());
+        if(starterRequests.length===1)return route.fulfill({status:429,json:{code:'DAILY_LIMIT',error:"Today's free test MON has run out. Use the Monad faucet, or try again tomorrow."}});
+        return route.fulfill({json:{hash:'0x'+'5'.repeat(64),amountMon:'0.3'}});}
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
@@ -62,6 +67,17 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
     await page.getByRole('button',{name:'Refresh balances'}).click();
     await page.getByText('Get test MON first. Balances update when you return to this page, or use Refresh balances.').waitFor();
     assert.equal(await page.getByRole('button',{name:'Request test AUSD',exact:true}).isDisabled(),true);
+    // Flurbo can send one-time starter MON to the linked wallet instead of the external faucet.
+    // When today's MON has run out, the button gives way to the reason and the Monad faucet stays offered.
+    await page.getByRole('button',{name:'Send me 0.3 test MON',exact:true}).click();
+    await page.getByText("Today's free test MON has run out.",{exact:false}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'Send me 0.3 test MON',exact:true}).count(),0);
+    assert.equal(await page.getByRole('link',{name:/Open MON faucet/}).count(),1);
+    await openFunding();
+    await page.getByRole('button',{name:'Send me 0.3 test MON',exact:true}).click();
+    await page.getByText('Flurbo sent you 0.3 test MON',{exact:false}).waitFor();
+    assert.deepEqual(starterRequests,[{wallet:owner},{wallet:owner}]);
+    assert.equal(await page.getByRole('button',{name:'Send me 0.3 test MON',exact:true}).count(),0);
     // Test MON arrives from the faucet in another tab. Coming back re-reads balances without a click.
     mon='0xde0b6b3a7640000';
     await page.evaluate(()=>window.dispatchEvent(new Event('focus')));

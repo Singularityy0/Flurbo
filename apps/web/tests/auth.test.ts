@@ -151,3 +151,21 @@ test("derived Mera sessions sign and reject signing after end", async () => {
   account.session.end();
   await assert.rejects(account.session.signDigest(new Uint8Array(32)), { code: "SESSION_ENDED" });
 });
+
+test('sign-up refuses up front only when the browser explicitly lacks PRF', async () => {
+  const { prfExplicitlyUnsupported } = await import('../src/auth/controller.ts');
+  assert.equal(await prfExplicitlyUnsupported({ getClientCapabilities: async () => ({ 'extension:prf': false }) }), true);
+  assert.equal(await prfExplicitlyUnsupported({ getClientCapabilities: async () => ({ 'extension:prf': true }) }), false);
+  // Unknown or unreportable capabilities never block the normal flow.
+  assert.equal(await prfExplicitlyUnsupported({ getClientCapabilities: async () => ({}) }), false);
+  assert.equal(await prfExplicitlyUnsupported({ getClientCapabilities: async () => { throw Error('unsupported'); } }), false);
+  assert.equal(await prfExplicitlyUnsupported({}), false);
+  assert.equal(await prfExplicitlyUnsupported(undefined), false);
+});
+
+test('a sign-up that fails for missing PRF names working providers and how to remove the orphan passkey', async () => {
+  const f = setup({ client: { createCredential: async () => ({ credentialId: new Uint8Array([1]), prfEnabled: false }) } });
+  assert.equal(await f.controller.authenticate("signup"), false);
+  const error = f.controller.getSnapshot().error ?? '';
+  assert.match(error, /Google Password Manager/); assert.match(error, /iCloud Keychain/); assert.match(error, /delete it/);
+});

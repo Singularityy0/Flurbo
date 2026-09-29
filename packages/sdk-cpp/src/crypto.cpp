@@ -7,6 +7,12 @@
 #include <openssl/obj_mac.h>
 #include <openssl/param_build.h>
 #include <openssl/rand.h>
+#include <openssl/opensslv.h>
+
+// Deterministic ECDSA nonces and Keccak-256 need OpenSSL 3.2. Ubuntu 24.04 ships 3.0; see the README.
+#if OPENSSL_VERSION_NUMBER < 0x30200000L
+#error "The Flurbo C++ SDK needs OpenSSL 3.2 or later. See packages/sdk-cpp/README.md (Linux)."
+#endif
 
 #include <cstdlib>
 #include <cstring>

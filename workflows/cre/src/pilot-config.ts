@@ -45,7 +45,16 @@ export function disputePolicy(input: { challengePolicy?:{version:'account-holder
   return eligibility+control+`Named testnet reviewer panel: ${input.reviewers.map(r => `${r.name} (${r.address.toLowerCase()})`).join(', ')}. Quorum ${Math.floor(input.reviewers.length / 2) + 1} of ${input.reviewers.length} matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: ${input.bondAtoms} atoms each. Assertion window: ${input.assertionPeriod} seconds after observation end. Challenge window: ${input.challengePeriod} seconds after assertion. Vote window: ${input.votingPeriod} seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted.`;
 }
 
-export function preparePilot(input: unknown, now: number) {
+// Pool depth b in collateral atoms. 250 test AUSD keeps a 10-share trade within about 1% of the
+// quoted price; funding is b * ln(2^events) (about 347 test AUSD for two questions). Deployed pools
+// keep the b they were created with; this only applies to new preparations.
+export const DEFAULT_LIQUIDITY_ATOMS = '250000000';
+export function validLiquidityAtoms(value: string) {
+  return /^[1-9][0-9]*$/.test(value) && BigInt(value) >= 10_000_000n && BigInt(value) <= 1_000_000_000_000n;
+}
+
+export function preparePilot(input: unknown, now: number, liquidityAtoms: string = DEFAULT_LIQUIDITY_ATOMS) {
+  if (!validLiquidityAtoms(liquidityAtoms)) throw new Error('Liquidity must be between 10 and 1,000,000 test AUSD in atoms');
   const value = pilotInputSchema.parse(input);
   if (!Number.isSafeInteger(now) || now <= 0) throw new Error('Invalid preparation time');
   if (![3, 5].includes(value.reviewers.length) || new Set(value.reviewers.map(r => r.address)).size !== value.reviewers.length
@@ -76,7 +85,7 @@ export function preparePilot(input: unknown, now: number) {
   const resolverConfig = encodeAbiParameters(resolverConfigAbi, [config]);
   return { schema: 'flurbo.pilot-prepared.v1', status: 'prepared_not_deployed', preparedAt: now,
     creator: value.creator, publication: value, draftHash, eventHashes, resolverConfig,
-    configHash: keccak256(resolverConfig), liquidityAtoms: '10000000',
+    configHash: keccak256(resolverConfig), liquidityAtoms,
     notice: 'Preparation does not publish a market, verify reviewer independence or establish evidence delivery. Deployment and public acceptance remain separate.' };
 }
 

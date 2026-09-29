@@ -1,5 +1,5 @@
 import { decodeAbiParameters, decodeFunctionResult, encodeFunctionData, keccak256, parseAbi, type Abi, type Address, type Hex } from 'viem';
-import { preparePilot, resolverConfigAbi, pilotRulesHash, PILOT_CASH } from './pilot-config';
+import { preparePilot, resolverConfigAbi, pilotRulesHash, PILOT_CASH, validLiquidityAtoms } from './pilot-config';
 import {holderResolverAbi} from '../../../apps/web/shared/holder-challenge.mjs';
 import { resolverAbi, pilotPoolAbi, pilotCashAbi } from '../../../apps/web/shared/pilot.mjs';
 
@@ -56,9 +56,14 @@ export async function verifyPilot(prepared: ReturnType<typeof preparePilot>, dep
     if((await read(resolver,resolverAbi,'caseState',[i])).phase!==0) throw new Error('Pilot already has outcome activity');
   }
   if(rebuilt.publication.challengePolicy)await check(resolver,holderResolverAbi,'eligibilitySigner',rebuilt.publication.challengePolicy.authority);
-  const funding=BigInt(config.eventHashes.length) * 6_931_472n;
+  if(!validLiquidityAtoms(prepared.liquidityAtoms))throw new Error('Invalid prepared liquidity');
+  const liquidity=BigInt(prepared.liquidityAtoms),events=BigInt(config.eventHashes.length);
+  // The pool rounds its funding bound up; expect ceil(events * b * ln 2), allowing one atom per event.
+  const LN2_E18=693_147_180_559_945_309n,exact=events*liquidity*LN2_E18,minimum=exact/10n**18n+(exact%10n**18n?1n:0n);
+  const funding=BigInt(await read(pool,pilotPoolAbi,'requiredFunding'));
+  if(funding<minimum||funding>minimum+events)throw new Error('Deployment mismatch: requiredFunding');
   for(const [name,value] of Object.entries({resolver,collateral:PILOT_CASH,settlementRulesHash:rulesHash,eventCount:config.eventHashes.length,
-    liquidity:10_000_000,collateralDecimals:6,closesAt:config.closesAt,funded:true,resolved:false,requiredFunding:funding,requiredCollateral:0,resolvedState:0,voidMask:0})) await check(pool,pilotPoolAbi,name,value);
+    liquidity,collateralDecimals:6,closesAt:config.closesAt,funded:true,resolved:false,requiredFunding:funding,requiredCollateral:0,resolvedState:0,voidMask:0})) await check(pool,pilotPoolAbi,name,value);
   await check(pool,pilotPoolAbi,'eliminationOrder',config.eventHashes.map((_,i)=>i));
   if((await read(pool,pilotPoolAbi,'factors')).length!==0)throw new Error('Pilot has prior trading activity; use a fresh deployment');
   await check(PILOT_CASH,pilotCashAbi,'decimals',6);

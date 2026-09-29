@@ -55,3 +55,13 @@ test('account discovers scopes at its verified block without attributing them to
   assert.deepEqual(result.claimScopes,[3]);assert.equal(calls[0][1],'0x64');
   assert.equal(result.rows,undefined);assert.equal(result.wallet.address,owner);
 });
+
+test('price impact compares the average price of a size with one share of the same claim', async () => {
+  const { priceImpact } = await import('../src/pilot.ts');
+  const buy = { action: 'buy', requested: { action: 'buy', quantity: '10000000' }, impact: { quoteAtoms: '6201000', oneShareAtoms: '512500' } } as any;
+  assert.deepEqual(priceImpact(buy), { averageAtoms: 620100n, bps: 2099 });
+  const sell = { action: 'sell', requested: { action: 'sell', quantity: '2000000' }, impact: { quoteAtoms: '900000', oneShareAtoms: '500000' } } as any;
+  assert.deepEqual(priceImpact(sell), { averageAtoms: 450000n, bps: 1000 });
+  assert.equal(priceImpact({ ...buy, requested: { action: 'buy', quantity: '1000000' } }), null);
+  assert.equal(priceImpact({ ...buy, impact: null }), null);
+});

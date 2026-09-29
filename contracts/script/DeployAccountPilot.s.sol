@@ -11,6 +11,7 @@ interface AccountPilotDeployVm {
     function parseJsonBytes(string calldata, string calldata) external pure returns (bytes memory);
     function parseJsonAddress(string calldata, string calldata) external pure returns (address);
     function parseJsonBytes32(string calldata, string calldata) external pure returns (bytes32);
+    function parseJsonUint(string calldata, string calldata) external pure returns (uint256);
     function startBroadcast(address) external;
     function stopBroadcast() external;
     function serializeAddress(string calldata, string calldata, address) external returns (string memory);
@@ -33,14 +34,15 @@ contract DeployAccountPilot {
         bytes memory encoded = vm.parseJsonBytes(prepared, ".resolverConfig");
         require(keccak256(encoded) == vm.parseJsonBytes32(prepared, ".configHash"), "configuration hash mismatch");
         PilotResolver.Config memory c = abi.decode(encoded, (PilotResolver.Config));
-        (pool, resolver) = deploy(creator, c);
+        uint256 liquidity = vm.parseJsonUint(prepared, ".liquidityAtoms");
+        (pool, resolver) = deploy(creator, c, liquidity);
         writeManifest(pool, resolver);
     }
 
     function preparedPath() internal pure virtual returns (string memory) { return "target/deployments/account-pilot-prepared.json"; }
     function manifestPath() internal pure virtual returns (string memory) { return "target/deployments/account-pilot-unverified.json"; }
 
-    function deploy(address creator, PilotResolver.Config memory c) internal returns (PilotPool pool, PilotResolver resolver) {
+    function deploy(address creator, PilotResolver.Config memory c, uint256 liquidity) internal returns (PilotPool pool, PilotResolver resolver) {
         require(block.chainid == 10143 && creator != address(0), "Monad testnet creator required");
         require(c.collateral == AUSD && c.closesAt > block.timestamp + 1 hours && c.closesAt <= block.timestamp + 30 days, "invalid pilot configuration");
         for (uint256 i; i < c.observationEnds.length; ++i) require(c.observationEnds[i] <= block.timestamp + 90 days, "observation too late");
@@ -50,7 +52,8 @@ contract DeployAccountPilot {
         for (uint8 i; i < order.length; ++i) order[i] = i;
         vm.startBroadcast(creator);
         resolver = new PilotResolver(c, authority);
-        pool = new PilotPool(AUSD, uint8(c.eventHashes.length), 10e6, c.closesAt, order, address(resolver), resolver.rulesHash());
+        require(liquidity >= 10e6 && liquidity <= 1e12, "prepared liquidity out of range");
+        pool = new PilotPool(AUSD, uint8(c.eventHashes.length), uint128(liquidity), c.closesAt, order, address(resolver), resolver.rulesHash());
         resolver.bindPool(address(pool));
         require(cash.balanceOf(creator) >= pool.requiredFunding(), "fund creator with test AUSD");
         require(cash.approve(address(pool), pool.requiredFunding()), "funding approval failed");

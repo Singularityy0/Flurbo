@@ -17,7 +17,7 @@ import QuantityStepper from '../components/ui/QuantityStepper';
 import {shares} from '../format';
 import CombinationBuilder from './CombinationBuilder';
 import { semanticAcknowledgment, pilotRequest as request, submitPilot, checkPilotPending, readPilotPending as readPending, pendingKeyFor, validatePilotReview,
-  type Provider, type PilotState, type PilotInput, type PilotReview, type PilotPending, type PilotNamespace, type HoldingWitness } from '../pilot';
+  priceImpact, type Provider, type PilotState, type PilotInput, type PilotReview, type PilotPending, type PilotNamespace, type HoldingWitness } from '../pilot';
 import './portfolio.css';
 import './kuru.css';
 import './pilot.css';
@@ -361,13 +361,14 @@ export default function Pilot({onBusy,namespace='pilot',consumer,tradingClosed=f
         <div><strong className={owner?'mono':undefined}>{owner ? `${owner.slice(0,6)}…${owner.slice(-4)}` : 'MetaMask'}</strong>{owner&&state?.wallet&&<small>{cash(state.wallet.cash)} test AUSD</small>}</div>
         <button className={owner?"btn btn-secondary":"btn btn-primary"} disabled={disabled} onClick={()=>void run(()=>connect(!!owner))}>{owner?'Switch wallet':walletStatus==='checking'?'Checking wallet...':walletStatus==='unlinked'?'Link selected wallet':'Connect MetaMask'}</button>
       </div>
-      {restored&&<p className="ticket-note">Your saved selection has been restored. Check the answers before confirming.</p>}
+      {restored&&legs.length===1&&<p className="ticket-note">Your saved selection has been restored. Check the answers before confirming.</p>}
+      {legs.length>1&&!pending&&!completed&&<p className="ticket-note ticket-combined" role="note"><strong>Combined prediction: {legs.length} answers.</strong> {restored?'Restored from your last visit. ':''}You are buying one combined position, not this answer alone. <button className="text-link" disabled={disabled} onClick={()=>{setLegs([consumer.event]);setRule('AND');}}>Buy only this answer</button></p>}
       {!pending&&!completed&&<div className="ticket-controls">
         <SegmentedControl label="Buy or sell" value={side==='sell'?'sell':'buy'} options={[{value:'buy',label:'Buy'},{value:'sell',label:'Sell'}]} onChange={value=>setSide(value)} disabled={disabled} block/>
         <SegmentedControl label="Your answer" value={(answers[consumer.event]??true)?'yes':'no'} options={[{value:'yes',label:'Yes'},{value:'no',label:'No'}]} onChange={value=>setAnswers(old=>({...old,[consumer.event]:value==='yes'}))} disabled={disabled} block/>
         <QuantityStepper label="Shares" value={quantity} onChange={setQuantity} max={limit} disabled={disabled} describedBy={limit!==null?'ticket-limit':undefined}/>
         {tradeLimit!==null&&['buy','sell'].includes(side)&&<p id="ticket-limit" className="field-help">Up to {formatUnits(tradeLimit,6)} shares per trade, including combinations.</p>}
-        {mask==='0'?<p role="alert" className="state-inline error">This saved selection is unavailable. <button className="text-link" onClick={()=>{setLegs([consumer.event]);setRule('AND');}}>Reset prediction</button></p>:<CombinationBuilder state={state} base={consumer.event} legs={legs} answers={answers} rule={legs.length===1?'AND':rule} scope={scope} mask={mask} disabled={disabled} namespace={namespace} onLegs={next=>{setLegs(next);if(next.length===1)setRule('AND');}} onAnswer={(event,yes)=>setAnswers(old=>({...old,[event]:yes}))} onRule={setRule}/>}
+        {mask==='0'?<p role="alert" className="state-inline error">This saved selection is unavailable. <button className="text-link" onClick={()=>{setLegs([consumer.event]);setRule('AND');}}>Reset prediction</button></p>:<CombinationBuilder state={state} base={consumer.event} legs={legs} answers={answers} rule={legs.length===1?'AND':rule} scope={scope} mask={mask} disabled={disabled} namespace={namespace} onLegs={next=>{setLegs(next);if(next.length===1||next.length<3&&rule==='AT_LEAST_TWO')setRule('AND');}} onAnswer={(event,yes)=>setAnswers(old=>({...old,[event]:yes}))} onRule={setRule}/>}
       </div>}
       {(()=>{const failed=!busy&&!quantityError&&!!failure&&notice===failure&&notice!=='Wallet request rejected.';
         return <p className={`ticket-status${failed?' ticket-status-error':''}`} role="status">{failed&&<TriangleAlert aria-hidden="true" strokeWidth={1.75}/>}{busy?'Working...':quantityError||consumerNotice(notice)}</p>;})()}
@@ -380,7 +381,9 @@ export default function Pilot({onBusy,namespace='pilot',consumer,tradingClosed=f
           <div className="review-cost"><dt>{review.action==='sell'?'Receive at least':'Spend up to'}</dt><dd>{cash(review.action==='sell'?review.minimumReceivedAtoms!:review.amountAtoms)} test AUSD</dd></div>
           {['buy','approve'].includes(review.action)&&<><div><dt>Payout if correct</dt><dd>{reviewQuantity} test AUSD</dd></div><div><dt>Possible loss</dt><dd>Up to {cash(review.amountAtoms)} test AUSD + fees</dd></div></>}
           <div><dt>Price tolerance</dt><dd>0.5%</dd></div>
+          {(()=>{const impact=priceImpact(review);return impact&&<div className={impact.bps>=500?'review-impact review-impact-large':'review-impact'}><dt>Average per share</dt><dd>{cash(impact.averageAtoms.toString())} test AUSD, {(Math.max(0,impact.bps)/100).toFixed(1)}% {review.requested.action==='sell'?'below':'above'} the price of one share</dd></div>;})()}
         </dl>}
+        {(()=>{const impact=priceImpact(review);return impact&&impact.bps>=500&&<p className="field-help">Large for this pool's depth: each extra share moves the price. Fewer shares cost less per share.</p>;})()}
         <p>{review.action==='approve'?'First allow this payment in your wallet. We will check it automatically, then show the Buy button. Approval alone does not purchase shares.':'Review the amount, then confirm in your selected wallet.'}</p>
         <p className="market-caption">The quote includes the price impact of this trade size. Payout is not profit. A losing prediction pays 0; VOID may pay a fraction under the rules.</p>
         <details><summary>Payment details</summary><p>Maximum network fee: {formatUnits(BigInt(review.maximumFeeWei),18)} MON. Price tolerance: 0.5%.</p><p>Wallet <span className="address">{review.transaction.from}</span>. Review valid until {date(review.expiresAt)}.</p><p>Contract <span className="address">{review.transaction.to}</span></p></details>

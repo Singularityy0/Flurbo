@@ -22,7 +22,7 @@ Preparation, verification, collection registration, server construction and the 
 
 Prepare only when the deployer can sign, the dedicated settlement bot is funded, durable storage and a publicly reachable HTTPS evidence endpoint are working, and the local monitor and worker are ready. The bot must have no position in the collection and cannot be one of its reviewers. Separate test wallets may place clearly identified test trades.
 
-The two-event pool requires 13.862944 test AUSD at the recipe's liquidity parameter. The bot needs at least two one-test-AUSD assertion bonds plus test MON for approval, assertion, finalization and delivery. Gas reserves depend on current gas prices and must be checked separately. Reviewer wallets are disclosed as operator controlled in this test recipe; they are not an independent panel.
+The two-event pool requires about 346.6 test AUSD at the default liquidity parameter of 250 AUSD (`liquidityAtoms` in the prepared file; older preparations used 10 AUSD and 13.862944 test AUSD). The bot needs at least two one-test-AUSD assertion bonds plus test MON for approval, assertion, finalization and delivery. Gas reserves depend on current gas prices and must be checked separately. Reviewer wallets are disclosed as operator controlled in this test recipe; they are not an independent panel.
 
 Keep the machine awake and run the local loop frequently enough to capture within the five-minute windows, preferably once per minute or faster with nonoverlapping executions. A GitHub five-minute schedule is too close to this window to establish reliable capture under normal scheduling delays. This run tests the locally hosted scheduler, not GitHub Actions availability.
 

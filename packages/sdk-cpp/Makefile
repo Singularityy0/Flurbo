@@ -34,13 +34,13 @@ $(LIB): $(LIB_OBJ)
 	ar rcs $@ $^
 
 $(BUILD)/flurbo-agent-cpp$(EXE): tools/main.cpp $(LIB)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(LIB) $(LDLIBS) -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(LDFLAGS) $< $(LIB) $(LDLIBS) -o $@
 
 $(BUILD)/%$(EXE): examples/%.cpp $(LIB)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(LIB) $(LDLIBS) -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(LDFLAGS) $< $(LIB) $(LDLIBS) -o $@
 
 $(BUILD)/test_%$(EXE): tests/%.cpp tests/check.hpp $(LIB)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DFLURBO_FIXTURES='"$(CURDIR)/../../protocol/fixtures"' -DFLURBO_REPO='"$(CURDIR)/../.."' $< $(LIB) $(LDLIBS) -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DFLURBO_FIXTURES='"$(CURDIR)/../../protocol/fixtures"' -DFLURBO_REPO='"$(CURDIR)/../.."' $(LDFLAGS) $< $(LIB) $(LDLIBS) -o $@
 
 test: $(BUILD)/test_conformance$(EXE) $(BUILD)/test_runtime_units$(EXE)
 	$(BUILD)/test_conformance$(EXE)

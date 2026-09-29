@@ -46,9 +46,9 @@ const resolver=await deploy('PilotResolver',[config]);
 async function read(to:Hex,abi:any,name:string,args:any[]=[]) { return decodeFunctionResult({abi,functionName:name,data:await rpc('eth_call',[{to,data:encodeFunctionData({abi,functionName:name,args})},'latest'])}) as any; }
 async function call(from:Hex,to:Hex,abi:any,name:string,args:any[]=[]) { return send(from,to,encodeFunctionData({abi,functionName:name,args})); }
 const rulesHash=await read(resolver,resolverAbi,'rulesHash');
-const pool=await deploy('PilotPool',[cash,4,10_000_000n,BigInt(now+7200),[0,1,2,3],resolver,rulesHash]);
+const pool=await deploy('PilotPool',[cash,4,BigInt(prepared.liquidityAtoms),BigInt(now+7200),[0,1,2,3],resolver,rulesHash]);
 await call(creator,resolver,artifacts.PilotResolver.abi,'bindPool',[pool]);
-for(const owner of [creator,alice,bob]) await call(creator,cash,artifacts.MockCollateral.abi,'mint',[owner,100_000_000n]);
+for(const owner of [creator,alice,bob]) await call(creator,cash,artifacts.MockCollateral.abi,'mint',[owner,1_000_000_000n]);
 const funding=await read(pool,pilotPoolAbi,'requiredFunding');
 await call(creator,cash,pilotCashAbi,'approve',[pool,funding]);
 await call(creator,pool,artifacts.PilotPool.abi,'fund');
