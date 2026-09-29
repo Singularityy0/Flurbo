@@ -61,6 +61,21 @@ export default function Funding({expanded=false}:{expanded?:boolean}) {
     return()=>{generation.current++;providerRef.current=null;stop();};
   },[wallets[0]?.provider,state.address]);
   useEffect(()=>{let active=true;if(owner&&network){void readBalances().catch(e=>{if(active)setMessage(fundingError(e));});void providerRef.current?.request({method:'eth_chainId'}).then(chain=>{if(active)setCorrectChain(chain==='0x279f');}).catch(()=>{});}return()=>{active=false;};},[owner,network]);
+  // Test MON arrives from the faucet in another tab. Re-read when the member comes back,
+  // and check briefly while none is visible yet, so the AUSD step is not left disabled on stale balances.
+  useEffect(()=>{
+    if(!owner||!network)return;
+    const refresh=()=>{if(!document.hidden&&!busyRef.current)void readBalances().catch(()=>{});};
+    window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);
+    return()=>{window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh);};
+  },[owner,network]);
+  const waitingForMon=!!owner&&!!network&&balances?.mon===0n;
+  useEffect(()=>{
+    if(!waitingForMon)return;
+    let tries=0;
+    const timer=setInterval(()=>{if(++tries>30){clearInterval(timer);return;}if(!document.hidden&&!busyRef.current)void readBalances().catch(()=>{});},10000);
+    return()=>clearInterval(timer);
+  },[waitingForMon,owner,network]);
   async function readBalances(address=owner, version=generation.current) {
     if(!address||!network)return;
     const balanceOf=(account:string)=>rpc('eth_call',[{to:TESTNET.cash,data:'0x70a08231'+account.slice(2).padStart(64,'0')},'latest']);
@@ -133,7 +148,7 @@ export default function Funding({expanded=false}:{expanded?:boolean}) {
   const cooldown=balances&&balances.nextClaim>BigInt(Math.floor(Date.now()/1000));
   const monReady=!!balances&&balances.mon>0n, ausdReady=!!balances&&balances.ausd>0n;
   // Say why the request button is disabled; the dispenser and cooldown cases have their own messages above.
-  const blockedReason=!owner||busy||empty||cooldown||uncertain?'':pending?'Your last request is still being checked. Use Check status below.':!correctChain?'Switch MetaMask to Monad testnet first.':!balances?'Balances are loading. If this persists, refresh balances.':balances.mon===0n?'Get test MON first, then refresh balances.':'';
+  const blockedReason=busy||empty||cooldown||uncertain?'':!owner?'Connect and link your MetaMask wallet above first.':pending?'Your last request is still being checked. Use Check status below.':!correctChain?'Switch MetaMask to Monad testnet first.':!balances?'Balances are loading. If this persists, refresh balances.':balances.mon===0n?'Get test MON first. Balances update when you return to this page, or use Refresh balances.':'';
   const content=<div className="funding-card">
     <section className="panel funding-wallet" aria-label="Your trading wallet">
       <div className="panel-head"><h2>Your trading wallet</h2>{owner&&<code className="address funding-address" title={owner}>{owner.slice(0,8)}…{owner.slice(-6)}</code>}</div>
