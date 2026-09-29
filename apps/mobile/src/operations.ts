@@ -75,8 +75,8 @@ export const operations = {
       const pending = state.pending;
       const p: Provider = { async request(input) {
         if (input.method === 'eth_accounts' && pending.category === 'kuru') return [pending.value.review.owner];
-        if (input.method === 'eth_blockNumber') return (await api<{ result: { number: string } }>('/api/rehearsal/rpc', { method: 'eth_getBlockByNumber', params: ['latest', false] })).result.number;
-        return (await api<{ result: unknown }>('/api/rehearsal/rpc', { method: input.method, params: input.params ?? [] })).result;
+        if (input.method === 'eth_blockNumber') return (await api<{ result: { number: string } }>('/api/pilot/rpc', { method: 'eth_getBlockByNumber', params: ['latest', false] })).result.number;
+        return (await api<{ result: unknown }>('/api/pilot/rpc', { method: input.method, params: input.params ?? [] })).result;
       } };
       if (!pending.value.hash) throw new Error('Attach the transaction hash from wallet activity. Do not repeat the action.');
       const result = pending.category === 'kuru' ? await kuru.check(p, pending.value) : pending.category === 'learning' ? await learning.checkLearningReceipt(p, pending.value) : await checkTracked(p, pending.value);

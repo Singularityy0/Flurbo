@@ -141,14 +141,17 @@ test('wall-clock skew cannot fabricate a closed challenge window', async () => {
 test('CLI retains the last good checkpoint on RPC failure, redacts secrets and resumes after restart', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'flurbo-monitor-'));
   const f = fixture();
-  const env = { FLURBO_REHEARSAL_MANIFEST_JSON: JSON.stringify(f.manifest), FLURBO_ALCHEMY_TESTNET_RPC_URL: 'https://monad-testnet.g.alchemy.com/v2/private-test-key' };
+  const manifest = { ...f.manifest, publication: { ...f.manifest.publication, mode: 'official-releases' } };
+  const env = { FLURBO_PILOT_MANIFEST_JSON: JSON.stringify(manifest), FLURBO_ALCHEMY_TESTNET_RPC_URL: 'https://monad-testnet.g.alchemy.com/v2/private-test-key' };
   const outputs: string[] = [];
   const request = async (_url: any, init: any) => {
     const body = JSON.parse(init.body);
     return Response.json({ jsonrpc: '2.0', id: body.id, result: await f.rpc(body.method, body.params) });
   };
-  const options = { args: ['--rehearsal'], env, directory, now: f.now, output: (v: string) => outputs.push(v), request };
+  const options = { args: [], env, directory, now: f.now, output: (v: string) => outputs.push(v), request };
   try {
+    // The retired September practice flag is refused rather than silently checking the pilot.
+    assert.equal(await runSettlementCheck({ ...options, args: ['--rehearsal'] }), 2);
     assert.equal(await runSettlementCheck(options), 1);
     const name = (await readdir(directory)).find(p => p.endsWith('.checkpoint.json'))!;
     const saved = await readFile(join(directory, name), 'utf8');

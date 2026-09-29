@@ -1,5 +1,4 @@
 import {useEffect,useRef,useState} from 'react';
-import {useSearch} from 'wouter';
 import {linkTradingWallet} from '../wallet-links';
 import {portfolioSources,type PortfolioSources} from '../portfolio-sources';
 import {discoverWallets,type BrowserWallet} from '../auth/wallet-choice';
@@ -9,7 +8,6 @@ import type {MarketGroup} from '../market-directory';
 import {useLoadGate} from '../loading/gates';
 
 export default function AccountPortfolio({account,namespace,groups}:{account:string;namespace:string;groups?:MarketGroup[]}) {
-  const showLegacy=new URLSearchParams(useSearch()).get('legacy')==='1';
   const [wallets,setWallets]=useState<string[]|null>(null),[error,setError]=useState(''),[tick,setTick]=useState(0),[busy,setBusy]=useState(false);
   const [sources,setSources]=useState<PortfolioSources|null>(null);
   const currentAccount=useRef(account);currentAccount.current=account;
@@ -21,8 +19,6 @@ export default function AccountPortfolio({account,namespace,groups}:{account:str
   }
   useLoadGate('portfolio-sources',{pending:!wallets&&!error,label:'Loading your portfolio'});
   const [providers,setProviders]=useState<BrowserWallet[]>([]);
-  const [legacy,setLegacy]=useState(false);
-  useEffect(()=>{if(!showLegacy)setLegacy(false);},[showLegacy]);
   useEffect(()=>discoverWallets(w=>setProviders(old=>old.some(x=>x.provider===w.provider)?old:[...old,w])),[]);
   useEffect(()=>{const changed=()=>setTick(n=>n+1);window.addEventListener('flurbo:wallet-linked',changed);return()=>window.removeEventListener('flurbo:wallet-linked',changed);},[]);
   useEffect(()=>{const c=new AbortController();setError('');setWallets(null);
@@ -40,11 +36,7 @@ export default function AccountPortfolio({account,namespace,groups}:{account:str
     {error&&<p role="alert" className="state-inline error">{error} <button className="btn btn-secondary btn-sm" onClick={()=>setTick(n=>n+1)}>Retry</button></p>}
     {!wallets&&!error&&<><p role="status" className="sr-only">Loading your portfolio…</p><div className="portfolio-summary-grid" aria-hidden="true">{[0,1,2].map(i=><article key={i}><span className="skeleton skeleton-line" style={{width:'40%'}}/><span className="skeleton portfolio-figure-skeleton"/></article>)}</div></>}
     {wallets?.length===0&&<div className="state-block"><p>Connect MetaMask to add your trading shares.</p><button className="btn btn-primary" disabled={busy} onClick={()=>void connect()}>{busy?'Check MetaMask…':'Connect MetaMask'}</button></div>}
-    {wallets&&(groups?<><PortfolioDashboard key={account+wallets.join(',')} account={account} wallets={wallets} groups={groups} manualWallets={sources?.wallets||[]} agentExecutions={sources?.agentExecutions} onRefreshSources={refreshSources}/>{showLegacy?<details className="portfolio-legacy disclosure" onToggle={e=>setLegacy(e.currentTarget.open)}><summary>Earlier experimental holdings</summary>{legacy&&<><EarlierHoldings account={account} wallets={sources?.wallets||[]} namespace="original" label="Earlier demo holdings"/><EarlierHoldings account={account} wallets={sources?.wallets||[]} namespace="learning" label="Learning experiment holdings"/></>}</details>:<a className="portfolio-archive-link text-link" href="/portfolio?legacy=1">Earlier experimental holdings</a>}</>:<AccountHoldings key={account+namespace} account={account} wallets={sources?.wallets||[]} namespace={namespace}/>)}
+    {wallets&&(groups?<PortfolioDashboard key={account+wallets.join(',')} account={account} wallets={wallets} groups={groups} manualWallets={sources?.wallets||[]} agentExecutions={sources?.agentExecutions} onRefreshSources={refreshSources}/>:<AccountHoldings key={account+namespace} account={account} wallets={sources?.wallets||[]} namespace={namespace}/>)}
   </section>;
 }
 
-function EarlierHoldings({account,wallets,namespace,label}:{account:string;wallets:string[];namespace:string;label:string}){
-  const [open,setOpen]=useState(false);
-  return <details className={'legacy-'+namespace} onToggle={e=>setOpen(e.currentTarget.open)}><summary>{label}</summary>{open&&<AccountHoldings account={account} wallets={wallets} namespace={namespace}/>}</details>;
-}

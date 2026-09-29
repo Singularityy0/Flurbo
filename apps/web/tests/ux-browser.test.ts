@@ -13,6 +13,8 @@ async function asset(route:any,path:string){
 test('closed markets show settlement, aggregate manual and agent shares, and disclose evidence safely',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href),browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const f=pilotFixture(Math.floor(Date.now()/1000),4),agent='0x'+'88'.repeat(20),errors:string[]=[];
+  // Practice collections are addressed by pool; this mode keeps the real-event wording.
+  f.manifest.publication.mode='deterministic-source-v1';
   f.manifest.publication.draft.closesAt=Math.floor(Date.now()/1000)-10;
   let prepares=0,evidenceReads=0,hostile=false;
   try{
@@ -23,16 +25,16 @@ test('closed markets show settlement, aggregate manual and agent shares, and dis
       if(p==='/api/account/access')return route.fulfill({json:{approved:true}});
       if(p==='/api/account/wallets')return route.fulfill({json:{account:alice,wallets:[owner]}});
       if(p==='/api/account/portfolio-sources')return route.fulfill({json:{account:alice,wallets:[owner],agentWallets:[agent,owner]}});
-      if(p==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',markets:[{namespace:'rehearsal',label:'Closed fixture',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
-      if(p==='/api/rehearsal/status'){const state=await f.service.status();return route.fulfill({json:{...state,resolved:true,cases:state.cases.map((c:any)=>({...c,phase:3,result:2,proposal:2,evidenceHash:hash}))}});}
-      if(p==='/api/rehearsal/markets')return route.fulfill({json:{...await f.service.markets(),open:false,resolved:true}});
-      if(p==='/api/rehearsal/positions'){const q=route.request().postDataJSON();return route.fulfill({json:{rows:q.claims.map((c:any)=>({...c,quantity:c.mask==='2'?(q.owner===agent?'5000000':'3000000'):'0',payoutAtoms:'0'}))}});}
-      if(p==='/api/rehearsal/prepare'){prepares++;return route.fulfill({status:400,json:{error:'Closed'}});}
+      if(p==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',markets:[{namespace:'practice-2222222222222222222222222222222222222222',label:'Closed fixture',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(p==='/api/practice-2222222222222222222222222222222222222222/status'){const state=await f.service.status();return route.fulfill({json:{...state,resolved:true,cases:state.cases.map((c:any)=>({...c,phase:3,result:2,proposal:2,evidenceHash:hash}))}});}
+      if(p==='/api/practice-2222222222222222222222222222222222222222/markets')return route.fulfill({json:{...await f.service.markets(),open:false,resolved:true}});
+      if(p==='/api/practice-2222222222222222222222222222222222222222/positions'){const q=route.request().postDataJSON();return route.fulfill({json:{rows:q.claims.map((c:any)=>({...c,quantity:c.mask==='2'?(q.owner===agent?'5000000':'3000000'):'0',payoutAtoms:'0'}))}});}
+      if(p==='/api/practice-2222222222222222222222222222222222222222/prepare'){prepares++;return route.fulfill({status:400,json:{error:'Closed'}});}
       if(p.includes('/evidence/')){evidenceReads++;return route.fulfill({json:{outcome:2,statement:'<img src=x onerror=alert(1)> is plain evidence text.',sourceURL:hostile?'javascript:alert(1)':'https://ethereum.org/',attachment:''}});}
       if(p.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unused fixture'}});
       return asset(route,p);
     });
-    await page.goto(origin+'/markets/rehearsal/0');
+    await page.goto(origin+'/markets/practice-2222222222222222222222222222222222222222/0');
     await page.locator('.closed-ticket').waitFor();
     await page.getByRole('region',{name:'Your position',exact:true}).getByText('8 shares',{exact:true}).waitFor();
     assert.equal(await page.getByLabel('Shares',{exact:true}).count(),0);

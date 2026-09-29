@@ -9,6 +9,7 @@ export class PublicStorage {
     for (const [key, value] of entries) if (key.startsWith('flurbo.') && value !== null && value.length < 200_000) this.values.set(key, value);
   }
   getItem = (key: string) => this.values.get(key) ?? null;
+  keys = () => [...this.values.keys()];
   setItem = (key: string, value: string) => {
     if (this.failure) throw new Error('Transaction tracking storage is unavailable. Restart the app before trading.');
     if (!key.startsWith('flurbo.') || value.length > 200_000) throw new Error('Invalid public storage entry');

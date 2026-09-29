@@ -35,7 +35,6 @@ jobs:
       - name: Observe pools and deliver pending alerts
         env:
           FLURBO_ALCHEMY_TESTNET_RPC_URL: ${{ secrets.FLURBO_ALCHEMY_TESTNET_RPC_URL }}
-          FLURBO_REHEARSAL_MANIFEST_JSON: ${{ secrets.FLURBO_REHEARSAL_MANIFEST_JSON }}
           FLURBO_PRACTICE_COLLECTIONS_JSON: ${{ secrets.FLURBO_PRACTICE_COLLECTIONS_JSON }}
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}

@@ -19,7 +19,7 @@ test('one portfolio combines pools, shows account-only trades and reveals real P
    if(p==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
    if(p==='/api/account/access')return route.fulfill({json:{approved:true}});
    if((p==='/api/account/wallets'||p==='/api/account/portfolio-sources'))return route.fulfill({json:{account:login,wallets:[owner,second]}});
-   if(p==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',markets:[{namespace:'rehearsal',label:'Hidden group A',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt},{namespace:nsB,label:'Hidden group B',pool:poolB,closesAt:f.manifest.publication.draft.closesAt}]}});
+   if(p==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',markets:[{namespace:'practice-2222222222222222222222222222222222222222',label:'Hidden group A',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt},{namespace:nsB,label:'Hidden group B',pool:poolB,closesAt:f.manifest.publication.draft.closesAt}]}});
    if(p.endsWith('/account')){accounts++;return route.fulfill({json:{...await f.service.account(u.searchParams.get('wallet')),manifest}});}
    if(p.endsWith('/status'))return route.fulfill({json:{...await f.service.status(),manifest}});
    if(p.endsWith('/positions')){

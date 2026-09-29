@@ -480,7 +480,7 @@ bool is_lower_hex(const std::string& s, size_t n) {
 }
 
 static bool namespace_ok(const std::string& s) {
-  if (s == "pilot" || s == "rehearsal") return true;
+  if (s == "pilot") return true;
   return s.rfind("practice-", 0) == 0 && is_lower_hex("0x" + s.substr(9), 40);
 }
 

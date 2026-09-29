@@ -26,7 +26,7 @@ function validateSensitivity(data:Analysis){
   });
 }
 
-export default function WhatIf({manifest,namespace='rehearsal'}:{manifest:PilotState['manifest'];namespace?:PilotNamespace}){
+export default function WhatIf({manifest,namespace}:{manifest:PilotState['manifest'];namespace:PilotNamespace}){
   const events=manifest.publication.draft.events;
   const [a,setA]=useState(0),[b,setB]=useState(1),[result,setResult]=useState<Analysis|null>(null);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[clock,setClock]=useState(Date.now());

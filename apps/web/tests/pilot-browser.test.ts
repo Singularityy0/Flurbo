@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { pilotFixture, owner, hash, code } from './pilot-fixture.ts';
 
-for(const namespace of ['pilot','rehearsal'] as const) test(namespace+' flow keeps auth, review, wallet confirmation and reload tracking separate on desktop and mobile',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+for(const namespace of ['pilot'] as const) test(namespace+' flow keeps auth, review, wallet confirmation and reload tracking separate on desktop and mobile',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const loginAddress='0x'+'99'.repeat(20);
@@ -16,7 +16,6 @@ for(const namespace of ['pilot','rehearsal'] as const) test(namespace+' flow kee
     {event:0,observation:'test:close',operator:'gte',value:'3000',sourceRule:'Fixture closing observation.'},
     {event:1,observation:'test:close',operator:'lt',value:'2500',sourceRule:'Fixture closing observation.'}]}]}):'');
   f.manifest.publication.reviewerControl='single-operator';
-  if(namespace==='rehearsal'){f.manifest.publication.mode='rehearsal';f.manifest.publication.draft.title='Public rehearsal: scripted settlement checks';}
   let login=true,reads=0;const errors:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
@@ -64,7 +63,7 @@ for(const namespace of ['pilot','rehearsal'] as const) test(namespace+' flow kee
       const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
-    await page.goto('https://flurbo.singu.online/'+(namespace==='pilot'?'events':'rehearsal'));
+    await page.goto('https://flurbo.singu.online/events');
     await page.getByRole('heading',{name:'Operator-run testnet alpha'}).waitFor();
     await page.getByLabel('MetaMask wallet',{exact:true}).selectOption('0');
     await page.locator('.portfolio-wallet .portfolio-address').waitFor();
@@ -107,7 +106,7 @@ for(const namespace of ['pilot','rehearsal'] as const) test(namespace+' flow kee
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     if(process.env.FLURBO_TEST_SCREENSHOT)await page.screenshot({path:process.env.FLURBO_TEST_SCREENSHOT.replace('.png','-mobile.png'),fullPage:true});
-    login=false;const before=reads;await page.goto('https://flurbo.singu.online/'+(namespace==='pilot'?'events':'rehearsal'));await page.waitForURL('**/login');assert.equal(reads,before);
+    login=false;const before=reads;await page.goto('https://flurbo.singu.online/events');await page.waitForURL('**/login');assert.equal(reads,before);
     assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });

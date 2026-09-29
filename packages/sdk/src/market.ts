@@ -10,8 +10,8 @@ const obj = (v: unknown, what: string): Record<string, unknown> => (v && typeof 
 const addr = (v: unknown, what: string): string => (typeof v === 'string' && /^0x[0-9a-fA-F]{40}$/.test(v) ? v.toLowerCase() : bad(what));
 const int = (v: unknown, what: string): number => (Number.isSafeInteger(v) ? v as number : bad(what));
 
-export type Namespace = 'pilot' | 'rehearsal' | `practice-${string}`;
-export const isNamespace = (v: unknown): v is Namespace => v === 'pilot' || v === 'rehearsal' || (typeof v === 'string' && /^practice-[0-9a-f]{40}$/.test(v));
+export type Namespace = 'pilot' | `practice-${string}`;
+export const isNamespace = (v: unknown): v is Namespace => v === 'pilot' || (typeof v === 'string' && /^practice-[0-9a-f]{40}$/.test(v));
 
 export type Snapshot = { chainId: number; pool: string; blockNumber: bigint; blockHash: string; timestamp: number };
 export type DirectoryEntry = { namespace: Namespace; label: string; pool: string; closesAt: number };

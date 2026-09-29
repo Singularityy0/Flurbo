@@ -3,7 +3,7 @@
 const KEY = 'flurbo.return-to';
 const PATHS = [
   /^\/markets$/,
-  /^\/markets\/(?:rehearsal|pilot|practice-[0-9a-f]{40})\/[0-3](?:\/thesis)?$/,
+  /^\/markets\/(?:pilot|practice-[0-9a-f]{40})\/[0-3](?:\/thesis)?$/,
   /^\/portfolio$/,
   /^\/fund$/,
   /^\/access$/,

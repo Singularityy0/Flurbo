@@ -10,6 +10,8 @@ test('What-if stays read-only, replaces pending pairs, expires snapshots and fit
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const now=Math.floor(Date.now()/1000),f=pilotFixture(now,4),errors:string[]=[],requests:any[]=[];
+  // Practice collections are addressed by pool; this mode keeps the real-event wording.
+  f.manifest.publication.mode='deterministic-source-v1';
   let delay=false,unavailable=false,badSensitivity=false,quoteUnavailable=false,release!:()=>void;
   const held=new Promise<void>(r=>{release=r;});
   const response=(a:number,b:number)=>{
@@ -28,15 +30,15 @@ test('What-if stays read-only, replaces pending pairs, expires snapshots and fit
     page.on('pageerror',(error:Error)=>errors.push(error.message));
     await page.route('**/*',async(route:any)=>{
       const path=new URL(route.request().url()).pathname;
-      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'practice-2222222222222222222222222222222222222222',markets:[{namespace:'practice-2222222222222222222222222222222222222222',label:'September practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600_000}}});
-      if(path==='/api/rehearsal/status')return route.fulfill({json:await f.service.status()});
+      if(path==='/api/practice-2222222222222222222222222222222222222222/status')return route.fulfill({json:await f.service.status()});
       if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:owner,wallets:[]}});
       if(path==='/api/network')return route.fulfill({status:503,json:{error:'Offline fixture'}});
-      if(path==='/api/rehearsal/price-history')return route.fulfill({status:503,json:{error:'Offline fixture'}});
-      if(path==='/api/rehearsal/markets')return route.fulfill({json:await f.service.markets()});
-      if(path==='/api/rehearsal/analytics'){
+      if(path==='/api/practice-2222222222222222222222222222222222222222/price-history')return route.fulfill({status:503,json:{error:'Offline fixture'}});
+      if(path==='/api/practice-2222222222222222222222222222222222222222/markets')return route.fulfill({json:await f.service.markets()});
+      if(path==='/api/practice-2222222222222222222222222222222222222222/analytics'){
         const input=route.request().postDataJSON();requests.push(input);
         if(delay)await held;
         return route.fulfill(unavailable?{status:503,json:{error:'unavailable'}}:{json:response(input.a,input.b)});
@@ -45,7 +47,7 @@ test('What-if stays read-only, replaces pending pairs, expires snapshots and fit
       const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
-    await page.goto('https://flurbo.singu.online/markets/rehearsal/0');
+    await page.goto('https://flurbo.singu.online/markets/practice-2222222222222222222222222222222222222222/0');
     await page.getByText('Explore how these markets connect',{exact:true}).click();
     assert.equal(await page.getByRole('alert').filter({hasText:'Your account holdings could not be refreshed.'}).count(),0);
     const panel=page.locator('.what-if');

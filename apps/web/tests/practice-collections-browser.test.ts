@@ -7,7 +7,7 @@ import { pilotFixture,owner } from './pilot-fixture.ts';
 test('directory and portfolio include multiple pools without a collection selector',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
-  const f=pilotFixture(Math.floor(Date.now()/1000),4),namespace='practice-'+f.manifest.pool.slice(2),oldPool='0x'+'ab'.repeat(20),errors:string[]=[],calls:string[]=[];
+  const f=pilotFixture(Math.floor(Date.now()/1000),4),namespace='practice-'+f.manifest.pool.slice(2),oldPool='0x'+'ab'.repeat(20),oldNamespace='practice-'+'ab'.repeat(20),errors:string[]=[],calls:string[]=[];
   f.manifest.publication.mode='rehearsal';
   try{
     const page=await browser.newPage({viewport:{width:390,height:844}});
@@ -19,10 +19,10 @@ test('directory and portfolio include multiple pools without a collection select
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:true}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:namespace,markets:[
-        {namespace:'rehearsal',label:'September practice',pool:oldPool,closesAt:f.manifest.publication.draft.closesAt},
+        {namespace:oldNamespace,label:'Earlier practice',pool:oldPool,closesAt:f.manifest.publication.draft.closesAt},
         {namespace,label:'October practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
-      if(path.startsWith('/api/'+namespace+'/')||path.startsWith('/api/rehearsal/')){
-        calls.push(path);const old=path.startsWith('/api/rehearsal/');
+      if(path.startsWith('/api/'+namespace+'/')||path.startsWith('/api/'+oldNamespace+'/')){
+        calls.push(path);const old=path.startsWith('/api/'+oldNamespace+'/');
         if(path.endsWith('/markets')){const v=await f.service.markets();return route.fulfill({json:{...v,manifest:{...v.manifest,pool:old?oldPool:f.manifest.pool}}});}
         if(path.endsWith('/account')){const account=await f.service.account(owner);return route.fulfill({json:{...account,manifest:{...account.manifest,pool:old?oldPool:f.manifest.pool},claimScopes:[1]}});}
         if(path.endsWith('/positions'))return route.fulfill({json:{snapshot:{blockNumber:'100'},rows:route.request().postDataJSON().claims.map((c:any)=>({...c,quantity:c.scope===1&&c.mask==='2'?(old?'7000000':'3000000'):'0',payoutAtoms:null}))}});
@@ -35,11 +35,13 @@ test('directory and portfolio include multiple pools without a collection select
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
     await page.goto('https://flurbo.singu.online/markets');await page.locator('.market-card').first().waitFor();
-    assert.ok(calls.includes('/api/'+namespace+'/markets'));assert.ok(calls.includes('/api/rehearsal/markets'));
+    assert.ok(calls.includes('/api/'+namespace+'/markets'));assert.ok(calls.includes('/api/'+oldNamespace+'/markets'));
     await page.goto('https://flurbo.singu.online/portfolio');await page.getByRole('cell',{name:'3',exact:true}).waitFor();
     await page.getByRole('cell',{name:'7',exact:true}).waitFor();
     assert.equal(await page.getByRole('cell',{name:'3',exact:true}).count(),1);
     assert.equal(await page.getByLabel('Collection',{exact:true}).count(),0);
+    // Retired earlier demo and learning holdings are no longer offered in the portfolio.
+    assert.equal(await page.getByText('Earlier experimental holdings').count(),0);
     assert.equal(await page.getByRole('region',{name:'Market results'}).count(),0);
     assert.equal(await page.getByRole('heading',{name:'Your shares',exact:true}).count(),1);
     assert.equal(await page.getByRole('table').count(),1);

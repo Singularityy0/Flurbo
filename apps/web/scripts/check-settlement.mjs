@@ -20,16 +20,14 @@ export async function writeAtomic(path, value) {
 
 export async function runSettlementCheck({ args = process.argv.slice(2), env = process.env, request = fetch,
   output = console.log, directory = resolve(root, 'target/settlement-monitor'), now = () => Math.floor(Date.now() / 1000) } = {}) {
-  if (args.length > 1 || args.length === 1 && args[0] !== '--rehearsal') {
-    output(JSON.stringify({ status: 'check_failed', message: 'Only --rehearsal is supported.' })); return 2;
+  if (args.length) {
+    output(JSON.stringify({ status: 'check_failed', message: 'No arguments are supported.' })); return 2;
   }
   let releaseLock;
   try {
-    const rehearsal = args[0] === '--rehearsal';
-    const raw = env[rehearsal ? 'FLURBO_REHEARSAL_MANIFEST_JSON' : 'FLURBO_PILOT_MANIFEST_JSON']
-      ?? await readFile(resolve(root, rehearsal ? 'target/deployments/rehearsal-testnet.json' : 'config/pilot-testnet.json'), 'utf8');
+    const raw = env.FLURBO_PILOT_MANIFEST_JSON ?? await readFile(resolve(root, 'config/pilot-testnet.json'), 'utf8');
     const manifest = JSON.parse(raw);
-    if ((manifest.publication?.mode === 'rehearsal') !== rehearsal) throw new Error('Manifest mode mismatch');
+    if (['rehearsal', 'ethereum-activity', 'deterministic-source-v1'].includes(manifest.publication?.mode)) throw new Error('Manifest mode mismatch');
     const key = createHash('sha256').update(monitorIdentity(manifest)).digest('hex');
     await mkdir(directory, { recursive: true });
     const lockPath = resolve(directory, `${key}.lock`);

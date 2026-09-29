@@ -38,8 +38,8 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:login,method:'passkey',expiresAt:Date.now()+3600000}}});
-      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'rehearsal',markets:[{namespace:'rehearsal',label:'Practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
-      if(path==='/api/rehearsal/markets')return route.fulfill({json:await f.service.markets()});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:'practice-2222222222222222222222222222222222222222',markets:[{namespace:'practice-2222222222222222222222222222222222222222',label:'Practice',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/practice-2222222222222222222222222222222222222222/markets')return route.fulfill({json:await f.service.markets()});
       if(path==='/api/rpc'){
         const {method,params}=route.request().postDataJSON();
         let result:any=method==='eth_getBlockByNumber'?{hash,number:'0x64'}:method==='eth_getBalance'?mon:method==='eth_getTransactionReceipt'?receipt:'0x0';
@@ -99,7 +99,7 @@ test('funding uses announced MetaMask instead of competing injection or Mera; ac
     await page.goto('https://flurbo.singu.online/markets');
     await page.locator('.market-card').first().waitFor();
     assert.equal(await page.getByText('Testing tools',{exact:true}).count(),0);
-    await page.goto('https://flurbo.singu.online/rehearsal');
+    await page.goto('https://flurbo.singu.online/events');
     await page.getByRole('heading',{name:'Operator access only'}).waitFor();
   } finally {await browser.close();}
 });

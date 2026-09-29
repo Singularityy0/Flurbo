@@ -1,20 +1,16 @@
 # Settlement checks
 
-Additional hosted practice collections can be monitored through `FLURBO_PRACTICE_COLLECTIONS_JSON` in the GitHub Actions secrets. Keep the same public collection entries as the web service. The original `FLURBO_REHEARSAL_MANIFEST_JSON` remains September practice; featuring a new web collection does not change monitor coverage. See [October rollout](OCTOBER_DEMO_ROLLOUT.md) for the registration and delivery checks.
+Hosted practice collections are monitored through `FLURBO_PRACTICE_COLLECTIONS_JSON` in the GitHub Actions secrets. Keep the same public collection entries as the web service. The September practice alias and its `FLURBO_REHEARSAL_MANIFEST_JSON` were retired on 29 September 2026; see `config/retired-collections.json`.
 
 The checker reads the deployed pilot or practice resolver on Monad testnet. It does not sign, submit transactions, evaluate source truth or send email. No scheduler is installed by this command. Contract pricing, collateral and settlement behaviour are unchanged.
 
 Run from the repository root in Git Bash with Node 24 and the web dependencies installed:
 
 ```bash
-# Real-event pilot
 node apps/web/scripts/check-settlement.mjs
-
-# Separate practice deployment
-node apps/web/scripts/check-settlement.mjs --rehearsal
 ```
 
-The pilot defaults to `config/pilot-testnet.json`; practice defaults to `target/deployments/rehearsal-testnet.json`. A hosted runner can supply the corresponding `FLURBO_PILOT_MANIFEST_JSON` or `FLURBO_REHEARSAL_MANIFEST_JSON`. Keep each manifest bound to its original pool. Replacing one does not monitor both deployments.
+The pilot defaults to `config/pilot-testnet.json`. A hosted runner can supply `FLURBO_PILOT_MANIFEST_JSON`. Keep the manifest bound to its original pool. Practice collections are covered by the scheduled monitor through `FLURBO_PRACTICE_COLLECTIONS_JSON`.
 
 `FLURBO_ALCHEMY_TESTNET_RPC_URL` optionally selects the private Monad testnet endpoint already supported by the backend. Otherwise the public Monad testnet RPC is used. Enter credentials in hosting secrets or your local environment, never in Git or chat. Provider error details are withheld in output.
 

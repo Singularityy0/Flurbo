@@ -42,7 +42,7 @@ fn lower_hex_of(s: &str, len: usize) -> bool {
 }
 
 fn namespace_ok(s: &str) -> bool {
-    s == "pilot" || s == "rehearsal" || s.strip_prefix("practice-").is_some_and(|h| h.len() == 40 && h.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)))
+    s == "pilot" || s.strip_prefix("practice-").is_some_and(|h| h.len() == 40 && h.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)))
 }
 
 /// Validates a deployment record. Limits looser than the protocol's are refused, not trusted.

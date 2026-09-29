@@ -7,7 +7,9 @@ import {pilotFixture,owner} from './pilot-fixture.ts';
 test('agent holdings and receipt-verified trades join one portfolio before indexing, with subtle attribution and no MetaMask agent redemption',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
  const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href),browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
  const login='0x'+'99'.repeat(20),agent='0x'+'88'.repeat(20),f=pilotFixture(Math.floor(Date.now()/1000),4),errors:string[]=[];
- const executions=[{scope:1,mask:'2',cash:'656981'},{scope:3,mask:'8',cash:'345338'}].map((c,i)=>({...c,agentId:'agent-rust',agentName:'Rust October E2E',namespace:'rehearsal',pool:f.manifest.pool,owner:agent,hash:'0x'+String(i+1).repeat(64),block:200+i,timestamp:1000+i,quantity:'1000000',action:'Buy'}));
+ // Practice collections are addressed by pool; this mode keeps the real-event wording.
+ f.manifest.publication.mode='deterministic-source-v1';
+ const executions=[{scope:1,mask:'2',cash:'656981'},{scope:3,mask:'8',cash:'345338'}].map((c,i)=>({...c,agentId:'agent-rust',agentName:'Rust October E2E',namespace:'practice-2222222222222222222222222222222222222222',pool:f.manifest.pool,owner:agent,hash:'0x'+String(i+1).repeat(64),block:200+i,timestamp:1000+i,quantity:'1000000',action:'Buy'}));
  let indexed=false;
  try{
   const page=await browser.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',(e:Error)=>errors.push(e.message));
@@ -17,7 +19,7 @@ test('agent holdings and receipt-verified trades join one portfolio before index
    if(p==='/api/account/access')return route.fulfill({json:{approved:true}});
    if(p==='/api/account/wallets')return route.fulfill({json:{account:login,wallets:[owner]}});
    if(p==='/api/account/portfolio-sources')return route.fulfill({json:{account:login,wallets:[owner],agentWallets:[agent],agentExecutions:executions}});
-   if(p==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',markets:[{namespace:'rehearsal',label:'October',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+   if(p==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',markets:[{namespace:'practice-2222222222222222222222222222222222222222',label:'October',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
    if(p.endsWith('/account'))return route.fulfill({json:await f.service.account(u.searchParams.get('wallet'))});
    if(p.endsWith('/positions')){
     const q=route.request().postDataJSON();assert.ok(q.claims.length<=30);

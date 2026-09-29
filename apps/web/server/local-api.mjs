@@ -19,13 +19,13 @@ import {settlementPacketHandler,SETTLEMENT_PACKET_PATH} from './settlement-persi
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
-  applications = null, previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, rehearsal = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {}, settlementPackets = null } = {}) {
+  applications = null, previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {}, settlementPackets = null } = {}) {
   const hosted = publicOrigin !== null;
   // Agent wallets cannot also be linked for manual MetaMask trading; with Redis the two claims exclude each other atomically.
   const links = walletLinks({command:store.command,isReserved:wallet=>agents?agents.isAgentWallet(wallet):false,reservedKey:store.command?agentWalletKey:null});
   // Operator addresses from every configured deployment, plus FLURBO_AGENT_RESERVED_WALLETS, can never be agent wallets.
   const reservedWallets=new Set((process.env.FLURBO_AGENT_RESERVED_WALLETS||'').split(',').map(x=>x.trim().toLowerCase()).filter(x=>/^0x[0-9a-f]{40}$/.test(x)));
-  for(const svc of [publishedPilot,rehearsal,...(practiceCollections?.services.values()||[])].filter(Boolean)){
+  for(const svc of [publishedPilot,...(practiceCollections?.services.values()||[])].filter(Boolean)){
     const m=svc.manifest;
     for(const a of [m.pool,m.resolver,m.publication?.creator,m.challengePolicy?.authority,...(m.publication?.reviewers||[]).map(r=>r.address)])if(typeof a==='string')reservedWallets.add(a.toLowerCase());
   }
@@ -39,7 +39,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
   const priceArchives=new WeakMap();
   // Agents: account-isolated profiles, paper trading and user-approved proposals. Never a signer.
   const agents=(()=>{try{return agentApi({command:store.command||null,hosted,links,rpc:agentRpc(rpcUrl,{hosted}),previewAllows,reservedWallets,
-    serviceFor:namespace=>namespace==='pilot'?publishedPilot:namespace==='rehearsal'?rehearsal:practiceCollections?.services.get(namespace)||null});}catch{return null;}})();
+    serviceFor:namespace=>namespace==='pilot'?publishedPilot:practiceCollections?.services.get(namespace)||null});}catch{return null;}})();
   const assistant=publishedPilot&&store.command?evidenceAssistant({manifest:publishedPilot.manifest,command:store.command,...evidenceOptions}):null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
   // Anonymous/public traffic never consumes authenticated account capacity.
@@ -113,7 +113,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
         if (!isTestingOperator(login, testingOperatorAccount)) return send(res, 403, {error:'Operator access only.'});
         if (req.method !== 'GET' || url.search) return send(res, 400, {error:'Semantic status accepts a GET without parameters'});
-        const services = [['pilot', publishedPilot], ...(practiceCollections ? [...practiceCollections.services] : [['rehearsal', rehearsal]])]
+        const services = [['pilot', publishedPilot], ...(practiceCollections ? [...practiceCollections.services] : [])]
           .filter(([, service]) => service).map(([namespace, service]) => ({ namespace, manifest: service.manifest }));
         try { return send(res, 200, semanticDiagnostics(activeSemanticConfig(), services)); }
         catch { return send(res, 503, {code:'SEMANTICS_UNAVAILABLE', error:'Semantic configuration could not be loaded.'}); }
@@ -141,7 +141,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
       }
       // Guard every app data/action route, including legacy namespaces and RPC.
       // Published evidence stays readable by counterparties during settlement.
-      const publicEvidence=req.method==='GET'&&!url.search&&/^\/api\/(pilot|rehearsal|practice-[0-9a-f]{40})\/evidence\/0x[0-9a-f]{64}$/.test(url.pathname);
+      const publicEvidence=req.method==='GET'&&!url.search&&/^\/api\/(pilot|practice-[0-9a-f]{40})\/evidence\/0x[0-9a-f]{64}$/.test(url.pathname);
       if(previewAllows&&!url.pathname.startsWith('/api/auth/')&&!publicEvidence){
         const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
@@ -218,10 +218,9 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         return send(res,200,practiceCollections.catalog);
       }
       const archiveNamespace=url.pathname.match(/^\/api\/(practice-[0-9a-f]{40})\//)?.[1];
-      if(url.pathname.startsWith('/api/pilot/')||url.pathname.startsWith('/api/rehearsal/')||archiveNamespace) {
-        const isRehearsal=url.pathname.startsWith('/api/rehearsal/')||!!archiveNamespace;
-        const pilot=archiveNamespace?practiceCollections?.services.get(archiveNamespace):isRehearsal?rehearsal:publishedPilot;
-        if(isRehearsal)url.pathname=url.pathname.replace('/api/'+(archiveNamespace||'rehearsal')+'/','/api/pilot/');
+      if(url.pathname.startsWith('/api/pilot/')||archiveNamespace) {
+        const pilot=archiveNamespace?practiceCollections?.services.get(archiveNamespace):publishedPilot;
+        if(archiveNamespace)url.pathname=url.pathname.replace('/api/'+archiveNamespace+'/','/api/pilot/');
         // Content-addressed evidence is public so counterparties can inspect a cited URI.
         const evidenceHash=url.pathname.match(/^\/api\/pilot\/evidence\/(0x[0-9a-f]{64})$/)?.[1];
         if(evidenceHash && req.method==='GET' && !url.search && evidence) {
@@ -230,7 +229,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         }
         const login=await getLogin();
         if(!login || login.method!=='passkey') return send(res,401,{error:'Sign in with your Flurbo passkey'});
-        if(!pilot) return send(res,503,{error:isRehearsal?'The separate rehearsal is not deployed and configured yet. The real-event market remains unchanged.':'The real-event pilot is not published yet. Reviewer identities, final event rules and a verified deployment are required.'});
+        if(!pilot) return send(res,archiveNamespace?404:503,{error:archiveNamespace?'That market collection is not available.':'The real-event pilot is not published yet. Reviewer identities, final event rules and a verified deployment are required.'});
         if(req.method==='GET' && ['/api/pilot/status','/api/pilot/account'].includes(url.pathname)) {
           if([...url.searchParams.keys()].some(k=>k!=='wallet') || url.searchParams.getAll('wallet').length>1) return send(res,400,{error:'Invalid pilot query'});
           if(url.pathname==='/api/pilot/account') return send(res,200,await pilot.account(url.searchParams.get('wallet')));

@@ -26,7 +26,7 @@
     },
     "namespace": {
       "type": "string",
-      "pattern": "^(pilot|rehearsal|practice-[0-9a-f]{40})$"
+      "pattern": "^(pilot|practice-[0-9a-f]{40})$"
     },
     "chainId": {
       "const": 10143

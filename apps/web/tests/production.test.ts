@@ -97,7 +97,7 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     // Direct visits and refreshes must serve the same shell as client-side navigation.
     // Agent data remains protected by the API's passkey and invite checks.
     const agentPath='/agents/12345678-1234-4234-8234-123456789abc';
-    for(const path of ['/agents',agentPath,agentPath+'?view=activity','/markets/pilot/0/thesis','/markets/rehearsal/1/thesis','/markets/practice-'+ '22'.repeat(20)+'/2/thesis']) {
+    for(const path of ['/agents',agentPath,agentPath+'?view=activity','/markets/pilot/0/thesis','/markets/practice-'+ '22'.repeat(20)+'/2/thesis']) {
       for(const method of ['GET','HEAD']) {
         const page=await request(path,undefined,'','flurbo.singu.online','',method);
         assert.equal(page.status,200,method+' '+path);
@@ -117,7 +117,9 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     assert.equal(docs.status,200);
     assert.match(docs.headers['content-security-policy'],/script-src 'self'/);
     assert.equal(docs.headers['cache-control'],'no-store');
-    assert.equal((await request('/markets/rehearsal/1')).status,200);
+    // The retired September practice alias no longer serves a page.
+    assert.equal((await request('/markets/rehearsal/1')).status,404);
+    assert.equal((await request('/markets/rehearsal/1/thesis')).status,404);
     assert.equal((await request('/markets/practice-'+'12'.repeat(20)+'/0')).status,200);
     assert.equal((await request('/markets/unknown/99')).status,404);
     assert.equal((await request('/rehearsal-rules')).json().fixtures.length,4);
@@ -167,7 +169,7 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     assert.equal((await request('/api/learning/comparison')).status,401);
     assert.equal((await request('/healthz')).json().learning_comparison,'ready');
     assert.equal((await request('/healthz')).json().pilot_pool,'disabled');
-    assert.equal((await request('/healthz')).json().rehearsal_pool,'disabled');
+    assert.equal((await request('/healthz')).json().rehearsal_pool,undefined);
     const ns='practice-'+pool.slice(2),rulesHash='0x'+'44'.repeat(32);
     (config as any).practiceCollections={catalog:{active:ns},services:new Map([[ns,{manifest:{pool,rulesHash,publication:{draft:{closesAt:1800000000}}},secret:'must-not-leak'}]])};
     const health=(await request('/healthz')).json();

@@ -117,7 +117,7 @@
       "input": {
         "policy": {
           "markets": [
-            "rehearsal"
+            "practice-1111111111111111111111111111111111111111"
           ],
           "maxQuantityAtoms": "5000000",
           "maxTradeCostAtoms": "3000000",
@@ -3708,7 +3708,7 @@
       "input": {
         "policy": {
           "markets": [
-            "rehearsal"
+            "practice-1111111111111111111111111111111111111111"
           ],
           "maxQuantityAtoms": "1",
           "maxTradeCostAtoms": "3000000",

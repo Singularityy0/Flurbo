@@ -58,7 +58,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   (async () => {
     const json = async path => JSON.parse(await readFile(resolve(root, path), 'utf8'));
     const bundle = await json('target/deployments/showcase-v0-collections.json');
-    const manifests = [await json('config/pilot-testnet.json'), await json('config/practice-rehearsal.json'), ...bundle.map(r => r.manifest || r)];
+    const manifests = [await json('config/pilot-testnet.json'), ...bundle.map(r => r.manifest || r)];
     const result = await inspectResolutionState({ command: redisCommand(process.env), rpc: jsonRpc('https://testnet-rpc.monad.xyz'), manifests,
       signer: process.env.FLURBO_RESOLUTION_SIGNER_ADDRESS || '0x632a158d5eccc10f864ab94cec99511e1cc514f3' });
     console.log(JSON.stringify(result, null, 2));
