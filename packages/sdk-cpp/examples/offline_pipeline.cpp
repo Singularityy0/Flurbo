@@ -19,9 +19,11 @@ int main() {
   e.url = "https://example.org/fixture-release-notes";
   e.title = "Fixture release notes";
   e.publisher = "example.org";
-  e.published_at = now - 3600;
+  e.publisher_released_at = now - 3600;
+  e.schema = EVIDENCE_SCHEMA; e.requested_url = e.url; e.final_url = e.url; e.complete_document = true; e.event_ids = {0, 1};
   e.content_sha256 = std::string(64, '0');
   e.excerpt = "Both release branches were tagged on the same day (fixture text).";
+  e.captured_bytes = static_cast<int64_t>(e.excerpt.size()); e.content_sha256 = sha256_hex(e.excerpt);
   std::string reply = R"({"schema":"flurbo.agent-model-forecast.v1","abstain":false,"abstainReason":null,"events":[0,1],"statesPpm":[250000,100000,100000,550000],)"
                       R"("evidenceIds":["src-1"],"assumptions":["The two releases share a dependency."],"uncertainty":"A late fix could split them.",)"
                       R"("explanation":"Fixture reasoning: both branches were tagged together, so both releases are likely and linked."})";

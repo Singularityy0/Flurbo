@@ -10,6 +10,9 @@ import {resolutionTick,resolutionRound} from '../server/resolution-worker.mjs';
 import {proposerHoldings as readProposerHoldings} from '../server/proposer-guard.mjs';
 import {activityEvidence} from '../server/ethereum-activity.mjs';
 import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
+import {DETERMINISTIC_MODE,validateSettlementManifest} from '../server/settlement-publication.mjs';
+import {deterministicEvidence} from '../server/deterministic-evidence.mjs';
+import {createSettlementStores,settlementPublicOrigin} from '../server/settlement-persistence.mjs';
 
 const diagnosticMessages={
   CONFIGURATION_INVALID:'Check the manifest, pool, rules hash, execution mode and public signer settings.',
@@ -58,6 +61,7 @@ export function finishingManifests(env,primary){
     if(m.chainId!==10143)throw Error('Finishing pools must be Monad testnet');
     pilotService({manifest:m,rpc:async()=>{throw Error('No read during configuration');}});
     if(m.publication?.mode==='ethereum-activity')validateActivityDraft(m.publication.draft);
+    if(m.publication?.mode===DETERMINISTIC_MODE)validateSettlementManifest(m);
   }
   return manifests;
 }
@@ -69,22 +73,29 @@ export function proposalMode(env){
   return value==='true';
 }
 
-export async function runResolution(env=process.env){
+export async function runResolution(env=process.env,deps={}){
   let configured=false;
   try{
   const manifest=JSON.parse(env.FLURBO_RESOLUTION_MANIFEST_JSON||'null');
   if(!manifest||manifest.pool!==env.FLURBO_RESOLUTION_POOL||manifest.rulesHash!==env.FLURBO_RESOLUTION_RULES_HASH)throw Error('Explicit pool and immutable rules allowlist required');
   if(manifest.publication?.mode==='ethereum-activity')validateActivityDraft(manifest.publication.draft);
+  const deterministic=manifest.publication?.mode===DETERMINISTIC_MODE;
+  if(deterministic){
+    validateSettlementManifest(manifest);
+    if(env.FLURBO_RESOLUTION_SOURCE_MODE!==DETERMINISTIC_MODE)throw Error('Explicit deterministic worker source mode required');
+    settlementPublicOrigin(env.FLURBO_RESOLUTION_EVIDENCE_ORIGIN);
+  }else if(env.FLURBO_RESOLUTION_SOURCE_MODE&&env.FLURBO_RESOLUTION_SOURCE_MODE!=='legacy')throw Error('Source mode and immutable publication differ');
+  const now=deps.now||(()=>Math.floor(Date.now()/1000));
   const endpoint=env.FLURBO_ALCHEMY_TESTNET_RPC_URL||'https://testnet-rpc.monad.xyz';
-  const rpc=guarded('RPC_READ_FAILED',pilotRpc(endpoint)),service=pilotService({manifest,rpc}),command=guarded('DURABLE_STATE_FAILED',redisCommand(env));
+  const rpc=guarded('RPC_READ_FAILED',deps.rpc||pilotRpc(endpoint)),service=deps.service||pilotService({manifest,rpc}),command=guarded('DURABLE_STATE_FAILED',deps.command||redisCommand(env));
   const enabled=env.FLURBO_RESOLUTION_EXECUTE==='true';
   if(!['true','false'].includes(env.FLURBO_RESOLUTION_EXECUTE||'false'))throw Error('Invalid execution mode');
   const owner=env.FLURBO_RESOLUTION_SIGNER_ADDRESS?.toLowerCase();
   if(!/^0x[0-9a-f]{40}$/.test(owner||''))throw Error('Dedicated public signer address required');
   let account=null;
   if(enabled)account=resolutionSigner(env.FLURBO_RESOLUTION_PRIVATE_KEY,owner);
-  const client=createPublicClient({chain:monadTestnet,transport:http(endpoint,{retryCount:0,timeout:15000})});
-  const transport={
+  const client=deps.client||createPublicClient({chain:monadTestnet,transport:http(endpoint,{retryCount:0,timeout:15000})});
+  const transport=deps.transport||{
     async receipt(hash){
       const r=await client.request({method:'eth_getTransactionReceipt',params:[hash]});
       if(!r)return null;
@@ -92,6 +103,13 @@ export async function runResolution(env=process.env){
       const head=await client.getBlockNumber(),block=await client.getBlock({blockNumber:BigInt(r.blockNumber)});
       if(block.hash!==r.blockHash)throw Error('Receipt block changed');
       return {confirmed:head>=BigInt(r.blockNumber)+2n,success:r.status==='0x1'};
+    },
+    async retryStatus(hash,address){
+      if(await client.getChainId()!==10143)throw Error('Wrong chain');
+      const known=await client.request({method:'eth_getTransactionByHash',params:[hash]});
+      if(known&&known.hash?.toLowerCase()!==hash.toLowerCase())throw Error('Pending hash response mismatch');
+      return {known:!!known,latestNonce:await client.getTransactionCount({address,blockTag:'latest'}),
+        pendingNonce:await client.getTransactionCount({address,blockTag:'pending'})};
     },
     async sign(review){
       if(!account||!enabled)throw Error('Execution disabled');
@@ -106,9 +124,14 @@ export async function runResolution(env=process.env){
     },
     async broadcast(raw){if(!enabled)throw Error('Execution disabled');return client.sendRawTransaction({serializedTransaction:raw});}
   };
-  const archive=pilotEvidence(command,'https://flurbo.singu.online');
+  const origin=env.FLURBO_RESOLUTION_EVIDENCE_ORIGIN||'https://flurbo.singu.online';
+  if(env.FLURBO_RESOLUTION_EVIDENCE_ORIGIN)settlementPublicOrigin(origin);
+  const archive=deps.archive||pilotEvidence(command,origin,()=>now()*1000);
+  const sources=deterministic?deterministicEvidence({manifest,owner,command,archive,origin,now,
+    ...(deps.settlementStores||createSettlementStores({command,origin,now})),request:deps.request||fetch}):null;
   const evidenceFor=manifest=>async event=>{
     const q=manifest.publication.draft.events[event];
+    if(manifest.publication.mode===DETERMINISTIC_MODE)return sources.proposal(event);
     if(manifest.publication.mode==='ethereum-activity'){
       try{return await (await activityEvidence(manifest,command,archive,owner))(event);}catch{return null;}
     }
@@ -130,11 +153,14 @@ export async function runResolution(env=process.env){
   const proposals=proposalMode(env);
   const finishing=finishingManifests(env,manifest);
   configured=true;
-  const proposerHoldings=()=>readProposerHoldings({manifest,rpc,owner});
-  if(!finishing)return {...await resolutionTick({manifest,owner,service,command,evidence:proposals?evidenceFor(manifest):null,transport,proposerHoldings,enabled,allowEvidence:proposals,preflight:true}),proposals};
+  // Observe before fixed cutoffs as well as after observation end. The same persistent source
+  // history survives worker restarts; observation has no access to the signing transport.
+  const sourceObservations=proposals&&sources?await sources.collect(await service.status()):undefined;
+  const proposerHoldings=deps.proposerHoldings||(()=>readProposerHoldings({manifest,rpc,owner}));
+  if(!finishing)return {...await resolutionTick({manifest,owner,service,command,evidence:proposals?evidenceFor(manifest):null,verifyPendingEvidence:sources?.verifyPending,transport,proposerHoldings,enabled,allowEvidence:proposals,preflight:true,now}),proposals,...(sourceObservations?{sourceObservations}:{})};
   // Only the explicitly allowlisted FLURBO_RESOLUTION_POOL may propose. Every other registered pool is finish-only.
-  const pools=[{manifest,service,evidence:proposals?evidenceFor(manifest):null,proposerHoldings},...finishing.map(m=>({manifest:m,service:pilotService({manifest:m,rpc}),evidence:null}))];
-  return {...await resolutionRound({pools,owner,command,transport,enabled}),proposals};
+  const pools=[{manifest,service,evidence:proposals?evidenceFor(manifest):null,verifyPendingEvidence:sources?.verifyPending,proposerHoldings},...finishing.map(m=>({manifest:m,service:pilotService({manifest:m,rpc}),evidence:null}))];
+  return {...await resolutionRound({pools,owner,command,transport,enabled,now}),proposals,...(sourceObservations?{sourceObservations}:{})};
   }catch(error){
     if(error instanceof ResolutionDiagnostic)throw error;
     throw new ResolutionDiagnostic(configured?'WORKER_CHECK_FAILED':'CONFIGURATION_INVALID');
@@ -146,7 +172,7 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
     const deadline=Date.now()+150000,limit=process.argv.includes('--drain')?12:1;
     for(let i=0;i<limit;i++){
       const result=await runResolution();console.log(JSON.stringify(result));
-      if(!['submitted','confirmed'].includes(result.status)||Date.now()>deadline)break;
+      if(!['submitted','resubmitted','confirmed'].includes(result.status)||Date.now()>deadline)break;
       await new Promise(resolve=>setTimeout(resolve,4000));
     }
   })().catch(error=>{console.error(JSON.stringify(resolutionFailure(error)));process.exitCode=1;});

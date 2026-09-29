@@ -176,10 +176,9 @@ struct Conn {
       out.append(buf, static_cast<size_t>(n));
       return true;
     }
-    if (n == 0) return false;
+    if (n == 0 && !ssl) return false;
     if (ssl && SSL_get_error(ssl, n) == SSL_ERROR_ZERO_RETURN) return false;
     if (timed_out()) throw Error("timeout", "The request timed out.");
-    if (ssl) return false;  // a peer that closes without close_notify: treat as the end
     throw net_error("The connection failed while receiving.");
   }
 };
@@ -189,13 +188,22 @@ std::string dechunk(const std::string& body) {
   size_t i = 0;
   while (i < body.size()) {
     size_t eol = body.find("\r\n", i);
-    if (eol == std::string::npos) break;
-    size_t len = std::stoul(body.substr(i, eol - i), nullptr, 16);
-    if (len == 0) break;
+    if (eol == std::string::npos) throw net_error("The chunked response was incomplete.");
+    auto size_text = body.substr(i, eol - i); size_text = size_text.substr(0, size_text.find(';'));
+    if (size_text.empty() || size_text.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) throw net_error("The chunk length was invalid.");
+    size_t len;
+    try { len = std::stoull(size_text, nullptr, 16); } catch (...) { throw net_error("The chunk length was invalid."); }
+    if (len == 0) {
+      size_t rest = eol + 2;
+      if (body.compare(rest, 2, "\r\n") == 0 || body.find("\r\n\r\n", rest) != std::string::npos) return out;
+      throw net_error("The chunked response trailers were incomplete.");
+    }
+    if (len > body.size() - (eol + 2) || body.size() - (eol + 2) - len < 2 || body.compare(eol + 2 + len, 2, "\r\n") != 0)
+      throw net_error("The chunked response was incomplete.");
     out += body.substr(eol + 2, len);
     i = eol + 2 + len + 2;
   }
-  return out;
+  throw net_error("The chunked response had no terminal chunk.");
 }
 
 }  // namespace
@@ -307,14 +315,18 @@ HttpResponse http_request(const HttpRequest& req) {
   size_t header_end = std::string::npos;
   while (c.receive(raw)) {
     if (header_end == std::string::npos) header_end = raw.find("\r\n\r\n");
-    if (raw.size() > req.max_body + 65536) break;
+    if (raw.size() > req.max_body + 65536) throw net_error("The response exceeded the capture limit.");
     if (header_end != std::string::npos) {
       // Stop early once a Content-Length body is complete.
       std::string lower_head = lower(raw.substr(0, header_end));
       auto cl = lower_head.find("\r\ncontent-length:");
       if (cl != std::string::npos) {
-        size_t len = std::stoul(lower_head.substr(cl + 17));
-        if (raw.size() >= header_end + 4 + len) break;
+        auto value = lower_head.substr(cl + 17); value = trim(value.substr(0, value.find("\r\n")));
+        if (value.empty() || value.find_first_not_of("0123456789") != std::string::npos) throw net_error("Invalid response length.");
+        size_t len;
+        try { len = std::stoull(value); } catch (...) { throw net_error("Invalid response length."); }
+        if (len > req.max_body) throw net_error("The response exceeded the capture limit.");
+        if (lower_head.find("\r\ntransfer-encoding:") == std::string::npos && raw.size() >= header_end + 4 + len) break;
       }
     }
   }
@@ -335,12 +347,20 @@ HttpResponse http_request(const HttpRequest& req) {
     at = next;
   }
   r.body = raw.substr(header_end + 4);
-  if (lower(r.header("Transfer-Encoding").value_or("")) == "chunked") r.body = dechunk(r.body);
+  for (const auto& field : {"content-length", "transfer-encoding"})
+    if (std::count_if(r.headers.begin(), r.headers.end(), [&](const auto& h) { return lower(h.first) == field; }) > 1) throw net_error("Ambiguous response framing.");
+  auto transfer_encoding = lower(r.header("Transfer-Encoding").value_or(""));
+  if (!transfer_encoding.empty() && transfer_encoding != "chunked") throw net_error("Unsupported response transfer encoding.");
+  if (transfer_encoding == "chunked") r.body = dechunk(r.body);
   if (auto cl = r.header("Content-Length")) {
-    size_t len = std::stoul(*cl);
+    if (!transfer_encoding.empty()) throw net_error("Ambiguous response framing.");
+    if (cl->empty() || cl->find_first_not_of("0123456789") != std::string::npos) throw net_error("Invalid response length.");
+    size_t len;
+    try { len = std::stoull(*cl); } catch (...) { throw net_error("Invalid response length."); }
+    if (r.body.size() < len) throw net_error("The response was incomplete.");
     if (r.body.size() > len) r.body.resize(len);
   }
-  if (r.body.size() > req.max_body) r.body.resize(req.max_body);
+  if (r.body.size() > req.max_body) throw net_error("The response exceeded the capture limit.");
   return r;
 }
 

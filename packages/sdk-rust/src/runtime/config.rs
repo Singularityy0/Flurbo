@@ -8,6 +8,7 @@ use serde_json::Value;
 use super::research::Source;
 use crate::error::{FlurboError, Result};
 use crate::policy::Policy;
+use crate::research::EvidenceRequirement;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,12 +54,25 @@ pub struct RetrieverConfig {
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum ProviderConfig {
     #[serde(rename_all = "camelCase")]
-    OpenaiCompatible { base_url: String, model: String, api_key_env: Option<String>, timeout_ms: Option<u64>, max_retries: Option<u32> },
+    OpenaiCompatible {
+        base_url: String,
+        model: String,
+        api_key_env: Option<String>,
+        timeout_ms: Option<u64>,
+        max_retries: Option<u32>,
+    },
     #[serde(rename_all = "camelCase")]
-    Anthropic { model: String, api_key_env: String, timeout_ms: Option<u64>, max_retries: Option<u32> },
+    Anthropic {
+        model: String,
+        api_key_env: String,
+        timeout_ms: Option<u64>,
+        max_retries: Option<u32>,
+    },
     /// A fixed reply read from a file, for offline runs and demonstrations. Always reported as a fixture, not AI.
     #[serde(rename_all = "camelCase")]
-    Fixture { reply_file: String },
+    Fixture {
+        reply_file: String,
+    },
     None,
 }
 
@@ -70,6 +84,8 @@ pub struct ResearchConfig {
     pub per_cycle: u32,
     pub per_hour: usize,
     pub max_evidence_age_days: i64,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub evidence_requirements: HashMap<String, Vec<EvidenceRequirement>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -128,9 +144,7 @@ fn env_name(s: &str) -> bool {
 
 fn has_key_material(text: &str) -> bool {
     let b = text.as_bytes();
-    (0..b.len().saturating_sub(65)).any(|i| {
-        b[i] == b'0' && (b[i + 1] == b'x') && b[i + 2..i + 66].iter().all(u8::is_ascii_hexdigit) && !b.get(i + 66).is_some_and(u8::is_ascii_hexdigit)
-    })
+    (0..b.len().saturating_sub(65)).any(|i| b[i] == b'0' && (b[i + 1] == b'x') && b[i + 2..i + 66].iter().all(u8::is_ascii_hexdigit) && !b.get(i + 66).is_some_and(u8::is_ascii_hexdigit))
 }
 
 pub fn parse_config(value: &Value) -> Result<AgentConfig> {
@@ -161,6 +175,14 @@ pub fn parse_config(value: &Value) -> Result<AgentConfig> {
     }
     if c.schedule.interval_seconds < 10 || c.schedule.heartbeat_seconds < 5 {
         return Err(bad("schedule too aggressive."));
+    }
+    for (namespace, requirements) in &c.research.evidence_requirements {
+        if !c.markets.contains(namespace)
+            || requirements.iter().any(|r| r.event >= 4 || !["release", "background"].contains(&r.freshness.as_str()))
+            || (1..requirements.len()).any(|i| requirements[..i].iter().any(|r| r.event == requirements[i].event))
+        {
+            return Err(bad("research.evidenceRequirements must contain configured markets and unique event requirements with release or background freshness."));
+        }
     }
     for s in [&c.strategy.quantity_atoms, &c.strategy.min_edge_atoms, &c.strategy.max_cost_atoms, &c.paper_budget_atoms] {
         crate::amounts::parse_atoms(s, "strategy amount").map_err(|_| bad("amounts must be decimal strings."))?;

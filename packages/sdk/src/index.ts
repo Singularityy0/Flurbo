@@ -17,7 +17,7 @@ export { verifyEffect, type ExecutionAction, type ExecutionIntent, type EffectRe
 export { evaluatePolicy, effectivePolicy, worstCaseLoss, spendOf, VIOLATIONS, UNFINISHED, SERVICE_MAX_ATOMS, SERVICE_SLIPPAGE_BPS, type PolicyConfig, type PolicyInput,
   type PolicyEntry, type JournalStatus, type Violation, type SpendWindow, type FlurboPolicy, type LiveBlock } from './policy.ts';
 export { recoveryStep, FINAL, type RecoveryAction, type ChainView, type RecoveryEntry } from './recovery.ts';
-export { validateModelOutput, forecastFromModel, buildResearchPrompt, MODEL_SCHEMA, MODEL_ABSTAIN_REASONS, type EvidenceRecord, type ResearchContext, type ResearchOutcome,
+export { validateModelOutput, forecastFromModel, buildResearchPrompt, isCitableEvidence, evidenceFailure, evidenceObservedAt, MODEL_SCHEMA, EVIDENCE_SCHEMA, MODEL_ABSTAIN_REASONS, type EvidenceRecord, type EvidenceRequirement, type ResearchContext, type ResearchOutcome,
   type ResearchAbstain, type ModelForecast, type ResearchQuestion } from './research.ts';
 export { PROTOCOL_VERSION, PROTOCOL_HEADER, RUNTIME_API_BASE, DEPLOYMENT_INTERFACE, COLLATERAL, COLLATERAL_DECIMALS, SERVICE_LIMITS, SCOPES, ERROR_CODES, STOP_CODES,
   parseDeployment, buyLimit, sellMinimum, type Deployment, type Scope, type RuntimeErrorCode } from './protocol.ts';

@@ -3,6 +3,7 @@ import { decodeFunctionResult, encodeFunctionData, keccak256, stringToHex, parse
 import { pilotCash, pilotCashAbi, pilotPoolAbi, resolverAbi, pilotCall, evidenceURI, validClaim } from '../shared/pilot.mjs';
 import {holderResolverAbi,dependsOnEvent,challengeCandidates} from '../shared/holder-challenge.mjs';
 import {assessSemantics} from './semantic-validation.mjs';
+import {DETERMINISTIC_MODE,validateSettlementManifest} from './settlement-publication.mjs';
 
 const address = value => {
   if(typeof value!=='string' || !/^0x[0-9a-f]{40}$/i.test(value) || /^0x0{40}$/i.test(value)) throw new Error('Invalid wallet');
@@ -49,6 +50,8 @@ export function pilotRpc(endpoint,request=fetch,{allowLocal=false}={}) {
 }
 
 export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)}) {
+  if(manifest?.publication?.mode===DETERMINISTIC_MODE || manifest?.publication?.settlementRules !== undefined
+    || manifest?.publication?.draft?.events?.some(event => event.source?.recordId?.startsWith('settlement-rule:'))) validateSettlementManifest(manifest);
   if(manifest?.schema!=='flurbo.pilot-manifest.v1' || manifest.status!=='verified_pilot_snapshot' || manifest.chainId!==10143
     || ![2,3,4].includes(manifest.publication?.draft?.events?.length) || ![3,5].includes(manifest.publication?.reviewers?.length)) throw new Error('Verified pilot manifest required');
   address(manifest.pool); address(manifest.resolver);

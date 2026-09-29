@@ -3,6 +3,7 @@ retrieved text is untrusted data; the model has no tools and never sees keys or 
 output is validated; every failure is an abstention with a reason."""
 import email.utils
 import hashlib
+import http.client
 import json
 import re
 import socket
@@ -12,7 +13,7 @@ import urllib.request
 from urllib.parse import urljoin, urlparse
 
 from ..errors import FlurboError
-from ..research import build_research_prompt, forecast_from_model, validate_model_output
+from ..research import EVIDENCE_SCHEMA, build_research_prompt, evidence_failure, evidence_observed_at, forecast_from_model, valid_evidence, validate_model_output
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -51,7 +52,7 @@ class HttpRetriever:
             if not self._allowed(url):
                 raise FlurboError("forbidden", "Source host not allowlisted.")
             try:
-                return self._open(urllib.request.Request(url, headers={"Accept": "text/html,application/json,text/plain"}), timeout=self.timeout)
+                return self._open(urllib.request.Request(url, headers={"Accept": "text/html,application/json,text/plain"}), timeout=self.timeout), url
             except urllib.error.HTTPError as e:
                 if 300 <= e.code < 400 and e.headers.get("Location"):
                     url = urljoin(url, e.headers["Location"])
@@ -63,11 +64,17 @@ class HttpRetriever:
         out = []
         for source in sources[: self.max_sources]:
             try:
-                with self._get(source["url"]) as r:
+                response, final_url = self._get(source["url"])
+                with response as r:
                     content_type = r.headers.get("Content-Type", "")
-                    if r.status != 200 or not re.search(r"text/|application/(json|xhtml)", content_type):
+                    if r.status != 200 or r.headers.get("Content-Range") is not None or not re.search(r"text/|application/(json|xhtml)", content_type):
                         continue
-                    raw = r.read(self.max_bytes + 1)[: self.max_bytes]
+                    raw = r.read(self.max_bytes + 1)
+                    if not raw or len(raw) > self.max_bytes:
+                        continue
+                    length = r.headers.get("Content-Length")
+                    if length is not None and (not length.isdecimal() or int(length) != len(raw)):
+                        continue
                     modified = r.headers.get("Last-Modified")
                 text = raw.decode("utf-8", errors="replace")
                 title = re.search(r"<title[^>]*>([^<]{1,160})</title>", text, re.I)
@@ -77,9 +84,14 @@ class HttpRetriever:
                         published = int(email.utils.parsedate_to_datetime(modified).timestamp())
                     except (TypeError, ValueError):
                         published = None
-                out.append({"id": f"src-{len(out) + 1}", "url": source["url"], "title": title.group(1).strip() if title else source["url"], "publisher": urlparse(source["url"]).netloc,
-                            "retrievedAt": now, "publishedAt": published, "contentSha256": hashlib.sha256(raw).hexdigest(), "excerpt": extract_text(text, content_type)[:4000]})
-            except (FlurboError, OSError, ValueError, urllib.error.URLError):
+                excerpt = extract_text(text, content_type)[:4000]
+                if not excerpt.strip():
+                    continue
+                out.append({"schema": EVIDENCE_SCHEMA, "id": f"src-{len(out) + 1}", "url": final_url, "requestedUrl": source["url"], "finalUrl": final_url,
+                            "title": title.group(1).strip() if title else final_url, "publisher": urlparse(final_url).netloc,
+                            "retrievedAt": now, "publisherReleasedAt": None, "httpLastModified": published, "completeDocument": True,
+                            "capturedBytes": len(raw), "eventIds": [source["event"]], "contentSha256": hashlib.sha256(raw).hexdigest(), "excerpt": excerpt})
+            except (FlurboError, OSError, ValueError, urllib.error.URLError, http.client.HTTPException):
                 continue  # a failed source is skipped; research abstains if nothing usable remains
         return out
 
@@ -204,7 +216,7 @@ class Researcher:
     def reset_cycle(self) -> None:
         self._cycle = 0
 
-    def research(self, pool: str, title: str, event_count: int, events: list[dict], sources: list[dict]) -> dict:
+    def research(self, pool: str, title: str, event_count: int, events: list[dict], sources: list[dict], evidence_requirements: list[dict] | None = None) -> dict:
         t = self.now()
         if isinstance(self.forecaster, ProviderError):
             return {"status": "abstain", "reason": self.forecaster.reason, "detail": str(self.forecaster), "evidence": [], "provenance": None}
@@ -215,17 +227,22 @@ class Researcher:
         evidence = self.retriever.retrieve(sources, t)
         if not evidence:
             return {"status": "abstain", "reason": "no_sources", "detail": "No evidence could be retrieved from the allowed sources.", "evidence": evidence, "provenance": provenance}
+        usable = [e for e in evidence if valid_evidence(e, t, event_count)]
+        ctx = {"requestedEvents": [e["index"] for e in events], "eventCount": event_count, "evidence": evidence, "now": t, "maxEvidenceAgeSeconds": self.max_age, "evidenceRequirements": evidence_requirements or []}
+        failure = evidence_failure(usable, ctx) if usable else "invalid_evidence"
+        if failure:
+            return {"status": "abstain", "reason": failure, "detail": f"Evidence validation failed: {failure}.", "evidence": evidence, "provenance": provenance}
         self._cycle += 1
         self._hour.append(t)
         try:
-            reply = self.forecaster.complete(build_research_prompt(title, events, evidence, t))
+            reply = self.forecaster.complete(build_research_prompt(title, events, usable, t, evidence_requirements, event_count))
         except ProviderError as e:
             return {"status": "abstain", "reason": e.reason, "detail": str(e), "evidence": evidence, "provenance": provenance}
         except Exception:
             return {"status": "abstain", "reason": "provider_unavailable", "detail": "The model provider failed.", "evidence": evidence, "provenance": provenance}
-        outcome = validate_model_output(reply, {"requestedEvents": [e["index"] for e in events], "eventCount": event_count, "evidence": evidence, "now": t, "maxEvidenceAgeSeconds": self.max_age})
+        outcome = validate_model_output(reply, ctx)
         if outcome["status"] == "abstain":
             return {"status": "abstain", "reason": outcome["reason"], "detail": f"The forecast was not used: {outcome['reason']}.", "modelReason": outcome.get("modelReason"), "evidence": evidence, "provenance": provenance}
         output = outcome["output"]
-        fresh = sum(1 for i in output["evidenceIds"] for e in evidence if e["id"] == i and t - (e["publishedAt"] if e.get("publishedAt") is not None else e["retrievedAt"]) <= self.max_age)
-        return {"status": "ok", "output": output, "freshEvidence": fresh, "forecast": forecast_from_model(output, pool, evidence, provenance, t), "evidence": evidence, "provenance": provenance}
+        fresh = sum(1 for e in evidence if e["id"] in output["evidenceIds"] and (observed := evidence_observed_at(e, output["events"], evidence_requirements)) is not None and 0 <= t - observed <= self.max_age)
+        return {"status": "ok", "output": output, "freshEvidence": fresh, "forecast": forecast_from_model(output, pool, evidence, provenance, t, evidence_requirements), "evidence": evidence, "provenance": provenance}

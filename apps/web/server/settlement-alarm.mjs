@@ -32,7 +32,7 @@ export function alarmConfig(input) {
     || !Array.isArray(c.pools) || !c.pools.length) throw new Error('Invalid alarm configuration');
   for (const k of Object.keys(ALARM_DEFAULTS)) if (!Number.isSafeInteger(c[k]) || c[k] <= 0) throw new Error('Invalid alarm configuration');
   const pools = c.pools.map(p => {
-    if (!address(p.pool) || !address(p.resolver) || !['rehearsal', 'ethereum-activity', 'release'].includes(p.mode)
+    if (!address(p.pool) || !address(p.resolver) || !['rehearsal', 'ethereum-activity', 'deterministic-source-v1', 'release'].includes(p.mode)
       || typeof p.evidence !== 'boolean' || !Array.isArray(p.observationEnds) || !p.observationEnds.length
       || p.observationEnds.some(t => !Number.isSafeInteger(t))) throw new Error('Invalid alarm pool');
     return { ...p };
@@ -44,7 +44,7 @@ export function alarmConfig(input) {
 export function alarmPoolsFromManifests(manifests, evidencePool = null) {
   return manifests.map(m => ({
     pool: m.pool.toLowerCase(), resolver: m.resolver.toLowerCase(),
-    mode: ['rehearsal', 'ethereum-activity'].includes(m.publication.mode) ? m.publication.mode : 'release',
+    mode: ['rehearsal', 'ethereum-activity', 'deterministic-source-v1'].includes(m.publication.mode) ? m.publication.mode : 'release',
     evidence: !!evidencePool && m.pool.toLowerCase() === evidencePool.toLowerCase(),
     observationEnds: m.publication.draft.events.map(e => e.observationEndsAt),
   }));

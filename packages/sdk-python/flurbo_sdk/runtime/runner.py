@@ -65,6 +65,16 @@ def parse_config(c: dict) -> dict:
             bad("credential and key settings must name environment variables.")
     if c["schedule"]["intervalSeconds"] < 10 or c["schedule"]["heartbeatSeconds"] < 5:
         bad("schedule too aggressive.")
+    requirements = c["research"].get("evidenceRequirements", {})
+    if not isinstance(requirements, dict):
+        bad("evidenceRequirements must be a map of market namespace to event requirements.")
+    for namespace, rows in requirements.items():
+        if namespace not in c["markets"] or not isinstance(rows, list):
+            bad("evidence requirements must name a configured market.")
+        if any(not isinstance(row, dict) or set(row) != {"event", "freshness"} or type(row["event"]) is not int or not 0 <= row["event"] < 4 or row["freshness"] not in ("release", "background") for row in rows):
+            bad("invalid event evidence requirement.")
+        if len({row["event"] for row in rows}) != len(rows):
+            bad("duplicate event evidence requirement.")
     return c
 
 
@@ -245,16 +255,20 @@ class AgentRunner:
             for b in range(a + 1, len(events)):
                 if self.blocked_by or self.stop_file.exists():
                     return
+                pair = sorted([events[a], events[b]], key=lambda event: event["index"])
+                indices = tuple(event["index"] for event in pair)
                 decision_id = f"d-{uuid.uuid4()}"
-                sources = [{"event": e["index"], "url": e["source"]["referenceUrl"]} for e in detail["events"] if e["index"] in (a, b) and (e.get("source") or {}).get("referenceUrl")]
-                sources += [s for s in self.config["research"]["retriever"].get("extraSources", {}).get(d["namespace"], []) if s["event"] in (a, b)]
+                sources = [{"event": e["index"], "url": e["source"]["referenceUrl"]} for e in detail["events"] if e["index"] in indices and (e.get("source") or {}).get("referenceUrl")]
+                sources += [s for s in self.config["research"]["retriever"].get("extraSources", {}).get(d["namespace"], []) if s["event"] in indices]
                 base = {"schema": "flurbo.agent-runtime-decision.v1", "decisionId": decision_id, "namespace": d["namespace"], "createdAt": self.now()}
-                found = self.researcher.research(d["pool"], detail.get("title", ""), d["eventCount"], [events[a], events[b]], sources)
+                requirements = self.config["research"].get("evidenceRequirements", {}).get(d["namespace"], [])
+                found = self.researcher.research(d["pool"], detail.get("title", ""), d["eventCount"], pair, sources,
+                                                 [r for r in requirements if r["event"] in indices])
                 provenance = found.get("provenance") or {"kind": "custom", "name": "unconfigured"}
                 if provenance["kind"] not in ("model", "fixture", "custom"):
                     provenance = {"kind": "custom", "name": provenance["name"]}
                 if found["status"] == "abstain":
-                    self.log("research_abstained", {"namespace": d["namespace"], "events": [a, b], "reason": found["reason"]})
+                    self.log("research_abstained", {"namespace": d["namespace"], "events": list(indices), "reason": found["reason"]})
                     self._report_decision({**base, "outcome": "abstain", "reasons": [found["reason"]], "provenance": provenance, "summary": found["detail"][:600]})
                     continue
 
@@ -268,7 +282,7 @@ class AgentRunner:
                 forecast = {"events": found["output"]["events"], "statesPpm": found["output"]["statesPpm"], "freshEvidence": found["freshEvidence"]}
                 decision = self.strategy.decide({"market": market, "forecast": forecast, "now": self.now(), "quote": quote})
                 if decision["outcome"] == "abstain" or not decision.get("proposal"):
-                    self.log("strategy_abstained", {"namespace": d["namespace"], "events": [a, b], "reasons": decision["reasons"]})
+                    self.log("strategy_abstained", {"namespace": d["namespace"], "events": list(indices), "reasons": decision["reasons"]})
                     self._report_decision({**base, "outcome": "abstain", "reasons": decision["reasons"] or ["strategy_abstained"], "provenance": provenance, "forecast": found["forecast"],
                                            "summary": decision["explanation"][:600]})
                     continue

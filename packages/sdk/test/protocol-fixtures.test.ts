@@ -89,7 +89,7 @@ test('recovery transitions and receipt effects', () => {
 test('research: model output validation', () => {
   const f = fixture('research');
   for (const c of f.cases) {
-    const r = validateModelOutput(c.output, f.context);
+    const r = validateModelOutput(c.output, { ...f.context, ...c.context });
     const got = r.status === 'ok' ? { status: 'ok', statesPpm: r.output.statesPpm.map(Number), evidenceIds: r.output.evidenceIds }
       : { status: 'abstain', reason: r.reason, ...(r.modelReason ? { modelReason: r.modelReason } : {}) };
     assert.deepEqual(got, c.expect, c.name);

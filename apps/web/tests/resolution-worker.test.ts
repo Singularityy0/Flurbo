@@ -44,6 +44,29 @@ test('worker journals before broadcast and reconciles an uncertain submission wi
   assert.equal((await resolutionTick({...options,enabled:true})).status,'pending');assert.equal(signed,1);
   confirmed=true;assert.equal((await resolutionTick({...options,enabled:true})).status,'confirmed');assert.equal(signed,1);assert.equal(evidenceCalls,0);
 });
+
+test('restart rebroadcasts only identical journal bytes after an absent hash and exact unconsumed nonce',async()=>{
+  const f=pilotFixture(now),s=await f.service.status();s.cases.forEach(c=>c.assertionDeadline=String(now-1));
+  const db=storage(f.manifest);let at=now,signed=0;const raws:string[]=[];
+  let retry={known:false,latestNonce:0,pendingNonce:0};
+  const transport={sign:async(review:any)=>{signed++;return account.signTransaction({chainId:10143,type:'legacy',nonce:0,to:review.transaction.to,data:review.transaction.data,value:0n,gas:BigInt(review.gasLimit),gasPrice:BigInt(review.gasPrice)});},
+    broadcast:async(raw:string)=>{raws.push(raw);if(raws.length===1)throw Error('Crash before RPC acceptance');},
+    receipt:async()=>null,retryStatus:async()=>retry};
+  const options={manifest:f.manifest,owner,service:{status:async()=>s,prepare:f.service.prepare},command:db.command,transport,enabled:true,now:()=>at};
+  await assert.rejects(resolutionTick(options),/Crash/);
+  assert.equal((await resolutionTick(options)).status,'pending');assert.equal(raws.length,1);
+  at+=60;assert.equal((await resolutionTick(options)).status,'resubmitted');
+  assert.equal(signed,1);assert.equal(raws[0],raws[1]);
+  at+=60;retry={known:true,latestNonce:0,pendingNonce:1};
+  assert.equal((await resolutionTick(options)).status,'pending');assert.equal(raws.length,2);
+  retry={known:false,latestNonce:1,pendingNonce:1};
+  await assert.rejects(resolutionTick(options),/nonce/);assert.equal(raws.length,2);
+  retry={known:false,latestNonce:0,pendingNonce:1};
+  await assert.rejects(resolutionTick(options),/nonce/);assert.equal(signed,1);
+  retry={known:false,latestNonce:0,pendingNonce:0};db.data.delete(db.monitorKey);
+  await assert.rejects(resolutionTick(options),/monitoring/);assert.equal(raws.length,2);
+  assert.equal((await resolutionTick({...options,enabled:false})).status,'pending');
+});
 test('unhealthy monitoring, stale review and excessive gas stop worker execution',async()=>{
   const f=pilotFixture(now),s=await f.service.status();s.cases.forEach(c=>c.assertionDeadline=String(now-1));
   const db=storage(f.manifest);db.data.delete(db.monitorKey);

@@ -1,6 +1,7 @@
 // Runtime pieces that need no chain: retrieval allowlist, model providers, request budgets, the headless
 // client, the journal lock across separate processes, the signer and the command line.
 #include <atomic>
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <thread>
@@ -52,9 +53,10 @@ class Server {
           n = static_cast<int>(calls_.size());
         }
         auto [status, headers, body] = respond_(c.path, n);
-        std::string out = "HTTP/1.1 " + std::to_string(status) + " X\r\nContent-Length: " + std::to_string(body.size()) + "\r\nConnection: close\r\n";
+        bool framed = std::any_of(headers.begin(), headers.end(), [](const auto& h) { return lower(h.first) == "content-length" || lower(h.first) == "transfer-encoding"; });
+        std::string out = "HTTP/1.1 " + std::to_string(status) + " X\r\n" + (framed ? "" : "Content-Length: " + std::to_string(body.size()) + "\r\n") + "Connection: close\r\n";
         for (const auto& [k, v] : headers) out += k + ": " + v + "\r\n";
-        net::write_all(s, out + "\r\n" + body);
+        try { net::write_all(s, out + "\r\n" + body); } catch (...) { /* Rejected captures can close the connection early. */ }
         net::close_socket(s);
       }
     });
@@ -107,12 +109,43 @@ TEST(retrieval_allowlist_redirects_and_text) {
     CHECK_EQ(got[0].id, std::string("src-1"));
     CHECK_EQ(got[0].title.value_or(""), std::string("Release 1.0"));
     CHECK_EQ(got[0].excerpt, std::string("Release 1.0 Tagged & released"));
-    CHECK(got[0].published_at == std::optional<int64_t>(1790416800));
+    CHECK(!got[0].publisher_released_at);
+    CHECK(got[0].http_last_modified == std::optional<int64_t>(1790416800));
+    CHECK_EQ(got[0].schema, std::string(EVIDENCE_SCHEMA));
+    CHECK(got[0].complete_document && got[0].captured_bytes > 0);
+    CHECK(got[0].event_ids == std::vector<unsigned>{0});
   }
   CHECK(HttpRetriever({}, false).retrieve({{0, server.url + "/a"}}, 0).empty());  // plain HTTP only when allowed
   CHECK(HttpRetriever({"allowed.example"}, false).retrieve({{0, "https://other.example/x"}}, 0).empty());
   for (const auto& c : server.calls()) CHECK(c.path.find("evil") == std::string::npos);
   CHECK_EQ(extract_text("<style>x{}</style><b>a</b>  b", "text/html"), std::string("a b"));
+}
+
+TEST(retrieval_rejects_partial_empty_and_oversized_bodies) {
+  Server server([](const std::string& path, int) -> std::tuple<int, Headers, std::string> {
+    Headers type = {{"Content-Type", "text/plain"}};
+    if (path == "/empty") return {200, type, ""};
+    if (path == "/blank") return {200, type, "   "};
+    if (path == "/oversize") return {200, type, std::string(300001, 'x')};
+    if (path == "/partial") return {206, type, "abc"};
+    if (path == "/range") return {200, {{"Content-Type", "text/plain"}, {"Content-Range", "bytes 0-2/100"}}, "abc"};
+    if (path == "/short") return {200, {{"Content-Type", "text/plain"}, {"Content-Length", "20"}}, "abc"};
+    if (path == "/chunk-broken") return {200, {{"Content-Type", "text/plain"}, {"Transfer-Encoding", "chunked"}}, "3\r\nabc\r\n"};
+    if (path == "/chunk-short") return {200, {{"Content-Type", "text/plain"}, {"Transfer-Encoding", "chunked"}}, "9\r\nabc\r\n0\r\n\r\n"};
+    if (path == "/chunk-ok") return {200, {{"Content-Type", "text/plain"}, {"Transfer-Encoding", "chunked"}}, "3\r\nabc\r\n3\r\ndef\r\n0\r\n\r\n"};
+    if (path == "/redirect-ok") return {302, {{"Location", "/chunk-ok"}}, ""};
+    return {200, type, "abc"};
+  });
+  HttpRetriever retriever({}, true);
+  for (const auto& path : {"/empty", "/blank", "/oversize", "/partial", "/range", "/short", "/chunk-broken", "/chunk-short"})
+    CHECK(retriever.retrieve({{0, server.url + path}}, 1790000000).empty());
+  auto records = retriever.retrieve({{1, server.url + "/redirect-ok"}}, 1790000000);
+  CHECK_EQ(records.size(), size_t{1});
+  if (!records.empty()) {
+    CHECK_EQ(records[0].requested_url, server.url + "/redirect-ok"); CHECK_EQ(records[0].final_url, server.url + "/chunk-ok");
+    CHECK_EQ(records[0].url, records[0].final_url); CHECK_EQ(records[0].captured_bytes, int64_t{6});
+    CHECK_EQ(records[0].content_sha256, sha256_hex("abcdef")); CHECK(records[0].event_ids == std::vector<unsigned>{1});
+  }
 }
 
 TEST(providers_configuration_retries_limits_and_wire_formats) {
@@ -152,8 +185,11 @@ TEST(providers_configuration_retries_limits_and_wire_formats) {
 
 static std::vector<Evidence> evidence() {
   Evidence e;
+  e.schema = EVIDENCE_SCHEMA; e.complete_document = true; e.captured_bytes = 1; e.event_ids = {0, 1};
+  e.publisher_released_at = 1790000000 - 60;
   e.id = "src-1";
   e.url = "https://example.org/x";
+  e.requested_url = e.url; e.final_url = e.url;
   e.title = "x source";
   e.publisher = "example.org";
   e.content_sha256 = std::string(64, '0');
@@ -185,6 +221,26 @@ TEST(research_budgets) {
   CHECK_EQ(*calls, 2);
   Researcher none(std::make_shared<FixtureRetriever>(std::vector<Evidence>{}), nullptr, 1, 1, 1, Error("provider_not_configured", "No provider."));
   CHECK_EQ(none.research("0x", "t", events, {}, 0).reason, std::string("provider_not_configured"));
+}
+
+TEST(research_requires_explicit_background_and_per_event_coverage) {
+  auto calls = std::make_shared<int>(0);
+  auto f = std::make_shared<FixtureForecaster>([calls](const Prompt&) { ++*calls; return std::string("{}"); }, "fixture");
+  auto records = evidence(); records[0].publisher_released_at.reset();
+  Researcher r(std::make_shared<FixtureRetriever>(records), f, 86400, 10, 10);
+  std::vector<PromptEvent> events = {{0,"q","y","n",1800000000},{1,"q","y","n",1800000000}};
+  CHECK_EQ(r.research("0x", "fixture", events, {}, 1790000000).reason, std::string("stale_evidence")); CHECK_EQ(*calls, 0);
+  auto background = json::parse(R"([{"event":0,"freshness":"background"},{"event":1,"freshness":"background"}])");
+  CHECK_EQ(r.research("0x", "fixture", events, {}, 1790000000, background).reason, std::string("malformed_output")); CHECK_EQ(*calls, 1);
+  records[0].event_ids = {0}; records[0].publisher_released_at = 1789999990;
+  Researcher missing(std::make_shared<FixtureRetriever>(records), f, 86400, 10, 10);
+  CHECK_EQ(missing.research("0x", "fixture", events, {}, 1790000000).reason, std::string("missing_event_evidence")); CHECK_EQ(*calls, 1);
+  auto record = evidence()[0]; record.retrieved_at = 1790000000; record.publisher_released_at.reset();
+  CHECK(!evidence_observed_at(record, {0, 1}));
+  CHECK(evidence_observed_at(record, {0, 1}, background) == std::optional<int64_t>(1790000000));
+  CHECK(!evidence_observed_at(record, {0, 1}, json::parse(R"([{"event":0,"freshness":"background"}])")));
+  record.publisher_released_at = 1789999990; record.event_ids = {2};
+  CHECK(!evidence_observed_at(record, {0, 1}, background));
 }
 
 TEST(transport_budget_counts_across_requests) {

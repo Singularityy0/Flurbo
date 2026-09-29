@@ -30,14 +30,21 @@ fn main() -> flurbo_sdk::Result<()> {
         .collect();
     let retriever = FixtureRetriever {
         records: vec![Evidence {
+            schema: flurbo_sdk::research::EVIDENCE_SCHEMA.into(),
             id: "src-1".into(),
             url: "https://example.org/fixture-release-notes".into(),
+            requested_url: "https://example.org/fixture-release-notes".into(),
+            final_url: "https://example.org/fixture-release-notes".into(),
             title: Some("Fixture release notes".into()),
             publisher: Some("example.org".into()),
             retrieved_at: 0,
-            published_at: Some(NOW - 3600),
+            publisher_released_at: Some(NOW - 3600),
+            http_last_modified: None,
             content_sha256: "0".repeat(64),
             excerpt: "Both release branches were tagged on the same day (fixture text).".into(),
+            complete_document: true,
+            captured_bytes: 63,
+            event_ids: vec![0, 1],
         }],
     };
     let reply = json!({"schema": MODEL_SCHEMA, "abstain": false, "abstainReason": null, "events": [0, 1], "statesPpm": [250_000, 100_000, 100_000, 550_000],
@@ -105,13 +112,6 @@ fn main() -> flurbo_sdk::Result<()> {
     };
     let intent = Intent::Buy { claim: Claim { scope: p.scope, mask: p.mask }, quantity_atoms: p.quantity_atoms, limit_atoms: limit, deadline: (NOW + 300) as u64 };
     let tx = build_transaction(&intent, &deployment, &format!("0x{}", "11".repeat(20)))?;
-    println!(
-        "Would sign: buy {} atoms of claim {}/{}, paying at most {} atoms, calldata {}... (offline: nothing signed)",
-        p.quantity_atoms,
-        p.scope,
-        p.mask,
-        limit,
-        &tx.data[..18]
-    );
+    println!("Would sign: buy {} atoms of claim {}/{}, paying at most {} atoms, calldata {}... (offline: nothing signed)", p.quantity_atoms, p.scope, p.mask, limit, &tx.data[..18]);
     Ok(())
 }

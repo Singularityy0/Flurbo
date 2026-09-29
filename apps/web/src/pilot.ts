@@ -29,6 +29,7 @@ export type PilotReview={schema:string;manifest:PilotManifest;snapshot:PilotStat
   transaction:{from:Hex;to:Hex;data:Hex;value:Hex;chainId:Hex};notice:string};
 export type PilotPending={review:PilotReview;nonce:Hex;hash:Hex|null;started:number;login:string};
 export const pilotPendingKey='flurbo.pilot.pending.v1';
+const practiceModes = ['rehearsal','ethereum-activity','deterministic-source-v1'];
 export type PilotNamespace='pilot'|'rehearsal'|`practice-${string}`;
 export const isPracticeNamespace=(value:string):value is Exclude<PilotNamespace,'pilot'>=>value==='rehearsal'||/^practice-[0-9a-f]{40}$/.test(value);
 export const pendingKeyFor=(namespace:PilotNamespace)=>{
@@ -45,7 +46,7 @@ export async function pilotRequest<T>(path:string,input?:unknown,namespace:Pilot
     if(result.code==='INVITE_REQUIRED'&&typeof window!=='undefined')window.dispatchEvent(new Event('flurbo:access-required'));
     throw new Error(result.error || 'Pilot request failed. Refresh before retrying.');
   }
-  if(result.manifest&&namespace.startsWith('practice-')&&(result.manifest.pool!=='0x'+namespace.slice(9)||!['rehearsal','ethereum-activity'].includes(result.manifest.publication?.mode)))throw Error('Response belongs to a different collection.');
+  if(result.manifest&&namespace.startsWith('practice-')&&(result.manifest.pool!=='0x'+namespace.slice(9)||!practiceModes.includes(result.manifest.publication?.mode)))throw Error('Response belongs to a different collection.');
   return result;
 }
 async function namespaceRpc(namespace:PilotNamespace,method:string,params:unknown[]=[]){ return (await pilotRequest<{result:unknown}>('rpc',{method,params},namespace)).result; }
@@ -105,7 +106,7 @@ export function readPilotPending(namespace:PilotNamespace='pilot'):PilotPending|
   if(!raw) return null;
   if(raw.length>100_000) throw new Error('Saved transaction is invalid. Do not resubmit.');
   const value=JSON.parse(raw) as PilotPending;
-  if((['rehearsal','ethereum-activity'].includes(value.review.manifest.publication.mode||''))!==isPracticeNamespace(namespace)
+  if((practiceModes.includes(value.review.manifest.publication.mode||''))!==isPracticeNamespace(namespace)
     ||namespace==='rehearsal'&&value.review.manifest.publication.mode!=='rehearsal'
     ||namespace.startsWith('practice-')&&value.review.manifest.pool!=='0x'+namespace.slice(9))throw new Error('Saved transaction belongs to a different market');
   validatePilotReview(value.review,Date.now(),true); rpcInteger(value.nonce);
@@ -166,7 +167,7 @@ export async function submitPilot(p:Provider,r:PilotReview,login:string,save:(va
   }
 }
 
-export async function checkPilotPending(saved:PilotPending,namespace:PilotNamespace=saved.review.manifest.publication.mode==='ethereum-activity'?`practice-${saved.review.manifest.pool.slice(2)}`:saved.review.manifest.publication.mode==='rehearsal'?'rehearsal':'pilot') {
+export async function checkPilotPending(saved:PilotPending,namespace:PilotNamespace=['ethereum-activity','deterministic-source-v1'].includes(saved.review.manifest.publication.mode||'')?`practice-${saved.review.manifest.pool.slice(2)}`:saved.review.manifest.publication.mode==='rehearsal'?'rehearsal':'pilot') {
   if(namespace.startsWith('practice-')&&saved.review.manifest.pool!=='0x'+namespace.slice(9))throw Error('Pending transaction belongs to a different collection');
   const rpc=(method:string,params:unknown[]=[])=>namespaceRpc(namespace,method,params);
   validatePilotReview(saved.review,Date.now(),true);

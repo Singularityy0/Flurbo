@@ -73,6 +73,9 @@ jobs:
         with:
           python-version: '3.12'
       - uses: foundry-rs/foundry-toolchain@v1
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
       - name: Install dependencies and build contracts for the local chain
         run: |
           npm --prefix apps/web ci
@@ -80,9 +83,27 @@ jobs:
           npm --prefix contracts ci
           forge build
           python3 -m pip install --quiet -e packages/sdk-python
+      # Runs after apps/web is installed: the CRE tests import apps/web modules that resolve viem from apps/web/node_modules.
+      - name: Settlement preparation types and rules
+        working-directory: workflows/cre
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun test
+      - name: Historical source-to-contract settlement replay (offline)
+        run: node apps/web/scripts/replay-settlement-chain.mjs
       - name: TypeScript SDK
         working-directory: packages/sdk
         run: npm run typecheck && npm test
+      - name: SDK dashboard with a real local-chain runtime
+        run: |
+          npm --prefix apps/web run build
+          npm install --prefix "$RUNNER_TEMP/pw-sdk" --no-audit --no-fund playwright-core@1.56.1
+          PW="$RUNNER_TEMP/pw-sdk/node_modules/playwright-core"
+          node "$PW/cli.js" install --with-deps chromium
+          export FLURBO_TEST_PLAYWRIGHT="$PW/index.mjs"
+          export FLURBO_TEST_BROWSER="$(node -e "console.log(require(process.argv[1]).chromium.executablePath())" "$PW")"
+          node --test packages/sdk/test/dashboard-browser.test.ts
       - name: Python SDK
         working-directory: packages/sdk-python
         run: python3 -m unittest discover -s tests

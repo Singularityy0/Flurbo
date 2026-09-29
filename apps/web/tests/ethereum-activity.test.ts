@@ -23,6 +23,21 @@ test('missing, conflicting, unfinalized and wrong-chain observations never becom
   const changed=structuredClone(draft);changed.events[0].yesRule+=' altered';assert.throws(()=>validateActivityDraft(changed));
   assert.throws(()=>activityBlock({...block(100),gasUsed:hex(1001)}));
 });
+test('Test uses two independently evaluated real metrics and rejects a changed recipe',async()=>{
+  const testDraft={...draft,title:'Test',clusterId:`ethereum-test-v1-${draft.closesAt}`,events:draft.events.slice(0,2)};
+  const changed=rpc(b=>({...b,gasUsed:hex(749)}));
+  const report=await observeEthereumActivity(testDraft,{rpcs:[changed,changed],now});
+  assert.deepEqual(report.outcomes,[1,2]);
+  assert.throws(()=>validateActivityDraft({...testDraft,events:[...testDraft.events].reverse()}));
+  assert.throws(()=>validateActivityDraft({...testDraft,events:draft.events}));
+  assert.throws(()=>validateActivityDraft({...draft,events:draft.events.slice(0,2)}));
+  const db=new Map();
+  const command=async(op:string,key:string,value?:string)=>{if(op==='GET')return db.get(key)||null;if(!db.has(key))db.set(key,value);return 'OK';};
+  const m={pool:'0x'+'bc'.repeat(20),rulesHash:hash(30),draftHash:hash(31),publication:{draft:testDraft}};
+  const ev=await activityEvidence(m,command,{put:async()=>({hash:hash(32),uri:'https://example.test/evidence'})},'owner',async()=>report);
+  assert.equal((await ev(0)).outcome,1);assert.equal((await ev(1)).outcome,2);
+  await assert.rejects(ev(2),/Invalid event/);
+});
 test('Ethereum transport allows only fixed read-only sources and matching bounded JSON RPC responses',async()=>{
   assert.throws(()=>ethereumRpc('https://example.com'));
   const read=ethereumRpc('https://eth.drpc.org',async(_url:any,options:any)=>{const body=JSON.parse(options.body);return Response.json({jsonrpc:'2.0',id:body.id,result:'0x1'});});

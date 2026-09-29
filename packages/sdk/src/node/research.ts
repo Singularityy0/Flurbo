@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { FlurboError } from '../errors.ts';
-import { buildResearchPrompt, forecastFromModel, validateModelOutput, type EvidenceRecord, type ResearchAbstain, type ResearchQuestion } from '../research.ts';
+import { EVIDENCE_SCHEMA, buildResearchPrompt, forecastFromModel, validateModelOutput, isCitableEvidence, evidenceFailure, type EvidenceRecord, type EvidenceRequirement, type ResearchAbstain, type ResearchQuestion } from '../research.ts';
 import type { Forecast } from '../forecast.ts';
 
 // Research on the operator's machine (protocol/specs/research.md). Retrieval is explicit and allowlisted;
@@ -17,13 +17,13 @@ export function httpRetriever(options: { allowHosts: string[]; allowLocalHttp?: 
   const maxBytes = options.maxBytes ?? 300_000, timeoutMs = options.timeoutMs ?? 10_000;
   const allowed = (u: URL) => !u.username && !u.password && ((u.protocol === 'https:' && allow.has(u.hostname.toLowerCase()))
     || (!!options.allowLocalHttp && u.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(u.hostname)));
-  async function get(url: string): Promise<Response> {
+  async function get(url: string): Promise<{ response: Response; finalUrl: string }> {
     let current = new URL(url);
     for (let hop = 0; hop < 4; hop++) {
       if (!allowed(current)) throw new FlurboError('forbidden', 'Source host not allowlisted.');
       const r = await request(current.href, { redirect: 'manual', headers: { Accept: 'text/html,application/json,text/plain' }, signal: AbortSignal.timeout(timeoutMs) });
-      if (r.status >= 300 && r.status < 400 && r.headers.get('location')) { current = new URL(r.headers.get('location')!, current); continue; }
-      return r;
+      if (r.status >= 300 && r.status < 400 && r.headers.get('location')) { await r.body?.cancel(); current = new URL(r.headers.get('location')!, current); continue; }
+      return { response: r, finalUrl: current.href };
     }
     throw new FlurboError('invalid_response', 'Too many redirects.');
   }
@@ -33,16 +33,29 @@ export function httpRetriever(options: { allowHosts: string[]; allowLocalHttp?: 
       const out: EvidenceRecord[] = [];
       for (const source of sources.slice(0, options.maxSources ?? 6)) {
         try {
-          const r = await get(source.url);
+          if (!Number.isSafeInteger(source.event) || source.event < 0) continue;
+          const { response: r, finalUrl } = await get(source.url);
           const type = r.headers.get('content-type') ?? '';
-          if (!r.ok || !/text\/|application\/(json|xhtml)/.test(type)) continue;
-          const reader = r.body!.getReader(), chunks: Uint8Array[] = [];
-          let size = 0;
-          for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.length; if (size > maxBytes) { await reader.cancel(); break; } chunks.push(value); }
+          if (!r.ok || r.status === 206 || r.headers.has('content-range') || !/text\/|application\/(json|xhtml)/.test(type) || !r.body) { await r.body?.cancel(); continue; }
+          const reader = r.body.getReader(), chunks: Uint8Array[] = [];
+          let size = 0, complete = false;
+          try {
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) { complete = true; break; }
+              size += value.length;
+              if (size > maxBytes) { await reader.cancel(); break; }
+              chunks.push(value);
+            }
+          } finally { reader.releaseLock(); }
+          if (!complete || size === 0) continue;
           const raw = Buffer.concat(chunks), text = extractText(raw.toString('utf8'), type);
+          if (!text) continue;
           const modified = Date.parse(r.headers.get('last-modified') ?? '');
-          out.push({ id: `src-${out.length + 1}`, url: source.url, title: titleOf(raw.toString('utf8')) ?? source.url, publisher: new URL(source.url).host,
-            retrievedAt: now, publishedAt: Number.isFinite(modified) ? Math.floor(modified / 1000) : null, contentSha256: createHash('sha256').update(raw).digest('hex'), excerpt: text.slice(0, 4000) });
+          out.push({ schema: EVIDENCE_SCHEMA, id: `src-${out.length + 1}`, url: finalUrl, requestedUrl: source.url, finalUrl,
+            title: titleOf(raw.toString('utf8')) ?? finalUrl, publisher: new URL(finalUrl).host,
+            retrievedAt: now, publisherReleasedAt: null, httpLastModified: Number.isFinite(modified) && modified >= 0 ? Math.floor(modified / 1000) : null,
+            completeDocument: true, capturedBytes: size, eventIds: [source.event], contentSha256: createHash('sha256').update(raw).digest('hex'), excerpt: text.slice(0, 4000) });
         } catch { /* A failed source is skipped; research abstains if nothing usable remains. */ }
       }
       return out;
@@ -138,7 +151,7 @@ export function researcher(o: { retriever: Retriever; forecaster: Forecaster | P
   let cycleCount = 0; const hour: number[] = [];
   return {
     resetCycle() { cycleCount = 0; },
-    async research(input: { pool: string; title: string; eventCount: number; events: ResearchQuestion[]; sources: RetrievalSource[] }): Promise<ResearchResult> {
+    async research(input: { pool: string; title: string; eventCount: number; events: ResearchQuestion[]; sources: RetrievalSource[]; evidenceRequirements?: EvidenceRequirement[] }): Promise<ResearchResult> {
       const t = now();
       if (o.forecaster instanceof ProviderError) return { status: 'abstain', reason: o.forecaster.reason, detail: o.forecaster.message, evidence: [], provenance: null };
       const provenance = { kind: o.forecaster.kind, name: o.forecaster.name };
@@ -146,14 +159,19 @@ export function researcher(o: { retriever: Retriever; forecaster: Forecaster | P
       if (cycleCount >= o.perCycle || hour.length >= o.perHour) return { status: 'abstain', reason: 'request_budget_exhausted', detail: 'The research request budget is used up.', evidence: [], provenance };
       const evidence = await o.retriever.retrieve(input.sources, t);
       if (!evidence.length) return { status: 'abstain', reason: 'no_sources', detail: 'No evidence could be retrieved from the allowed sources.', evidence, provenance };
+      const context = { requestedEvents: input.events.map(e => e.index), eventCount: input.eventCount, evidence, now: t,
+        maxEvidenceAgeSeconds: o.maxEvidenceAgeSeconds, evidenceRequirements: input.evidenceRequirements };
+      const usable = evidence.filter(e => isCitableEvidence(e, t, input.eventCount));
+      const failure = usable.length ? evidenceFailure(usable, context) : 'invalid_evidence';
+      if (failure) return { status: 'abstain', reason: failure, detail: `Evidence requirements failed: ${failure}.`, evidence, provenance };
       cycleCount++; hour.push(t);
       let reply: string;
-      try { reply = await o.forecaster.complete(buildResearchPrompt({ pool: input.pool, title: input.title, events: input.events, evidence, now: t })); }
+      try { reply = await o.forecaster.complete(buildResearchPrompt({ ...input, evidence: usable, now: t })); }
       catch (e) { const pe = e instanceof ProviderError ? e : new ProviderError('provider_unavailable', 'The model provider failed.'); return { status: 'abstain', reason: pe.reason, detail: pe.message, evidence, provenance }; }
-      const outcome = validateModelOutput(reply, { requestedEvents: input.events.map(e => e.index), eventCount: input.eventCount, evidence, now: t, maxEvidenceAgeSeconds: o.maxEvidenceAgeSeconds });
+      const outcome = validateModelOutput(reply, context);
       if (outcome.status === 'abstain') return { status: 'abstain', reason: outcome.reason, detail: `The forecast was not used: ${outcome.reason}.`, modelReason: outcome.modelReason, evidence, provenance };
       try {
-        const forecast = forecastFromModel(outcome.output, { pool: input.pool, eventCount: input.eventCount, evidence, provider: provenance.kind === 'fixture' ? 'fixture' : provenance.name.split('/')[0], model: provenance.name.split('/').slice(1).join('/') || provenance.name, now: t });
+        const forecast = forecastFromModel(outcome.output, { pool: input.pool, eventCount: input.eventCount, evidence, provider: provenance.kind === 'fixture' ? 'fixture' : provenance.name.split('/')[0], model: provenance.name.split('/').slice(1).join('/') || provenance.name, now: t, evidenceRequirements: input.evidenceRequirements });
         return { status: 'ok', forecast: provenance.kind === 'fixture' ? { ...forecast, source: { kind: 'fixture', name: provenance.name } } : forecast, evidence, provenance };
       } catch { return { status: 'abstain', reason: 'malformed_output', detail: 'The forecast failed final validation.', evidence, provenance }; }
     },

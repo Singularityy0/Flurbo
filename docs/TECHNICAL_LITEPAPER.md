@@ -2,9 +2,9 @@
 
 ## A Coherent Market for Related Events
 
-### Technical Litepaper, Version 0.1
+### Technical Litepaper, Version 0.2
 
-28 September 2026
+29 September 2026
 
 Flurbo Research and Engineering
 
@@ -16,7 +16,7 @@ Prediction markets usually divide related questions into separate venues. This d
 
 Flurbo is an experimental information market for binary events and Boolean claims defined over those events. A pool represents a finite state space, maintains one logarithmic market scoring rule cost function, and prices individual and composed claims against the same inventory. A claim is a truth table over one to three selected events. The same representation supports individual answers, conjunction, disjunction, exactly-one, at-least-two, and other nonconstant Boolean payoffs. One terminal assignment settles all claims in a pool consistently.
 
-The current Monad testnet application uses small event clusters with explicitly enumerated states, test AUSD collateral, immutable market rules, optimistic resolution, and a uniform treatment of void outcomes. A separately implemented factored engine uses bounded-width variable elimination to evaluate one global cost function without materializing all terminal states. The factored engine is locally tested and is not presented as the currently deployed public pool.
+The current Monad testnet pilot uses bounded-width factored pricing for small event clusters, test AUSD collateral, immutable market rules, optimistic resolution, and a uniform treatment of void outcomes. Its pricing engine evaluates one global cost function through variable elimination without materializing all terminal liabilities. The pilot separately enumerates at most sixteen terminal assignments for settlement and void payouts. A general factored pool implementation supports a larger event domain under the same graph-width restrictions; operation of larger public clusters remains unvalidated.
 
 This paper specifies the economic model, claim encoding, pricing rule, collateral accounting, settlement semantics, agent interface, trust assumptions, and implementation status. It does not claim that market prices are true probabilities, that participation is profitable, or that the testnet mechanism is ready for real-value deployment.
 
@@ -43,7 +43,7 @@ For example, suppose P(A) = 0.40 and P(B) = 0.30. Then P(A and B) may lie anywhe
 Flurbo treats the complete state assignment as the primitive economic object. Individual and composed claims are projections of one state space. This approach is intended to provide three properties.
 
 1. **Coherent expression.** A trader can buy a claim whose payout matches a Boolean thesis rather than reconstructing that thesis from disconnected legs.
-2. **Shared price impact.** Every accepted trade changes one inventory and therefore affects every claim that overlaps the same terminal states.
+2. **Shared price impact.** Every accepted trade changes one inventory and can affect prices of other claims through the shared state distribution. A particular marginal or conditional probability may remain unchanged.
 3. **Unified settlement.** One resolved state settles all claims in a pool according to their published truth tables.
 
 The design does not solve semantic market definition by mathematics alone. A coherent numerical state space can still describe vague or incompatible real-world questions. Event wording, observation sources, deadlines, and exception policies must be reviewed and committed before trading.
@@ -125,7 +125,7 @@ Q_buy = C(q + delta 1_W) - C(q),
 
 where 1_W is one in winning states and zero otherwise. A sale reverses liability and receives the corresponding decrease in C, subject to ownership and representational constraints.
 
-Hanson introduced logarithmic market scoring rules as automated mechanisms for information aggregation [1, 2]. Combinatorial state spaces make exact LMSR pricing difficult in general, with known hardness results even under restricted languages [3]. Flurbo therefore maintains a small enumerated implementation for deployed testnet clusters and a separately bounded factored implementation for larger sparse clusters.
+Hanson introduced logarithmic market scoring rules as automated mechanisms for information aggregation [1, 2]. Combinatorial state spaces make exact LMSR pricing difficult in general, with known hardness results even under restricted languages [3]. Flurbo uses bounded-width factored pricing in the deployed small-cluster PilotPool. An enumerated implementation serves as a numerical reference for small state spaces rather than the deployed trading engine.
 
 ### 3.2 Finite trade formula
 
@@ -150,6 +150,17 @@ P(A OR B) = P(A) + P(B) - P(A AND B).
 The mechanism therefore does not maintain independent order books for A, B, and A AND B. A trade in one expression changes the relative liability of states and can move all overlapping expressions.
 
 This numerical coherence should not be overstated. Prices are inventory-derived market quantities. They can reflect sparse participation, subsidized initial conditions, strategic behavior, test-token indifference, or poor event definitions. They are not independently validated forecasts and they do not prove causation.
+
+### 3.4 Conditional structure under trades
+
+A purchase of delta units of A adds delta to every terminal liability for which A is true. The weights of those states are multiplied by the same factor exp(delta / b). Normalization within that subset cancels the common multiplier. Consequently, both P(B given A) and P(B given not A) remain unchanged, including when A and B are dependent. A sale reverses the same update. This preserves existing conditional structure rather than replacing it with independence.
+
+```equation
+P_new(B given A) = P_old(B given A)
+P_new(B given not A) = P_old(B given not A).
+```
+
+The marginal P(B) need not remain fixed because P(A) changes. By contrast, a purchase of A AND B changes the relative weights within the A subset, so P(B given A) increases for a nondegenerate distribution. These are properties of the inventory-derived LMSR distribution, not claims about real-world predictive accuracy. Regression tests compare exact integer liability differences that determine conditional odds, including correlated and independent fixtures, overlapping three-event factors, and buy/sell reversals. Separate high-precision quote fixtures test conservative rounding within the documented numerical enclosure; a one-atom discrepancy observed in some testnet quotes is not a universal error bound.
 
 ## 4. Bounded factored representation
 
@@ -185,9 +196,11 @@ Under width 2, joined intermediate tables contain at most eight entries. The eva
 
 The supplied order is validated but not optimized. A graph may admit a valid low-width order and still be rejected when given a poor order. Adding a claim can also create fill-in that violates the bound. These are intentional rejection conditions, not silent approximations.
 
-### 4.3 Current implementation boundary
+### 4.3 Pricing and settlement boundaries
 
-The factored Solidity pool integrates bounded-width evaluation, conservative quotes, owner holdings, funding, exact transfer checks, settlement, redemption, and canonical base-event receipt tokens. It has extensive local tests. As of this version, it is not the pool serving the public Flurbo testnet application. Public deployment, live gas validation, indexing, and operational acceptance remain future gates.
+The public PilotPool inherits the factored trading implementation and restricts a deployment to two to four binary events. It integrates conservative quotes, owner holdings, funding, exact transfer checks, canonical base-event receipt tokens, and resolver-delivered settlement. Its settlement path enumerates compatible assignments to compute uniform VOID payouts. This small settlement enumeration does not imply enumerated pricing.
+
+The general FactoredPool accepts a larger event domain under the limits in Section 4.2 and has local tests. Its larger-domain operation is distinct from the deployed small pilot. Successful local tests or a small public deployment do not establish gas feasibility, indexing coverage, or operational readiness for every permitted graph.
 
 ## 5. Collateral, ownership, and trading
 
@@ -345,7 +358,7 @@ No combination is favorable merely because its events are correlated. An observa
 
 ## 11. Implementation status
 
-| Component | Status at version 0.1 | Scope |
+| Component | Status at version 0.2 | Scope |
 | --- | --- | --- |
 | Public web application | Deployed testnet beta | Invite-based, test assets |
 | Small-cluster PilotPool | Deployed on Monad testnet | Factored local scopes over a small event cluster |
@@ -354,12 +367,13 @@ No combination is favorable merely because its events are correlated. An observa
 | Uniform VOID payout | Implemented in pilot settlement | Fractional truth-table averaging |
 | Holder-restricted challenge resolver | Implemented for new deployments | Not retroactive to legacy resolvers |
 | Agent runtime and SDKs | Implemented in four languages | Local keys, paper and testnet live modes |
-| Bounded-width factored LMSR pool | Local implementation and tests | Not the current public production pool |
+| Bounded-width factored pricing | Used by deployed PilotPool | Public pilot restricted to two to four events |
+| General FactoredPool with larger event domain | Local implementation and tests | Larger public clusters not operationally validated |
 | Independent oracle or appeal system | Not implemented | Current alpha remains operator dependent |
 | Mainnet or real-value market | Not launched | No real-value readiness claim |
 | Independent security audit | Not completed | Required before real-value deployment |
 
-The deployed pilot documented in the repository uses pool address `0x28d5ee02b1eda6959ac3ee5a4f834237c84dee02` on Monad testnet. Addresses and active market configuration can change through new deployments, so the hosted application and its verified manifests remain the operational source for current testnet markets.
+The pilot manifest records pool address `0x28d5ee02b1eda6959ac3ee5a4f834237c84dee02` on Monad testnet. The repository's 29 September 2026 read-only deployment assessment reports that deployed bytecode hashes match the manifest at the inspected blocks. A chain-to-manifest match is not an independent reproduction of compiled source bytecode; that source-to-bytecode linkage was not re-derived in that assessment. The source implementation of PilotPool inherits FactoredTrading. Addresses and active market configuration can change through new deployments, so the hosted application and its manifests provide the operational configuration for current testnet markets.
 
 ## 12. Limitations and research agenda
 
@@ -378,7 +392,7 @@ Future work includes automatic elimination-order selection, larger sparse cluste
 
 ## 13. Conclusion
 
-Flurbo's central proposition is that related predictions should be represented as claims on one coherent outcome space. A shared cost function gives individual and Boolean claims mutually consistent prices, shares liquidity across overlapping states, and permits one terminal assignment to settle all claims. The small-cluster public testnet provides an operational environment for evaluating that proposition. The bounded-width factored engine provides a concrete route toward larger sparse event graphs without global state enumeration.
+Flurbo's central proposition is that related predictions should be represented as claims on one coherent outcome space. A shared cost function gives individual and Boolean claims mutually consistent prices, shares liquidity across overlapping states, and permits one terminal assignment to settle all claims. The small-cluster public testnet uses bounded-width factored pricing to evaluate that proposition. The same representation offers a route toward larger sparse event graphs, subject to computational and operational limits. The pilot's bounded settlement enumeration remains a separate implementation choice.
 
 The remaining work is substantial. Semantic market design, resolution quality, operational reliability, computation, and user demand are separate problems from numerical coherence. The purpose of the testnet is to measure those problems directly while limiting financial risk to test assets.
 
@@ -424,7 +438,7 @@ This procedure separates human-readable logic from execution representation. Con
 
 [4] Pennock, D. M., and Xia, L. (2012). Price updating in combinatorial prediction markets with Bayesian networks. *Proceedings of the 28th Conference on Uncertainty in Artificial Intelligence*. https://doi.org/10.48550/arXiv.1202.3756
 
-[5] Flurbo Research and Engineering. (2026). Repository specifications for quoting, factored pricing, settlement, account challenges, and autonomous agents. Version 0.1 code and documentation snapshot, 28 September 2026.
+[5] Flurbo Research and Engineering. (2026). Repository specifications for quoting, factored pricing, settlement, account challenges, and autonomous agents. Implementation assessed at source revision fb10b64; documentation revision 0.2, 29 September 2026.
 
 ## Document status
 

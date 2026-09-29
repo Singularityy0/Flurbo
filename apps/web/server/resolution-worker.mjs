@@ -6,6 +6,7 @@ import {monitorIdentity} from './settlement-monitor.mjs';
 import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
 import {settlementCalendar,nextWake,priority} from '../shared/settlement-calendar.mjs';
 import {proposerStatus} from './proposer-guard.mjs';
+import {DETERMINISTIC_MODE,validateSettlementManifest} from './settlement-publication.mjs';
 export {proposerStatus};
 
 export function nextResolutionAction(state,owner,owned={},deferred={},{evidence=true}={}){
@@ -30,7 +31,9 @@ export function nextResolutionAction(state,owner,owned={},deferred={},{evidence=
 
 export function validateWorkerReview(review,manifest,owner,now){
   const activity=manifest.publication.mode==='ethereum-activity';
+  const deterministic=manifest.publication.mode===DETERMINISTIC_MODE;
   if(activity)validateActivityDraft(manifest.publication.draft);
+  if(deterministic)validateSettlementManifest(manifest);
   if(review.schema!=='flurbo.pilot-review.v1'||review.manifest.pool!==manifest.pool||review.manifest.rulesHash!==manifest.rulesHash
     ||review.transaction.from.toLowerCase()!==owner.toLowerCase()||BigInt(review.transaction.chainId)!==10143n
     ||BigInt(review.transaction.value)!==0n||review.expiresAt<=now||now-review.snapshot.timestamp>60||review.snapshot.timestamp>now+15
@@ -38,7 +41,7 @@ export function validateWorkerReview(review,manifest,owner,now){
   const call=pilotCall({...review.transaction,manifest});
   if(!call||call.name!==review.action||!['approve','assertOutcome','finalize','deliver'].includes(call.name))throw Error('Worker action rejected');
   if(call.name==='finalize'&&Number(call.args[0])!==review.requested.event)throw Error('Finalization event mismatch');
-  if(call.name==='assertOutcome'&&(Number(call.args[0])!==review.requested.event||!(activity?[1,2]:[2]).includes(Number(call.args[1]))||Number(call.args[1])!==review.requested.outcome
+  if(call.name==='assertOutcome'&&(Number(call.args[0])!==review.requested.event||!((activity||deterministic)?[1,2]:[2]).includes(Number(call.args[1]))||Number(call.args[1])!==review.requested.outcome
     ||call.args[2]!==review.requested.evidenceHash||call.args[3]!==review.requested.evidenceURI))throw Error('Assertion evidence mismatch');
   if(call.name==='approve'&&(review.requested.action!=='assertOutcome'||review.transaction.to.toLowerCase()!==pilotCash
     ||String(call.args[0]).toLowerCase()!==manifest.resolver||BigInt(call.args[1])!==BigInt(manifest.publication.bondAtoms)))throw Error('Only exact assertion bond approval is allowed');
@@ -57,9 +60,30 @@ export async function requireHealthyMonitor(command,manifest,now){
 // Any event still Pending may need a proposal later, so the proposer must stay position-free.
 const undecided=state=>!state.delivered&&state.cases.some(c=>c.phase===0);
 
+// A persisted transaction may have been saved before any broadcast reached the RPC.
+// Recovery may resend these exact bytes, never sign a replacement or raise the gas price.
+export async function validatePendingTransaction(pending,manifest,owner){
+  if(manifest.publication.mode===DETERMINISTIC_MODE)validateSettlementManifest(manifest);
+  if(manifest.publication.mode==='ethereum-activity')validateActivityDraft(manifest.publication.draft);
+  if(keccak256(pending.raw)!==pending.hash)throw Error('Journal hash mismatch');
+  const tx=parseTransaction(pending.raw),call=pilotCall({...tx,manifest});
+  if((await recoverTransactionAddress({serializedTransaction:pending.raw})).toLowerCase()!==owner.toLowerCase()
+    ||tx.chainId!==10143||(tx.value||0n)!==0n||!Number.isSafeInteger(tx.nonce)||tx.nonce<0
+    ||!call||call.name!==pending.action||!['approve','assertOutcome','finalize','deliver'].includes(call.name)
+    ||!tx.gas||tx.gas>1500000n||!tx.gasPrice||tx.gasPrice>500000000000n||tx.gas*tx.gasPrice>100000000000000000n)
+    throw Error('Pending transaction binding failed');
+  if(call.name==='approve'&&(tx.to.toLowerCase()!==pilotCash||String(call.args[0]).toLowerCase()!==manifest.resolver
+    ||BigInt(call.args[1])!==BigInt(manifest.publication.bondAtoms)))throw Error('Pending approval mismatch');
+  if(call.name==='finalize'&&Number(call.args[0])!==pending.event)throw Error('Pending event mismatch');
+  if(call.name==='assertOutcome'&&(!(['ethereum-activity',DETERMINISTIC_MODE].includes(manifest.publication.mode)?[1,2]:[2]).includes(Number(call.args[1]))
+    ||Number(call.args[0])!==pending.event||Number(call.args[1])!==pending.outcome
+    ||call.args[2]!==pending.evidenceHash||(pending.evidenceURI!==undefined&&call.args[3]!==pending.evidenceURI)))throw Error('Pending assertion mismatch');
+  return tx;
+}
+
 // Dependencies are deliberately explicit: source/model reads cannot call signer.
 // One durable transaction at a time, across every pool using this signer.
-export async function resolutionTick({manifest,owner,service,command,evidence,transport,proposerHoldings,enabled=false,allowEvidence=true,preflight=false,now=()=>Math.floor(Date.now()/1000)}){
+export async function resolutionTick({manifest,owner,service,command,evidence,verifyPendingEvidence,transport,proposerHoldings,enabled=false,allowEvidence=true,preflight=false,now=()=>Math.floor(Date.now()/1000)}){
   if(manifest.chainId!==10143||owner.toLowerCase()===manifest.publication.creator.toLowerCase()
     ||manifest.publication.reviewers.some(r=>r.address.toLowerCase()===owner.toLowerCase()))throw Error('Use a dedicated non-reviewer testnet signer');
   const lease=await settlementLease(command,'resolution-worker-v1:'+owner.toLowerCase());
@@ -74,9 +98,30 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
     if(saved.schema!=='flurbo.resolution-worker.v1'||saved.pool!==manifest.pool||saved.rulesHash!==manifest.rulesHash)throw Error('Reconcile existing signer journal before changing pools');
     if(saved.pending){
       const pending=saved.pending;
-      if(keccak256(pending.raw)!==pending.hash)throw Error('Journal hash mismatch');
+      const tx=await validatePendingTransaction(pending,manifest,owner);
       const receipt=await transport.receipt(pending.hash);
-      if(!receipt)return {status:'pending',hash:pending.hash};
+      if(!receipt){
+        if(!enabled||!transport.retryStatus||now()-(pending.lastBroadcastAt||0)<60)return {status:'pending',hash:pending.hash};
+        const retry=await transport.retryStatus(pending.hash,owner);
+        if(retry?.known===true)return {status:'pending',hash:pending.hash};
+        if(retry?.known!==false||retry.latestNonce!==tx.nonce||retry.pendingNonce!==tx.nonce)
+          throw Error('Pending nonce is occupied, consumed or inconsistent; reconcile without replacement');
+        if((pending.broadcastAttempts||1)>=8)throw Error('Identical-raw retry limit reached; inspect the journal and RPC');
+        await requireHealthyMonitor(command,manifest,now());
+        if(['assertOutcome','approve'].includes(pending.action)){
+          const guard=await proposerStatus(proposerHoldings);
+          if(guard.status!=='clear')return {status:'proposer-blocked',event:pending.event,proposer:guard};
+          if(manifest.publication.mode===DETERMINISTIC_MODE){
+            if(typeof verifyPendingEvidence!=='function')throw Error('Pending deterministic evidence verifier required');
+            await verifyPendingEvidence(pending);
+          }
+        }
+        await lease.renew();
+        saved.pending={...pending,lastBroadcastAt:now(),broadcastAttempts:(pending.broadcastAttempts||1)+1};await save();
+        const reportedHash=await transport.broadcast(pending.raw);
+        if(reportedHash&&reportedHash.toLowerCase()!==pending.hash.toLowerCase())throw Error('Broadcast hash mismatch');
+        return {status:'resubmitted',hash:pending.hash,action:pending.action};
+      }
       if(!receipt.confirmed)return {status:'pending',hash:pending.hash};
       if(receipt.success&&pending.action==='assertOutcome')saved.owned[pending.event]={outcome:pending.outcome,evidenceHash:pending.evidenceHash};
       saved.last={hash:pending.hash,success:receipt.success,at:now()};saved.pending=null;await save();
@@ -105,7 +150,7 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
       if(guard.status!=='clear')return {status:'proposer-blocked',event:plan.event,proposer:guard};
       const proposal=await evidence(plan.event);
       if(!proposal){saved.deferred={...saved.deferred,[plan.event]:now()+600};await save();return {status:'awaiting-evidence',event:plan.event};}
-      if(!(manifest.publication.mode==='ethereum-activity'?[1,2]:[2]).includes(proposal.outcome))throw Error('Unsupported source-checked outcome');
+      if(!(['ethereum-activity',DETERMINISTIC_MODE].includes(manifest.publication.mode)?[1,2]:[2]).includes(proposal.outcome))throw Error('Unsupported source-checked outcome');
       input={owner,action:'assertOutcome',event:plan.event,outcome:proposal.outcome,evidenceHash:proposal.hash,evidenceURI:proposal.uri};
     }
     const review=await service.prepare(input);validateWorkerReview(review,manifest,owner,now());
@@ -122,9 +167,11 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
       ||tx.chainId!==10143||tx.to?.toLowerCase()!==review.transaction.to.toLowerCase()||tx.data!==review.transaction.data
       ||(tx.value||0n)!==0n||tx.gas!==BigInt(review.gasLimit)||tx.gasPrice!==BigInt(review.gasPrice))throw Error('Signed transaction differs from prepared action');
     const hash=keccak256(signed);
-    saved.pending={hash,raw:signed,action:review.action,event:input.event,outcome:input.outcome,evidenceHash:input.evidenceHash};
+    saved.pending={hash,raw:signed,action:review.action,event:input.event,outcome:input.outcome,evidenceHash:input.evidenceHash,
+      evidenceURI:input.evidenceURI,lastBroadcastAt:now(),broadcastAttempts:1};
     await save(); // Persist BEFORE broadcast, including uncertain outcomes.
-    await transport.broadcast(signed);
+    const reportedHash=await transport.broadcast(signed);
+    if(reportedHash&&reportedHash.toLowerCase()!==hash.toLowerCase())throw Error('Broadcast hash mismatch');
     return {status:'submitted',hash,action:review.action};
   }finally{await lease.release();}
 }
@@ -132,7 +179,7 @@ export async function resolutionTick({manifest,owner,service,command,evidence,tr
 const journalKey=owner=>'flurbo:monitor:v1:'+createHash('sha256').update('resolution-worker-v1:'+owner.toLowerCase()).digest('hex')+':state';
 const roleConflict=(manifest,owner)=>owner.toLowerCase()===manifest.publication.creator.toLowerCase()
   ||manifest.publication.reviewers.some(r=>r.address.toLowerCase()===owner.toLowerCase());
-const TRANSACTIONAL=new Set(['submitted','pending','confirmed','reverted']);
+const TRANSACTIONAL=new Set(['submitted','resubmitted','pending','confirmed','reverted']);
 
 // Plans every registered pool, earliest deadline first. Signing still goes through resolutionTick,
 // which holds the one signer lease and journal. Only pools given an evidence function may propose;
@@ -146,7 +193,7 @@ export async function resolutionRound({pools,owner,command,transport,enabled=fal
   const raw=await command('GET',journalKey(owner)),stored=raw?JSON.parse(raw):null;
   const book=stored?.schema==='flurbo.resolution-journals.v2'?stored.pools:stored?{[stored.pool]:stored}:{};
   const pending=Object.values(book||{}).find(entry=>entry?.pending);
-  const tick=(p,live)=>resolutionTick({manifest:p.manifest,owner,service:p.service,command,evidence:p.evidence,transport,proposerHoldings:p.proposerHoldings,enabled:live,allowEvidence:!!p.evidence,preflight:!!p.proposerHoldings,now});
+  const tick=(p,live)=>resolutionTick({manifest:p.manifest,owner,service:p.service,command,evidence:p.evidence,verifyPendingEvidence:p.verifyPendingEvidence,transport,proposerHoldings:p.proposerHoldings,enabled:live,allowEvidence:!!p.evidence,preflight:!!p.proposerHoldings,now});
   if(pending){
     // Reconcile first; resolutionTick rechecks this under the lease.
     const target=pools.find(p=>p.manifest.pool===pending.pool);
