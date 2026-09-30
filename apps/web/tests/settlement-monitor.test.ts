@@ -3,13 +3,16 @@ import { test } from 'node:test';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, basename } from 'node:path';
-import { decodeFunctionData, encodeFunctionResult } from 'viem';
+import { decodeFunctionData, encodeFunctionResult, parseAbi } from 'viem';
 import { pilotFixture, hash, pool, resolver } from './pilot-fixture.ts';
 import { pilotPoolAbi, pilotCashAbi, resolverAbi } from '../shared/pilot.mjs';
 import { checkSettlement } from '../server/settlement-monitor.mjs';
 import { runSettlementCheck } from '../scripts/check-settlement.mjs';
 
 const CASH = '0xa9012a055bd4e0edff8ce09f960291c09d5322dc';
+// Multicall3, used by status for its single batched read: each inner call is answered by the same fixture.
+const MULTICALL = '0xca11bde05977b3631167028862be2a173976ca11';
+const multicall = parseAbi(['function aggregate3((address target,bool allowFailure,bytes callData)[] calls) payable returns ((bool success,bytes returnData)[] returnData)']);
 function fixture(time = 3000) {
   const f = pilotFixture(time, 4);
   f.manifest.publication.mode = 'rehearsal';
@@ -24,6 +27,12 @@ function fixture(time = 3000) {
   const calls: any[] = [];
   const rpc = async (method: string, params: any[] = []) => {
     calls.push({ method, params });
+    if (method === 'eth_call' && params[0].to === MULTICALL) {
+      const inner = decodeFunctionData({ abi: multicall, data: params[0].data }).args[0] as any[];
+      const rows = [];
+      for (const c of inner) rows.push({ success: true, returnData: await rpc('eth_call', [{ to: c.target, data: c.callData }, params[1]]) });
+      return encodeFunctionResult({ abi: multicall, functionName: 'aggregate3', result: rows });
+    }
     if (method === 'eth_call') {
       const tx = params[0], abi = tx.to === resolver ? resolverAbi : tx.to === pool ? pilotPoolAbi : pilotCashAbi;
       try {

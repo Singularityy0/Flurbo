@@ -64,6 +64,12 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     const data=encodeFunctionData({abi,functionName,args});
     return decodeFunctionResult({abi,functionName,data:await rpc('eth_call',[{to,data},tag])});
   }
+  // Several reads at one block: one Multicall3 eth_call when the RPC supports it (every read must succeed), or the
+  // same reads in parallel otherwise. Results come back in order.
+  async function readMany(calls,tag) {
+    if(rpc.readBatch&&calls.length>1)return rpc.readBatch(calls.map(([to,abi,fn,args=[]])=>({to,abi,fn,args})),tag);
+    return Promise.all(calls.map(([to,abi,fn,args=[]])=>read(to,abi,fn,args,tag)));
+  }
   // Holdings pages from one Portfolio visit arrive together; with snapshotReuseMs set, they share one verified
   // snapshot for that long instead of re-verifying the deployment for each page. Each page still checks that
   // the snapshot block is canonical (stable) before answering. Other reads always take a fresh snapshot.
@@ -79,13 +85,15 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     if(BigInt(chain)!==10143n) throw new Error('Wrong network');
     if(anchor?.hash?.toLowerCase()!==manifest.verifiedBlockHash) throw new Error('Deployment anchor changed');
     if(!head || !/^0x[0-9a-f]{64}$/i.test(head.hash) || now()-Number(BigInt(head.timestamp))>180 || now()-Number(BigInt(head.timestamp)) < -15) throw new Error('Stale chain data');
-    await Promise.all([manifest.pool,manifest.resolver].map(async to=>{
-      const code=await rpc('eth_getCode',[to,head.number]);
-      if(keccak256(code)!==manifest.codeHashes[to]) throw new Error('Contract code changed');
-    }));
-    const [rulesHash,boundPool]=await Promise.all([read(manifest.pool,pilotPoolAbi,'settlementRulesHash',[],head.number),read(manifest.resolver,resolverAbi,'pool',[],head.number)]);
+    // Code and bindings at the same head block, checked together in one round.
+    const [codes,bindings]=await Promise.all([
+      Promise.all([manifest.pool,manifest.resolver].map(to=>rpc('eth_getCode',[to,head.number]))),
+      Promise.all([read(manifest.pool,pilotPoolAbi,'settlementRulesHash',[],head.number),read(manifest.resolver,resolverAbi,'pool',[],head.number),
+        ...(manifest.challengePolicy?[read(manifest.resolver,holderResolverAbi,'eligibilitySigner',[],head.number)]:[])])]);
+    [manifest.pool,manifest.resolver].forEach((to,i)=>{if(keccak256(codes[i])!==manifest.codeHashes[to]) throw new Error('Contract code changed');});
+    const [rulesHash,boundPool,signer]=bindings;
     if(rulesHash.toLowerCase()!==manifest.rulesHash||boundPool.toLowerCase()!==manifest.pool) throw new Error('Pilot binding changed');
-    if(manifest.challengePolicy&&(await read(manifest.resolver,holderResolverAbi,'eligibilitySigner',[],head.number)).toLowerCase()!==manifest.challengePolicy.authority)throw Error('Challenge authority changed');
+    if(manifest.challengePolicy&&signer.toLowerCase()!==manifest.challengePolicy.authority)throw Error('Challenge authority changed');
     return {blockNumber:BigInt(head.number).toString(),blockHash:head.hash.toLowerCase(),timestamp:Number(BigInt(head.timestamp))};
   }
   async function stable(s) { if((await rpc('eth_getBlockByNumber',[tagFor(s),false]))?.hash?.toLowerCase()!==s.blockHash) throw new Error('Snapshot changed'); }
@@ -101,26 +109,32 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     await stable(s);
     return json({manifest,snapshot:s,wallet:{address:owner,cash},claimScopes});
   }
+  // Identical status requests that arrive while one is being read share it: a page load asks for the same status
+  // several times at once. Each read still takes its own verified snapshot.
+  const statusReads=new Map();
   async function status(owner) {
-    if(owner) address(owner);
-    const s=await snapshot(), tag=tagFor(s);
-    const cases=[];
-    for(let i=0;i<manifest.publication.draft.events.length;i++) {
-      const state=await read(manifest.resolver,resolverAbi,'caseState',[i],tag);
-      cases.push({...state,assertionDeadline:await read(manifest.resolver,resolverAbi,'assertionDeadline',[i],tag),
-        voted:owner?await read(manifest.resolver,resolverAbi,'voted',[i,owner],tag):false});
-    }
-    const liquidity=await read(manifest.pool,pilotPoolAbi,'liquidity',[],tag);
+    const key=owner?address(owner):'';
+    if(!statusReads.has(key))statusReads.set(key,readStatus(owner).finally(()=>statusReads.delete(key)));
+    return statusReads.get(key);
+  }
+  async function readStatus(owner) {
+    const s=await snapshot(), tag=tagFor(s), count=manifest.publication.draft.events.length;
+    // Every value comes from one block, in a single batched read.
+    const events=Array.from({length:count},(_,i)=>i);
+    const values=await readMany([
+      ...events.flatMap(i=>[[manifest.resolver,resolverAbi,'caseState',[i]],[manifest.resolver,resolverAbi,'assertionDeadline',[i]],
+        ...(owner?[[manifest.resolver,resolverAbi,'voted',[i,owner]]]:[])]),
+      [manifest.pool,pilotPoolAbi,'liquidity'],[manifest.pool,pilotPoolAbi,'factors'],[manifest.pool,pilotPoolAbi,'eliminationOrder'],
+      [manifest.resolver,resolverAbi,'delivered'],[manifest.pool,pilotPoolAbi,'requiredCollateral'],[pilotCash,pilotCashAbi,'balanceOf',[manifest.pool]],
+      [manifest.pool,pilotPoolAbi,'resolved'],[manifest.pool,pilotPoolAbi,'voidMask'],
+      ...(owner?[[pilotCash,pilotCashAbi,'balanceOf',[owner]],[manifest.resolver,resolverAbi,'credits',[owner]],[manifest.resolver,resolverAbi,'isReviewer',[owner]]]:[])],tag);
+    const per=owner?3:2, cases=events.map(i=>({...values[i*per],assertionDeadline:values[i*per+1],voted:owner?values[i*per+2]:false}));
+    const [liquidity,factors,order,delivered,requiredCollateral,poolCash,resolved,voidMask,cash,credits,reviewer]=values.slice(count*per);
     // The combinations already priced by the pool and its elimination order let the ticket show, before any
     // request, which further combinations the pool can still accept (see combinationFits).
-    const [factors,order]=await Promise.all([read(manifest.pool,pilotPoolAbi,'factors',[],tag),read(manifest.pool,pilotPoolAbi,'eliminationOrder',[],tag)]);
     const result={manifest,snapshot:s,cases,maxTradeQuantityAtoms:liquidity<100_000_000n?liquidity:100_000_000n,
-      factorScopes:[...new Set(factors.map(f=>Number(f.scope)))],eliminationOrder:order.map(Number),delivered:await read(manifest.resolver,resolverAbi,'delivered',[],tag),
-      requiredCollateral:await read(manifest.pool,pilotPoolAbi,'requiredCollateral',[],tag),
-      poolCash:await read(pilotCash,pilotCashAbi,'balanceOf',[manifest.pool],tag),
-      resolved:await read(manifest.pool,pilotPoolAbi,'resolved',[],tag),voidMask:await read(manifest.pool,pilotPoolAbi,'voidMask',[],tag),
-      wallet:owner?{address:owner,cash:await read(pilotCash,pilotCashAbi,'balanceOf',[owner],tag),credits:await read(manifest.resolver,resolverAbi,'credits',[owner],tag),
-        reviewer:await read(manifest.resolver,resolverAbi,'isReviewer',[owner],tag)}:null};
+      factorScopes:[...new Set(factors.map(f=>Number(f.scope)))],eliminationOrder:order.map(Number),delivered,requiredCollateral,poolCash,resolved,voidMask,
+      wallet:owner?{address:owner,cash,credits,reviewer}:null};
     await stable(s); return json(result);
   }
   // One verified snapshot for the browse page. Prices are one-share buy costs,
