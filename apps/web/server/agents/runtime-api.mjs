@@ -59,7 +59,9 @@ function account(totals, action, status, collateral) {
   else if (status === 'attributed-elsewhere') totals.attributedElsewhere++;
 }
 
-export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, reservedWallets = new Set(), links = null }) {
+// `count` replaces the shared Redis rate windows with another counter (in memory on a single server).
+export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, reservedWallets = new Set(), links = null, count = null }) {
+  const bump = count ?? ((key, seconds) => store.count(key, seconds));
   const service = namespace => {
     const svc = isNamespace(namespace) ? serviceFor(namespace) : null;
     return svc ?? fail(404, 'NOT_FOUND', 'That market is not available.');
@@ -209,12 +211,12 @@ export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, 
       let record;
       try { record = await authenticate(store, headers.authorization, now()); }
       catch(e) {
-        if(hosted && await store.count(`unauthenticated:${minute}`,120)>300)throw new RuntimeError(429,'RATE_LIMITED','Retry after the cooldown.',60-now()%60);
+        if(hosted && await bump(`unauthenticated:${minute}`,120)>300)throw new RuntimeError(429,'RATE_LIMITED','Retry after the cooldown.',60-now()%60);
         throw e;
       }
-      if (await store.count(`credential:${record.credentialId}:${minute}`, 120) > RATE_PER_MINUTE) throw new RuntimeError(429, 'RATE_LIMITED', 'Rate limit reached for this credential.', 60 - (now() % 60));
-      if (await store.count(`account:${record.account.toLowerCase()}:${minute}`,120)>240)throw new RuntimeError(429,'RATE_LIMITED','Rate limit reached for this account.',60-now()%60);
-      if (hosted && await store.count(`service:${minute}`,120)>SERVICE_PER_MINUTE)throw new RuntimeError(429,'RATE_LIMITED','The agent API is busy. Retry shortly.',60-now()%60);
+      if (await bump(`credential:${record.credentialId}:${minute}`, 120) > RATE_PER_MINUTE) throw new RuntimeError(429, 'RATE_LIMITED', 'Rate limit reached for this credential.', 60 - (now() % 60));
+      if (await bump(`account:${record.account.toLowerCase()}:${minute}`,120)>240)throw new RuntimeError(429,'RATE_LIMITED','Rate limit reached for this account.',60-now()%60);
+      if (hosted && await bump(`service:${minute}`,120)>SERVICE_PER_MINUTE)throw new RuntimeError(429,'RATE_LIMITED','The agent API is busy. Retry shortly.',60-now()%60);
       if (previewAllows && !await previewAllows(record.account)) fail(403, 'INVITE_REQUIRED', 'Testnet access is not approved for the account that owns this agent.');
       const found = await store.get(record.account, record.agentId);
       if (!found || found.profile.kind !== 'runtime') fail(404, 'NOT_FOUND', 'Agent not found.');

@@ -5,6 +5,7 @@ import { quoteClaims, verifyReceipt, readResolution } from './agent-market.mjs';
 import { runtimeApi, defaultRuntimePolicy, policyView, connection } from './runtime-api.mjs';
 import {agentPortfolio} from './portfolio.mjs';
 import { RuntimeError } from './credentials.mjs';
+import { memoryWindow } from '../request-limits.mjs';
 import { STRATEGY, DEFAULT_CONFIG, SCHEMAS, FlurboError, assertConfig, candidateClaims, decide, claimKey, parseMarket, parseForecast, parseQuoteResult,
   parsePairAnalytics, parseClaimImplied, decisionToJSON, decisionFromJSON, recordPaperFill, paperFillToJSON, paperFillFromJSON, evaluatePaper, forecastToJSON, FILL_MODEL,
   claimFromJSON, isNamespace, parseAtoms } from '../../../../packages/sdk/src/index.ts';
@@ -85,10 +86,10 @@ const recordsView = (state, now) => [...state.proposals.map(p => proposalView(p,
 
 // `previewAllows(account)` re-checks testnet approval on every headless request; `reservedWallets` are
 // operator addresses that can never become agent wallets.
-export function agentApi({ command = null, hosted = false, serviceFor, links, rpc, now = nowSeconds, previewAllows = null, reservedWallets = new Set() }) {
+export function agentApi({ command = null, hosted = false, serviceFor, links, rpc, now = nowSeconds, previewAllows = null, reservedWallets = new Set(), localCounters = false }) {
   if (hosted && !command) throw new Error('Durable agent storage is required when hosted');
   const store = agentStore(command ? redisBackend(command) : memoryBackend(), { unresolved: p => unresolvedProposal(p, now()) });
-  const runtime = runtimeApi({ store, serviceFor, rpc, now, previewAllows, reservedWallets, links });
+  const runtime = runtimeApi({ store, serviceFor, rpc, now, previewAllows, reservedWallets, links, count: localCounters ? memoryWindow() : null });
   // Autonomous runtime agents and assisted (manual forecast, paper and MetaMask approval) agents.
   const assisted = profile => { if (profile.kind === 'runtime') fail(409, 'This agent runs on your own infrastructure. Use the SDK runtime for research and trading.'); };
   const service = namespace => {

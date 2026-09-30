@@ -22,6 +22,20 @@ export function watchdog(env, request = fetch) {
 export const READ_FAILURE_THRESHOLD = 2;
 const READ_ATTEMPTS = 3;
 const pause = ms => new Promise(done => setTimeout(done, ms));
+// A verified observation is written at least this often even when nothing changed, well inside the worker's
+// 15-minute freshness requirement and the hosted gap alarm.
+export const CHECKPOINT_REFRESH_SECONDS = 300;
+
+// When the settlement bot next needs to act on this pool, in UTC seconds: now when an assertion window is open
+// or every answer is final but not delivered, otherwise the next observation end, challenge or vote deadline.
+// 'none' when the pool is delivered. The bot runs every 2 minutes near these times and every 10 otherwise.
+export function nextDueAt(report) {
+  if (report.lifecycle === 'settled') return 'none';
+  const chainTime = report.snapshot.timestamp, open = report.events.filter(e => e.phase !== 'Finalized');
+  if (!open.length) return chainTime;
+  return Math.min(...open.map(e => e.phase === 'Pending'
+    ? Math.max(chainTime, Number(report.timing.observationEnds[e.event])) : Math.max(chainTime, Number(e.deadline))));
+}
 
 export async function notifyPool({ manifest, command, rpc, config, send,
   now = () => Math.floor(Date.now() / 1000), test = false, inspect = checkSettlement, wait = pause }) {
@@ -32,6 +46,7 @@ export async function notifyPool({ manifest, command, rpc, config, send,
     let state = await lease.load() ?? { schema: 'flurbo.settlement-mail.v1', identity,
       checkpoint: null, report: null, signature: null, lastQueuedAt: 0, queue: [] };
     validateEmailState(state, identity); validateMonitorCheckpoint(state.checkpoint, manifest);
+    const loaded = state;
     if (state.queue.some(item => item.body.from !== config.from || JSON.stringify(item.body.to) !== JSON.stringify(config.to))) {
       throw new Error('Reconcile pending mail before changing recipient or sender');
     }
@@ -60,15 +75,24 @@ export async function notifyPool({ manifest, command, rpc, config, send,
     result.report.notice = 'Read-only observation; no transaction submitted. Email delivery state is tracked separately. Neither email acceptance nor this snapshot certifies truth or continuous coverage.';
     state = queueReport(state, result.report, config, now(), { test });
     state.report = result.report; state.checkpoint = result.checkpoint;
-    // Observation and pending email are saved atomically before any external send.
-    await lease.save(state);
+    // Observation and pending email are saved atomically before any external send. A repeat of the saved
+    // observation (same status, alerts and cases, no new email) is not rewritten until the saved checkpoint is
+    // CHECKPOINT_REFRESH_SECONDS old, which saves one Redis write per pool on most two-minute cycles.
+    const repeat = loaded.checkpoint && (loaded.readFailures ?? 0) === 0 && state.signature === loaded.signature
+      && state.queue.length === loaded.queue.length && loaded.report?.status === state.report.status
+      && now() - loaded.checkpoint.checkedAt < CHECKPOINT_REFRESH_SECONDS;
+    if (!repeat) await lease.save(state);
     const delivered = await drainEmails(state, { save: lease.save, renew: lease.renew, send, now });
     return { status: result.report.status, pool: manifest.pool, acceptedEmails: delivered.accepted,
-      pendingEmails: delivered.state.queue.length };
+      pendingEmails: delivered.state.queue.length, nextDueAt: (() => { try { return nextDueAt(result.report); } catch { return null; } })() };
   } finally { await lease.release(); }
 }
 
+// This process remembers when the shared read-failure outbox is known to be clear (no failure reported, nothing
+// pending), so healthy cycles skip its lease: three Redis commands per cycle. A restart checks it once again.
+let readFailuresClear = false;
 export async function notifyReadFailures({ command, config, send, now, failing }) {
+  if (!failing.length && readFailuresClear) return { acceptedEmails: 0, pendingEmails: 0 };
   const lease = await settlementLease(command, READ_FAILURE_IDENTITY);
   try {
     let state = await lease.load() ?? { schema: 'flurbo.settlement-mail.v1', identity: READ_FAILURE_IDENTITY,
@@ -77,6 +101,7 @@ export async function notifyReadFailures({ command, config, send, now, failing }
     const next = queueReadFailures(state, failing, config, now());
     if (JSON.stringify(next) !== JSON.stringify(state)) await lease.save(next);
     const delivered = await drainEmails(next, { save: lease.save, renew: lease.renew, send, now });
+    readFailuresClear = next.signature === null && delivered.state.queue.length === 0;
     return { acceptedEmails: delivered.accepted, pendingEmails: delivered.state.queue.length };
   } finally { await lease.release(); }
 }

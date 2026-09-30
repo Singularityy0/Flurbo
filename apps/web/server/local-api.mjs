@@ -19,7 +19,7 @@ import {settlementPacketHandler,SETTLEMENT_PACKET_PATH} from './settlement-persi
 import {userMetrics} from './user-metrics.mjs';
 import {memberNotices,noticeDelivery} from './member-notices.mjs';
 
-export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
+export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(), sharedLimits = true,
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
   applications = null, previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {}, settlementPackets = null, starter = null, funding = null } = {}) {
   const hosted = publicOrigin !== null;
@@ -40,7 +40,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
   const authorizeHolder=holderAuthorizer(challengeOptions);
   const priceArchives=new WeakMap();
   // Agents: account-isolated profiles, paper trading and user-approved proposals. Never a signer.
-  const agents=(()=>{try{return agentApi({command:store.command||null,hosted,links,rpc:agentRpc(rpcUrl,{hosted}),previewAllows,reservedWallets,
+  const agents=(()=>{try{return agentApi({command:store.command||null,hosted,links,localCounters:!sharedLimits,rpc:agentRpc(rpcUrl,{hosted}),previewAllows,reservedWallets,
     serviceFor:namespace=>namespace==='pilot'?publishedPilot:practiceCollections?.services.get(namespace)||null});}catch{return null;}})();
   // Operator-only growth metrics. Needs durable storage; members never see these numbers.
   const listedPools=()=>[
@@ -56,8 +56,9 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
     res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} | flurbo</title></head><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 16px;color:#14271d;background:#f5f4ec;line-height:1.5"><h1 style="font-size:1.5rem">${title}</h1>${body}</body></html>`);};
   const assistant=publishedPilot&&store.command?evidenceAssistant({manifest:publishedPilot.manifest,command:store.command,...evidenceOptions}):null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
-  // Anonymous/public traffic never consumes authenticated account capacity.
-  const limits=requestLimits({command:store.command});
+  // Anonymous/public traffic never consumes authenticated account capacity. With sharedLimits off (a single
+  // server), the rate windows count in memory instead of costing Redis commands on every request.
+  const limits=requestLimits({command:sharedLimits?store.command:null});
   const publicPackets=settlementPackets?settlementPacketHandler(settlementPackets):null;
   const send = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(body)); };
   const cookie = (name, value, age) => `${name}=${value}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=${age}${hosted ? '; Secure' : ''}`;

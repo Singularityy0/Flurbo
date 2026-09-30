@@ -94,3 +94,17 @@ test('operator metrics run after the worker each cycle, and a metrics failure ne
   assert.equal(settlementBot({ env: both }).status().notices, 'disabled');
   assert.equal(settlementBot({ env: both, notices: async () => 'idle' }).status().notices, 'not_run');
 });
+
+test('the bot runs every 2 minutes near anything due and every 10 minutes otherwise', async () => {
+  const { nextPeriod } = await import('../server/settlement-bot.mjs');
+  const base = { intervalMs: 120_000, idleIntervalMs: 600_000, monitor: 'ok', worker: 'wait', nowSeconds: 1_000_000 };
+  assert.equal(nextPeriod({ ...base, nextDue: 'none' }), 600_000, 'every pool delivered');
+  assert.equal(nextPeriod({ ...base, nextDue: 1_000_000 + 86_400 }), 600_000, 'next deadline a day away');
+  assert.equal(nextPeriod({ ...base, nextDue: 1_000_000 + 15 * 60 + 300 }), 300_000, 'wakes 15 minutes before it is due');
+  assert.equal(nextPeriod({ ...base, nextDue: 1_000_000 + 600 }), 120_000, 'due within 15 minutes');
+  assert.equal(nextPeriod({ ...base, nextDue: 1_000_000 }), 120_000, 'window open now');
+  assert.equal(nextPeriod({ ...base, nextDue: null }), 120_000, 'unknown state');
+  assert.equal(nextPeriod({ ...base, nextDue: 'none', monitor: 'attention' }), 120_000, 'monitor not clean');
+  assert.equal(nextPeriod({ ...base, nextDue: 'none', worker: 'submitted' }), 120_000, 'transaction in flight');
+  assert.equal(nextPeriod({ ...base, nextDue: 'none', worker: 'drain_limit' }), 120_000);
+});

@@ -1,6 +1,6 @@
 # Settlement bot on the free Render web service
 
-The settlement monitor and resolution worker normally run as scheduled GitHub Actions. Scheduled Actions can start late or be skipped, and a private repository has a limited free minute allowance. Setting `FLURBO_SETTLEMENT_BOT=true` on the Render web service runs the same two scripts inside the web server instead: one monitor pass, then the worker with the same bounded drain as `run-resolution.mjs --drain`, every 2 minutes. Cycles never overlap. State, leases and the signer journal stay in Redis, so a restart only skips a cycle.
+The settlement monitor and resolution worker normally run as scheduled GitHub Actions. Scheduled Actions can start late or be skipped, and a private repository has a limited free minute allowance. Setting `FLURBO_SETTLEMENT_BOT=true` on the Render web service runs the same two scripts inside the web server instead: one monitor pass, then the worker with the same bounded drain as `run-resolution.mjs --drain`. Cycles never overlap. The bot runs every 2 minutes from 15 minutes before anything is due (an observation window ending, an open assertion window, a challenge or vote deadline, delivery) until it is done, and whenever the monitor or worker reports trouble. Otherwise it runs every 10 minutes, which keeps the monitor's record inside the worker's 15-minute freshness limit and saves most of the Redis commands. `/healthz` shows `cadence` (`normal` or `idle`) and the next due time. State, leases and the signer journal stay in Redis, so a restart only skips a cycle.
 
 Trade-offs: the settlement signer key lives in the web service environment, and a free Render instance can be restarted at any time. The key controls test funds only.
 
@@ -27,6 +27,10 @@ Leave `FLURBO_RESOLUTION_SOURCE_MODE` and `FLURBO_RESOLUTION_EVIDENCE_ORIGIN` un
 
 Each cycle also updates the operator member metrics after the settlement work; see [USER_METRICS.md](USER_METRICS.md) for its optional variables and daily email.
 
+## Redis usage
+
+Rate limits (chain requests, page requests and agent runtime requests) count in the server's memory, because Render runs a single instance; counting them in Redis cost one command per request. Sign-in lookups are cached in memory for 30 seconds and dropped at once on sign-out. Set `FLURBO_SHARED_LIMITS=true` only when running more than one instance, so they share the budgets through Redis again. A monitor observation that repeats the saved one is rewritten at most every 5 minutes.
+
 ## Keep the service awake
 
 Free Render web services stop after 15 minutes without inbound traffic, and the bot's own outbound requests do not count. Create a free external job, for example on cron-job.org, that sends `GET https://flurbo.singu.online/healthz` every 10 minutes. One always-on service uses about 720 to 744 of the 750 free instance hours a month, so it must be the only free service in the Render workspace.
@@ -36,7 +40,7 @@ Free Render web services stop after 15 minutes without inbound traffic, and the 
 1. After the deploy, open `https://flurbo.singu.online/healthz`. Within about 3 minutes `settlement_bot.cycles` should be at least 1, `monitor` should be `ok` (or `attention` with an explanation in the logs) and `worker` should show a worker status such as `wait`.
 2. Render logs show one `[settlement-monitor]` line per pool and one or more `[settlement-worker]` lines per cycle.
 3. Set the GitHub repository variables `FLURBO_MONITOR_ENABLED` and `FLURBO_RESOLUTION_ENABLED` to `false`. The workflows remain available for manual runs.
-4. In Healthchecks.io, set the check period to 5 minutes with a 10 minute grace, so a stopped bot raises an alert.
+4. In Healthchecks.io, set the check period to 10 minutes with a 10 minute grace (the idle cadence pings every 10 minutes), so a stopped bot raises an alert.
 5. Set `FLURBO_RESOLUTION_EXECUTE=true` on Render only when the worker reports the expected pool and no blocker.
 
 To roll back, set `FLURBO_SETTLEMENT_BOT=false` on Render and the two GitHub variables back to `true`.
