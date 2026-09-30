@@ -33,6 +33,7 @@ export function productionServer(config, store, staticRoot = dist) {
   const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
     applications:config.applications, previewAccess:config.previewAccess===undefined?previewAccess():config.previewAccess, testingOperatorAccount:config.testingOperatorAccount, testFaucet:config.testFaucet, learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
     learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions, challengeOptions:config.challengeOptions, settlementPackets:config.settlementPackets, starter:config.starter });
+  config.metrics = api.metrics;
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
     // Liveness only. This deliberately does not claim contracts or RPC are ready.
@@ -71,7 +72,7 @@ export function productionServer(config, store, staticRoot = dist) {
         }
         // Serve agent deep links on direct visits too; API session and invite gates still protect data.
         const agentPage = /^\/agents(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$/.test(pathname);
-        const page = agentPage || /^\/markets\/(?:pilot|practice-[0-9a-f]{40})\/[0-3](?:\/thesis)?$/.test(pathname) || ['/', '/docs', '/markets', '/fund', '/access', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/evidence'].includes(pathname);
+        const page = agentPage || /^\/markets\/(?:pilot|practice-[0-9a-f]{40})\/[0-3](?:\/thesis)?$/.test(pathname) || ['/', '/docs', '/markets', '/fund', '/access', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/evidence', '/metrics'].includes(pathname);
         const labPage=['/privacy-lab','/privacy-lab/'].includes(pathname);
         const labAsset=/^\/privacy-lab\/(?:assets\/[a-zA-Z0-9_.-]+|semaphore-8\.(?:wasm|zkey))$/.test(pathname);
         if(labPage||labAsset)res.setHeader('Content-Security-Policy',security['Content-Security-Policy'].replace("script-src 'self'","script-src 'self' 'wasm-unsafe-eval'")+"; worker-src 'self' blob:");
@@ -164,9 +165,10 @@ async function main() {
   // Disabled unless explicitly enabled; the separate GitHub Actions path is unchanged.
   if (process.env.FLURBO_SETTLEMENT_BOT === 'true') {
     const { settlementBot } = await import('./settlement-bot.mjs');
-    config.settlementBot = settlementBot({ env: process.env });
+    // Operator metrics ride the same cycle: advance the trade scan, then send the daily summary when due.
+    config.settlementBot = settlementBot({ env: process.env, metrics: config.metrics ? () => config.metrics.tick() : null });
     config.settlementBot.start();
-    console.log('Settlement bot enabled: monitor then worker every 2 minutes');
+    console.log('Settlement bot enabled: monitor, worker and metrics every 2 minutes');
   }
   for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => {
     comparison.abort(); config.settlementBot?.stop();
