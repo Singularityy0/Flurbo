@@ -1,4 +1,5 @@
 import {rpcFetch} from '../rpc-capacity.mjs';
+import { testnetRpcHost } from '../network.mjs';
 import { decodeEventLog, decodeFunctionResult, encodeFunctionData, parseAbi } from 'viem';
 import { pilotPoolAbi, pilotCall } from '../../shared/pilot.mjs';
 
@@ -13,8 +14,8 @@ const MAX_QUOTES = 24;
 export function agentRpc(endpoint, { hosted = true, request = fetch } = {}) {
   const url = new URL(endpoint);
   const allowed = hosted
-    ? url.protocol === 'https:' && ['testnet-rpc.monad.xyz', 'monad-testnet.g.alchemy.com'].includes(url.hostname)
-    : ['127.0.0.1', 'localhost'].includes(url.hostname) || (url.protocol === 'https:' && ['testnet-rpc.monad.xyz', 'monad-testnet.g.alchemy.com'].includes(url.hostname));
+    ? url.protocol === 'https:' && testnetRpcHost(url.hostname)
+    : ['127.0.0.1', 'localhost'].includes(url.hostname) || (url.protocol === 'https:' && testnetRpcHost(url.hostname));
   if (!allowed || url.username || url.password) throw new Error('Unsupported RPC endpoint for agents');
   let id = 0;
   return async (method, params = []) => {

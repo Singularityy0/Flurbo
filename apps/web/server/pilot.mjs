@@ -1,4 +1,5 @@
 import {rpcFetch} from './rpc-capacity.mjs';
+import {testnetRpcHost} from './network.mjs';
 import { decodeFunctionResult, encodeFunctionData, keccak256, stringToHex, parseAbi } from 'viem';
 import { pilotCash, pilotCashAbi, pilotPoolAbi, resolverAbi, pilotCall, evidenceURI, validClaim, combinationFits, COMBINATION_LIMIT_MESSAGE } from '../shared/pilot.mjs';
 import { ApplicationError } from './access-applications.mjs';
@@ -17,7 +18,7 @@ const json = value => JSON.parse(JSON.stringify(value,(_,v)=>typeof v==='bigint'
 export function pilotRpc(endpoint,request=fetch,{allowLocal=false}={}) {
   const url=new URL(endpoint);
   const local=allowLocal&&url.protocol==='http:'&&['127.0.0.1','localhost'].includes(url.hostname)&&!url.username&&!url.password;
-  if(!local&&(url.protocol!=='https:'||url.username||url.password||url.hash||url.port||!['testnet-rpc.monad.xyz','monad-testnet.g.alchemy.com'].includes(url.hostname)))throw new Error('Public Monad testnet RPC required');
+  if(!local&&(url.protocol!=='https:'||url.username||url.password||url.hash||url.port||!testnetRpcHost(url.hostname)))throw new Error('Public Monad testnet RPC required');
   let id=0;
   const rpc=async(method,params=[])=>{
     if(!['eth_chainId','eth_getBlockByNumber','eth_getCode','eth_call','eth_estimateGas','eth_gasPrice','eth_getLogs'].includes(method))throw new Error('Pilot service is read-only');

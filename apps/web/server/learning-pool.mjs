@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { encodeFunctionData, decodeFunctionResult } from 'viem';
-import { TESTNET } from './network.mjs';
+import { TESTNET, testnetRpcHost } from './network.mjs';
 import { poolAbi, cashAbi, engineAbi } from '../shared/learning-contracts.mjs';
 export { poolAbi, cashAbi, engineAbi };
 
@@ -55,7 +55,7 @@ export function validateLearningManifest(m) {
 export function learningRpc(url, fetcher = fetch) {
   const parsed = new URL(url);
   if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.hash || parsed.port ||
-      !['testnet-rpc.monad.xyz', 'monad-testnet.g.alchemy.com'].includes(parsed.hostname)) throw new Error('Public testnet RPC required');
+      !testnetRpcHost(parsed.hostname)) throw new Error('Public testnet RPC required');
   let id = 0;
   return async (calls, { signal } = {}) => {
     const output = [];
