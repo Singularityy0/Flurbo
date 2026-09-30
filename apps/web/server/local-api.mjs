@@ -17,6 +17,7 @@ import {assessSemantics,activeSemanticConfig,semanticDiagnostics} from './semant
 import {ApplicationError} from './access-applications.mjs';
 import {settlementPacketHandler,SETTLEMENT_PACKET_PATH} from './settlement-persistence.mjs';
 import {userMetrics} from './user-metrics.mjs';
+import {memberNotices,noticeDelivery} from './member-notices.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
@@ -42,11 +43,17 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
   const agents=(()=>{try{return agentApi({command:store.command||null,hosted,links,rpc:agentRpc(rpcUrl,{hosted}),previewAllows,reservedWallets,
     serviceFor:namespace=>namespace==='pilot'?publishedPilot:practiceCollections?.services.get(namespace)||null});}catch{return null;}})();
   // Operator-only growth metrics. Needs durable storage; members never see these numbers.
+  const listedPools=()=>[
+    ...(publishedPilot?[{namespace:'pilot',label:(practiceCollections?.catalog?.collections||[]).find(c=>c.pool===publishedPilot.manifest.pool)?.label||'Release milestones',service:publishedPilot}]:[]),
+    ...[...(practiceCollections?.services||[])].map(([namespace,service])=>({namespace,label:practiceCollections.catalog.collections.find(c=>c.namespace===namespace)?.label||namespace,service}))]
+    .filter(p=>p.service.index);
   const metrics=userMetrics({command:store.command||null,origin:publicOrigin||`http://${hosts[0]}`,links,applications,operatorAccount:testingOperatorAccount,funding,
-    openAccess:!previewAllows,reservedWallets,rpcUrl,pools:()=>[
-      ...(publishedPilot?[{namespace:'pilot',label:(practiceCollections?.catalog?.collections||[]).find(c=>c.pool===publishedPilot.manifest.pool)?.label||'Release milestones',service:publishedPilot}]:[]),
-      ...[...(practiceCollections?.services||[])].map(([namespace,service])=>({namespace,label:practiceCollections.catalog.collections.find(c=>c.namespace===namespace)?.label||namespace,service}))]
-      .filter(p=>p.service.index)});
+    openAccess:!previewAllows,reservedWallets,rpcUrl,pools:listedPools});
+  // Email notices to members about their own positions (payout ready, answer proposed, trading closing).
+  const notices=memberNotices({command:store.command||null,pools:listedPools,applications,links,origin:publicOrigin||`http://${hosts[0]}`,
+    send:applications?.noticeEmail?noticeDelivery(applications.noticeEmail):null});
+  const page=(res,status,title,body)=>{res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
+    res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} | flurbo</title></head><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 16px;color:#14271d;background:#f5f4ec;line-height:1.5"><h1 style="font-size:1.5rem">${title}</h1>${body}</body></html>`);};
   const assistant=publishedPilot&&store.command?evidenceAssistant({manifest:publishedPilot.manifest,command:store.command,...evidenceOptions}):null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
   // Anonymous/public traffic never consumes authenticated account capacity.
@@ -91,6 +98,16 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (result.retryAfter) res.setHeader('Retry-After', String(result.retryAfter));
         return send(res, result.status, result.body);
       } catch(e) { if(e instanceof CapacityError){res.setHeader('Retry-After',String(e.retryAfter));return send(res,429,{code:e.code,error:e.message,retryable:true});} return send(res, 503, { code:'UNAVAILABLE', error:'The agent service is temporarily unavailable.', retryable:true }); }
+    }
+    const unsubscribe=req.url.match(/^\/api\/notifications\/unsubscribe\/([0-9a-zA-Zx.]{1,200})$/);
+    if(unsubscribe){
+      try{limits.localTake('notice-unsubscribe',120);}catch{return page(res,429,'Try again shortly','<p>Too many requests. Try again in a minute.</p>');}
+      if(!notices)return page(res,503,'Unavailable','<p>Notices are not available right now.</p>');
+      if(req.method==='GET')return page(res,200,'Stop Flurbo emails?',`<p>Stop all Flurbo notices about payouts, proposed answers and closing markets. You can turn them back on from Your account.</p><form method="post"><button type="submit" style="font:inherit;padding:10px 18px;border-radius:8px;border:0;background:#14271d;color:#f5f4ec;cursor:pointer">Stop all notices</button></form>`);
+      if(req.method!=='POST')return page(res,405,'Not allowed','<p>Use the link in the email.</p>');
+      for await(const chunk of req){if(chunk.length>2048)break;}
+      const account=await notices.unsubscribe(unsubscribe[1]).catch(()=>null);
+      return account?page(res,200,'You will not get Flurbo notices','<p>Done. You can turn notices back on from Your account at any time.</p>'):page(res,400,'Link not valid','<p>This unsubscribe link is not valid. Turn notices off from Your account instead.</p>');
     }
     const origin = publicOrigin || `http://${host}`;
     if ((req.headers.origin && req.headers.origin !== origin) || (req.method !== 'GET' && req.headers.origin !== origin) || req.headers['sec-fetch-site'] === 'cross-site') return send(res, 403, { error: 'Same-origin request required' });
@@ -144,6 +161,19 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
         res.setHeader('Set-Cookie', toolsCookie(login, sid));
         return send(res, 200, {testingTools:isTestingOperator(login, testingOperatorAccount),approved:!previewAllows||await previewAllows(login.address),applicationUrl:applications?null:previewAccess?.applicationUrl||null,...(applications?{nativeApplications:true}:{})});
+      }
+      if(url.pathname==='/api/account/notifications'){
+        const login=await getLogin();
+        if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in first.'});
+        if(url.search)return send(res,400,{error:'Unexpected request.'});
+        if(!notices)return send(res,503,{error:'Notices are unavailable.'});
+        let email=null;
+        try{const status=applications?await applications.handle({action:'status',account:login.address}):null;const a=status?.application;email=a?.verified&&a.state==='approved'?a.email:null;}catch{}
+        const base={enabled:process.env.FLURBO_NOTIFY_ENABLED==='true',email};
+        if(req.method==='GET')return send(res,200,{...base,preferences:await notices.preferences(login.address)});
+        if(req.method!=='POST')return send(res,405,{error:'Method not allowed.'});
+        try{return send(res,200,{...base,preferences:await notices.setPreferences(login.address,await body(req))});}
+        catch(e){return send(res,e.status||503,{error:e.status?e.message:'Your choices could not be saved. Try again.'});}
       }
       if(url.pathname==='/api/account/application'||url.pathname.startsWith('/api/account/application/')){
         const login=await getLogin();
@@ -497,5 +527,6 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
     } catch(e) { if(e instanceof CapacityError){res.setHeader('Retry-After',String(e.retryAfter));return send(res,429,{code:e.code,error:e.message});} if(e instanceof ApplicationError){if(e.status===429)res.setHeader('Retry-After','60');return send(res,e.status,{error:e.message});} return send(res, 503, { error: 'Service unavailable or request rejected. Refresh before retrying. No automatic transaction retry is performed.' }); }
   };
   handler.metrics = metrics;
+  handler.notices = notices;
   return handler;
 }

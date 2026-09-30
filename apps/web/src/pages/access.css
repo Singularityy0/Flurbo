@@ -37,3 +37,7 @@
 .trading-wallets .wallet-status { font-weight: 500; color: var(--ink) !important; }
 .wallet-rows { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
 .wallet-rows li { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); min-height: 48px; border-bottom: 1px solid var(--rule); }
+
+.notice-settings fieldset { display: grid; gap: var(--s-3); margin: 0; padding: 0; border: 0; }
+.notice-settings .check-row span { display: grid; gap: 2px; }
+.notice-settings .check-row small { color: var(--ink-3); font-size: 13px; }
