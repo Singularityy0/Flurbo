@@ -1,4 +1,5 @@
 import { canonical, compareDecimal, decimal, digest, settlementRuleHash, sourceUrl, usgsQuery, validateSettlementRule } from './settlement-rules.mjs';
+import { GENERAL_ADAPTERS, readGeneralRecord, readerAccept, retrieveEvmCapture } from './settlement-readers.mjs';
 
 const MAX_BYTES = 2_000_000;
 const kinds = ['initial', 'correction', 'revision', 'cancelled', 'correction-notice'];
@@ -118,9 +119,10 @@ export function parseSettlementCapture(rule, capture, now) {
   if (capture.status !== 200 || capture.complete !== true || typeof capture.body !== 'string') issue('CAPTURE_INCOMPLETE');
   const bytes = Buffer.byteLength(capture.body);
   if (bytes === 0 || bytes > MAX_BYTES || capture.bytes !== bytes || capture.sha256 !== digest(capture.body)) issue('CAPTURE_INTEGRITY_FAILED');
-  const json = ['json-record.v1', 'usgs-earthquake-count.v1'].includes(rule.source.adapter);
-  if (!(json ? /^application\/(?:json|[^;]+\+json)(?:;|$)/i : /^text\/html(?:;|$)/i).test(capture.contentType || '')) issue('CONTENT_TYPE_MISMATCH');
-  const record = rule.source.adapter === 'json-record.v1' ? jsonRecord(capture.body, rule)
+  const json = ['json-record.v1', 'usgs-earthquake-count.v1'].includes(rule.source.adapter), general = GENERAL_ADAPTERS.includes(rule.source.adapter);
+  // General readers check their own formats (JSON, CSV, SDMX, JSON-stat, HTML, chain bundles).
+  if (!general && !(json ? /^application\/(?:json|[^;]+\+json)(?:;|$)/i : /^text\/html(?:;|$)/i).test(capture.contentType || '')) issue('CONTENT_TYPE_MISMATCH');
+  const record = general ? readGeneralRecord(rule, capture) : rule.source.adapter === 'json-record.v1' ? jsonRecord(capture.body, rule)
     : rule.source.adapter === 'usgs-earthquake-count.v1' ? usgsRecord(capture.body, rule)
     : rule.source.adapter === 'bls-employment-html.v1' ? blsRecord(capture.body, rule) : fedRecord(capture.body, rule);
   if (!['series', 'period', 'unit'].every(key => record[key] === rule.observation[key])) issue('OBSERVATION_IDENTITY_MISMATCH');
@@ -163,6 +165,13 @@ function evaluate(rule, captures, { now, finalized = false, archivedAt } = {}) {
     && !rule.source.urls.every(url => captures.some(capture => capture.requestedUrl === url && capture.fetchedAt >= t.correctionCutoff)))
     return result('unresolved', 'CORRECTION_MONITOR_STALE');
   let initials = records.filter(record => record.kind === 'initial' && record.publishedAt <= t.publicationCutoff);
+  // A general reader's release must come after the observation window opens, which is after trading closed.
+  // An answer that was already public when trading closed is not a prediction, so it never settles the market.
+  if (GENERAL_ADAPTERS.includes(rule.source.adapter) && rule.vintage === 'initial') {
+    const early = initials.filter(record => record.publishedAt < t.scheduledAt);
+    initials = initials.filter(record => record.publishedAt >= t.scheduledAt);
+    if (!initials.length && early.length) return result('unresolved', 'RELEASED_BEFORE_OBSERVATION_WINDOW', { action: 'wait-for-evidence-or-timeout' });
+  }
   if (rule.vintage === 'first-observed-snapshot') {
     initials = initials.filter(record => record.publishedAt >= t.scheduledAt
       && record.provenance.fetchedAt >= t.scheduledAt && record.provenance.fetchedAt <= t.publicationCutoff);
@@ -259,9 +268,10 @@ export async function archiveSettlementProposal({ rule, expectedRuleHash, captur
 export async function retrieveSettlementCapture(rule, url, { request = fetch, now = () => Math.floor(Date.now() / 1000) } = {}) {
   validateSettlementRule(rule);
   if (!rule.source.urls.includes(url)) issue('SOURCE_URL_MISMATCH');
+  if (rule.source.adapter === 'evm-rpc.v1') return retrieveEvmCapture(rule, url, { request, now });
   const controller = new AbortController();
   const response = await request(url, { redirect: 'error', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]),
-    headers: { Accept: ['json-record.v1', 'usgs-earthquake-count.v1'].includes(rule.source.adapter) ? 'application/json' : 'text/html', 'Cache-Control': 'no-cache' } });
+    headers: { Accept: GENERAL_ADAPTERS.includes(rule.source.adapter) ? readerAccept(rule) : ['json-record.v1', 'usgs-earthquake-count.v1'].includes(rule.source.adapter) ? 'application/json' : 'text/html', 'Cache-Control': 'no-cache' } });
   try {
     if (response.status !== 200 || !response.body || response.redirected || (response.url && response.url !== url)) issue('SOURCE_FETCH_FAILED');
     if (response.headers.has('content-range')) issue('SOURCE_PARTIAL_RESPONSE');

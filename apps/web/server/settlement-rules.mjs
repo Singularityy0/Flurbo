@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
+import { validateReaderConfig } from './settlement-readers.mjs';
 
 export const SETTLEMENT_SCHEMA = 'flurbo.settlement-rule.v1';
-export const SETTLEMENT_ADAPTERS = ['json-record.v1', 'bls-employment-html.v1', 'fomc-statement-html.v1', 'usgs-earthquake-count.v1'];
+// General readers (settlement-readers.mjs) are configured by each rule. Defined here, not imported, so either
+// module can be loaded first despite their mutual import.
+export const GENERAL_ADAPTERS = ['json-api.v1', 'stat-table.v1', 'html-text.v1', 'evm-rpc.v1'];
+export const SETTLEMENT_ADAPTERS = ['json-record.v1', 'bls-employment-html.v1', 'fomc-statement-html.v1', 'usgs-earthquake-count.v1', ...GENERAL_ADAPTERS];
 const operators = ['gt', 'gte', 'lt', 'lte', 'eq'];
 const integer = value => Number.isSafeInteger(value) && value >= 0;
 const text = value => typeof value === 'string' && value.trim() === value && value.length > 0 && value.length <= 500;
@@ -47,8 +51,8 @@ export function usgsQuery(rule) {
 export function validateSettlementRule(rule) {
   if (!exactKeys(rule, ['schema', 'eventId', 'question', 'source', 'observation', 'decision', 'timing', 'vintage', 'missingPolicy'])
     || rule.schema !== SETTLEMENT_SCHEMA || !text(rule.eventId) || !text(rule.question)) throw Error('Invalid settlement rule');
-  const source = rule.source;
-  if (!exactKeys(source, ['id', 'publisher', 'urls', 'adapter', 'fields']) || !text(source.id) || !text(source.publisher)
+  const source = rule.source, general = GENERAL_ADAPTERS.includes(source?.adapter);
+  if (!exactKeys(source, ['id', 'publisher', 'urls', 'adapter', general ? 'reader' : 'fields']) || !text(source.id) || !text(source.publisher)
     || !SETTLEMENT_ADAPTERS.includes(source.adapter) || !Array.isArray(source.urls) || !source.urls.length || source.urls.length > 32
     || new Set(source.urls).size !== source.urls.length || !source.urls.every(sourceUrl)) throw Error('Unsupported settlement source');
   if (source.adapter === 'json-record.v1') {
@@ -76,7 +80,9 @@ export function validateSettlementRule(rule) {
     || !Number.isSafeInteger(timing.observationEndsAt + timing.assertionPeriod + timing.challengePeriod + timing.votingPeriod)) throw Error('Invalid fixed resolver timing');
   if (!['initial', 'initial-with-corrections', 'first-observed-snapshot'].includes(rule.vintage) || rule.missingPolicy !== 'resolver-timeout-void'
     || (rule.vintage !== 'initial-with-corrections' && timing.correctionCutoff !== timing.publicationCutoff)
-    || (rule.vintage === 'first-observed-snapshot' && source.adapter !== 'usgs-earthquake-count.v1')) throw Error('Unsupported vintage or exception policy');
+    || (rule.vintage === 'first-observed-snapshot' && source.adapter !== 'usgs-earthquake-count.v1' && !general)) throw Error('Unsupported vintage or exception policy');
+  // General readers are configured by the rule; their settings are checked once the decision and timing are valid.
+  if (general) validateReaderConfig(rule);
   if (source.adapter === 'bls-employment-html.v1' && (rule.observation.series !== 'LNS14000000' || rule.observation.unit !== 'percent'
     || decision.type !== 'number' || !/^\d{4}-(?:0[1-9]|1[0-2])$/.test(rule.observation.period)
     || source.urls.some(url => !/^https:\/\/www\.bls\.gov\/news\.release\/archives\/empsit_\d{8}\.htm$/.test(url)))) throw Error('Unsupported BLS observation');
