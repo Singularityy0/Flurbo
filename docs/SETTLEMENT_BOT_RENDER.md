@@ -29,7 +29,7 @@ Each cycle also updates the operator member metrics after the settlement work; s
 
 ## Redis usage
 
-Rate limits (chain requests, page requests and agent runtime requests) count in the server's memory, because Render runs a single instance; counting them in Redis cost one command per request. Sign-in lookups are cached in memory for 30 seconds and dropped at once on sign-out. Set `FLURBO_SHARED_LIMITS=true` only when running more than one instance, so they share the budgets through Redis again. A monitor observation that repeats the saved one is rewritten at most every 5 minutes.
+Rate limits (chain requests, page requests and agent runtime requests) count in the server's memory, because Render runs a single instance; counting them in Redis cost one command per request. Sign-in lookups are cached in memory for 30 seconds and dropped at once on sign-out. Set `FLURBO_SHARED_LIMITS=true` only when running more than one instance, so they share the budgets through Redis again. A monitor observation that repeats the saved one is rewritten at most every 5 minutes. Agent heartbeats (every 30 seconds per running agent) are kept in memory and shown on the dashboard at once; they are written to Redis only when the runtime's mode, state, pending count, SDK, policy, credential or error changes, or every 5 minutes. After a restart, a running agent shows as stale until its next heartbeat. Even so, each agent running around the clock uses about 4,000 to 5,000 commands a day, so on the free Upstash plan ask invited users to run agents for trading sessions (`start`, then `stop`) rather than all day.
 
 ## Keep the service awake
 
