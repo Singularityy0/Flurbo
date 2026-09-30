@@ -21,7 +21,7 @@ Copy these from the GitHub repository variables and secrets into the Render serv
 | `FLURBO_RESOLUTION_MANIFEST_JSON` | The primary pool's verified manifest |
 | `FLURBO_RESOLUTION_PRIVATE_KEY` | The dedicated settlement signer key |
 | `FLURBO_RESOLUTION_FINISH_ALLOWLIST` and `FLURBO_RESOLUTION_COLLECTIONS_JSON` | Both or neither, matching exactly |
-| `FLURBO_EVIDENCE_GEMINI_KEY`, `FLURBO_EVIDENCE_MODEL`, `FLURBO_EVIDENCE_FREE_TIER_CONFIRMED` | Needed for legacy release-milestone YES proposals. They also enable the operator evidence tool, which shares the same daily cap. |
+| `FLURBO_EVIDENCE_GEMINI_KEY`, `FLURBO_EVIDENCE_MODEL`, `FLURBO_EVIDENCE_FREE_TIER_CONFIRMED` | Optional. Release-milestone YES assertions come from the deterministic GitHub release check; these only add a written explanation when available, and enable the operator evidence tool. |
 
 Leave `FLURBO_RESOLUTION_SOURCE_MODE` and `FLURBO_RESOLUTION_EVIDENCE_ORIGIN` unset unless the primary pool is a `deterministic-source-v1` collection.
 

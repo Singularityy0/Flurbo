@@ -127,6 +127,8 @@ StrategyDecision JointEdgeStrategy::decide(const StrategyContext& ctx) {
 struct AgentRunner::Shared : Controls {
   Value config;
   std::string stop_file;
+  // Set only for the final heartbeat after a requested stop, so Flurbo shows the runtime as stopped.
+  std::atomic<bool> stopped{false};
   std::mutex m;
   std::optional<FlurboPolicy> flurbo;
   std::optional<int64_t> read_at;
@@ -273,6 +275,7 @@ std::optional<std::string> AgentRunner::blocked_by() const {
 bool AgentRunner::stop_requested() const { return file_exists(shared_->stop_file); }
 
 std::string AgentRunner::state() const {
+  if (shared_->stopped) return "stopped";
   if (stop_requested()) return "stopping";
   if (blocked_by()) return "blocked";
   std::lock_guard<std::mutex> g(shared_->m);
@@ -619,7 +622,9 @@ void AgentRunner::run(bool once) {
   }
   if (stop_requested()) {
     remove_file(shared_->stop_file);
+    shared_->stopped = true;
     heartbeat();
+    shared_->stopped = false;
   }
   shared_->log("stopped", with(Value::object(), {{"runtimeId", runtime_id}}));
 }

@@ -73,6 +73,21 @@ export function proposalMode(env){
   return value==='true';
 }
 
+// Release questions: the YES decision is the deterministic assessRelease() check of the official GitHub
+// release record, never a model. An AI explanation is attached only when one is configured and succeeds;
+// its absence never blocks an assertion. NO is never inferred: a missing release is not proof of NO.
+export async function legacyReleaseEvidence({manifest,event,env,archive,owner,assistant}){
+  const aiConfigured=env.FLURBO_EVIDENCE_FREE_TIER_CONFIRMED==='true'&&!!env.FLURBO_EVIDENCE_GEMINI_KEY;
+  const report=await assistant.review(event.id,aiConfigured);
+  if(report.assessment.recommendation!=='YES')return null;
+  const facts=report.assessment.facts,explained=report.ai.status==='generated'&&report.ai.explanation?.summary?.length>=20;
+  const statement=explained?report.ai.explanation.summary
+    :`Automatic YES from the official GitHub release record: ${facts.tag} (release ${facts.releaseId}) was published as a stable release at ${facts.publishedAt}, inside the committed observation window. Checked by rule github-stable-release-publication.v1; the archived API response is attached.`;
+  const saved=await archive.put({eventId:event.id,outcome:2,statement,sourceURL:report.evidence[0].endpoint,
+    attachment:JSON.stringify({reportHash:report.reportHash,assessment:report.assessment,...(explained?{ai:report.ai}:{}),sourceHash:report.evidence[0].payloadHash})},owner,manifest.draftHash);
+  return {...saved,outcome:2};
+}
+
 export async function runResolution(env=process.env,deps={}){
   let configured=false;
   try{
@@ -142,11 +157,7 @@ export async function runResolution(env=process.env,deps={}){
       const saved=await archive.put({eventId:q.id,outcome:2,statement:'Automatic practice assertion follows the immutable scripted YES fixture. This is not an AI prediction of a real-world event.',sourceURL:q.source.referenceUrl,attachment:JSON.stringify({rulesHash:manifest.rulesHash,fixture:q.source})},owner,manifest.draftHash);
       return {...saved,outcome:2};
     }
-    const report=await evidenceAssistant({manifest,command,env}).review(q.id,true);
-    if(report.assessment.recommendation!=='YES'||report.ai.status!=='generated')return null;
-    const saved=await archive.put({eventId:q.id,outcome:2,statement:report.ai.explanation.summary.length>=20?report.ai.explanation.summary:'Source-checked automatic YES assertion; see the archived report and evidence.',sourceURL:report.evidence[0].endpoint,
-      attachment:JSON.stringify({reportHash:report.reportHash,assessment:report.assessment,ai:report.ai,sourceHash:report.evidence[0].payloadHash})},owner,manifest.draftHash);
-    return {...saved,outcome:2};
+    return legacyReleaseEvidence({manifest,event:q,env,archive,owner,assistant:evidenceAssistant({manifest,command,env})});
   };
   // Proposals are off unless explicitly enabled, independently of execution, so rollout testing can
   // execute finishing actions while no outcome is ever proposed.

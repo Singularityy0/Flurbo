@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, Copy } from 'lucide-react';
+import AgentFunding from './AgentFunding';
+import { ArrowLeft, Copy } from 'lucide-react';
 import StatusBadge from '../components/ui/StatusBadge';
 import Stepper, { type Step } from '../components/ui/Stepper';
 import { useLoadGate } from '../loading/gates';
@@ -16,9 +17,11 @@ const SCOPES = [
   ['runtime:report', 'Send heartbeats and decisions, read the policy'], ['executions:report', 'Report sent transactions for verification'],
 ] as const;
 const CONNECTION: Record<string, string> = {
-  connected: 'Runtime connected', stale: 'No recent heartbeat: the runtime may be slow, offline or stopped',
-  disconnected: 'Disconnected: no heartbeat for over 10 minutes', never: 'The runtime has not connected yet',
+  connected: 'Runtime running', stale: 'No heartbeat for over 90 seconds: the runtime may be slow, offline or stopped',
+  disconnected: 'Not running: no heartbeat for over 10 minutes', stopped: 'Stopped by its runtime', never: 'The runtime has not connected yet',
 };
+// Only a runtime that is still sending heartbeats is shown in its reported state; otherwise the report is history.
+const reportedState = (state: string, connection: string) => connection === 'connected' || connection === 'stopped' ? state : `last reported ${state}`;
 const EXECUTION: Record<string, string> = {
   recorded: 'Reported, not yet seen on-chain', pending: 'On-chain, waiting for confirmation', confirmed: 'Verified on-chain',
   reverted: 'Reverted on-chain', mismatch: 'Not attributed: the chain does not show the reported trade from this wallet', 'attributed-elsewhere': 'Verified for another agent or proposal first',
@@ -83,7 +86,7 @@ export function RuntimeAgentDetail({ id }: { id: string }) {
         <p>Closing this page does not stop the agent. Stop it where it runs with <code>flurbo-agent stop</code> or Ctrl+C.</p></div>
       <dl className="agents-facts">
         <div><dt>Flurbo policy</dt><dd><StatusBadge kind={archived ? 'closed' : policy.paused ? 'waiting' : policy.liveEnabled ? 'open' : 'settled'}>{archived ? 'Archived' : policy.paused ? 'Paused on Flurbo' : policy.liveEnabled ? 'Live trades allowed' : 'Paper until allowed'}</StatusBadge></dd></div>
-        <div><dt>Last reported by your runtime</dt><dd>{latest ? `${latest.mode === 'live' ? 'Live' : 'Paper'} mode, ${latest.state}` : 'No report yet'}<small>{CONNECTION[rt.connection.state]}{rt.connection.ageSeconds !== null && rt.connection.state !== 'never' ? `, ${ago(rt.connection.ageSeconds)}` : ''}</small></dd></div>
+        <div><dt>Last reported by your runtime</dt><dd>{latest ? `${latest.mode === 'live' ? 'Live' : 'Paper'} mode, ${reportedState(latest.state, rt.connection.state)}` : 'No report yet'}<small>{CONNECTION[rt.connection.state]}{rt.connection.ageSeconds !== null && rt.connection.state !== 'never' ? `, ${ago(rt.connection.ageSeconds)}` : ''}</small></dd></div>
         <div><dt>Verified on-chain</dt><dd>{rt.totals.buys} {rt.totals.buys === 1 ? 'purchase' : 'purchases'}<small>{rt.totals.sells} sales, {rt.totals.redemptions} redemptions</small></dd></div>
       </dl>
     </header>
@@ -94,7 +97,7 @@ export function RuntimeAgentDetail({ id }: { id: string }) {
     <div hidden={view!=='Overview'}><section className="agents-card" aria-label="Runtime status">
       <div className="agents-row"><h2>Runtime</h2><span className={`agents-chip agents-chip-${rt.connection.state}`} data-state={rt.connection.state}>{CONNECTION[rt.connection.state]}{rt.connection.ageSeconds !== null && rt.connection.state !== 'never' ? `, last heartbeat ${ago(rt.connection.ageSeconds)}` : ''}</span></div>
       {latest ? <dl className="agents-terms">
-        <dt>Last reported mode (not a live confirmation)</dt><dd>{latest.mode === 'live' ? 'Live testnet trades' : 'Paper (simulated)'}; state {latest.state}</dd>
+        <dt>Last reported mode (not a live confirmation)</dt><dd>{latest.mode === 'live' ? 'Live testnet trades' : 'Paper (simulated)'}; {reportedState(latest.state, rt.connection.state)}</dd>
         <dt>SDK</dt><dd>{latest.sdk.language} {latest.sdk.version}</dd>
         <dt>Transactions in progress</dt><dd>{latest.pending}</dd>
         <dt>Policy</dt><dd>{rt.acknowledged ? `Applies Flurbo policy version ${policy.version}` : `Has not applied policy version ${policy.version} yet (applies ${latest.policy.flurboVersion ?? 'none'})`}</dd>
@@ -128,7 +131,7 @@ function Controls({ id, policy, busy, act }: { id: string; policy: any; busy: bo
     </div>
     {confirmLive && !policy.liveEnabled && <div className="agents-confirm" role="group" aria-label="Confirm live testnet trades">
       <p><strong>Allow this agent to send live testnet trades?</strong></p>
-      <p className="agents-fine">Its runtime can then spend test AUSD from the agent wallet on its own, within these Flurbo limits: {policy.limits.maxTradeCostAtoms ? `${amount(policy.limits.maxTradeCostAtoms)} test AUSD per trade` : 'no per-trade limit set here'}; {policy.limits.windows[0] ? `${amount(policy.limits.windows[0].atoms)} test AUSD per 24 hours` : 'no 24-hour limit set here'}. The runtime must also be set to "mode": "live". You can stop it at any time.</p>
+      <p className="agents-fine">Its runtime can then spend test AUSD from the agent wallet on its own, within these Flurbo limits: {!policy.limits.maxTradeCostAtoms && !policy.limits.windows.length ? 'the defaults, 2 test AUSD per trade and 10 test AUSD per 24 hours' : <>{policy.limits.maxTradeCostAtoms ? `${amount(policy.limits.maxTradeCostAtoms)} test AUSD per trade` : 'no per-trade limit'}; {policy.limits.windows[0] ? `${amount(policy.limits.windows[0].atoms)} test AUSD per 24 hours` : 'no 24-hour limit'}</>}. The runtime also keeps its own local limits, and every trade must pass both. The runtime must be set to "mode": "live". You can stop it at any time.</p>
       <div className="agents-actions"><button className="btn btn-primary" disabled={busy} onClick={() => act(async () => { await runtimeAdmin.setPolicy(id, { liveEnabled: true }); setConfirmLive(false); })}>Confirm live testnet trades</button><button className="btn btn-secondary" onClick={() => setConfirmLive(false)}>Cancel</button></div>
     </div>}
     <p className="agents-fine">Pause is an instruction. A compliant runtime reads it before each new action and stops starting trades within about a minute. It is not an on-chain freeze: a transaction already sent can still confirm, and the wallet key can still sign outside the runtime.</p>
@@ -147,7 +150,7 @@ function WalletSetup({ id, profile, busy, act }: { id: string; profile: ProfileJ
   const [address, setAddress] = useState(''), [challenge, setChallenge] = useState<{ id: string; message: string; expiresAt: number } | null>(null), [signature, setSignature] = useState('');
   return <section className="agents-card" aria-label="Agent wallet">
     <h2>Agent wallet</h2>
-    {profile.wallet ? <p>Associated wallet <code>{profile.wallet}</code>. Only transactions this runtime reports from this wallet, verified on-chain, count for the agent.</p>
+    {profile.wallet ? <><p>Associated wallet <code>{profile.wallet}</code>. Only transactions this runtime reports from this wallet, verified on-chain, count for the agent.</p><AgentFunding wallet={profile.wallet}/></>
       : <p className="agents-fine">Use a new wallet only for this agent, funded with a small amount of test AUSD and MON for gas. Never a deployer, settlement, reviewer or personal wallet. Its key stays on your machine; Flurbo never asks for it.</p>}
     {(profile.walletHistory ?? []).length > 1 && <details className="agents-assumptions"><summary>Earlier wallets</summary><ul>{profile.walletHistory!.filter(w => w.until !== null).map(w => <li key={w.address + w.from}>{w.address}: {when(w.from)} to {when(w.until)}</li>)}</ul></details>}
     {!challenge ? <div className="agents-attach">
@@ -202,7 +205,7 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
   const [copyStatus,setCopyStatus]=useState('');
   const origin = typeof window === 'undefined' ? 'https://flurbo.singu.online' : window.location.origin;
   const ts = [
-    '# Node 24 or later, in a checkout of the Flurbo repository',
+    '# Node 24 or later, in your copy of the Flurbo SDK source',
     'cd packages/sdk && npm ci',
     'node bin/flurbo-agent.ts init --config flurbo-agent.json',
     `# Edit flurbo-agent.json: api.baseUrl "${origin}", markets ${JSON.stringify(profile.markets ?? [])},`,
@@ -215,7 +218,7 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
     'node bin/flurbo-agent.ts stop --config flurbo-agent.json',
   ].join('\n');
   const py = [
-    '# Python 3.11 or later, in a checkout of the Flurbo repository',
+    '# Python 3.11 or later, in your copy of the Flurbo SDK source',
     'cd packages/sdk-python && python -m venv .venv',
     '# macOS / Linux: source .venv/bin/activate',
     '# Windows Git Bash: source .venv/Scripts/activate',
@@ -231,7 +234,7 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
     'python -m flurbo_sdk stop --config flurbo-agent.json',
   ].join('\n');
   const rs = [
-    '# A Rust toolchain, in a checkout of the Flurbo repository',
+    '# A Rust toolchain, in your copy of the Flurbo SDK source',
     'cd packages/sdk-rust && cargo build --release',
     './target/release/flurbo-agent-rs init --config flurbo-agent.json',
     `# Same configuration format as TypeScript: api.baseUrl "${origin}", markets ${JSON.stringify(profile.markets ?? [])},`,
@@ -243,7 +246,7 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
     './target/release/flurbo-agent-rs stop --config flurbo-agent.json',
   ].join('\n');
   const cpp = [
-    '# GCC or Clang (C++20) and OpenSSL 3.2 or later, in a checkout of the Flurbo repository',
+    '# GCC or Clang (C++20) and OpenSSL 3.2 or later, in your copy of the Flurbo SDK source',
     'cd packages/sdk-cpp && make            # Windows (MSYS2): mingw32-make',
     './build/flurbo-agent-cpp init --config flurbo-agent.json',
     `# Same configuration format as TypeScript: api.baseUrl "${origin}", markets ${JSON.stringify(profile.markets ?? [])},`,
@@ -255,14 +258,13 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
     './build/flurbo-agent-cpp stop --config flurbo-agent.json',
   ].join('\n');
   const available: Record<string, string> = { typescript: ts, python: py, rust: rs, cpp };
-  const readme: Record<string, string> = { typescript: 'packages/sdk/README.md', python: 'packages/sdk-python/README.md', rust: 'packages/sdk-rust/README.md', cpp: 'packages/sdk-cpp/README.md' };
   return <section className="agents-card" aria-label="Run the agent">
-    <h2>Run the agent</h2><p className="agents-fine">These commands are for a terminal on your own computer. <Link href="/docs#agents">Read the setup and troubleshooting guide</Link>.</p>
+    <h2>Run the agent</h2><p className="agents-fine">These commands are for a terminal on your own computer, in a copy of the Flurbo SDK source. The source is not public yet; ask the Flurbo team for a copy through the channel where you received your invitation. <Link href="/docs#agents">Read the setup and troubleshooting guide</Link>.</p>
     <div className="agents-tabs segmented" role="tablist" aria-label="SDK language">{(['typescript', 'python', 'rust', 'cpp'] as const).map(l => <button key={l} type="button" role="tab" aria-selected={language === l} aria-pressed={language === l} onClick={() => setLanguage(l)}>{{ typescript: 'TypeScript', python: 'Python', rust: 'Rust', cpp: 'C++' }[l]}</button>)}</div>
     {!hasWallet && <p className="agents-note">Associate the agent wallet first; Flurbo only attributes trades from it.</p>}
     <pre className="agents-code">{available[language]}</pre>
     <button className="button button-outline" onClick={async()=>{try{await navigator.clipboard.writeText(available[language]);setCopyStatus('Commands copied.');}catch{setCopyStatus('Copy is unavailable. Select the commands above to copy them.');}}}><Copy aria-hidden="true" strokeWidth={1.75}/>Copy commands</button><span role="status" className="agents-fine"> {copyStatus}</span>
-    <p className="agents-fine">The runtime keeps its journal in the state directory and resumes pending transactions after a restart without sending them twice. <a href={`https://github.com/Singularityy0/Flurbo/blob/main/${readme[language]}`} target="_blank" rel="noreferrer">Read the SDK guide and custom strategy examples <ArrowUpRight aria-hidden="true" strokeWidth={1.75}/></a>.</p>
+    <p className="agents-fine">The runtime keeps its journal in the state directory and resumes pending transactions after a restart without sending them twice. Each SDK's README in the source explains configuration and custom strategies.</p>
   </section>;
 }
 

@@ -141,6 +141,8 @@ type ClockFn = dyn Fn() -> i64 + Send + Sync;
 pub struct Shared {
     pub config: AgentConfig,
     pub stop_file: PathBuf,
+    /// Set only for the final heartbeat after a requested stop, so Flurbo shows the runtime as stopped.
+    pub stopped: std::sync::atomic::AtomicBool,
     pub flurbo: Mutex<Option<(FlurboPolicy, i64)>>,
     pub blocked_by: Mutex<Option<String>>,
     pub last_error: Mutex<Option<String>>,
@@ -346,6 +348,7 @@ impl AgentRunner {
         let shared = Arc::new(Shared {
             config: config.clone(),
             stop_file: dir.join("stop.request"),
+            stopped: std::sync::atomic::AtomicBool::new(false),
             flurbo: Mutex::new(None),
             blocked_by: Mutex::new(None),
             last_error: Mutex::new(None),
@@ -397,7 +400,9 @@ impl AgentRunner {
     }
 
     pub fn state(&self) -> &'static str {
-        if self.stop_requested() {
+        if self.shared.stopped.load(std::sync::atomic::Ordering::SeqCst) {
+            "stopped"
+        } else if self.stop_requested() {
             "stopping"
         } else if self.blocked_by().is_some() {
             "blocked"
@@ -698,7 +703,9 @@ impl AgentRunner {
         }
         if self.stop_requested() {
             let _ = fs::remove_file(&self.shared.stop_file);
+            self.shared.stopped.store(true, std::sync::atomic::Ordering::SeqCst);
             self.heartbeat();
+            self.shared.stopped.store(false, std::sync::atomic::Ordering::SeqCst);
         }
         self.log("stopped", json!({"runtimeId": self.runtime_id}));
     }

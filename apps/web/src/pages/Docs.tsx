@@ -10,7 +10,7 @@ const sections = [
   ['accounts', 'Accounts and wallets'], ['trading', 'Trading and shares'],
   ['combinations', 'Combined predictions'], ['what-if', 'What-if and prices'], ['thesis', 'Build your thesis'],
   ['settlement', 'Settlement and payouts'], ['portfolio', 'Portfolio and payouts'],
-  ['agents', 'Agents and SDKs'], ['help', 'Common questions'], ['preview', 'Preview limitations'],
+  ['agents', 'Agents and SDKs'], ['limits', 'Limits and allowances'], ['help', 'Common questions'], ['preview', 'Preview limitations'],
 ] as const;
 
 export default function Docs() {
@@ -48,18 +48,18 @@ export default function Docs() {
           <h2 id="overview-title">One shared market. Related predictions.</h2>
           <p>Flurbo brings individual and combined predictions into one shared market, letting you see how the market prices relationships between events.</p>
           <p>Each question has defined outcomes and resolution rules. Related questions can share a pool. You can take a position on one answer or, where supported, combine answers into a single prediction. Separate pools have separate positions and schedules. The Markets page brings their questions together; you do not need to choose a collection.</p>
-          <div className="docs-note"><strong>This is a testnet preview.</strong><p>Trading uses test AUSD on Monad testnet. Test MON pays network fees. Practice questions have scripted outcomes; real-event questions use specified external observations. Read the selected market’s rules before trading.</p></div>
+          <div className="docs-note"><strong>This is a testnet preview.</strong><p>Trading uses test AUSD on Monad testnet, which has no monetary value. Test MON pays network fees. Every question names the official source and the rule that decides it. Read the selected market’s rules before trading.</p></div>
         </section>
         <section id="getting-started" aria-labelledby="getting-started-title">
           <h2 id="getting-started-title">Getting started</h2>
           <ol className="docs-steps">
-            <li><strong>Create your account.</strong> Use a Mera passkey to sign in to Flurbo.</li>
-            <li><strong>Request access.</strong> Open Your account when applications are available. The native form captures your signed-in Mera account automatically. Enter your email and verify the code sent to it. The team reviews applications manually. Email verification is not approval or a new sign-in method.</li>
+            <li><strong>Create your account.</strong> Use a Mera passkey to sign in to Flurbo. Keep that passkey safe: if you lose it, you lose this Flurbo account, and Flurbo cannot recover it.</li>
+            <li><strong>Request access.</strong> Open Your account, enter your email and verify the six-digit code sent to it. The form uses your signed-in Mera account automatically. The team reviews requests manually and emails you when your account is approved. Verifying your email is not approval and cannot be used to sign in.</li>
             <li><strong>Link MetaMask once.</strong> Choose the wallet you want to trade with and sign the account-linking message. Its shares, trades and collected payouts stay in your Mera account's portfolio across devices, even when MetaMask is disconnected. Funds remain in the trading wallet.</li>
             <li><strong>Return or switch wallets.</strong> Flurbo restores an already linked wallet when MetaMask still authorizes this site. Manage wallets from Your account, or switch on a trade. A new wallet needs its own linking signature. Unlocking MetaMask or reconnecting after permission is revoked can still require your approval.</li>
-            <li><strong>Get test funds.</strong> Open <Link href="/fund">Get test funds</Link> for the available funding options. You need test MON for gas and test AUSD for purchases. Faucet availability and claim limits apply.</li>
+            <li><strong>Get test funds.</strong> When you link your first MetaMask wallet, Flurbo sends it a one-time amount of test MON for network fees. Then open <Link href="/fund">Get test funds</Link> to claim 50 test AUSD, once every 24 hours per wallet. For more test MON, use the Monad faucet linked there. The exact amounts are listed under <a href="#limits">Limits and allowances</a>.</li>
             <li><strong>Choose a market.</strong> Check the question, close time and resolution rules. Select your answer and number of shares.</li>
-            <li><strong>Review and confirm.</strong> Check the quoted cost and confirm the requested action in MetaMask. A token approval may be required before the purchase.</li>
+            <li><strong>Review and confirm.</strong> Check the quoted cost and confirm in MetaMask. A purchase usually asks for two confirmations: first an approval for the exact amount of test AUSD, then the purchase itself.</li>
           </ol>
           <p>The landing page and docs are public. Markets, funding and portfolio require a signed-in, approved Mera account. Creating a passkey does not submit an application. Your account page shows whether applications are available, pending or approved.</p>
         </section>
@@ -69,6 +69,7 @@ export default function Docs() {
           <p>Your Mera address identifies your Flurbo account. Your passkey signs you in; MetaMask holds your trading funds and confirms trades. Mera is not used to place trades in the current app.</p>
           <p>You can link multiple MetaMask addresses to your account by proving control of each wallet. Flurbo can then show their shares together in your portfolio. Linking a wallet does not transfer its assets or give another wallet permission to spend them. To sell or collect a payout, use the wallet that owns the relevant shares.</p>
           <p>Access on another device depends on having the same passkey available through your credential provider. A fingerprint or face scan unlocks the credential on your device; it is not your account identifier. Creating a different passkey account can produce a different Flurbo account.</p>
+          <div className="docs-note"><strong>Losing your passkey means losing your Flurbo account.</strong><p>Flurbo has no password reset, and your email cannot restore access. Keep the passkey in a password manager that syncs across your devices. Funds in your MetaMask wallets stay yours, but those wallets remain linked to the lost account; contact the Flurbo team to move them to a new account.</p></div>
           <p>Never share your wallet seed phrase, private key or passkey recovery credentials.</p>
         </section>
         <section id="trading" aria-labelledby="trading-title">
@@ -114,9 +115,16 @@ export default function Docs() {
         <section id="settlement" aria-labelledby="settlement-title">
           <h2 id="settlement-title">Settlement and payouts</h2>
           <p>Trading closes at the time specified by the market. Resolution follows the observation window and the pool’s published deadlines. A closed market is not necessarily settled.</p>
+          <h3>Who proposes each answer</h3>
+          <ul>
+            <li><strong>Questions with a machine-readable official source</strong>, such as earthquake counts from USGS, Ethereum network activity, or a US labour or interest-rate figure: Flurbo’s settlement bot reads the source named in the rules after the observation window and proposes Yes or No exactly as the rule states. If the source is missing or malformed, it proposes nothing rather than guessing.</li>
+            <li><strong>Software release questions</strong>: the bot proposes Yes when the official GitHub release record shows the exact stable release was published inside the window. It never proposes No, because a missing release record can have other causes. A No is proposed by the Flurbo operator after checking; if nobody proposes an answer before the deadline, the question resolves VOID.</li>
+            <li><strong>Any other question</strong>: the Flurbo operator proposes the answer with its evidence.</li>
+          </ul>
+          <p>No AI model decides an outcome. Every proposal links its evidence, and every proposal can be challenged.</p>
           <ol className="docs-steps">
             <li><strong>An answer is proposed.</strong> After the observation window, an asserter can post Yes, No or VOID with a test AUSD bond and an evidence reference.</li>
-            <li><strong>The answer can be challenged.</strong> A challenge within the deadline sends the disputed outcome to the configured reviewer panel. Current testnet panels use operator-controlled wallets and a two-vote quorum.</li>
+            <li><strong>The answer can be challenged.</strong> A challenge within the deadline sends the disputed outcome to the reviewer panel. On this testnet, the panel’s wallets are run by the Flurbo team and two votes decide, so it is not an independent review. A proposed answer shows its challenge deadline on the market page.</li>
             <li><strong>The outcome is finalized.</strong> An uncontested answer can finalize after its challenge window. A missing assertion or a dispute that times out without the required votes follows the resolver’s VOID path.</li>
             <li><strong>Results reach the pool.</strong> Once all underlying events in the same pool are finalized, their outcomes are delivered to the pool. Individual and combined payouts follow from those answers.</li>
             <li><strong>You collect the payout.</strong> Eligible shares can be redeemed using their owning MetaMask wallet. Settlement does not automatically send winnings to every holder. Redemption requires a transaction and test MON for gas.</li>
@@ -141,16 +149,42 @@ export default function Docs() {
             <li><strong>Associate a dedicated wallet.</strong> In Setup, enter its public address and sign the ownership message locally. Keep its private key on your machine. Do not use your personal, manual-trading or operator wallets.</li>
             <li><strong>Create an API credential.</strong> Copy the token when it is shown and store it in the runtime environment. It allows API access, not wallet signing. Never include the token or private key in a shared script or model prompt.</li>
             <li><strong>Run in paper mode.</strong> Choose your language in Setup, install its dependencies and configure your model provider, strategy and spending limits. Paper decisions simulate trades without moving funds. Check connection status and Activity before continuing.</li>
-            <li><strong>Enable live testnet trading deliberately.</strong> Fund the dedicated wallet with a small amount of test AUSD and MON. Live mode must be enabled both in the runtime configuration and in Flurbo Settings. Purchases still depend on valid quotes and the runtime's checks.</li>
+            <li><strong>Fund the agent wallet.</strong> On the agent’s Setup page, under Agent wallet, send test MON and test AUSD from your own MetaMask. The Flurbo AUSD dispenser only pays the wallet that asks, so it cannot fund an agent wallet directly.</li>
+            <li><strong>Enable live testnet trading deliberately.</strong> Live mode must be enabled both in the runtime configuration and in Flurbo Settings. New agents start with Flurbo limits of 2 test AUSD per trade and 10 test AUSD per 24 hours, which you can change. Every trade must also pass the runtime’s own limits and a fresh quote.</li>
           </ol>
-          <p>The Overview shows the latest heartbeat and verified trades. Activity shows reported decisions. Setup holds wallet association, credentials and language instructions. Settings holds limits, pause and archive controls.</p>
-          <details><summary>Developer SDK reference and custom strategies</summary><p>You can write your own script or strategy with the SDK. Follow the language's reference for configuration, execution and recovery. Custom software must preserve those checks.</p><ul>{[['sdk','TypeScript'],['sdk-python','Python'],['sdk-rust','Rust'],['sdk-cpp','C++']].map(([path,label])=><li key={path}><a href={`https://github.com/Singularityy0/Flurbo/tree/main/packages/${path}`} target="_blank" rel="noreferrer">{label} SDK and examples <ArrowUpRight size={14} strokeWidth={1.75} /></a></li>)}</ul></details>
+          <p>The Overview shows the runtime’s status and verified trades. Running means a heartbeat arrived in the last 90 seconds. Stopped means the runtime reported a clean stop. With no heartbeat for over 90 seconds the runtime may be slow or offline, and after 10 minutes it is shown as not running. Activity shows reported decisions. Setup holds wallet association, funding, credentials and language instructions. Settings holds limits, pause and archive controls.</p>
+          <div className="docs-note"><strong>Identical agents compete with each other.</strong><p>Each purchase moves the price for the next one. If several agents run the same strategy on the same market, they bid against each other, pay more for the same shares and shrink each other’s edge. Vary your forecasts, markets or limits.</p></div>
+          <details><summary>Developer SDK reference and custom strategies</summary><p>You can write your own script or strategy with the SDK. Each SDK’s README covers configuration, execution, recovery and custom strategies; custom software must preserve those checks. The SDK source is not public yet. Ask the Flurbo team for a copy through the channel where you received your invitation.</p></details>
           <details><summary>Stopping an agent and recovering a transaction</summary><p>Closing the browser does not stop the runtime. Stop it on the machine where it runs. A pause on Flurbo is a software instruction; a previously sent transaction may still confirm. Preserve the runtime's journal and restart with the same configuration to recover pending transactions without sending duplicates.</p><p>A revoked credential stops a compliant runtime from starting new work. It does not revoke the wallet's on-chain permissions or private key. A stale heartbeat is a last-known report, not proof that the runtime has stopped.</p></details>
           <p>The optional assisted feature is different: you enter forecasts yourself and either record paper decisions or confirm proposed trades in MetaMask. It does not run an autonomous agent.</p>
         </section>
+        <section id="limits" aria-labelledby="limits-title">
+          <h2 id="limits-title">Limits and allowances</h2>
+          <p>These are the defaults on this testnet. Where a market or your agent settings show a different value, that value applies.</p>
+          <h3>Test funds</h3>
+          <ul>
+            <li><strong>Starter test MON:</strong> sent once, automatically, when an approved account links its first MetaMask wallet. Once per account and once per wallet, only while the wallet has less than 0.1 test MON, and up to a daily total across all members. The amount is shown on Get test funds.</li>
+            <li><strong>Test AUSD:</strong> 50 test AUSD per claim, once every 24 hours per wallet, while the dispenser has funds.</li>
+          </ul>
+          <h3>Trading on the site</h3>
+          <ul>
+            <li>Up to 100 shares per trade, or less when a pool is small.</li>
+            <li>Price tolerance of 0.5%: if the price moves more than that before your purchase confirms, it fails instead of filling at a worse price.</li>
+            <li>Combined predictions cover up to three questions from the same pool.</li>
+            <li>Up to 20 MetaMask wallets per account. Buying and selling on the site only use wallets linked to your account; collecting a payout is always allowed.</li>
+          </ul>
+          <h3>Agents</h3>
+          <ul>
+            <li><strong>Flurbo limits, set per agent in Settings:</strong> 2 test AUSD per trade and 10 test AUSD per 24 hours by default. Live trading also needs "mode": "live" in the runtime.</li>
+            <li><strong>Runtime limits, set in its configuration file:</strong> 2 test AUSD per trade, 10 test AUSD per 24 hours, 20 test AUSD in total, at most 5 shares of any one prediction, 0.5% price tolerance, no trading in the last hour before a market closes, at most 2 unconfirmed transactions, and 0.2 test MON always kept for fees.</li>
+            <li>A trade must pass both sets of limits. At most 100 shares or 100 test AUSD per trade, and 120 API requests per minute per credential.</li>
+          </ul>
+          <p>Limits are software checks by Flurbo and the runtime. The amount in a wallet is the hard limit on what it can spend.</p>
+        </section>
         <section id="help" aria-labelledby="help-title">
           <h2 id="help-title">Common questions</h2>
-          <details><summary>I created an account. Why can't I enter the markets?</summary><p>Account creation and invitation approval are separate. Your account page shows approval status. The request-access method is still being prepared when no application link is configured; the placeholder does not submit anything.</p></details>
+          <details><summary>I created an account. Why can't I enter the markets?</summary><p>Creating an account and being approved are separate. Request access from Your account and verify your email; the team reviews requests manually and emails you when you are approved. Your account page always shows the current status.</p></details>
+          <details><summary>Why did MetaMask ask me twice for one purchase?</summary><p>The first confirmation approves the exact amount of test AUSD the purchase may spend. The second is the purchase. Only the second one buys shares.</p></details>
           <details><summary>I approved a payment. Where are my shares?</summary><p>Token approval grants spending permission. A separate purchase transaction buys the shares. Follow the ticket's next step and wait for confirmation. If a transaction is already pending, check it instead of submitting again.</p></details>
           <details><summary>Trading closed. Can I collect a payout?</summary><p>A closed market may still be settling. Once results are delivered, Portfolio shows eligible payouts and the collect action. Collection sends funds to the wallet that owns the shares. Agent wallets collect through their runtime.</p></details>
           <details><summary>Why is profit / loss still loading?</summary><p>Collected payouts and current holdings can appear before complete purchase history. The profit / loss chart waits for verified cost basis. Background history checks are bounded; Retry activity continues them if needed. A payout total is not a profit total.</p></details>

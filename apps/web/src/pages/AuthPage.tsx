@@ -66,6 +66,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
               <p id="passkey-name-help" className="field-help">A label in your password manager, not a public username.</p>
             </div>
             {state.remembered && <label className="check-row"><input type="checkbox" checked={allowNew} onChange={event => setAllowNew(event.target.checked)} disabled={state.busy} /><span>A passkey is remembered here. Create a separate account with a new address.</span></label>}
+            <p className="callout callout-attention">Losing this passkey means losing this Flurbo account. There is no password reset, and your email cannot restore access. Save it in a password manager that syncs across your devices.</p>
           </>}
           <button type="submit" className="btn btn-primary btn-lg btn-block" disabled={state.busy || (!isLogin && state.remembered && !allowNew)}>
             {state.busy ? "Waiting for your passkey..." : isLogin ? "Sign in with a passkey" : "Create a passkey"}

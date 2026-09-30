@@ -20,6 +20,7 @@ import { configurePracticeCollections } from './practice-collections.mjs';
 import { loadSemanticConfig, semanticDiagnostics } from './semantic-validation.mjs';
 import { createSettlementStores } from './settlement-persistence.mjs';
 import { starterConfig, starterFunds } from './starter-funds.mjs';
+import { fundingAlerts } from './funding-alerts.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -32,7 +33,7 @@ const security = {
 export function productionServer(config, store, staticRoot = dist) {
   const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
     applications:config.applications, previewAccess:config.previewAccess===undefined?previewAccess():config.previewAccess, testingOperatorAccount:config.testingOperatorAccount, testFaucet:config.testFaucet, learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
-    learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions, challengeOptions:config.challengeOptions, settlementPackets:config.settlementPackets, starter:config.starter });
+    learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions, challengeOptions:config.challengeOptions, settlementPackets:config.settlementPackets, starter:config.starter, funding:config.fundingAlerts });
   config.metrics = api.metrics;
   return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
@@ -100,6 +101,9 @@ async function main() {
     config.pilotEvidence = pilotEvidence(store.command, config.origin);
     config.settlementPackets = createSettlementStores({command:store.command,origin:config.origin}).packetStore;
   config.starter = starterFunds({ config: starterConfig(), command: store.command, rpcUrl: config.rpcUrl });
+  // Low-balance email for the AUSD dispenser and the starter MON wallet, checked by the settlement bot.
+  config.fundingAlerts = fundingAlerts({ rpcUrl: config.rpcUrl, command: store.command, dispenser: config.testFaucet,
+    starter: config.starter ? { address: config.starter.address, amount: config.starter.amountWei } : null });
   config.pilot = await configurePilot({rpcUrl:config.rpcUrl,command:store.command});
   config.practiceCollections=await configurePracticeCollections({rpcUrl:config.rpcUrl,command:store.command});
   for(const service of config.practiceCollections.services.values())if(config.pilot&&(service.manifest.pool===config.pilot.manifest.pool||service.manifest.resolver===config.pilot.manifest.resolver))throw Error('Practice collections must be separate from the real pilot');
@@ -166,7 +170,8 @@ async function main() {
   if (process.env.FLURBO_SETTLEMENT_BOT === 'true') {
     const { settlementBot } = await import('./settlement-bot.mjs');
     // Operator metrics ride the same cycle: advance the trade scan, then send the daily summary when due.
-    config.settlementBot = settlementBot({ env: process.env, metrics: config.metrics ? () => config.metrics.tick() : null });
+    config.settlementBot = settlementBot({ env: process.env, metrics: config.metrics ? () => config.metrics.tick() : null,
+      funds: config.fundingAlerts ? () => config.fundingAlerts.tick() : null });
     config.settlementBot.start();
     console.log('Settlement bot enabled: monitor, worker and metrics every 2 minutes');
   }

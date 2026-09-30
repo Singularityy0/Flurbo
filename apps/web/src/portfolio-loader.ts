@@ -6,7 +6,7 @@ import type {ActivityLog} from './portfolio-performance';
 import type {AgentExecution} from './portfolio-sources';
 
 export type HistoryRead={complete:boolean;through?:number;target?:number;logs:ActivityLog[]};
-export type PoolRead={group:MarketGroup;manifest?:PilotState['manifest'];owners:Record<string,AccountHolding[]>;blocks:Record<string,string>;holdingsComplete:boolean;history?:HistoryRead;payouts?:HistoryRead;payoutError?:boolean;error?:string;historyError?:boolean};
+export type PoolRead={cachedAt?:number;group:MarketGroup;manifest?:PilotState['manifest'];owners:Record<string,AccountHolding[]>;blocks:Record<string,string>;holdingsComplete:boolean;history?:HistoryRead;payouts?:HistoryRead;payoutError?:boolean;error?:string;historyError?:boolean};
 export type PortfolioRequest=<T>(path:string,input:unknown,namespace:PilotNamespace,signal:AbortSignal)=>Promise<T>;
 type AccountRead=Pick<PilotState,'manifest'|'snapshot'>&{claimScopes?:number[]};
 export async function loadPortfolio({groups,account,wallets,signal,publish,request=pilotRequest,historyOnly=false,previous={},agentExecutions=[]}:{groups:MarketGroup[];account:string;wallets:string[];signal:AbortSignal;publish:(namespace:string,value:PoolRead)=>void;request?:PortfolioRequest;historyOnly?:boolean;previous?:Record<string,PoolRead>;agentExecutions?:AgentExecution[]}){
@@ -14,8 +14,8 @@ export async function loadPortfolio({groups,account,wallets,signal,publish,reque
   const send=(value:PoolRead)=>{data[value.group.namespace]=value;if(!signal.aborted)publish(value.group.namespace,{...value,owners:{...value.owners},blocks:{...value.blocks}});};
   const call=<T,>(group:MarketGroup,path:string,input?:unknown)=>request<T>(path,input,group.namespace,AbortSignal.any([signal,AbortSignal.timeout(45000)]));
   async function balances(value:PoolRead,claims:ClaimHint[],owner:string){
-    for(let offset=0;offset<claims.length&&!signal.aborted;offset+=30){
-      const batch=claims.slice(offset,offset+30);
+    for(let offset=0;offset<claims.length&&!signal.aborted;offset+=60){
+      const batch=claims.slice(offset,offset+60);
       const response=await call<{rows:AccountHolding[];owner?:string;snapshot?:{blockNumber:string}}>(value.group,'positions',{owner,claims:batch});
       if(response.owner&&response.owner.toLowerCase()!==owner)throw Error('Wrong owner');
       if(!Array.isArray(response.rows)||response.rows.length!==batch.length||response.rows.some((row,i)=>row.scope!==batch[i].scope||row.mask!==batch[i].mask||!/^\d+$/.test(row.quantity)||row.payoutAtoms!==null&&!/^\d+$/.test(row.payoutAtoms)))throw Error('Incomplete balances');

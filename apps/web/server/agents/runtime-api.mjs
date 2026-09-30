@@ -28,7 +28,11 @@ export function deploymentOf(namespace, svc) {
     limits: { maxQuantityAtoms: '100000000', maxLimitAtoms: '100000000', slippageBps: [10, 50, 100], maxDeadlineSeconds: 300 } };
 }
 
-export const defaultRuntimePolicy = () => ({ version: 1, paused: false, liveEnabled: false, limits: { maxTradeCostAtoms: null, windows: [] } });
+// Flurbo's default live-trading limits match the runtimes' own local defaults (agent-config maxTradeCostAtoms and
+// spend.windows): 2 test AUSD per trade, 10 test AUSD per 24 hours. They are published on the Docs page.
+export const DEFAULT_LIVE_LIMITS = Object.freeze({ maxTradeCostAtoms: '2000000', windows: Object.freeze([Object.freeze({ seconds: 86_400, atoms: '10000000' })]) });
+const defaultLimits = () => ({ maxTradeCostAtoms: DEFAULT_LIVE_LIMITS.maxTradeCostAtoms, windows: DEFAULT_LIVE_LIMITS.windows.map(w => ({ ...w })) });
+export const defaultRuntimePolicy = () => ({ version: 1, paused: false, liveEnabled: false, limits: defaultLimits() });
 export const policyView = (profile, now) => ({ schema: 'flurbo.agent-runtime-policy.v1', ...profile.runtimePolicy, markets: profile.markets, serverTime: now });
 
 // Dashboard connection state from the latest heartbeat. Pause is separate: it is an instruction.
@@ -36,6 +40,8 @@ export function connection(heartbeats, now) {
   const latest = [...(heartbeats ?? [])].sort((a, b) => b.receivedAt - a.receivedAt)[0];
   if (!latest) return { state: 'never', latest: null };
   const age = now - latest.receivedAt;
+  // A runtime that reported its own stop is stopped, however recent that report is.
+  if (latest.state === 'stopped') return { state: 'stopped', ageSeconds: age, latest };
   return { state: age <= HEARTBEAT_ONLINE ? 'connected' : age <= HEARTBEAT_STALE ? 'stale' : 'disconnected', ageSeconds: age, latest };
 }
 
@@ -161,8 +167,11 @@ export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, 
         if (current.kind !== 'runtime') fail(404, 'NOT_FOUND', 'Agent not found.');
         if (current.status === 'archived') fail(409, 'AGENT_ARCHIVED', 'This agent is archived.');
         const p = current.runtimePolicy;
-        return { ...current, markets: input.markets ?? current.markets, updatedAt: now(), runtimePolicy: { version: p.version + 1, paused: input.paused ?? p.paused, liveEnabled: input.liveEnabled ?? p.liveEnabled,
-          limits: { maxTradeCostAtoms: 'maxTradeCostAtoms' in input ? input.maxTradeCostAtoms : p.limits.maxTradeCostAtoms, windows: input.windows ?? p.limits.windows } } };
+        let limits = { maxTradeCostAtoms: 'maxTradeCostAtoms' in input ? input.maxTradeCostAtoms : p.limits.maxTradeCostAtoms, windows: input.windows ?? p.limits.windows };
+        // Turning live trading on for an agent with no Flurbo limits (created before defaults existed) applies the
+        // defaults, unless this same request sets its own limits.
+        if (input.liveEnabled === true && !p.liveEnabled && !('maxTradeCostAtoms' in input) && !('windows' in input) && limits.maxTradeCostAtoms === null && !limits.windows.length) limits = defaultLimits();
+        return { ...current, markets: input.markets ?? current.markets, updatedAt: now(), runtimePolicy: { version: p.version + 1, paused: input.paused ?? p.paused, liveEnabled: input.liveEnabled ?? p.liveEnabled, limits } };
       });
       return updated ? policyView(updated, now()) : fail(404, 'NOT_FOUND', 'Agent not found.');
     },
@@ -279,7 +288,7 @@ export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, 
       exact(input, ['runtimeId', 'sdk', 'mode', 'state', 'policy', 'pending', 'startedAt'], ['lastCycleAt', 'lastErrorCode']);
       const text = (v, max) => typeof v === 'string' && v.length >= 1 && v.length <= max && !/[\u0000-\u001f\u007f]/.test(v);
       if (!text(input.runtimeId, 64) || !input.sdk || !['typescript', 'python', 'rust', 'cpp'].includes(input.sdk.language) || !text(input.sdk.version, 32)
-        || !['paper', 'live'].includes(input.mode) || !['running', 'paused', 'blocked', 'stopping'].includes(input.state) || !Number.isInteger(input.pending) || input.pending < 0 || input.pending > 1000
+        || !['paper', 'live'].includes(input.mode) || !['running', 'paused', 'blocked', 'stopping', 'stopped'].includes(input.state) || !Number.isInteger(input.pending) || input.pending < 0 || input.pending > 1000
         || !Number.isSafeInteger(input.startedAt) || !input.policy || typeof input.policy !== 'object' || !/^[0-9a-f]{64}$/.test(input.policy.hash ?? '')
         || !(input.policy.flurboVersion === null || Number.isInteger(input.policy.flurboVersion)) || JSON.stringify(input.policy.summary ?? {}).length > 4000
         || ('lastErrorCode' in input && input.lastErrorCode !== null && !/^[A-Za-z_]{1,48}$/.test(input.lastErrorCode))) fail(400, 'INVALID_INPUT', 'Malformed heartbeat.');

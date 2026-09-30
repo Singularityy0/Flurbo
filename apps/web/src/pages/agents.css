@@ -81,7 +81,7 @@
 .agents-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; }
 .agents-chip-connected { border-color: var(--ink); color: var(--ink); }
 .agents-chip-connected::before { background: var(--ink); }
-.agents-chip-stale, .agents-chip-disconnected { border-style: dashed; }
+.agents-chip-stale, .agents-chip-disconnected, .agents-chip-stopped { border-style: dashed; }
 
 /* Setup. */
 .agents-setup { display: grid; gap: var(--s-3); grid-template-columns: minmax(0, 1fr); margin-top: var(--s-5); }
@@ -129,3 +129,6 @@
   .agents-settings dd, .agents-terms dd, .agents-performance dd { margin-bottom: var(--s-2); }
 }
 @media (prefers-reduced-motion: reduce) { .agents-confirm { animation: none; } }
+.agents-funding { display: grid; gap: var(--s-2); margin-top: var(--s-4); padding-top: var(--s-4); border-top: 1px solid var(--rule); }
+.agents-funding h3 { margin: 0; font-size: 16px; }
+.agents-funding .agents-pair { align-items: end; }

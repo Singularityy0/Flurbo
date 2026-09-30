@@ -136,7 +136,7 @@ export type RunnerOptions = {
   client?: RuntimeClient; chain?: ChainReader; signer?: Signer | null; retriever?: Retriever; forecaster?: Forecaster; strategy?: Strategy;
   now?: () => number; log?: (event: string, detail?: Record<string, unknown>) => void;
 };
-export type RuntimeStatus = { state: 'running' | 'paused' | 'blocked' | 'stopping'; blockedBy: string | null };
+export type RuntimeStatus = { state: 'running' | 'paused' | 'blocked' | 'stopping' | 'stopped'; blockedBy: string | null };
 
 export function agentRunner(o: RunnerOptions) {
   const config = o.config, env = o.env ?? process.env, now = o.now ?? (() => Math.floor(Date.now() / 1000));
@@ -181,7 +181,9 @@ export function agentRunner(o: RunnerOptions) {
   const policyNow = (): PolicyConfig => { const e = effective(); return { ...config.policy, maxTradeCostAtoms: e.maxTradeCostAtoms, spend: { ...config.policy.spend, windows: e.windows } }; };
   const exec: Executor | null = signer ? executor({ chain, signer, journal, client, policy: policyNow, liveAllowed, now, waitSeconds: config.schedule.waitSeconds, log, onStop: stop }) : null;
   const policyHash = () => createHash('sha256').update(JSON.stringify({ mode: config.mode, policy: policyNow(), strategy: config.strategy })).digest('hex');
-  const state = (): RuntimeStatus => ({ state: existsSync(stopFile) ? 'stopping' : blockedBy ? 'blocked' : flurbo?.paused ? 'paused' : 'running', blockedBy });
+  // `stopped` is sent once, in the final heartbeat after a requested stop, so Flurbo shows the runtime as stopped.
+  let stopped = false;
+  const state = (): RuntimeStatus => ({ state: stopped ? 'stopped' : existsSync(stopFile) ? 'stopping' : blockedBy ? 'blocked' : flurbo?.paused ? 'paused' : 'running', blockedBy });
 
   async function api<T>(fn: () => Promise<T>): Promise<T | null> {
     if (!client) return null;
@@ -320,7 +322,7 @@ export function agentRunner(o: RunnerOptions) {
           if (existsSync(stopFile)) break;
         }
       } finally { clearInterval(beat); }
-      if (existsSync(stopFile)) { unlinkSync(stopFile); await heartbeat().catch(() => {}); }
+      if (existsSync(stopFile)) { unlinkSync(stopFile); stopped = true; await heartbeat().catch(() => {}); stopped = false; }
       log('stopped', { runtimeId });
     },
     requestStop: () => writeFileSync(stopFile, String(now())),

@@ -72,3 +72,5 @@
 .metrics-table td { padding: var(--s-2) var(--s-3) var(--s-2) 0; border-bottom: 1px solid var(--rule); white-space: nowrap; }
 .metrics-table code { font-size: 12px; }
 .metrics-team td { color: var(--ink-3); }
+
+.metrics-low { color: var(--danger) !important; }

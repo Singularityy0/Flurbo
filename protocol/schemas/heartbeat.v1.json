@@ -51,7 +51,8 @@
         "running",
         "paused",
         "blocked",
-        "stopping"
+        "stopping",
+        "stopped"
       ]
     },
     "policy": {

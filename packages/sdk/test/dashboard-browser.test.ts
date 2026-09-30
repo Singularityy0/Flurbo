@@ -57,14 +57,16 @@ test('dashboard: register, link the wallet, issue a credential, then watch a run
     await page.reload();
     assert.equal(await page.getByText(token).count(), 0, 'not after a reload either');
     await page.getByRole('navigation', { name: 'Agent sections' }).getByRole('button', { name: 'Setup', exact: true }).click();
-    // Every language is available with its own runner and README, and no setup text contains a secret.
+    // Every language is available with its own runner, and no setup text contains a secret. The repository is
+    // private, so the card links nowhere on GitHub and says how to get the SDK source instead.
     const setup = page.getByRole('region', { name: 'Run the agent' });
-    for (const [tab, runner, readme] of [['TypeScript', 'bin/flurbo-agent.ts start', 'packages/sdk/README.md'], ['Python', 'python -m flurbo_sdk start', 'packages/sdk-python/README.md'],
-      ['Rust', 'flurbo-agent-rs start', 'packages/sdk-rust/README.md'], ['C++', 'flurbo-agent-cpp start', 'packages/sdk-cpp/README.md']]) {
+    for (const [tab, runner] of [['TypeScript', 'bin/flurbo-agent.ts start'], ['Python', 'python -m flurbo_sdk start'],
+      ['Rust', 'flurbo-agent-rs start'], ['C++', 'flurbo-agent-cpp start']]) {
       await setup.getByRole('tab', { name: tab, exact: true }).click();
       const text = await setup.innerText();
       assert.ok(text.includes(runner), `${tab} runner setup`);
-      assert.ok((await setup.getByRole('link', { name: /Read the SDK guide/ }).getAttribute('href'))?.endsWith(readme), `${tab} README link`);
+      assert.equal(await setup.locator('a[href*="github.com"]').count(), 0, `${tab} has no repository link`);
+      assert.ok(text.includes('The source is not public yet'), `${tab} explains how to get the SDK`);
       assert.ok(!text.includes('not complete yet') && !text.includes(token), `${tab} setup text`);
     }
     // Allow live trades, then run the agent outside the browser.
@@ -82,7 +84,7 @@ test('dashboard: register, link the wallet, issue a credential, then watch a run
     await runner.cycle();
     // Direct URL and refresh show what the runtime reported and what Flurbo verified.
     await page.goto(agentUrl);
-    await page.getByRole('region', { name: 'Runtime status' }).getByText('Runtime connected', { exact: false }).waitFor();
+    await page.getByRole('region', { name: 'Runtime status' }).getByText('Runtime running', { exact: false }).waitFor();
     const verified = page.getByRole('region', { name: 'Verified trades' });
     await verified.getByText('1, paid', { exact: false }).waitFor();
     await verified.getByText('Verified on-chain').first().waitFor();

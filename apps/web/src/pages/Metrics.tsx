@@ -53,6 +53,10 @@ export default function Metrics(){
         {[['Signed in',f.signedIn],['Access granted',f.granted],['Made a bet',f.traded],['Bet in last 7 days',f.active7d],['Bets placed',report.totals.buys],['Combined bets',share(report.totals.combined,report.totals.buys)]].map(([label,value])=>
           <div key={label as string} className="metrics-tile"><span>{label}</span><strong>{value}</strong></div>)}
       </section>
+      {report.funds&&<section className="panel" aria-labelledby="funds-h"><h2 id="funds-h">Test funds for new members</h2>
+        <dl className="metrics-facts">{([['AUSD dispenser',report.funds.dispenser],['Starter MON wallet',report.funds.starter]] as const).filter(([,w])=>w).map(([name,w])=>
+          <div key={name}><dt>{name} <code title={w!.address}>{short(w!.address)}</code></dt><dd className={w!.low?'metrics-low':''}>{Number(w!.balance).toLocaleString(undefined,{maximumFractionDigits:2})} {w!.unit} <small>about {w!.left} {w!.leftLabel} left{w!.low?` · below ${w!.threshold}, top up`:''}</small></dd></div>)}</dl>
+        <p className="field-help">Checked {when(report.funds.checkedAt)}. The operator is emailed when either drops below its threshold.</p></section>}
       {!report.sync.complete&&<p className="callout">Trade data is still being scanned from the chain, so bet counts may be low. It catches up every two minutes; progress is in Markets below.</p>}
       {report.unlinked.length>0&&<p role="alert" className="callout metrics-alert"><strong>{report.unlinked.length} wallet{report.unlinked.length===1?'':'s'} traded without a linked Flurbo account.</strong> The website refuses these trades, so someone is calling the contracts directly. See Unlinked wallets below.</p>}
 

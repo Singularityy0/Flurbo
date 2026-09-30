@@ -36,7 +36,7 @@ export function starterFunds({ config, command, rpcUrl, now = () => Date.now(), 
   const arrived = async hash => { for (let i = 0; i < 4; i++) { if (i) await sleep(1500); if (await seen(hash)) return true; } return false; };
   const dayKey = () => `${KEY}:day:${new Date(now()).toISOString().slice(0, 10)}`;
   return {
-    amountMon: formatEther(config.amount),
+    amountMon: formatEther(config.amount), address: account.address.toLowerCase(), amountWei: config.amount,
     // sent: this account already received it; exhausted: today's service cap is used; available otherwise.
     async status(login) {
       login = String(login).toLowerCase();

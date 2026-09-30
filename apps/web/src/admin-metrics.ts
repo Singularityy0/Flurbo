@@ -10,7 +10,8 @@ export type MetricsUser={account:string;team:boolean;firstSignIn:number|null;las
   approved:boolean;wallets:number;linkedAt:number|null;starter:boolean;trades:TradeStats};
 export type MetricsMarket=TradeStats&{namespace:string;label:string;pool:string;closesAt:number|null;traders:number;
   scanned:{through:number;target:number;start:number;percent:number;complete:boolean}};
-export type MetricsReport={schema:'flurbo.user-metrics.v1';generatedAt:number;
+export type FundWallet={address:string;balance:string;unit:string;left:number;leftLabel:string;threshold:string;low:boolean};
+export type MetricsReport={schema:'flurbo.user-metrics.v1';generatedAt:number;funds:{checkedAt:number;dispenser:FundWallet|null;starter:FundWallet|null}|null;
   notes:{signInsTrackedSince:number;applications:'ok'|'unavailable'|'not_configured';excludedAccounts:number;inviteOnly:boolean};
   funnel:FunnelStep[];last24h:{signIns:number;requests:number;approvals:number;firstBets:number;bets:number;singles:number;combined:number};
   daily:DailyRow[];totals:TradeStats;markets:MetricsMarket[];sync:{complete:boolean;lastRunAt:number|null};

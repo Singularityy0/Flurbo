@@ -41,7 +41,8 @@ test('combined shares appear in a fresh browser before history responds, with no
     assert.deepEqual(batches.map(b=>b.owner).sort(),[login,owner].sort());
     for(const batch of batches)for(const mask of ['6','8','9'])assert.ok(batch.claims.some((c:any)=>c.scope===3&&c.mask===mask));
     assert.equal(await page.getByRole('button',{name:/^Refresh/}).count(),1);
-    assert.equal(await page.evaluate(()=>localStorage.length),0);
+    // No trade hints are saved or needed; the only entry is the holdings cache for the next visit.
+    assert.deepEqual(await page.evaluate(()=>Object.keys(localStorage).filter(k=>!k.startsWith('flurbo.portfolio-cache.v1:'))),[]);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     assert.equal(await page.locator('.portfolio-account-identity').getByText(login,{exact:true}).count(),1);
     assert.equal(await page.getByRole('textbox',{name:'Wallet to view'}).count(),0);
@@ -255,7 +256,7 @@ test('portfolio shares one discovery read across linked wallets, bounds reads an
     await page.getByText('Earlier activity is still being verified. Current holdings and collected payouts remain available.',{exact:true}).waitFor();
     assert.equal(scans,1,'one shared discovery read, not one per wallet');
     assert.ok(peak<=2,`at most two concurrent account reads, saw ${peak}`);
-    assert.ok(batches.length>0&&batches.every(n=>n>0&&n<=30),`position batches exceed thirty claims: ${batches}`);
+    assert.ok(batches.length>0&&batches.every(n=>n>0&&n<=60),`position batches exceed sixty claims: ${batches}`);
     await page.clock.runFor(3100);
     await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();
     assert.equal(scans,2,'one bounded history catch-up is allowed');
