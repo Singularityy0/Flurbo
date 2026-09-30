@@ -36,6 +36,11 @@ def rpc_endpoint(network, provider, environment):
         if provider == "alchemy":
             valid = valid and parsed.hostname == network["alchemy_host"] and parsed.path.startswith("/v2/")
             valid = valid and len(parsed.path.removeprefix("/v2/")) > 0
+        elif provider == "quicknode":
+            # https://<name>.monad-testnet.quiknode.pro/<token>/ for the network whose Alchemy host names it.
+            chain = network["alchemy_host"].split(".", 1)[0]
+            valid = valid and re.fullmatch(r"[a-z0-9-]{1,63}\." + re.escape(chain) + r"\.quiknode\.pro", parsed.hostname or "") is not None
+            valid = valid and len(parsed.path.strip("/")) > 0
     except ValueError:
         valid = False
     if not valid:
@@ -124,7 +129,7 @@ def inspect(network, rpc):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--network", choices=["testnet", "mainnet"], default="testnet")
-    parser.add_argument("--provider", choices=["public", "alchemy"], default="public")
+    parser.add_argument("--provider", choices=["public", "alchemy", "quicknode"], default="public")
     args = parser.parse_args(argv)
     report = {"network": args.network, "provider": args.provider, "read_only": True,
               "observed_at": datetime.now(timezone.utc).isoformat(),

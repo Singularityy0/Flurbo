@@ -15,6 +15,13 @@ export const TESTNET = Object.freeze({
 export const testnetRpcHost = hostname => ['testnet-rpc.monad.xyz', 'monad-testnet.g.alchemy.com'].includes(hostname)
   || /^[a-z0-9-]{1,63}\.monad-testnet\.quiknode\.pro$/.test(hostname);
 
+// The provider name the Python chain readers (scripts/serve_dashboard.py) validate the configured RPC URL against.
+export function readerProvider(url) {
+  if (!url) return 'public';
+  const host = new URL(url).hostname;
+  return host === 'monad-testnet.g.alchemy.com' ? 'alchemy' : host.endsWith('.monad-testnet.quiknode.pro') ? 'quicknode' : 'public';
+}
+
 export function hostedConfig(env = process.env) {
   if (env.FLURBO_ORIGIN !== 'https://flurbo.singu.online') throw new Error('Set FLURBO_ORIGIN to the canonical HTTPS origin');
   if (env.FLURBO_NETWORK !== 'public_testnet') throw new Error('This release supports public Monad testnet only');

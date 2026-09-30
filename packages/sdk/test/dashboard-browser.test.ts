@@ -29,10 +29,19 @@ test('dashboard: register, link the wallet, issue a credential, then watch a run
     page.on('pageerror', (e: Error) => errors.push(e.message));
     await page.goto(`${stack.apiUrl}/agents`);
     // Register: the primary flow is an agent that runs elsewhere; the assisted flow is secondary.
+    // The page is usable while the agent list loads, so wait for what a person would: the loader gone, a market
+    // ticked, and the name really in the box, before registering.
     const form = page.getByRole('form', { name: 'Register an agent' });
-    await form.getByLabel('Name').fill('Dashboard test agent');
+    await page.locator('.contour-loader').waitFor({ state: 'detached', timeout: 30_000 }).catch(() => {});
+    await form.getByRole('checkbox', { checked: true }).first().waitFor({ timeout: 30_000 });
+    const nameField = form.getByLabel('Name');
+    await nameField.fill('Dashboard test agent');
+    assert.equal(await nameField.inputValue(), 'Dashboard test agent');
     await form.getByRole('button', { name: 'Register agent' }).click();
-    await page.waitForURL(/\/agents\/[0-9a-f-]{36}$/);
+    await page.waitForURL(/\/agents\/[0-9a-f-]{36}$/).catch(async (error: Error) => {
+      const alert = await form.getByRole('alert').textContent({ timeout: 1_000 }).catch(() => null);
+      throw new Error(`Registering did not open the agent page${alert ? `: ${alert}` : ''} (${error.message.split('\n')[0]})`);
+    });
     const agentUrl = page.url();
     await page.getByRole('region', { name: 'Runtime status' }).getByText('The runtime has not connected yet').waitFor();
     await page.getByText('Closing this page does not stop the agent', { exact: false }).waitFor();

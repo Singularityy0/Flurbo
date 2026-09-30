@@ -129,7 +129,7 @@ def handler(factory, local_setup=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
-    parser.add_argument("--provider", choices=("local", "public", "alchemy"), default="local")
+    parser.add_argument("--provider", choices=("local", "public", "alchemy", "quicknode"), default="local")
     parser.add_argument("--port", type=int, default=18765)
     parser.add_argument("--learning-market", action="store_true", help="Read the separate verified public learning pool")
     parser.add_argument("--enable-local-wallet-setup", action="store_true", help="Allow fixed test-balance top-ups on local Anvil only")
