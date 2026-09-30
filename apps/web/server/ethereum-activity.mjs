@@ -1,6 +1,8 @@
 import {createHash} from 'node:crypto';
 import {activityOutcome,activityMetrics,validateActivityDraft} from '../shared/ethereum-activity.mjs';
-export const ETHEREUM_SOURCES=['https://ethereum-rpc.publicnode.com','https://eth.drpc.org'];
+import {ETHEREUM_RPC_SOURCES} from '../shared/settlement-sources.mjs';
+// The same two endpoints are published to members as each activity question's settlement source.
+export const ETHEREUM_SOURCES=ETHEREUM_RPC_SOURCES;
 const hash=v=>typeof v==='string'&&/^0x[0-9a-f]{64}$/.test(v);
 const uint=v=>{if(typeof v!=='string'||!/^0x(?:0|[1-9a-f][0-9a-f]*)$/.test(v)||v.length>66)throw Error('Invalid Ethereum quantity');return BigInt(v);};
 export function activityBlock(value){

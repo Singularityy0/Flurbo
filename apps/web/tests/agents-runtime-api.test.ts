@@ -5,6 +5,7 @@ import {encodeFunctionData,encodeAbiParameters,encodeEventTopics} from 'viem';
 import {pilotPoolAbi,pilotCash,pilotCashAbi} from '../shared/pilot.mjs';
 import {alice,bob,setup,forecast} from './agent-fixture.ts';
 import {owner} from './pilot-fixture.ts';
+import {settlementSources} from '../shared/settlement-sources.mjs';
 
 // Hosted side of the autonomous agent platform: credentials, wallet association, the headless runtime API
 // and verification of transactions a runtime signed itself. The fake chain answers the reads; signatures
@@ -146,6 +147,8 @@ test('runtime reads: deployment record, market detail, quotes and the associated
     ['flurbo.agent-deployment.v1','flurbo.pilot-pool.v1',10143,s.f.manifest.pool,pilotCash,6,[10,50,100]]);
   const market=(await rt(s,token,'GET','markets/pilot')).body;
   assert.equal(market.events.length,3);assert.ok(market.events[0].question);assert.ok('yesRule' in market.events[0]);
+  // Every question carries the exact source settlement reads (or null), matching the shared derivation the market page uses.
+  assert.deepEqual(market.events.map((e:any)=>e.settlement),settlementSources(s.f.manifest));
   assert.equal((await rt(s,token,'GET','markets/practice-'+'ab'.repeat(20))).status,404,'only enabled markets');
   const quote=(await rt(s,token,'POST','markets/pilot/quote',{side:'buy',scope:3,mask:'8',quantityAtoms:'1000000'})).body;
   assert.equal(quote.status,'ok');assert.equal(quote.quote.source,'pool.quoteBuy');

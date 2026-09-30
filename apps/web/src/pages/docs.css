@@ -69,3 +69,5 @@
 .docs-table-wrap { overflow-x: auto; max-width: 100%; margin: var(--s-4) 0; }
 .docs-table { width: 100%; border-collapse: collapse; font-size: 0.9375em; }
 .docs-table th, .docs-table td { text-align: left; vertical-align: top; padding: var(--s-2) var(--s-3); border-bottom: 1px solid var(--rule); }
+/* Long inline addresses in the guide wrap instead of widening the page on phones. */
+#first-bot p code, #first-bot li code, #first-bot td code { overflow-wrap: anywhere; word-break: break-word; }

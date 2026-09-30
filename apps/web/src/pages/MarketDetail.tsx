@@ -9,6 +9,7 @@ import {useAuth} from '../auth/context';
 import {pilotRequest,type PilotNamespace,type PilotState} from '../pilot';
 import {rememberedTradingWallet} from '../portfolio';
 import {settlementView} from '../market-detail';
+import {settlementSources} from '../../shared/settlement-sources.mjs';
 import {marketHref} from '../market-detail';
 import Pilot from './Pilot';
 import ShowcaseSource from './ShowcaseSource';
@@ -60,6 +61,7 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
       if(!c.signal.aborted)setPositions(rows);
     }).catch(()=>{if(!c.signal.aborted)setPositionError('Your account holdings could not be refreshed. Retry shortly.');});return()=>c.abort();
   },[namespace,event,owner,attempt,auth.address]);
+  const checkedSource=state?(settlementSources(state.manifest)[event]??null):null;
   const question=state?.manifest.publication.draft.events[event],view=state&&question?settlementView(state,event):null;
   const tradingClosed=!!state&&(state.resolved||now>=state.manifest.publication.draft.closesAt);
   const gate=useLoadGate('market',{pending:!state&&!error,label:'Loading this market'});
@@ -132,7 +134,7 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
             <details className="disclosure"><summary>Settlement details</summary><p>Observation ends {date(view.observes)}. Last checked {date(state.snapshot.timestamp)}.</p><p>Disputes or missing evidence can delay settlement. All events in this shared pool must resolve before payouts.</p></details>
             <div className="cluster"><button className="btn btn-secondary btn-sm" onClick={()=>setAttempt(n=>n+1)}>Refresh status</button></div>
           </section>
-          <section className="detail-panel"><h2>What decides the answer?</h2><p>{state.manifest.publication.mode!=='rehearsal'?'The published source and the rules below determine the answer.':'This is a practice event with a scripted outcome, using test funds.'}</p>{!showcaseCopy(question)&&<a className="text-link" href={question.source.referenceUrl} target="_blank" rel="noreferrer">View source <ArrowUpRight aria-hidden="true" strokeWidth={1.75}/></a>}<details className="disclosure"><summary>Read the resolution rules</summary><p>Published question: {question.question}</p><h3>Yes</h3><p>{question.yesRule}</p><h3>No</h3><p>{question.noRule}</p><h3>If there is no clear result</h3><p>{state.manifest.publication.draft.exceptionPolicy}</p><p>{state.manifest.publication.draft.disputePolicy}</p><p>The current testnet dispute wallets are controlled by the Flurbo operator.</p></details></section>
+          <section className="detail-panel"><h2>What decides the answer?</h2><p>{state.manifest.publication.mode!=='rehearsal'?'The published source and the rules below determine the answer.':'This is a practice event with a scripted outcome, using test funds.'}</p>{!showcaseCopy(question)&&<a className="text-link" href={question.source.referenceUrl} target="_blank" rel="noreferrer">View source <ArrowUpRight aria-hidden="true" strokeWidth={1.75}/></a>}{checkedSource&&<div className="settlement-source"><h3>What settlement reads</h3><p>{checkedSource.request==='GET'?'Settlement reads exactly this record. You and your agents can open or fetch it too, before the result is decided.':'Settlement reads these Ethereum node endpoints. They answer JSON-RPC requests, so open them with an Ethereum client rather than a browser.'}</p><ul>{checkedSource.urls.map(url=><li key={url}><code>{url}</code></li>)}</ul><p className="field-help">Rule: {checkedSource.method}</p></div>}<details className="disclosure"><summary>Read the resolution rules</summary><p>Published question: {question.question}</p><h3>Yes</h3><p>{question.yesRule}</p><h3>No</h3><p>{question.noRule}</p><h3>If there is no clear result</h3><p>{state.manifest.publication.draft.exceptionPolicy}</p><p>{state.manifest.publication.draft.disputePolicy}</p><p>The current testnet dispute wallets are controlled by the Flurbo operator.</p></details></section>
           <details className="detail-panel"><summary>Shared pool details</summary><dl className="facts"><dt>Pool balance</dt><dd>{cash(state.poolCash)} test AUSD</dd><dt>Required payouts</dt><dd>{cash(state.requiredCollateral)} test AUSD</dd></dl><p className="market-caption">These totals cover the shared pool, not just this question.</p><a className="text-link" href={`https://testnet.monadscan.com/address/${state.manifest.pool}`} target="_blank" rel="noreferrer">View pool <ArrowUpRight aria-hidden="true" strokeWidth={1.75}/></a></details>
         </div>
       </div>

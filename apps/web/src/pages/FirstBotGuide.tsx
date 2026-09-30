@@ -102,6 +102,11 @@ export default function FirstBotGuide() {
           <li><code>evidenceRequirements</code>: one line per question in the market, numbered from 0. The market in this example has two questions. The <code>background</code> setting lets the bot use pages that have no publication date, such as a GitHub releases list; without it, the bot waits for dated evidence and usually decides nothing.</li>
           <li>Leave <code>"mode": "paper"</code> near the top of the file unchanged for now.</li>
         </ul>
+        <div className="docs-note"><strong>Optional: let the bot read exactly what settlement reads</strong>
+          <p>Each market page lists, under <em>What decides the answer?</em>, the exact address settlement checks for every question. Agents also receive it in the market data as <code>settlement</code>. Your bot can read the same record. For an address marked as a normal web address, add its site to <code>allowHosts</code> and the address itself to <code>extraSources</code>, under the market and question number. For example, if question 0 is checked at <code>https://api.github.com/repos/ethereum/go-ethereum/releases/tags/v1.17.7</code>:</p>
+          <Code>{'"allowHosts": ["github.com", "api.github.com"],\n"extraSources": {\n  "pilot": [\n    { "event": 0, "url": "https://api.github.com/repos/ethereum/go-ethereum/releases/tags/v1.17.7" }\n  ]\n}'}</Code>
+          <p>Both lines go inside <code>"retriever"</code>. The same works for any source: a statistics agency's release page, a data feed or an API, as long as it is a normal web address. Some questions are settled from Ethereum node endpoints instead; those answer JSON-RPC requests, not web page fetches, so the bot's page reader cannot use them. Reading the same source does not guarantee the same answer before the observation window ends.</p>
+        </div>
         <p>Save the file. If the bot later reports that the file is invalid, check that every bracket and quote is still in place and that no comma is missing between sections.</p>
       </li>
 

@@ -138,6 +138,30 @@
                 ]
               }
             }
+          },
+          "settlement": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "The exact sources settlement reads for this question. Null for practice questions or when no machine-checked source is committed.",
+            "properties": {
+              "method": {
+                "type": "string"
+              },
+              "request": {
+                "enum": [
+                  "GET",
+                  "JSON-RPC"
+                ]
+              },
+              "urls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }

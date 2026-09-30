@@ -1,4 +1,5 @@
 import {CapacityError} from '../request-limits.mjs';
+import { settlementSources } from '../../shared/settlement-sources.mjs';
 import { randomBytes } from 'node:crypto';
 import { assessSemantics } from '../semantic-validation.mjs';
 import { verifyMessage, encodeFunctionData, decodeFunctionResult } from 'viem';
@@ -246,12 +247,14 @@ export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, 
     deployments: ({ profile }) => ({ schema: 'flurbo.agent-deployments.v1', deployments: profile.markets.map(ns => serviceFor(ns) && deploymentOf(ns, serviceFor(ns))).filter(Boolean) }),
     async market({ profile, param }) {
       const svc = allowedMarket(profile, param), m = svc.manifest, draft = m.publication.draft, view = await svc.markets();
+      const settlement = settlementSources(m);
       let resolution = null;
       if (view.resolved) { try { resolution = await readResolution({ rpc, pool: m.pool }); } catch { resolution = null; } }
       return { schema: 'flurbo.agent-market.v1', namespace: param, deployment: deploymentOf(param, svc), title: String(draft.title ?? ''), closesAt: draft.closesAt,
         open: view.open, resolved: view.resolved, resolution, snapshot: view.snapshot,
         events: draft.events.map((e, index) => ({ index, id: e.id, question: e.question, yesRule: e.yesRule, noRule: e.noRule, observationStartsAt: e.observationStartsAt ?? null,
-          observationEndsAt: e.observationEndsAt, source: e.source ? { publisher: e.source.publisher ?? null, referenceUrl: e.source.referenceUrl ?? null } : null })),
+          observationEndsAt: e.observationEndsAt, source: e.source ? { publisher: e.source.publisher ?? null, referenceUrl: e.source.referenceUrl ?? null } : null,
+          settlement: settlement[index] ?? null })),
         oneShareBuyAtoms: view.prices.map(p => ({ event: p.event, yes: p.yes, no: p.no })) };
     },
     async quote({ profile, param, input }) {
