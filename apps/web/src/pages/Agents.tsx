@@ -79,7 +79,9 @@ function AgentList() {
     try { const created = await agentClient.agents.create({ name, namespace, mode }) as ProfileJSON; navigate(`/agents/${created.id}`); }
     catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
-  useLoadGate('agents', { pending: agents === null && !error, error: agents === null ? error : null, label: 'Loading your agents' });
+  // The list has its own skeleton, so the page and its register form are usable at once instead of waiting
+  // behind the loader for the agent list; only a failure to load the list reaches the page-level loader.
+  useLoadGate('agents', { pending: false, error: agents === null ? error : null, label: 'Loading your agents' });
   return <>
     <PageHeader className="agents-heading" title="Build agents that trade relationships."
       lead="Write an agent with the Flurbo SDK and run it on your own computer or server. Flurbo does not host a model for you; it shows your agent's status, decisions and verified trades here."
@@ -103,7 +105,7 @@ function AgentList() {
       <details className="agents-card agents-settings disclosure"><summary>Assisted agent: manual forecasts, paper trades and MetaMask approval</summary>
       <form onSubmit={create}>
         <h2>Create an assisted agent</h2>
-        <label>Name<input value={name} onChange={e => setName(e.target.value)} maxLength={48} required placeholder="Release relationship agent"/></label>
+        <label>Name<input value={name} onChange={e => setName(e.target.value)} maxLength={48} required placeholder="Assisted release agent"/></label>
         <label>Market<select value={namespace} onChange={e => setNamespace(e.target.value)} required>{directory.map(d => <option key={d.namespace} value={d.namespace} disabled={!d.open}>{d.label}{!d.open?' · Unavailable for new trades':''}</option>)}</select></label>
         <fieldset className="agents-choice"><legend>Mode</legend>
           <label><input type="radio" checked={mode === 'paper'} onChange={() => setMode('paper')}/>Paper only<small>Simulated trades. Nothing is sent on-chain.</small></label>

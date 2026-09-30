@@ -27,7 +27,7 @@ Value default_config() {
   "strategy": {"id": "joint-edge", "quantityAtoms": "1000000", "slippageBps": 50, "minEdgeBps": 500, "minEdgeAtoms": "10000", "maxCostAtoms": "2000000", "includeSingles": true, "minEvidence": 1},
   "policy": {"markets": ["pilot"], "maxQuantityAtoms": "2000000", "maxTradeCostAtoms": "2000000", "maxSlippageBps": 50,
              "spend": {"totalAtoms": "20000000", "windows": [{"seconds": 86400, "atoms": "10000000"}]}, "maxPositionAtoms": "5000000", "maxWorstCaseLossAtoms": "10000000",
-             "gas": {"maxFeeWei": "100000000000000000", "reserveWei": "200000000000000000"}, "quoteMaxAgeSeconds": 30, "minSecondsBeforeClose": 3600, "maxPending": 2,
+             "gas": {"maxFeeWei": "100000000000000000", "reserveWei": "200000000000000000"}, "quoteMaxAgeSeconds": 30, "minSecondsBeforeClose": 120, "maxPending": 2,
              "allowSell": false, "allowRedeem": false},
   "policyMaxAgeSeconds": 120, "paperBudgetAtoms": "50000000"
 })");
@@ -127,7 +127,7 @@ StrategyDecision JointEdgeStrategy::decide(const StrategyContext& ctx) {
 struct AgentRunner::Shared : Controls {
   Value config;
   std::string stop_file;
-  // Set only for the final heartbeat after a requested stop, so Flurbo shows the runtime as stopped.
+  // Set only for the final heartbeat when a run ends, so Flurbo shows the runtime as stopped.
   std::atomic<bool> stopped{false};
   std::mutex m;
   std::optional<FlurboPolicy> flurbo;
@@ -620,12 +620,12 @@ void AgentRunner::run(bool once) {
     }
     if (stop_requested()) break;
   }
-  if (stop_requested()) {
-    remove_file(shared_->stop_file);
-    shared_->stopped = true;
-    heartbeat();
-    shared_->stopped = false;
-  }
+  // Every ended run tells Flurbo it stopped, whether it was asked to stop or ran once, so the dashboard
+  // never shows a finished runtime as running.
+  if (stop_requested()) remove_file(shared_->stop_file);
+  shared_->stopped = true;
+  heartbeat();
+  shared_->stopped = false;
   shared_->log("stopped", with(Value::object(), {{"runtimeId", runtime_id}}));
 }
 
@@ -663,15 +663,17 @@ Value AgentRunner::status() {
 
 // ---- command line ----
 int cli_main(const std::vector<std::string>& argv, const std::function<void(const std::string&)>& out, const std::function<void(const std::string&)>& err) {
-  const std::string usage = "usage: flurbo-agent-cpp <init|start [--once]|stop|status|recover|address|sign-message --file F> [--config flurbo-agent.json]";
+  const std::string usage = "usage: flurbo-agent-cpp <init [--markets A,B]|start [--once]|stop|status|recover|address|sign-message --file F> [--config flurbo-agent.json]";
   try {
-    std::string command, config_path = "flurbo-agent.json", file;
+    std::string command, config_path = "flurbo-agent.json", file, markets;
+    bool has_markets = false;
     bool once = false;
     for (size_t i = 0; i < argv.size(); ++i) {
       const std::string& a = argv[i];
       if (a == "--config" && i + 1 < argv.size()) config_path = argv[++i];
       else if (a == "--file" && i + 1 < argv.size()) file = argv[++i];
       else if (a == "--once") once = true;
+      else if (a == "--markets" && i + 1 < argv.size()) { markets = argv[++i]; has_markets = true; }
       else if (command.empty() && (a == "init" || a == "start" || a == "stop" || a == "status" || a == "recover" || a == "address" || a == "sign-message")) command = a;
       else throw invalid(usage);
     }
@@ -683,8 +685,36 @@ int cli_main(const std::vector<std::string>& argv, const std::function<void(cons
     };
     if (command == "init") {
       if (file_exists(path)) throw Error("conflict", path + " already exists.");
-      write_file(path, default_config().dump(2) + "\n");
-      out("Wrote " + path + " (paper mode). Set FLURBO_AGENT_TOKEN, and FLURBO_AGENT_PRIVATE_KEY for live mode, in your environment. Never put them in the file.");
+      Value config = default_config();
+      std::string names = "pilot";
+      if (has_markets) {
+        auto namespace_ok = [](const std::string& s) {
+          return s == "pilot" || (s.size() == 49 && s.rfind("practice-", 0) == 0
+            && std::all_of(s.begin() + 9, s.end(), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); }));
+        };
+        Value list = Value::array();
+        names.clear();
+        size_t start = 0;
+        while (start <= markets.size()) {
+          size_t end = markets.find(',', start);
+          std::string m = markets.substr(start, end == std::string::npos ? std::string::npos : end - start);
+          m.erase(0, m.find_first_not_of(' '));
+          m.erase(m.find_last_not_of(' ') + 1);
+          if (!m.empty()) {
+            if (!namespace_ok(m)) throw invalid("Pass --markets as the comma separated market names shown on the agent page: pilot, or practice- followed by the pool address without 0x.");
+            list.push(m);
+            names += (names.empty() ? "" : ", ") + m;
+          }
+          if (end == std::string::npos) break;
+          start = end + 1;
+        }
+        if (names.empty()) throw invalid("Pass --markets as the comma separated market names shown on the agent page: pilot, or practice- followed by the pool address without 0x.");
+        config.set("markets", list);
+        config.get_or_add("policy").set("markets", list);
+        parse_config(config);
+      }
+      write_file(path, config.dump(2) + "\n");
+      out("Wrote " + path + " (paper mode, markets " + names + "). Set FLURBO_AGENT_TOKEN, and FLURBO_AGENT_PRIVATE_KEY for live mode, in your environment. Never put them in the file.");
     } else if (command == "start") {
       AgentRunner(load_config(path)).run(once);
     } else if (command == "stop") {

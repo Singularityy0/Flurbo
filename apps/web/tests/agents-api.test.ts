@@ -46,6 +46,12 @@ test('profile input is validated and ownership never comes from the request',asy
     {name:'Valid name',namespace:'pilot',mode:'paper',config:{...DEFAULT_PROFILE_CONFIG,quantityAtoms:'1.5'}},{name:'Valid name',namespace:'pilot',mode:'paper',config:{...DEFAULT_PROFILE_CONFIG,maxCostAtoms:'0'}}])
     assert.equal((await s.call(alice,'POST','/api/agents',input)).status,400,JSON.stringify(input));
   assert.equal((await s.call(alice,'POST','/api/agents',{name:'Valid name',namespace:'practice-'+'99'.repeat(20),mode:'paper'})).status,404);
+  // Names can carry the SDK they use, but nothing that could read as markup.
+  for(const name of ['<b>bot</b>','bot"quoted"','a/b agent'])assert.equal((await s.call(alice,'POST','/api/agents',{name,namespace:'pilot',mode:'paper'})).status,400,name);
+  const cpp=await s.call(alice,'POST','/api/agents',{name:'e2e C++ agent',namespace:'pilot',mode:'paper'});
+  assert.equal(cpp.status,200);assert.equal(cpp.body.name,'e2e C++ agent');
+  assert.equal((await s.call(alice,'POST',`/api/agents/${cpp.body.id}/update`,{name:"C# bot (Anna's test)"})).status,200);
+  await s.call(alice,'POST',`/api/agents/${cpp.body.id}/delete`,{});
   for(let i=0;i<AGENT_LIMITS.agents;i++)assert.equal((await s.call(alice,'POST','/api/agents',{name:`Agent ${i}`,namespace:'pilot',mode:'paper'})).status,200);
   assert.equal((await s.call(alice,'POST','/api/agents',{name:'One too many',namespace:'pilot',mode:'paper'})).status,409);
 });

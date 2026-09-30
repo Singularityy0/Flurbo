@@ -76,6 +76,37 @@ export function queueReport(state, report, config, now, { test = false } = {}) {
   return next;
 }
 
+// One outbox for chain read failures across every monitored pool. A public RPC hiccup fails every pool at once,
+// so a single email names them all, repeats hourly while it lasts, and a single email reports recovery.
+export const READ_FAILURE_IDENTITY = 'flurbo:monitor:read-failures:v1';
+const bothZones = seconds => {
+  const at = new Date(seconds * 1000);
+  return `${at.toISOString().slice(0, 16).replace('T', ' ')} UTC (${new Date(at.getTime() + 19_800_000).toISOString().slice(11, 16)} IST)`;
+};
+export function queueReadFailures(state, failing, config, now) {
+  const next = structuredClone(state);
+  const signature = failing.length ? digest(failing.map(f => f.pool).sort()) : null;
+  const recovered = !failing.length && state.signature !== null;
+  const notify = recovered || (failing.length && (signature !== state.signature || now - state.lastQueuedAt >= 3600));
+  if (notify) {
+    if (next.queue.length >= 20) throw new Error('Email queue full; inspect monitor');
+    const text = recovered ? [
+      `Chain reads recovered at ${bothZones(now)}. Every monitored pool was read and verified again.`,
+      'No transaction was submitted by the monitor. Settlement continued on its own schedule.',
+    ] : [
+      `The settlement monitor could not read Monad testnet for ${failing.length} pool${failing.length === 1 ? '' : 's'} on at least two checks in a row, retrying each read three times, as of ${bothZones(now)}.`,
+      ...failing.map(f => `Pool ${f.pool}: ${f.readFailures} failed checks in a row.`),
+      'Settlement retries on its own; nothing is lost while reads fail. The last verified observation stays valid. If this lasts more than 15 minutes, a check gap alert follows for each pool, and this email repeats every hour until reads recover.',
+      'Check the RPC provider status. No transaction was submitted by the monitor.',
+    ];
+    next.queue.push({ key: `flurbo-${randomUUID()}`, createdAt: now, body: { from: config.from, to: config.to,
+      subject: recovered ? 'Flurbo settlement monitor: chain reads recovered' : 'Flurbo settlement monitor: chain reads failing', text: text.join('\n\n') } });
+    next.lastQueuedAt = now;
+  }
+  next.signature = signature;
+  return next;
+}
+
 export async function drainEmails(state, { save, renew, send, now }) {
   // At most three attempts per invocation; the next scheduled run resumes the outbox.
   let accepted = 0;

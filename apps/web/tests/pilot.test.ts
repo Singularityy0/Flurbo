@@ -116,3 +116,22 @@ test('log range errors are classified without exposing upstream details; transpo
   await assert.rejects(rejected('block range limit')('eth_call',[]),(e:any)=>e.code===undefined);
   await assert.rejects(rejected('block range limit',429)('eth_getLogs',[]),(e:any)=>e.code===undefined);
 });
+
+test('a combination the pool cannot price is refused before quoting, with a reason, and the ticket can see why', async () => {
+  const { combinationFits, COMBINATION_LIMIT_MESSAGE } = await import('../shared/pilot.mjs');
+  // pre-test-v1 on 30 September 2026: NBP was linked to Monad and USGS, so NBP + EMSC could not be priced.
+  const traded = [2, 1, 3, 5, 7], order = [0, 1, 2, 3];
+  assert.equal(combinationFits(4, order, traded, 9), false);
+  assert.equal(combinationFits(4, order, traded, 12), true, 'USGS + EMSC does not add a fourth link to NBP');
+  assert.equal(combinationFits(4, order, traded, 5), true, 'a combination already in the pool always fits');
+  assert.equal(combinationFits(4, order, [], 9), true);
+  const f = pilotFixture(undefined, 4);
+  f.options.factors = traded.map(scope => ({ scope, values: [0n] }));
+  const status = await f.service.status(owner);
+  assert.deepEqual(status.factorScopes, traded); assert.deepEqual(status.eliminationOrder, order);
+  await assert.rejects(f.service.prepare({ owner, action: 'buy', scope: 9, mask: '8', quantity: '1000000', slippageBps: 50 }),
+    (error: any) => error.status === 409 && error.message === COMBINATION_LIMIT_MESSAGE);
+  await f.service.prepare({ owner, action: 'buy', scope: 12, mask: '8', quantity: '1000000', slippageBps: 50 });
+  // Selling a combination already held is never limited.
+  await f.service.prepare({ owner, action: 'sell', scope: 5, mask: '8', quantity: '1000000', slippageBps: 50 });
+});

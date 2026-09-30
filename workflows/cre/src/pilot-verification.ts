@@ -26,7 +26,7 @@ export function matchPilotRuntime(code: Hex, artifact: Artifact) {
 
 export async function verifyPilot(prepared: ReturnType<typeof preparePilot>, deployment: {pool:Address;resolver:Address},
   rpc: (method:string,params:unknown[])=>Promise<any>, artifacts: Record<string,Artifact>, now:number) {
-  const rebuilt=preparePilot(prepared.publication,prepared.preparedAt);
+  const rebuilt=preparePilot(prepared.publication,prepared.preparedAt,undefined,{reproduce:true});
   if(rebuilt.resolverConfig!==prepared.resolverConfig || rebuilt.configHash!==prepared.configHash) throw new Error('Prepared rules mismatch');
   const [config]=decodeAbiParameters(resolverConfigAbi,rebuilt.resolverConfig);
   const pool=deployment.pool.toLowerCase() as Address, resolver=deployment.resolver.toLowerCase() as Address;

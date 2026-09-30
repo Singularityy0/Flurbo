@@ -6,7 +6,7 @@ const selection = { creator: '0xf1fea08ebba92ed342acc5639db312c3694bc391', revie
 const at = (h: number, m: number) => Date.UTC(2026, 8, 30, h, m) / 1000;
 
 test('pre-test-v1 uses four sources, b = 25, and settles before 17:00 IST', () => {
-  const prepared = preparePreTest(selection, at(5, 30));
+  const prepared = preparePreTest(selection, at(5, 30), undefined, { reproduce: true });
   const rules = validateSettlementPublication(prepared.publication);
   expect(prepared.liquidityAtoms).toBe('25000000');
   expect(rules.map((r: any) => r.source.adapter)).toEqual(['json-api.v1', 'evm-rpc.v1', 'json-api.v1', 'json-api.v1']);
@@ -17,6 +17,10 @@ test('pre-test-v1 uses four sources, b = 25, and settles before 17:00 IST', () =
   const finals = rules.map((r: any) => r.timing.observationEndsAt + 3600);
   expect(new Set(finals).size).toBe(4);
   expect(Math.max(...finals)).toBeLessThanOrEqual(PRE_TEST_TIMES.deadline - 600);
+});
+
+test('the template can no longer author a collection: catalogue captures open too soon after the counted hour', () => {
+  expect(() => preparePreTest(selection, at(5, 30))).toThrow(/usgs-m25-hour: The capture window opens 30 minutes after .* at least 3 hours/);
 });
 
 test('preparing too late, or with a close after the counted hour could start, is refused', () => {

@@ -10,7 +10,8 @@ test('fresh official-source recipe uses two fixed future intervals and explicit 
   expect(rules.map(r=>r.source.adapter)).toEqual(['usgs-earthquake-count.v1','usgs-earthquake-count.v1']);
   expect(rules.map(r=>r.vintage)).toEqual(['first-observed-snapshot','first-observed-snapshot']);
   expect(rules[0].observation.period).not.toBe(rules[1].observation.period);
-  expect(rules[1].timing.observationEndsAt+3600-now).toBe(10200);
+  expect(rules[1].timing.observationEndsAt+3600-now).toBe(20880);
+  for(const r of rules)expect(r.timing.scheduledAt-Date.parse(r.observation.period.split('/')[1])/1000).toBe(3*3600);
   for(const r of rules){
     const url=new URL(r.source.urls[0]);expect(url.origin).toBe('https://earthquake.usgs.gov');expect(url.searchParams.has('limit')).toBe(false);
     expect(r.question).toContain('first retained USGS catalogue snapshot');

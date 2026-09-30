@@ -1,6 +1,7 @@
 import {rpcFetch} from './rpc-capacity.mjs';
 import { decodeFunctionResult, encodeFunctionData, keccak256, stringToHex, parseAbi } from 'viem';
-import { pilotCash, pilotCashAbi, pilotPoolAbi, resolverAbi, pilotCall, evidenceURI, validClaim } from '../shared/pilot.mjs';
+import { pilotCash, pilotCashAbi, pilotPoolAbi, resolverAbi, pilotCall, evidenceURI, validClaim, combinationFits, COMBINATION_LIMIT_MESSAGE } from '../shared/pilot.mjs';
+import { ApplicationError } from './access-applications.mjs';
 import {holderResolverAbi,dependsOnEvent,challengeCandidates} from '../shared/holder-challenge.mjs';
 import {assessSemantics} from './semantic-validation.mjs';
 import {DETERMINISTIC_MODE,validateSettlementManifest} from './settlement-publication.mjs';
@@ -109,7 +110,11 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
         voted:owner?await read(manifest.resolver,resolverAbi,'voted',[i,owner],tag):false});
     }
     const liquidity=await read(manifest.pool,pilotPoolAbi,'liquidity',[],tag);
-    const result={manifest,snapshot:s,cases,maxTradeQuantityAtoms:liquidity<100_000_000n?liquidity:100_000_000n,delivered:await read(manifest.resolver,resolverAbi,'delivered',[],tag),
+    // The combinations already priced by the pool and its elimination order let the ticket show, before any
+    // request, which further combinations the pool can still accept (see combinationFits).
+    const [factors,order]=await Promise.all([read(manifest.pool,pilotPoolAbi,'factors',[],tag),read(manifest.pool,pilotPoolAbi,'eliminationOrder',[],tag)]);
+    const result={manifest,snapshot:s,cases,maxTradeQuantityAtoms:liquidity<100_000_000n?liquidity:100_000_000n,
+      factorScopes:[...new Set(factors.map(f=>Number(f.scope)))],eliminationOrder:order.map(Number),delivered:await read(manifest.resolver,resolverAbi,'delivered',[],tag),
       requiredCollateral:await read(manifest.pool,pilotPoolAbi,'requiredCollateral',[],tag),
       poolCash:await read(pilotCash,pilotCashAbi,'balanceOf',[manifest.pool],tag),
       resolved:await read(manifest.pool,pilotPoolAbi,'resolved',[],tag),voidMask:await read(manifest.pool,pilotPoolAbi,'voidMask',[],tag),
@@ -170,6 +175,10 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
       if(!validClaim(input.scope,mask,manifest.publication.draft.events.length) || quantity===0n || quantity>100_000_000n) throw new Error('Unsupported claim or quantity');
       args=[input.scope,mask,quantity];
       if(name!=='buy' && await read(to,abi,'holdings',[owner,input.scope,mask],tag)<quantity) throw new Error('Not enough shares in this wallet');
+      if(name==='buy'){
+        const [factors,order]=await Promise.all([read(to,abi,'factors',[],tag),read(to,abi,'eliminationOrder',[],tag)]);
+        if(!combinationFits(manifest.publication.draft.events.length,order.map(Number),factors.map(f=>Number(f.scope)),input.scope))throw new ApplicationError(409,COMBINATION_LIMIT_MESSAGE);
+      }
       if(name!=='redeem') {
         if(![10,50,100].includes(input.slippageBps)) throw new Error('Choose a supported slippage limit');
         const quote=await read(to,abi,name==='buy'?'quoteBuy':'quoteSell',args,tag);

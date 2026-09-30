@@ -2,35 +2,37 @@
 //! or runs anything on Flurbo's servers. Closing the dashboard does not stop it; `stop` (or Ctrl+C) does.
 //!
 //! ```text
-//! flurbo-agent-rs <init|start [--once]|stop|status|recover|address|sign-message --file F> [--config flurbo-agent.json]
+//! flurbo-agent-rs <init [--markets A,B]|start [--once]|stop|status|recover|address|sign-message --file F> [--config flurbo-agent.json]
 //! ```
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use super::config::{default_config, parse_config, AgentConfig};
 use super::runner::{AgentRunner, RunnerOptions};
 use crate::error::{FlurboError, Result};
 use crate::signer::{LocalKeySigner, Signer};
 
-pub const USAGE: &str = "usage: flurbo-agent-rs <init|start [--once]|stop|status|recover|address|sign-message --file F> [--config flurbo-agent.json]";
+pub const USAGE: &str = "usage: flurbo-agent-rs <init [--markets A,B]|start [--once]|stop|status|recover|address|sign-message --file F> [--config flurbo-agent.json]";
 
 struct Args {
     command: String,
     config: PathBuf,
     once: bool,
     file: Option<PathBuf>,
+    markets: Option<String>,
 }
 
 fn parse_args(argv: &[String]) -> Result<Args> {
-    let mut args = Args { command: String::new(), config: PathBuf::from("flurbo-agent.json"), once: false, file: None };
+    let mut args = Args { command: String::new(), config: PathBuf::from("flurbo-agent.json"), once: false, file: None, markets: None };
     let mut it = argv.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--config" => args.config = PathBuf::from(it.next().ok_or_else(|| FlurboError::invalid(USAGE))?),
             "--file" => args.file = Some(PathBuf::from(it.next().ok_or_else(|| FlurboError::invalid(USAGE))?)),
             "--once" => args.once = true,
+            "--markets" => args.markets = Some(it.next().ok_or_else(|| FlurboError::invalid(USAGE))?.clone()),
             c if args.command.is_empty() && ["init", "start", "stop", "status", "recover", "address", "sign-message"].contains(&c) => args.command = c.into(),
             _ => return Err(FlurboError::invalid(USAGE)),
         }
@@ -74,10 +76,24 @@ pub fn main_with(argv: &[String], out: &mut dyn FnMut(&str), err: &mut dyn FnMut
                 if path.exists() {
                     return Err(FlurboError::new("conflict", format!("{} already exists.", path.display())));
                 }
-                fs::write(&path, serde_json::to_string_pretty(&default_config()).unwrap() + "\n").map_err(|_| FlurboError::new("io", "The configuration could not be written."))?;
+                let mut config = default_config();
+                if let Some(markets) = &args.markets {
+                    let list: Vec<String> = markets.split(',').map(|m| m.trim().to_string()).filter(|m| !m.is_empty()).collect();
+                    if list.is_empty() || !list.iter().all(|m| crate::protocol::namespace_ok(m)) {
+                        return Err(FlurboError::invalid(
+                            "Pass --markets as the comma separated market names shown on the agent page: pilot, or practice- followed by the pool address without 0x.",
+                        ));
+                    }
+                    config["markets"] = json!(list);
+                    config["policy"]["markets"] = json!(list);
+                    parse_config(&config)?;
+                }
+                let names: Vec<&str> = config["markets"].as_array().map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+                fs::write(&path, serde_json::to_string_pretty(&config).unwrap() + "\n").map_err(|_| FlurboError::new("io", "The configuration could not be written."))?;
                 out(&format!(
-                    "Wrote {} (paper mode). Set FLURBO_AGENT_TOKEN, and FLURBO_AGENT_PRIVATE_KEY for live mode, in your environment. Never put them in the file.",
-                    path.display()
+                    "Wrote {} (paper mode, markets {}). Set FLURBO_AGENT_TOKEN, and FLURBO_AGENT_PRIVATE_KEY for live mode, in your environment. Never put them in the file.",
+                    path.display(),
+                    names.join(", ")
                 ));
             }
             "start" => {

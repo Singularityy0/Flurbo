@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {claimScenarios, type ClaimRule} from '../../shared/claims.mjs';
+import {combinationFits} from '../../shared/pilot.mjs';
 import {pilotRequest,type PilotNamespace,type PilotState} from '../pilot';
 import {marketQuestion} from '../showcase-copy';
 import {Check} from 'lucide-react';
@@ -21,18 +22,25 @@ export default function CombinationBuilder({state,base,legs,answers,rule,scope,m
   const [open,setOpen]=useState(legs.length>1);
   if(!state)return null;
   const events=state.manifest.publication.draft.events;
+  // The pool can only price combinations that keep each question linked to at most two others, counting every
+  // combination already bought here. Unknown pool state (older API) leaves every question selectable.
+  const selected=legs.reduce((s,i)=>s|1<<i,0);
+  const fits=(next:number)=>!state.eliminationOrder||combinationFits(events.length,state.eliminationOrder,state.factorScopes??[],next);
+  const currentFits=legs.length<2||fits(selected);
   return <section className="combination-builder" aria-label="Combined prediction builder">
     <button className="combination-toggle" type="button" aria-expanded={open} onClick={()=>setOpen(!open)}>
       <span>{legs.length>1?'Combined prediction':'Combine with another prediction'}</span><span className="combination-toggle-meta">{open?'Close':legs.length>1?`${legs.length} answers`:'Explore'}</span>
     </button>
     {open&&<div className="combination-body">
       <p className="market-caption">Choose up to three questions from this shared pool. The current question stays first; others keep their order.</p>
-      <div className="combination-legs">{events.map((e,i)=><div className={'combination-leg'+(legs.includes(i)?' selected':'')} key={e.id}>
-        <label className="check-row"><input type="checkbox" checked={legs.includes(i)} disabled={disabled||i===base||!legs.includes(i)&&legs.length>=3}
-          onChange={()=>onLegs(legs.includes(i)?legs.filter(v=>v!==i):[...legs,i].sort((a,b)=>a-b))}/><span>{marketQuestion(e)}{i===base&&<small>Current question</small>}</span></label>
+      <div className="combination-legs">{events.map((e,i)=>{const blocked=!legs.includes(i)&&legs.length<3&&!fits(selected|1<<i);return <div className={'combination-leg'+(legs.includes(i)?' selected':'')+(blocked?' unavailable':'')} key={e.id}>
+        <label className="check-row"><input type="checkbox" checked={legs.includes(i)} disabled={disabled||i===base||!legs.includes(i)&&legs.length>=3||blocked}
+          onChange={()=>onLegs(legs.includes(i)?legs.filter(v=>v!==i):[...legs,i].sort((a,b)=>a-b))}/><span>{marketQuestion(e)}{i===base&&<small>Current question</small>}{blocked&&<small>Not available with this selection: this pool cannot price that combination</small>}</span></label>
         {legs.includes(i)&&<SegmentedControl className="combination-answer" label={marketQuestion(e)+' answer'} hideLabel value={(answers[i]??true)?'yes':'no'}
           options={[{value:'yes',label:'Yes'},{value:'no',label:'No'}]} onChange={value=>onAnswer(i,value==='yes')} disabled={disabled}/>}
-      </div>)}</div>
+      </div>;})}</div>
+      {!currentFits&&<p className="field-help" role="status">This pool cannot accept this combination any more: combinations already bought here link these questions as far as it can price. Remove a question or choose another.</p>}
+      {events.some((_,i)=>!legs.includes(i)&&legs.length<3&&!fits(selected|1<<i))&&<p className="field-help">Greyed questions cannot be added here. Each pool prices combined predictions together, and every combination already bought limits which new ones it can accept. <a href="/docs#combinations">How combinations work</a></p>}
       {legs.length>=3&&<p className="field-help">Three questions is the most a combined prediction can hold.</p>}
       {legs.length>1&&<>
         <fieldset className="combination-rules" disabled={disabled}><legend>I win if...</legend>

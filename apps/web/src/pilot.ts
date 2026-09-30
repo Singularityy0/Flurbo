@@ -20,6 +20,7 @@ export type Provider={request(input:{method:string;params?:unknown[]}):Promise<u
 export type PilotState={manifest:PilotManifest;snapshot:{blockNumber:string;blockHash:string;timestamp:number};
   cases:{phase:number;proposal:number;counter:number;result:number;asserter:string;disputer:string;evidenceHash:string;counterEvidenceHash:string;challengeUntil:string;voteUntil:string;assertionDeadline:string;votes:number[];voted:boolean}[];
   delivered:boolean;resolved:boolean;voidMask:number;requiredCollateral:string;poolCash:string;maxTradeQuantityAtoms?:string;
+  factorScopes?:number[];eliminationOrder?:number[];
   wallet:null|{address:string;cash:string;credits:string;reviewer:boolean}};
 export type HoldingWitness={holder:string;scope:number;mask:string;wrapped:boolean};
 export type HolderAuthorization=HoldingWitness&{accountCommitment:Hex;challenger:string;nonce:string;deadline:string};

@@ -5,6 +5,8 @@ export const pilotPoolAbi: Abi;
 export const pilotCashAbi: Abi;
 export function evidenceURI(value: unknown): boolean;
 export function validClaim(scope: number, mask: bigint, count: number): boolean;
+export const COMBINATION_LIMIT_MESSAGE: string;
+export function combinationFits(events: number, order: number[], scopes: number[], scope: number): boolean;
 export type PilotManifest = { status: string; pool: `0x${string}`; resolver: `0x${string}`; rulesHash: string; draftHash: string;
   challengePolicy?:{version:'account-holders-v1';authority:string};
   verifiedBlock: string; verifiedBlockHash: string; codeHashes: Record<string,string>;

@@ -1,5 +1,6 @@
 import { encodeAbiParameters, keccak256, parseAbiParameters } from 'viem';
 import { canonical, settlementRuleHash, validateSettlementRule } from './settlement-rules.mjs';
+export { assertSettlementRuleAuthoring, SNAPSHOT_SETTLE_SECONDS } from './settlement-rules.mjs';
 
 export const DETERMINISTIC_MODE = 'deterministic-source-v1';
 export const PILOT_CASH = '0xa9012a055bd4e0edff8ce09f960291c09d5322dc';

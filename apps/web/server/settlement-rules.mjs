@@ -98,6 +98,33 @@ export function validateSettlementRule(rule) {
 }
 export const settlementRuleHash = rule => digest(canonical(validateSettlementRule(rule)));
 
+// Authoring policy, applied when a market is prepared and by the rule check, never when an existing pool settles.
+// Catalogues and feeds keep adding and revising records after the interval they describe (EMSC added an M4.2
+// earthquake 92 minutes after it happened, after pre-test-v1 had captured its count). A snapshot of an interval
+// must therefore wait until the source has settled, so the first retained capture reflects the complete record.
+// Chain readers are exempt: evm-rpc.v1 already requires block finality.
+export const SNAPSHOT_SETTLE_SECONDS = 3 * 3600;
+function intervalEnd(period) {
+  const parts = period.split('/');
+  if (parts.length !== 2) return null;
+  const end = Date.parse(parts[1]);
+  return Number.isFinite(end) && /^\d{4}-\d{2}-\d{2}T/.test(parts[1]) ? Math.floor(end / 1000) : null;
+}
+export function settlementRuleAuthoringIssues(rule) {
+  validateSettlementRule(rule);
+  const issues = [], end = intervalEnd(rule.observation.period);
+  if (rule.vintage === 'first-observed-snapshot' && rule.source.adapter !== 'evm-rpc.v1' && end !== null
+    && rule.timing.scheduledAt - end < SNAPSHOT_SETTLE_SECONDS)
+    issues.push(`The capture window opens ${Math.round((rule.timing.scheduledAt - end) / 60)} minutes after the observed interval ends. `
+      + `Sources add and revise records late, so open it at least ${SNAPSHOT_SETTLE_SECONDS / 3600} hours after the interval.`);
+  return issues;
+}
+export function assertSettlementRuleAuthoring(rule) {
+  const issues = settlementRuleAuthoringIssues(rule);
+  if (issues.length) throw Error(`${rule.eventId}: ${issues.join(' ')}`);
+  return rule;
+}
+
 // End-to-end lock estimates use fixed contract deadlines, not a moving date after retrieval.
 export function settlementTimeline(rule, closesAt) {
   validateSettlementRule(rule);

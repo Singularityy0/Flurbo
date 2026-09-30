@@ -180,6 +180,16 @@ test('policy rejections, abstentions, pause and revocation stop new actions but 
   } finally { s.cleanup(); }
 });
 
+test('a run that ends, even a single --once pass, reports stopped so the dashboard never shows it running', { timeout: 120_000 }, async () => {
+  const s = await setupAgent({ live: false });
+  try {
+    await s.make({}, { ...s.config, mode: 'paper' }).run({ once: true });
+    const runtime = await detail(s);
+    assert.equal(runtime.heartbeats[0].state, 'stopped');
+    assert.equal(runtime.connection.state, 'stopped');
+  } finally { s.cleanup(); }
+});
+
 test('paper mode never constructs or calls a signer, and concurrent processes share one spend reservation', { timeout: 120_000 }, async () => {
   const s = await setupAgent({ live: false });
   try {

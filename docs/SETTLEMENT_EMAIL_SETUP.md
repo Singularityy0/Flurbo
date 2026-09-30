@@ -29,13 +29,15 @@ The selected recipient is intentionally absent from tracked configuration. Servi
 
 ## Acceptance drills
 
-- **RPC failure:** while supervising and outside an urgent settlement window, temporarily replace the workflow RPC secret with an invalid key at the allowed Alchemy testnet host. Run manually. Expect `check_failed`, a read-failure email, a failed Actions job, and a Healthchecks failure signal. Restore the correct secret immediately, rerun and verify recovery. The previous good checkpoint must remain in Redis during the failed read.
+- **RPC failure:** while supervising and outside an urgent settlement window, temporarily replace the RPC secret with an invalid key at the allowed Alchemy testnet host. The first failed check (each read is retried three times) sends nothing and keeps the heartbeat healthy. The second check in a row sends one "chain reads failing" email naming every affected pool and a Healthchecks failure signal. Restore the correct secret immediately; the next good check sends one "chain reads recovered" email. The previous good checkpoint must remain in Redis during the failed reads.
 - **Stopped runner:** after a successful watchdog ping, temporarily set `FLURBO_MONITOR_ENABLED=false`. Verify a missed-check email after the configured period plus grace, then restore `true`, run manually and verify recovery. Keep manual resolver coverage throughout the drill.
 - **Mail rejection:** temporarily use a revoked test sending key, run a labelled delivery test, and verify a failed job plus pending outbox entries. Restore the working key well within 23 hours, rerun and verify pending items are acknowledged. Inspect Resend logs if an email appeared before the job failed. Never disclose API keys in logs or screenshots.
 
 No live drill or inbox receipt is established by unit tests. Until these drills pass, alerts are not operationally accepted.
 
 ## Delivery and recovery behaviour
+
+Chain reads are retried three times within a check (2 and 4 seconds apart). A pool whose reads still fail counts one failed check; only after two failed checks in a row (about four minutes on the hosted two-minute cycle) does the monitor email and fail the Healthchecks heartbeat. That email is shared by every failing pool, repeats hourly while reads keep failing, and one recovery email follows when they succeed again. A single public RPC hiccup therefore pages nobody, while a real outage is reported within minutes and, past 15 minutes, also raises the per-pool check gap alert.
 
 Each pool has a durable checkpoint, latest report and bounded outbox in one Redis state record. State is written atomically under a five-minute renewable lease before email submission. An expired worker cannot overwrite a newer worker's state. Redis failures stop sending and cause the independent watchdog to receive failure, where reachable.
 

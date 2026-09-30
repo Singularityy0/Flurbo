@@ -79,9 +79,9 @@ export default function FirstBotGuide() {
         <ol>
           <li>Open <Link href="/agents">Agents</Link>, type a name, keep the market ticked and choose <em>Register agent</em>.</li>
           <li>On the agent's page, open <em>Setup</em>, paste the bot wallet address and choose <em>Get ownership message</em>. The message expires after 5 minutes, so do the next steps straight away.</li>
-          <li>Copy the whole message, save it as a plain text file named <code>message.txt</code> inside the <code>sdk-python</code> folder, and first create the bot's settings file (the bot needs it for every command):</li>
+          <li>Copy the whole message, save it as a plain text file named <code>message.txt</code> inside the <code>sdk-python</code> folder, and first create the bot's settings file (the bot needs it for every command). The Setup page shows the <code>init</code> line with your agent's exact market names after <code>--markets</code>; copy that line rather than typing them:</li>
         </ol>
-        <Code>{'python -m flurbo_sdk init --config flurbo-agent.json\npython -m flurbo_sdk sign-message --config flurbo-agent.json --file message.txt'}</Code>
+        <Code>{'python -m flurbo_sdk init --config flurbo-agent.json --markets <market names from the Setup page>\npython -m flurbo_sdk sign-message --config flurbo-agent.json --file message.txt'}</Code>
         <p><em>You should see</em> a long line starting with <code>0x</code>: that is the signature. It proves ownership and cannot move funds. Paste it into the <em>Signature</em> box on Flurbo and choose <em>Verify and associate</em>. The page then shows <em>Associated wallet</em>.</p>
       </li>
 

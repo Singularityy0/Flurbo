@@ -9,7 +9,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { settlementRuleHash, settlementTimeline, validateSettlementRule } from '../server/settlement-rules.mjs';
+import { settlementRuleAuthoringIssues, settlementRuleHash, settlementTimeline, validateSettlementRule } from '../server/settlement-rules.mjs';
 import { parseSettlementCapture, retrieveSettlementCapture } from '../server/settlement-evidence.mjs';
 
 const WAITING = new Set(['VALUE_MISSING', 'EVM_BLOCK_NOT_YET_AVAILABLE', 'EVM_NOT_FINAL', 'EXTRACTION_MISSING_FIELD']);
@@ -18,6 +18,8 @@ const iso = seconds => new Date(seconds * 1000).toISOString();
 export async function checkRule(raw, { now = Math.floor(Date.now() / 1000), closesAt = null, request = fetch } = {}) {
   let rule;
   try { rule = validateSettlementRule(raw); } catch (error) { return { eventId: raw?.eventId ?? null, status: 'invalid', message: error.message }; }
+  const issues = settlementRuleAuthoringIssues(rule);
+  if (issues.length) return { eventId: rule.eventId, status: 'invalid', message: issues.join(' ') };
   const report = { eventId: rule.eventId, status: 'ok', ruleHash: settlementRuleHash(rule), adapter: rule.source.adapter,
     window: { opens: iso(rule.timing.scheduledAt), captureCutoff: iso(rule.timing.publicationCutoff) }, sources: [] };
   if (closesAt !== null) {

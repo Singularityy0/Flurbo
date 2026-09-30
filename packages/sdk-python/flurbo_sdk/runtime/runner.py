@@ -37,7 +37,7 @@ DEFAULT_CONFIG = {
     "strategy": {"id": "joint-edge", "quantityAtoms": "1000000", "slippageBps": 50, "minEdgeBps": 500, "minEdgeAtoms": "10000", "maxCostAtoms": "2000000", "includeSingles": True, "minEvidence": 1},
     "policy": {"markets": ["pilot"], "maxQuantityAtoms": "2000000", "maxTradeCostAtoms": "2000000", "maxSlippageBps": 50,
                "spend": {"totalAtoms": "20000000", "windows": [{"seconds": 86400, "atoms": "10000000"}]}, "maxPositionAtoms": "5000000", "maxWorstCaseLossAtoms": "10000000",
-               "gas": {"maxFeeWei": "100000000000000000", "reserveWei": "200000000000000000"}, "quoteMaxAgeSeconds": 30, "minSecondsBeforeClose": 3600, "maxPending": 2,
+               "gas": {"maxFeeWei": "100000000000000000", "reserveWei": "200000000000000000"}, "quoteMaxAgeSeconds": 30, "minSecondsBeforeClose": 120, "maxPending": 2,
                "allowSell": False, "allowRedeem": False},
     "policyMaxAgeSeconds": 120, "paperBudgetAtoms": "50000000",
 }
@@ -191,7 +191,7 @@ class AgentRunner:
 
     def state(self) -> str:
         if getattr(self, "_stopped", False):
-            return "stopped"  # sent once, in the final heartbeat after a requested stop
+            return "stopped"  # sent once, in the final heartbeat when a run ends
         return "stopping" if self.stop_file.exists() else "blocked" if self.blocked_by else "paused" if (self.flurbo or {}).get("paused") else "running"
 
     def _api(self, fn):
@@ -372,13 +372,14 @@ class AgentRunner:
                     last_beat = time.monotonic()
             if self.stop_file.exists():
                 break
-        if self.stop_file.exists():
-            self.stop_file.unlink(missing_ok=True)
-            self._stopped = True
-            try:
-                self.heartbeat()
-            finally:
-                self._stopped = False
+        # Every ended run tells Flurbo it stopped, whether it was asked to stop or ran once, so the dashboard
+        # never shows a finished runtime as running.
+        self.stop_file.unlink(missing_ok=True)
+        self._stopped = True
+        try:
+            self.heartbeat()
+        finally:
+            self._stopped = False
         self.log("stopped", {"runtimeId": self.runtime_id})
 
     def status(self) -> dict:

@@ -54,7 +54,11 @@ export function preTestRules(closesAt: number) {
   ];
 }
 
-export function preparePreTest(selection: { creator: string; reviewers: { name: string; address: string }[] }, now: number, closesAt?: number) {
+// pre-test-v1 was deployed once, on 30 September 2026. Its catalogue captures open 30 and 35 minutes after the
+// counted hour, which the authoring policy now refuses (EMSC added an earthquake after the capture), so the
+// template only reproduces that publication; a new collection must open catalogue captures 3 hours later.
+export function preparePreTest(selection: { creator: string; reviewers: { name: string; address: string }[] }, now: number, closesAt?: number,
+  { reproduce = false } = {}) {
   // The deploy script requires trading close to be more than an hour after the deployment transaction, so the
   // default leaves about 30 minutes to deploy after preparing.
   const close = closesAt ?? Math.ceil((now + 95 * 60) / 300) * 300;
@@ -68,5 +72,5 @@ export function preparePreTest(selection: { creator: string; reviewers: { name: 
   return preparePilot({ schema: 'flurbo.pilot-publication.v1', mode: 'deterministic-source-v1', ...policy, settlementRules,
     draft: { schema: 'flurbo.event-draft.v1', status: 'draft', chainId: 10143, clusterId: `pre-test-v1-${close}`,
       title: 'pre-test-v1: macro, Monad and earthquakes', closesAt: close, events: settlementRules.map(settlementEvent),
-      exceptionPolicy: VOID_POLICY, disputeModel: 'reviewer-panel', disputePolicy: disputePolicy(policy) } }, now, PRE_TEST_LIQUIDITY_ATOMS);
+      exceptionPolicy: VOID_POLICY, disputeModel: 'reviewer-panel', disputePolicy: disputePolicy(policy) } }, now, PRE_TEST_LIQUIDITY_ATOMS, { reproduce });
 }

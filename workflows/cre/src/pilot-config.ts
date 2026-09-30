@@ -4,7 +4,7 @@ import { eventDraftSchema, prepareEventDraft } from './event-draft';
 import { releaseTargetForEvent } from './github-release';
 import { validateRehearsalDraft } from './rehearsal';
 import { validateActivityDraft } from '../../../apps/web/shared/ethereum-activity.mjs';
-import { DETERMINISTIC_MODE, validateSettlementPublication, pilotRulesHash as committedPilotRulesHash } from '../../../apps/web/server/settlement-publication.mjs';
+import { DETERMINISTIC_MODE, assertSettlementRuleAuthoring, validateSettlementPublication, pilotRulesHash as committedPilotRulesHash } from '../../../apps/web/server/settlement-publication.mjs';
 
 // Declared locally so viem infers typed ABI parameters; test/pilot-config.test.ts checks it matches the web server's ABI.
 export const resolverConfigAbi = parseAbiParameters('(address collateral, bytes32 draftHash, uint64 closesAt, bytes32[] eventHashes, uint64[] observationEnds, address[] reviewers, uint128 bond, uint32 assertionPeriod, uint32 challengePeriod, uint32 votingPeriod) config');
@@ -53,7 +53,9 @@ export function validLiquidityAtoms(value: string) {
   return /^[1-9][0-9]*$/.test(value) && BigInt(value) >= 10_000_000n && BigInt(value) <= 1_000_000_000_000n;
 }
 
-export function preparePilot(input: unknown, now: number, liquidityAtoms: string = DEFAULT_LIQUIDITY_ATOMS) {
+// `reproduce` rebuilds a publication that was already prepared (verification of a deployed pool): the committed
+// hashes are checked, but authoring policy added after it was prepared is not applied again.
+export function preparePilot(input: unknown, now: number, liquidityAtoms: string = DEFAULT_LIQUIDITY_ATOMS, { reproduce = false } = {}) {
   if (!validLiquidityAtoms(liquidityAtoms)) throw new Error('Liquidity must be between 10 and 1,000,000 test AUSD in atoms');
   const value = pilotInputSchema.parse(input);
   if (!Number.isSafeInteger(now) || now <= 0) throw new Error('Invalid preparation time');
@@ -66,7 +68,7 @@ export function preparePilot(input: unknown, now: number, liquidityAtoms: string
   const records = new Set<string>();
   if(value.mode==='rehearsal')validateRehearsalDraft(value.draft);
   if(value.mode==='ethereum-activity')validateActivityDraft(value.draft);
-  if(value.mode===DETERMINISTIC_MODE)validateSettlementPublication(value);
+  if(value.mode===DETERMINISTIC_MODE){validateSettlementPublication(value);if(!reproduce)value.settlementRules!.forEach(assertSettlementRuleAuthoring);}
   for (const event of value.draft.events) {
     if(value.mode!=='rehearsal'&&value.mode!=='ethereum-activity'&&value.mode!==DETERMINISTIC_MODE)releaseTargetForEvent(value.draft, event.id);
     if (records.has(event.source.recordId)) throw new Error('Do not duplicate the same release as separate events');

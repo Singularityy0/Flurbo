@@ -44,7 +44,7 @@ const p = decision.proposal, limit = buyLimit(p.quoteAtoms, p.slippageBps);
 const verdict = evaluatePolicy({
   policy: { markets: [FIXTURE_NAMESPACE], maxQuantityAtoms: '2000000', maxTradeCostAtoms: '2000000', maxSlippageBps: 50, spend: { totalAtoms: '10000000', windows: [{ seconds: 86_400, atoms: '5000000' }] },
     maxPositionAtoms: '5000000', maxWorstCaseLossAtoms: '5000000', gas: { maxFeeWei: '100000000000000000', reserveWei: '200000000000000000' }, quoteMaxAgeSeconds: 30,
-    minSecondsBeforeClose: 3600, maxPending: 2, allowSell: false, allowRedeem: false },
+    minSecondsBeforeClose: 120, maxPending: 2, allowSell: false, allowRedeem: false },
   now: FIXTURE_NOW, market: { namespace: FIXTURE_NAMESPACE, pool: market.pool, eventCount: market.events.length, closesAt: market.closesAt, open: market.open, resolved: market.resolved },
   wallet: { nativeBalanceWei: '1000000000000000000', holdings: [] }, journal: [],
   candidate: { action: 'buy', namespace: FIXTURE_NAMESPACE, claim: { scope: p.claim.scope, mask: p.claim.mask.toString() }, quantityAtoms: p.quantityAtoms.toString(), limitAtoms: limit.toString(),

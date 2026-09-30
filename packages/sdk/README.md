@@ -26,7 +26,7 @@ Node 24 or later. From a checkout of the repository:
 
 ```bash
 cd packages/sdk && npm ci
-node bin/flurbo-agent.ts init --config flurbo-agent.json      # paper mode, no secrets in the file
+node bin/flurbo-agent.ts init --config flurbo-agent.json --markets <names from the agent's Setup page>   # paper mode, no secrets
 ```
 
 On the agent page (flurbo.singu.online/agents): register the agent, link its dedicated wallet (`flurbo-agent sign-message --file message.txt` signs the ownership message with the agent key), issue a credential, and later allow live trades. Then set secrets in the environment, never in files:
