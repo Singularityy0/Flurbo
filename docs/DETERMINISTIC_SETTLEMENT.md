@@ -15,6 +15,7 @@ Implemented adapters:
 | `fomc-statement-html.v1` | Dated FOMC statement and announced target range upper bound | Narrow statement wording; not minutes, forecasts, or an automatic choice of the prior policy baseline |
 | `usgs-earthquake-count.v1` | Complete official GeoJSON query for a fixed UTC interval, with validated count, distinct IDs and event timestamps | First observed catalogue snapshot during a published capture window, not the final number of physical earthquakes |
 | Existing Ethereum activity implementation | Corroborated finalized block measurements and YES/NO outcomes | Unchanged; its existing manifest and evidence validation remain authoritative |
+| `json-api.v1`, `stat-table.v1`, `html-text.v1`, `evm-rpc.v1` | General readers configured per rule: any public JSON API, official statistics (CSV, SDMX-JSON, JSON-stat), official pages, and any EVM chain | See [SETTLEMENT_READERS.md](SETTLEMENT_READERS.md); new markets should use these |
 
 The new evaluator supports exact decimal thresholds, categorical equality and integer UTC timestamp comparisons. Existing adapters and supported rules can be configured for new questions. Unsupported prose, new source formats and subjective labels require reviewed extraction/rules work before launch. A parser's determinism does not prove that the publisher is correct or that the market's prose is unambiguous.
 
