@@ -115,7 +115,7 @@ It validates each rule, prints its hash and timeline, reads each source now and 
 | `source-error` | The source could not be read or did not match the settings. Fix the rule |
 | `invalid` | The rule itself is invalid |
 
-For a rule whose window is in the future, `not-yet-available` on each source is the expected result.
+For a rule whose window is in the future, `not-yet-available` on each source is the expected result. A snapshot rule may also show a `current-reading` (for example a count of 0 for an hour that has not started): it is informational, because the first capture inside the window decides. A 404 before a release is published (NBP, for example) shows as `source-error` here, but the bot simply keeps checking. FDSN catalogues such as EMSC return 204 for an empty window, which is not retained: a question that can plausibly have zero events should use a source that returns an empty list instead.
 
 ## Verified against live sources (30 September 2026)
 
