@@ -196,6 +196,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if(req.method!=='GET'||url.search)return send(res,400,{error:'Unexpected portfolio request.'});
         if(hosted&&!store.command||!agents)return send(res,503,{error:'Account portfolio sources are unavailable.'});
         const manual=await links.list(login.address,origin);
+        if(metrics)void metrics.recordExistingLinks(login.address,manual.wallets).catch(()=>{});
         const agent=await agents.portfolio(login.address,origin);
         return send(res,200,{account:manual.account,wallets:manual.wallets,agentWallets:agent.wallets,agentExecutions:agent.executions});
       }
@@ -222,7 +223,11 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
         if(hosted&&!store.command)return send(res,503,{error:'Account wallet storage is unavailable.'});
         if(url.search)return send(res,400,{error:'Unexpected wallet query.'});
-        if(req.method==='GET'&&url.pathname==='/api/account/wallets')return send(res,200,await links.list(login.address,origin));
+        if(req.method==='GET'&&url.pathname==='/api/account/wallets'){
+          const listed=await links.list(login.address,origin);
+          if(metrics)void metrics.recordExistingLinks(login.address,listed.wallets).catch(()=>{});
+          return send(res,200,listed);
+        }
         if(req.method!=='POST')return send(res,405,{error:'Method not allowed.'});
         const input=await body(req);
         try {

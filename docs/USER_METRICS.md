@@ -17,7 +17,7 @@ Team and test accounts are excluded: the operator account, anything in `FLURBO_M
 | Signed in | First passkey sign-in, recorded in Redis from the day this shipped. Earlier members appear once they request access, link a wallet or bet. |
 | Access requested | Supabase applications (migration 002), excluding withdrawn requests. Email verification is shown alongside. |
 | Access granted | Supabase approvals, plus `FLURBO_TESTNET_APPROVED_ACCOUNTS` for accounts without a decision. |
-| Wallet linked | Links recorded from the day this shipped, plus older links found through starter MON records or a trade. |
+| Wallet linked | Links recorded from the day this shipped. Older links are added, without a date, the next time the member opens a page that loads their wallets, or when found through starter MON records or a trade. |
 | Got starter MON | The starter MON records. |
 | Made at least one bet | At least one confirmed buy, in any listed market, from a wallet linked to the account. |
 | Bet in the last 7 days | Same, within the last 7 days. |

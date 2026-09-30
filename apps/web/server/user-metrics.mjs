@@ -74,6 +74,21 @@ export function userMetrics({ command, origin, pools, links = null, applications
     account = String(account).toLowerCase(); wallet = String(wallet).toLowerCase();
     if (!address(account) || !address(wallet)) return;
     await command('HSETNX', LINKS, wallet, JSON.stringify({ account, at: now() }));
+    seen.add(wallet);
+  }
+  // Links made before metrics shipped have no recorded date. They are picked up when the member next loads
+  // their wallets; each wallet is written at most once per server process, and never overwrites a dated link.
+  const seen = new Set();
+  async function recordExistingLinks(account, wallets) {
+    account = String(account).toLowerCase();
+    if (!address(account)) return;
+    for (const raw of wallets) {
+      const wallet = String(raw).toLowerCase();
+      if (!address(wallet) || seen.has(wallet)) continue;
+      if (seen.size >= 50_000) seen.clear();
+      await command('HSETNX', LINKS, wallet, JSON.stringify({ account, at: null }));
+      seen.add(wallet);
+    }
   }
 
   const readIndex = async pool => json(await command('GET', `flurbo:pilot:index:v1:${pool}`));
@@ -315,6 +330,6 @@ export function userMetrics({ command, origin, pools, links = null, applications
     } catch (error) { await command('DEL', key); throw error; }
   }
 
-  return { recordSignIn, recordLink, sync, report, digest, digestText,
+  return { recordSignIn, recordLink, recordExistingLinks, sync, report, digest, digestText,
     async tick() { const s = await sync(); const d = await digest().catch(() => 'digest_failed'); return `${s.complete ? 'synced' : 'scanning'}; digest ${d}`; } };
 }
