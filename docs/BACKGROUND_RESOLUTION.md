@@ -33,8 +33,8 @@ Repository **variables**:
 | `FLURBO_RESOLUTION_EXECUTE` | Start with `false`; only `true` permits signing/broadcast |
 | `FLURBO_RESOLUTION_POOL` | Exact lowercase target pool address |
 | `FLURBO_RESOLUTION_RULES_HASH` | Exact immutable rules hash from its verified manifest |
-| `FLURBO_RESOLUTION_SIGNER_ADDRESS` | `0x632a158d5eccc10f864ab94cec99511e1cc514f3` — dedicated testnet bot supplied by the operator |
-| `FLURBO_EVIDENCE_MODEL` | Configured free-tier Gemini model, when using official release evidence |
+| `FLURBO_RESOLUTION_SIGNER_ADDRESS` | The dedicated testnet settlement signer (currently `0x6713e2324108d1f71ec8479415eb37c08638adea`) |
+| `FLURBO_EVIDENCE_MODEL` | Optional. A free-tier Gemini model that adds a written explanation to release evidence. Not required for assertions. |
 | `FLURBO_EVIDENCE_FREE_TIER_CONFIRMED` | `true` only for a confirmed unbilled provider project |
 
 Repository **secrets**, entered directly in GitHub:
@@ -42,11 +42,11 @@ Repository **secrets**, entered directly in GitHub:
 - `FLURBO_RESOLUTION_MANIFEST_JSON`: complete verified manifest for that pool.
 - `FLURBO_RESOLUTION_PRIVATE_KEY`: the dedicated testnet bot key, only needed for execution. Never paste it into chat, a command argument or Git.
 - Existing `FLURBO_ALCHEMY_TESTNET_RPC_URL`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`.
-- `FLURBO_EVIDENCE_GEMINI_KEY` for official release AI assistance. The existing 20-attempt/day application cap applies across interactive and automated requests. Practice fixture handling does not call an AI model.
+- `FLURBO_EVIDENCE_GEMINI_KEY`, optional. Release questions are asserted YES from the deterministic check of the official GitHub release record; when a model is configured and answers, its explanation is attached, and when it is missing or rate-limited the assertion goes ahead without it. The 20-attempt/day cap applies across interactive and automated requests. Practice fixture handling does not call an AI model.
 
 Bot private key exports may have an optional `0x` prefix and surrounding whitespace. Only a valid 32-byte hexadecimal key matching the configured public signer is accepted. Logs report safe codes for missing, invalid or mismatched bot keys, configuration errors, RPC reads and Redis failures; they never print the input key or upstream error. A generic `WORKER_CHECK_FAILED` can still require investigation of the monitor and pending journal. Never clear that journal merely to silence an error.
 
-First run with execution false and inspect its `dry-run` plan, pool identity and `monitoring` field. It must report `healthy` before activation. `not-ready` means the pool's independent monitoring checkpoint is missing, stale, invalid, unreadable or has queued alerts; run the existing Settlement monitor and inspect its result before retrying. Dry runs do not sign or fetch AI evidence, so they do not validate provider availability. Activation remains incomplete until a funded dedicated signer, provider setup where applicable, and a successful hosted dry run are verified. No transaction has been submitted by the development tests. Do not reuse the same signer journal for another pool without reconciling its pending transaction and preserving its audit trail.
+First run with execution false and inspect its `dry-run` plan, pool identity and `monitoring` field. It must report `healthy` before activation. `not-ready` means the pool's independent monitoring checkpoint is missing, stale, invalid, unreadable or has queued alerts; run the existing Settlement monitor and inspect its result before retrying. Dry runs do not sign or fetch AI evidence, so they do not validate provider availability. Activation remains incomplete until a funded dedicated signer and a successful hosted dry run are verified. No transaction has been submitted by the development tests. Do not reuse the same signer journal for another pool without reconciling its pending transaction and preserving its audit trail.
 
 ## Public prices and future private participation
 
