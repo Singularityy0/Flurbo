@@ -71,3 +71,30 @@ test('concurrent market reads share one batch without retaining stale prices',as
   f.options.changed=true;await assert.rejects(service.markets(),/anchor/);
   f.options.changed=false;await service.markets();assert.equal(batches,3,'failed in-flight reads are cleared');
 });
+
+test('on a single server, rate windows and session reads stay in memory instead of costing Redis commands', async () => {
+  const { memoryWindow } = await import('../server/request-limits.mjs');
+  const { RedisSessionStore } = await import('../server/redis-session.mjs');
+  let t = 1_800_000_000_000; const count = memoryWindow(() => t);
+  assert.equal(await count('a', 60), 1); assert.equal(await count('a', 60), 2); assert.equal(await count('b', 60), 1);
+  t += 61_000; assert.equal(await count('a', 60), 1, 'window expired');
+  // Page traffic: no EVAL for limits, and one session GET for many requests.
+  const {command} = fakeRedis(); const seen: string[] = [];
+  const counted = async (...c: any[]) => { seen.push(c[0]); return command(...c); };
+  await counted('SET', 'flurbo:auth:v1:session:' + (await import('node:crypto')).createHash('sha256').update('owner').digest('hex'),
+    JSON.stringify({ method: 'passkey', origin: 'https://flurbo.singu.online', address: alice, expiresAt: Date.now() + 3_600_000 }));
+  seen.length = 0;
+  const store = new RedisSessionStore(counted);
+  const api = localApi({ publicOrigin: 'https://flurbo.singu.online', rpcUrl: 'https://testnet-rpc.monad.xyz', store, sharedLimits: false });
+  const call = async () => { let status = 0; await api({ url: '/api/network', method: 'GET', headers: { host: 'flurbo.singu.online', cookie: 'flurbo_session=owner' } },
+    { setHeader() {}, writeHead(s: number) { status = s; }, end() {} }, () => {}); return status; };
+  for (let i = 0; i < 5; i++) assert.equal(await call(), 200);
+  assert.deepEqual(seen, ['GET'], 'five requests: one session read, no limit scripts');
+  await store.revoke('owner'); seen.length = 0;
+  assert.equal(await store.read('owner', 'https://flurbo.singu.online'), null, 'sign-out takes effect at once');
+  assert.deepEqual(seen, ['GET']);
+  // The shared mode (several servers) still counts in Redis.
+  const shared = localApi({ publicOrigin: 'https://flurbo.singu.online', rpcUrl: 'https://testnet-rpc.monad.xyz', store: new RedisSessionStore(counted) });
+  seen.length = 0; await shared({ url: '/api/network', method: 'GET', headers: { host: 'flurbo.singu.online', cookie: 'flurbo_session=x' } }, { setHeader() {}, writeHead() {}, end() {} }, () => {});
+  assert.ok(seen.includes('EVAL'));
+});

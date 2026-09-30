@@ -15,8 +15,12 @@ export function redisCommand(env = process.env, request = fetch) {
   };
 }
 
+// Session reads are cached in memory for a short time: a page makes about twenty API calls, and each would
+// otherwise read the same session from Redis. Sign-out goes through revoke() on this store and drops the
+// cached entry at once. With several server instances, a session signed out on another one stays usable here
+// for at most cacheMs.
 export class RedisSessionStore {
-  constructor(command, now = Date.now) { this.command = command; this.now = now; }
+  constructor(command, now = Date.now, { cacheMs = 30_000 } = {}) { this.command = command; this.now = now; this.cacheMs = cacheMs; this.cache = new Map(); }
   key(kind, id) { return `flurbo:auth:v1:${kind}:${digest(id || '')}`; }
   async challenge(address, origin, method = 'passkey') {
     const temporary = new SessionStore(this.now);
@@ -41,10 +45,19 @@ export class RedisSessionStore {
   }
   async read(id, origin) {
     if (!id) return null;
-    const stored = await this.command('GET', this.key('session', id));
-    if (!stored) return null;
-    const value = JSON.parse(stored);
+    const key = this.key('session', id), cached = this.cache.get(key);
+    let value;
+    if (cached && cached.until > this.now()) value = cached.value;
+    else {
+      const stored = await this.command('GET', key);
+      if (!stored) { this.cache.delete(key); return null; }
+      value = JSON.parse(stored);
+      if (this.cacheMs > 0) {
+        if (this.cache.size >= 5000) for (const [k, v] of this.cache) if (v.until <= this.now() || this.cache.size >= 5000) this.cache.delete(k);
+        this.cache.set(key, { value, until: this.now() + this.cacheMs });
+      }
+    }
     return value.method === 'passkey' && value.origin === origin && value.expiresAt > this.now() ? value : null;
   }
-  async revoke(id) { if (id) await this.command('DEL', this.key('session', id)); }
+  async revoke(id) { if (id) { const key = this.key('session', id); this.cache.delete(key); await this.command('DEL', key); } }
 }

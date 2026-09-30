@@ -31,7 +31,7 @@ const security = {
 };
 
 export function productionServer(config, store, staticRoot = dist) {
-  const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, getLearningReport: () => config.learningReport,
+  const api = localApi({ publicOrigin: config.origin, rpcUrl: config.rpcUrl, store, sharedLimits: config.sharedLimits !== false, getLearningReport: () => config.learningReport,
     applications:config.applications, previewAccess:config.previewAccess===undefined?previewAccess():config.previewAccess, testingOperatorAccount:config.testingOperatorAccount, testFaucet:config.testFaucet, learningPool: config.learningPool, learningOperatorAccount: config.learningOperatorAccount,
     learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions, challengeOptions:config.challengeOptions, settlementPackets:config.settlementPackets, starter:config.starter, funding:config.fundingAlerts });
   config.metrics = api.metrics;
@@ -98,7 +98,11 @@ async function main() {
   config.androidAssetLinks = androidAssetLinks();
   const store = new RedisSessionStore(redisCommand());
   await store.command('PING');
-  installRpcCapacity({command:store.command});
+  // Rate windows (chain requests, page requests, agent runtime requests) count in this process by default:
+  // Render runs one instance, and a shared Redis counter cost one command per request. Set
+  // FLURBO_SHARED_LIMITS=true when running more than one instance so they share the budgets again.
+  const sharedLimits = config.sharedLimits = process.env.FLURBO_SHARED_LIMITS === 'true';
+  installRpcCapacity({command:sharedLimits?store.command:null});
     config.pilotEvidence = pilotEvidence(store.command, config.origin);
     config.settlementPackets = createSettlementStores({command:store.command,origin:config.origin}).packetStore;
   config.starter = starterFunds({ config: starterConfig(), command: store.command, rpcUrl: config.rpcUrl });

@@ -3,15 +3,39 @@
 // same bounded drain as `run-resolution.mjs --drain`. Cycles never overlap. Durable state, leases and
 // signer journals stay in Redis, so a restart only skips a cycle and a second runner cannot double-act.
 const ACTIVE = ['submitted', 'resubmitted', 'confirmed'];
+// Near anything due (an observation window ending, an open assertion window, a challenge or vote deadline,
+// delivery) the bot runs every intervalMs. When every pool's next due time is further away than FAST_LEAD, it
+// runs every idleIntervalMs instead, waking FAST_LEAD before the next due time. Unknown state is treated as due.
+const FAST_LEAD_SECONDS = 15 * 60;
+export function nextPeriod({ intervalMs, idleIntervalMs, nextDue, monitor, worker, nowSeconds }) {
+  const workerIdle = !ACTIVE.includes(worker) && worker !== 'drain_limit';
+  if (nextDue === null || !workerIdle || monitor !== 'ok') return intervalMs;
+  if (nextDue === 'none') return idleIntervalMs;
+  return Math.max(intervalMs, Math.min(idleIntervalMs, (nextDue - FAST_LEAD_SECONDS - nowSeconds) * 1000));
+}
 
-export function settlementBot({ env = process.env, intervalMs = 120_000, firstDelayMs = 30_000, log = console.log,
-  monitor = async () => (await import('../scripts/notify-settlement.mjs')).runNotifications({ env, args: [], output: line => log('[settlement-monitor] ' + line) }),
+export function settlementBot({ env = process.env, intervalMs = 120_000, idleIntervalMs = 600_000, firstDelayMs = 30_000, log = console.log,
+  monitor = null,
   resolve = async () => (await import('../scripts/run-resolution.mjs')).runResolution(env),
   failure = async error => (await import('../scripts/run-resolution.mjs')).resolutionFailure(error),
   metrics = null, funds = null, notices = null, sleep = ms => new Promise(done => setTimeout(done, ms)), now = Date.now, schedule = setTimeout, cancel = clearTimeout } = {}) {
   if (!Number.isSafeInteger(intervalMs) || intervalMs < 60_000) throw Error('Settlement cycles must be at least one minute apart');
-  let timer = null, stopped = true, running = false;
-  const status = { enabled: true, intervalSeconds: intervalMs / 1000, cycles: 0, lastStartedAt: null, lastFinishedAt: null, monitor: 'not_run', worker: 'not_run', metrics: metrics ? 'not_run' : 'disabled', funds: funds ? 'not_run' : 'disabled', notices: notices ? 'not_run' : 'disabled' };
+  if (!Number.isSafeInteger(idleIntervalMs) || idleIntervalMs < intervalMs || idleIntervalMs > 600_000) throw Error('Idle cycles must be between the normal interval and ten minutes');
+  let timer = null, stopped = true, running = false, nextDue = null;
+  // The default monitor reads each pool's next due time from its report line; an injected monitor leaves it
+  // unknown, which keeps the normal interval.
+  monitor ??= async () => {
+    let due = 'none';
+    const code = await (await import('../scripts/notify-settlement.mjs')).runNotifications({ env, args: [], output: line => {
+      log('[settlement-monitor] ' + line);
+      let value; try { value = JSON.parse(line).nextDueAt; } catch { value = null; }
+      if (due === null || value === 'none') return;
+      due = Number.isSafeInteger(value) ? (due === 'none' ? value : Math.min(due, value)) : null;
+    } });
+    nextDue = code === 0 ? due : null;
+    return code;
+  };
+  const status = { enabled: true, intervalSeconds: intervalMs / 1000, idleIntervalSeconds: idleIntervalMs / 1000, cadence: 'normal', nextDueAt: null, cycles: 0, lastStartedAt: null, lastFinishedAt: null, monitor: 'not_run', worker: 'not_run', metrics: metrics ? 'not_run' : 'disabled', funds: funds ? 'not_run' : 'disabled', notices: notices ? 'not_run' : 'disabled' };
 
   async function work() {
     const deadline = now() + 150_000;
@@ -27,7 +51,7 @@ export function settlementBot({ env = process.env, intervalMs = 120_000, firstDe
 
   async function cycle() {
     if (running || stopped) return;
-    running = true; status.cycles++; status.lastStartedAt = new Date(now()).toISOString();
+    running = true; status.cycles++; status.lastStartedAt = new Date(now()).toISOString(); nextDue = null;
     try {
       if (env.FLURBO_MONITOR_ENABLED === 'true') {
         try { status.monitor = (await monitor()) === 0 ? 'ok' : 'attention'; } catch { status.monitor = 'failed'; log('[settlement-monitor] {"status":"notification_failed"}'); }
@@ -47,7 +71,11 @@ export function settlementBot({ env = process.env, intervalMs = 120_000, firstDe
       }
     } finally {
       running = false; status.lastFinishedAt = new Date(now()).toISOString();
-      if (!stopped) timer = schedule(cycle, Math.max(1_000, intervalMs - (Date.parse(status.lastFinishedAt) - Date.parse(status.lastStartedAt))));
+      // Idle only when the monitor ran cleanly and nothing is due soon; an active worker keeps the normal interval.
+      const period = nextPeriod({ intervalMs, idleIntervalMs, nextDue, monitor: status.monitor, worker: status.worker, nowSeconds: now() / 1000 });
+      status.cadence = period > intervalMs ? 'idle' : 'normal';
+      status.nextDueAt = typeof nextDue === 'number' ? new Date(nextDue * 1000).toISOString() : nextDue;
+      if (!stopped) timer = schedule(cycle, Math.max(1_000, period - (Date.parse(status.lastFinishedAt) - Date.parse(status.lastStartedAt))));
     }
   }
 

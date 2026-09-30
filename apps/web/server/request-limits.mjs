@@ -27,4 +27,16 @@ export function requestLimits({command,now=Date.now}={}) {
   return {take,localTake};
 }
 
+// INCR-with-expiry counter kept in this process, for rate windows that do not need to be shared (one server).
+export function memoryWindow(now = Date.now) {
+  const counts = new Map();
+  return async (key, seconds) => {
+    const t = now();
+    if (counts.size >= 10_000) for (const [k, v] of counts) if (v.until <= t) counts.delete(k);
+    const entry = counts.get(key);
+    if (!entry || entry.until <= t) { counts.set(key, { n: 1, until: t + seconds * 1000 }); return 1; }
+    return ++entry.n;
+  };
+}
+
 export const expensivePath = path => /\/(?:rpc|analytics|claim-analytics|thesis|thesis-analytics|what-if|quote|prepare|positions|history|redemptions|account|status|markets|performance)(?:\/|$)/.test(path);

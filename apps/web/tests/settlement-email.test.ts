@@ -219,3 +219,21 @@ test('runner handles the pilot and practice pools, signals failed reads to watch
   assert.ok(!output.join('').includes('storage-secret'));
   assert.equal(await runNotifications({ ...options, env: { ...env, FLURBO_MONITOR_RESEND_KEY: '' } }), 2);
 });
+
+test('next due time follows observation ends, deadlines and delivery; repeated observations skip rewriting state', async () => {
+  const { nextDueAt, CHECKPOINT_REFRESH_SECONDS } = await import('../scripts/notify-settlement.mjs');
+  const report = (events: any[], lifecycle = 'trading_closed') => ({ lifecycle, snapshot: { timestamp: 1000 }, timing: { observationEnds: [5000, 9000] }, events });
+  assert.equal(nextDueAt(report([{ event: 0, phase: 'Pending', deadline: 5000 }, { event: 1, phase: 'Pending', deadline: 9000 }])), 5000);
+  assert.equal(nextDueAt(report([{ event: 0, phase: 'Asserted', deadline: 4600 }, { event: 1, phase: 'Pending', deadline: 9000 }])), 4600);
+  assert.equal(nextDueAt({ ...report([{ event: 0, phase: 'Pending', deadline: 8600 }]), timing: { observationEnds: [500] } }), 1000, 'assertion window open: due now');
+  assert.equal(nextDueAt(report([{ event: 0, phase: 'Finalized', deadline: null }])), 1000, 'all final, delivery due now');
+  assert.equal(nextDueAt(report([], 'settled')), 'none');
+  // Saves: the first observation is written; an identical one within the refresh window is not; later it is again.
+  const f = pilotFixture(), r = redis(); let time = 1000, saves = 0;
+  const command = async (...c: any[]) => { if (c[0] === 'EVAL' && c.includes('save')) saves++; return r.command(...c); };
+  const options = { manifest: f.manifest, rpc: f.rpc, command, config, now: () => time, wait: async () => {},
+    send: async () => 'accepted-id', inspect: async () => observed(f.manifest, time) };
+  await notifyPool(options); const first = saves;
+  time += 120; await notifyPool(options); assert.equal(saves, first, 'unchanged observation not rewritten');
+  time += CHECKPOINT_REFRESH_SECONDS; await notifyPool(options); assert.equal(saves, first + 1, 'refreshed before the freshness limit');
+});
