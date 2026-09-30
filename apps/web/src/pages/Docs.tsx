@@ -3,6 +3,7 @@ import { Link } from 'wouter';
 import { ArrowUpRight, FileText } from 'lucide-react';
 import { useAuth } from '../auth/context';
 import { LITEPAPER } from '../components/SiteFooter';
+import FirstBotGuide from './FirstBotGuide';
 import './docs.css';
 
 const sections = [
@@ -10,7 +11,7 @@ const sections = [
   ['accounts', 'Accounts and wallets'], ['trading', 'Trading and shares'],
   ['combinations', 'Combined predictions'], ['what-if', 'What-if and prices'], ['thesis', 'Build your thesis'],
   ['settlement', 'Settlement and payouts'], ['portfolio', 'Portfolio and payouts'],
-  ['agents', 'Agents and SDKs'], ['limits', 'Limits and allowances'], ['help', 'Common questions'], ['preview', 'Preview limitations'],
+  ['agents', 'Agents and SDKs'], ['first-bot', 'Your first trading bot'], ['limits', 'Limits and allowances'], ['help', 'Common questions'], ['preview', 'Preview limitations'],
 ] as const;
 
 export default function Docs() {
@@ -144,6 +145,7 @@ export default function Docs() {
         <section id="agents" aria-labelledby="agents-title">
           <h2 id="agents-title">Build and run your own agent</h2>
           <p>Agents are for users comfortable running software on their own computer or server. Flurbo provides SDKs in TypeScript, Python, Rust and C++. Registering an agent does not start or host it.</p>
+          <p className="docs-note"><strong>New to running software?</strong> Follow <a href="#first-bot">Your first trading bot, step by step</a>. It explains every command and why it is needed.</p>
           <ol className="docs-steps">
             <li><strong>Register.</strong> Open <Link href="/agents">Agents</Link>, give your agent a name and choose open related markets. Market permissions apply to their shared pool; configure your strategy to select individual questions or combinations.</li>
             <li><strong>Associate a dedicated wallet.</strong> In Setup, enter its public address and sign the ownership message locally. Keep its private key on your machine. Do not use your personal, manual-trading or operator wallets.</li>
@@ -158,6 +160,7 @@ export default function Docs() {
           <details><summary>Stopping an agent and recovering a transaction</summary><p>Closing the browser does not stop the runtime. Stop it on the machine where it runs. A pause on Flurbo is a software instruction; a previously sent transaction may still confirm. Preserve the runtime's journal and restart with the same configuration to recover pending transactions without sending duplicates.</p><p>A revoked credential stops a compliant runtime from starting new work. It does not revoke the wallet's on-chain permissions or private key. A stale heartbeat is a last-known report, not proof that the runtime has stopped.</p></details>
           <p>The optional assisted feature is different: you enter forecasts yourself and either record paper decisions or confirm proposed trades in MetaMask. It does not run an autonomous agent.</p>
         </section>
+        <FirstBotGuide/>
         <section id="limits" aria-labelledby="limits-title">
           <h2 id="limits-title">Limits and allowances</h2>
           <p>These are the defaults on this testnet. Where a market or your agent settings show a different value, that value applies.</p>

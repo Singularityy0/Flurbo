@@ -259,7 +259,7 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
   ].join('\n');
   const available: Record<string, string> = { typescript: ts, python: py, rust: rs, cpp };
   return <section className="agents-card" aria-label="Run the agent">
-    <h2>Run the agent</h2><p className="agents-fine">These commands are for a terminal on your own computer, in a copy of the Flurbo SDK source. The source is not public yet; ask the Flurbo team for a copy through the channel where you received your invitation. <Link href="/docs#agents">Read the setup and troubleshooting guide</Link>.</p>
+    <h2>Run the agent</h2><p className="callout"><strong>New to this?</strong> Follow <Link href="/docs#first-bot">Your first trading bot, step by step</Link>. It explains every command below, why it is needed and what you should see, and starts safely in practice mode.</p><p className="agents-fine">These commands are for a terminal on your own computer, in a copy of the Flurbo SDK source. The source is not public yet; ask the Flurbo team for a copy through the channel where you received your invitation. <Link href="/docs#agents">Read the setup and troubleshooting guide</Link>.</p>
     <div className="agents-tabs segmented" role="tablist" aria-label="SDK language">{(['typescript', 'python', 'rust', 'cpp'] as const).map(l => <button key={l} type="button" role="tab" aria-selected={language === l} aria-pressed={language === l} onClick={() => setLanguage(l)}>{{ typescript: 'TypeScript', python: 'Python', rust: 'Rust', cpp: 'C++' }[l]}</button>)}</div>
     {!hasWallet && <p className="agents-note">Associate the agent wallet first; Flurbo only attributes trades from it.</p>}
     <pre className="agents-code">{available[language]}</pre>
