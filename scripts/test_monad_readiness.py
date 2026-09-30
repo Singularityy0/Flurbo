@@ -82,6 +82,17 @@ class ReadinessTests(unittest.TestCase):
         url = "https://monad-testnet.g.alchemy.com/v2/local-test-key"
         self.assertEqual(rpc_endpoint(NETWORK, "alchemy", {name: url}), url)
 
+    def test_quicknode_endpoint_must_be_for_the_same_network(self):
+        name = NETWORK["alchemy_env"]
+        url = "https://little-dawn-cloud.monad-testnet.quiknode.pro/local-test-token/"
+        self.assertEqual(rpc_endpoint(NETWORK, "quicknode", {name: url}), url)
+        for bad in ["https://little-dawn-cloud.monad-mainnet.quiknode.pro/secret/", "https://little-dawn-cloud.monad-testnet.quiknode.pro/",
+                    "https://a.b.monad-testnet.quiknode.pro/secret/", "https://monad-testnet.quiknode.pro.evil.com/secret/",
+                    "http://little-dawn-cloud.monad-testnet.quiknode.pro/secret/"]:
+            with self.assertRaises(CheckError) as error:
+                rpc_endpoint(NETWORK, "quicknode", {name: bad})
+            self.assertNotIn("secret", str(error.exception))
+
     def test_no_write_method_or_redirect_allowed(self):
         rpc = Rpc("https://example.com")
         with self.assertRaises(CheckError):

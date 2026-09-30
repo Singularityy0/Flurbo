@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import { localApi } from './local-api.mjs';
 import { cookieValue } from './session.mjs';
 import { isTestingOperator, testingPages } from './testing-access.mjs';
-import { hostedConfig } from './network.mjs';
+import { hostedConfig, readerProvider } from './network.mjs';
 import {previewAccess} from './preview-access.mjs';
 import {configureApplications} from './access-applications.mjs';
 import { RedisSessionStore, redisCommand } from './redis-session.mjs';
@@ -155,7 +155,7 @@ async function main() {
     config.learningDashboardUrl = 'http://127.0.0.1:18768';
     learningReader = spawn(process.env.PYTHON || 'python3', ['scripts/serve_dashboard.py', '--manifest',
       'config/learning-testnet.json', '--learning-market', '--port', '18768',
-      '--provider', process.env.FLURBO_ALCHEMY_TESTNET_RPC_URL ? 'alchemy' : 'public'], { cwd: root, stdio: 'inherit', windowsHide: true });
+      '--provider', readerProvider(process.env.FLURBO_ALCHEMY_TESTNET_RPC_URL)], { cwd: root, stdio: 'inherit', windowsHide: true });
     learningReader.on('error', () => console.error('Learning market reader could not start; requests will remain unavailable'));
     learningReader.on('exit', () => console.error('Learning market reader stopped; requests will remain unavailable'));
   }
@@ -169,7 +169,7 @@ async function main() {
     const manifestPath = resolve(tmpdir(), 'flurbo-public-manifest.json');
     await writeFile(manifestPath, JSON.stringify(manifest), { mode: 0o600 });
     reader = spawn(process.env.PYTHON || 'python3', ['scripts/serve_dashboard.py', '--manifest', manifestPath,
-      '--provider', process.env.FLURBO_ALCHEMY_TESTNET_RPC_URL ? 'alchemy' : 'public'], { cwd: root, stdio: 'inherit', windowsHide: true });
+      '--provider', readerProvider(process.env.FLURBO_ALCHEMY_TESTNET_RPC_URL)], { cwd: root, stdio: 'inherit', windowsHide: true });
     reader.on('error', () => { console.error('Public chain reader could not start'); process.exit(1); });
     reader.on('exit', () => { console.error('Public chain reader stopped'); process.exit(1); });
   }
