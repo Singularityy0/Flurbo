@@ -55,7 +55,7 @@ export function defaultConfig(): AgentConfig {
     strategy: { id: 'joint-edge', quantityAtoms: '1000000', slippageBps: 50, minEdgeBps: 500, minEdgeAtoms: '10000', maxCostAtoms: '2000000', includeSingles: true, minEvidence: 1 },
     policy: { markets: ['pilot'], maxQuantityAtoms: '2000000', maxTradeCostAtoms: '2000000', maxSlippageBps: 50,
       spend: { totalAtoms: '20000000', windows: [{ seconds: 86_400, atoms: '10000000' }] }, maxPositionAtoms: '5000000', maxWorstCaseLossAtoms: '10000000',
-      gas: { maxFeeWei: '100000000000000000', reserveWei: '200000000000000000' }, quoteMaxAgeSeconds: 30, minSecondsBeforeClose: 3600, maxPending: 2, allowSell: false, allowRedeem: false },
+      gas: { maxFeeWei: '100000000000000000', reserveWei: '200000000000000000' }, quoteMaxAgeSeconds: 30, minSecondsBeforeClose: 120, maxPending: 2, allowSell: false, allowRedeem: false },
     policyMaxAgeSeconds: 120, paperBudgetAtoms: '50000000',
   };
 }
@@ -181,7 +181,7 @@ export function agentRunner(o: RunnerOptions) {
   const policyNow = (): PolicyConfig => { const e = effective(); return { ...config.policy, maxTradeCostAtoms: e.maxTradeCostAtoms, spend: { ...config.policy.spend, windows: e.windows } }; };
   const exec: Executor | null = signer ? executor({ chain, signer, journal, client, policy: policyNow, liveAllowed, now, waitSeconds: config.schedule.waitSeconds, log, onStop: stop }) : null;
   const policyHash = () => createHash('sha256').update(JSON.stringify({ mode: config.mode, policy: policyNow(), strategy: config.strategy })).digest('hex');
-  // `stopped` is sent once, in the final heartbeat after a requested stop, so Flurbo shows the runtime as stopped.
+  // `stopped` is sent once, in the final heartbeat when a run ends, so Flurbo shows the runtime as stopped.
   let stopped = false;
   const state = (): RuntimeStatus => ({ state: stopped ? 'stopped' : existsSync(stopFile) ? 'stopping' : blockedBy ? 'blocked' : flurbo?.paused ? 'paused' : 'running', blockedBy });
 
@@ -322,7 +322,10 @@ export function agentRunner(o: RunnerOptions) {
           if (existsSync(stopFile)) break;
         }
       } finally { clearInterval(beat); }
-      if (existsSync(stopFile)) { unlinkSync(stopFile); stopped = true; await heartbeat().catch(() => {}); stopped = false; }
+      // Every ended run tells Flurbo it stopped, whether it was asked to stop or ran once, so the dashboard
+      // never shows a finished runtime as running.
+      if (existsSync(stopFile)) unlinkSync(stopFile);
+      stopped = true; await heartbeat().catch(() => {}); stopped = false;
       log('stopped', { runtimeId });
     },
     requestStop: () => writeFileSync(stopFile, String(now())),

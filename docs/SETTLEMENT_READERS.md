@@ -22,6 +22,7 @@ Not automatable, so the operator proposes: sources that need a login or a secret
 
 - **Timing.** `first-observed-snapshot`: the first capture retained between `scheduledAt` and `publicationCutoff` decides; its capture time is the publication time. `initial`: the source's own publication time (configured in `publishedAt`) must fall inside the window. `initial-with-corrections` is not available for general readers.
 - **Prediction guard.** Trading closes before every observation window. A general reader's release published before the window never settles the market (`RELEASED_BEFORE_OBSERVATION_WINDOW`), and the rule check refuses a value that is already public.
+- **Late additions and revisions.** Catalogues and feeds keep adding and correcting records after the interval they describe. In pre-test-v1, EMSC entered an M4.2 earthquake 92 minutes after it happened, five minutes after Flurbo had captured the count, so the market settled on 4 while the catalogue later showed 5. A snapshot of an interval (an `observation.period` written as `start/end`) must therefore open its capture window at least 3 hours after the interval ends. The rule check and market preparation refuse anything sooner. `evm-rpc.v1` is exempt because it already waits for block finality, and a single dated release (such as an exchange rate for one day) is not an interval. Pools prepared before this rule keep settling under their own published rules.
 - **Missing is not an answer.** A value that is not there yet (a row not published, a block not produced, a `null`) means the capture is not retained, and the bot keeps checking until the cutoff. If nothing valid is retained, the question resolves VOID at its deadline.
 - **Exact values.** Numbers are read from the raw text, never through floating point: `3.6123` stays `3.6123`. Up to 18 decimal places. `scale` divides by 10^n (for example 18 for token amounts).
 - **Evidence.** Every retained response is archived publicly with its hash and checked again before anything is signed. Keep responses small (well under 1 MB): narrow queries with date parameters.
@@ -113,7 +114,7 @@ It validates each rule, prints its hash and timeline, reads each source now and 
 | `ok` | Valid. The value is not public yet (as a prediction needs), or the window has already opened |
 | `already-public` | The answer can already be read. Move the window or choose a period not yet published |
 | `source-error` | The source could not be read or did not match the settings. Fix the rule |
-| `invalid` | The rule itself is invalid |
+| `invalid` | The rule itself is invalid, or it breaks authoring policy (for example a capture window less than 3 hours after an observed interval) |
 
 For a rule whose window is in the future, `not-yet-available` on each source is the expected result. A snapshot rule may also show a `current-reading` (for example a count of 0 for an hour that has not started): it is informational, because the first capture inside the window decides. A 404 before a release is published (NBP, for example) shows as `source-error` here, but the bot simply keeps checking. FDSN catalogues such as EMSC return 204 for an empty window, which is not retained: a question that can plausibly have zero events should use a source that returns an empty list instead.
 

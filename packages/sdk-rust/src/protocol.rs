@@ -41,7 +41,7 @@ fn lower_hex_of(s: &str, len: usize) -> bool {
     s.len() == len + 2 && s.starts_with("0x") && s[2..].bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
 
-fn namespace_ok(s: &str) -> bool {
+pub(crate) fn namespace_ok(s: &str) -> bool {
     s == "pilot" || s.strip_prefix("practice-").is_some_and(|h| h.len() == 40 && h.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)))
 }
 

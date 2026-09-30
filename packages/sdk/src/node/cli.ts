@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FlurboError } from '../errors.ts';
+import { isNamespace } from '../market.ts';
 import { agentRunner, defaultConfig, parseConfig } from './runner.ts';
 import { signerFromEnv } from './signer.ts';
 
@@ -9,7 +10,8 @@ import { signerFromEnv } from './signer.ts';
 // `stop` (or Ctrl+C) does.
 const HELP = `flurbo-agent <command> [--config flurbo-agent.json]
 
-  init                 Write a configuration template (paper mode, no secrets).
+  init [--markets A,B] Write a configuration template (paper mode, no secrets). --markets sets the
+                       markets the agent trades; its page on Flurbo shows the exact command.
   start [--once]       Run the agent loop in the foreground. --once runs a single cycle.
   stop                 Ask a running agent to stop after its current step.
   status               Show mode, pending transactions and the last run.
@@ -34,8 +36,15 @@ export async function main(argv: string[], io = { out: (s: string) => console.lo
     switch (command) {
       case 'init': {
         if (existsSync(configPath)) throw new FlurboError('conflict', `${configPath} already exists.`);
-        writeFileSync(configPath, JSON.stringify(defaultConfig(), null, 2) + '\n');
-        io.out(`Wrote ${configPath} (paper mode). Set FLURBO_AGENT_TOKEN, and FLURBO_AGENT_PRIVATE_KEY for live mode, in your environment. Never put them in the file.`);
+        const config = defaultConfig(), markets = flag('--markets');
+        if (markets !== undefined) {
+          const list = markets.split(',').map(m => m.trim()).filter(Boolean);
+          if (!list.length || !list.every(isNamespace)) throw new FlurboError('invalid_input', 'Pass --markets as the comma separated market names shown on the agent page: pilot, or practice- followed by the pool address without 0x.');
+          config.markets = list; config.policy = { ...config.policy, markets: list };
+          parseConfig(config);
+        }
+        writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+        io.out(`Wrote ${configPath} (paper mode, markets ${config.markets.join(', ')}). Set FLURBO_AGENT_TOKEN, and FLURBO_AGENT_PRIVATE_KEY for live mode, in your environment. Never put them in the file.`);
         return 0;
       }
       case 'start': {

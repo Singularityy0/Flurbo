@@ -14,7 +14,7 @@ A Rust toolchain (tested with 1.97.1). From a checkout of the repository:
 ```bash
 cd packages/sdk-rust
 cargo build --release
-./target/release/flurbo-agent-rs init --config flurbo-agent.json
+./target/release/flurbo-agent-rs init --config flurbo-agent.json --markets <names from the agent's Setup page>
 ```
 
 Dependencies: `k256` (secp256k1 with RFC 6979 signing), `sha3` (keccak), `serde` and `serde_json`, `getrandom`, and `ureq` with rustls for HTTP. All are MIT or Apache-2.0, except rustls's own dependencies (ISC, BSD-3-Clause) and the bundled web root certificates (CDLA-Permissive-2.0). The protocol core (`claims`, `abi`, `amounts`, `policy`, `recovery`, `effects`, `research`, `strategy`, `transaction`, `protocol`) does no I/O.

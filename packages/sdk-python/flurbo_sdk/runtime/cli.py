@@ -1,7 +1,7 @@
 """flurbo-agent for Python: a local runner on the operator's own infrastructure. It never uploads keys, prints
 secrets or runs anything on Flurbo's servers. Closing the dashboard does not stop it; `stop` (or Ctrl+C) does.
 
-    python -m flurbo_sdk <init|start [--once]|stop|status|recover|address|sign-message --file F> [--config flurbo-agent.json]
+    python -m flurbo_sdk <init [--markets A,B]|start [--once]|stop|status|recover|address|sign-message --file F> [--config flurbo-agent.json]
 """
 import argparse
 import json
@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from ..errors import FlurboError
+from ..protocol import _NAMESPACE
 from .runner import AgentRunner, default_config, parse_config
 from .signer import signer_from_env
 
@@ -20,6 +21,7 @@ def main(argv: list[str], out=print, err=lambda s: print(s, file=sys.stderr)) ->
     parser.add_argument("--config", default="flurbo-agent.json")
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--file")
+    parser.add_argument("--markets", help="init only: comma separated market names from the agent page")
     try:
         args = parser.parse_args(argv)
     except SystemExit as e:
@@ -36,8 +38,15 @@ def main(argv: list[str], out=print, err=lambda s: print(s, file=sys.stderr)) ->
         if args.command == "init":
             if config_path.exists():
                 raise FlurboError("conflict", f"{config_path} already exists.")
-            config_path.write_text(json.dumps(default_config(), indent=2) + "\n", encoding="utf-8")
-            out(f"Wrote {config_path} (paper mode). Set FLURBO_AGENT_TOKEN, and FLURBO_AGENT_PRIVATE_KEY for live mode, in your environment. Never put them in the file.")
+            config = default_config()
+            if args.markets is not None:
+                markets = [m.strip() for m in args.markets.split(",") if m.strip()]
+                if not markets or not all(_NAMESPACE.match(m) for m in markets):
+                    raise FlurboError("invalid_input", "Pass --markets as the comma separated market names shown on the agent page: pilot, or practice- followed by the pool address without 0x.")
+                config["markets"], config["policy"]["markets"] = markets, list(markets)
+                parse_config(config)
+            config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+            out(f"Wrote {config_path} (paper mode, markets {', '.join(config['markets'])}). Set FLURBO_AGENT_TOKEN, and FLURBO_AGENT_PRIVATE_KEY for live mode, in your environment. Never put them in the file.")
             return 0
         if args.command == "start":
             runner = AgentRunner(load())

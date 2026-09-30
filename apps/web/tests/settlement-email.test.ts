@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { emailConfig, resendDelivery, queueReport, drainEmails } from '../server/settlement-email.mjs';
+import { emailConfig, resendDelivery, queueReport, drainEmails, queueReadFailures } from '../server/settlement-email.mjs';
 import { settlementLease } from '../server/settlement-store.mjs';
 import { notifyPool, runNotifications, watchdog } from '../scripts/notify-settlement.mjs';
 import { monitorIdentity } from '../server/settlement-monitor.mjs';
@@ -104,9 +104,10 @@ function observed(manifest: any, now: number, active = true) {
       cases: Array.from({ length: manifest.publication.draft.events.length }, () => ({ phase: 0, result: 0, votes: [0, 0, 0] })) } };
 }
 
-test('hosted job persists before sending, preserves the checkpoint on failed reads and emails recovery', async () => {
+test('hosted job persists before sending, retries reads, and keeps the checkpoint and inbox quiet on a failed check', async () => {
   const f = pilotFixture(), r = redis(); let time = 1000, sends = 0;
-  const options = { manifest: f.manifest, rpc: f.rpc, command: r.command, config, now: () => time,
+  const waits: number[] = [], wait = async (ms: number) => { waits.push(ms); };
+  const options = { manifest: f.manifest, rpc: f.rpc, command: r.command, config, now: () => time, wait,
     send: async () => { sends++; return 'accepted-id'; }, inspect: async () => observed(f.manifest, time) };
   r.fail.save = true;
   await assert.rejects(notifyPool(options)); assert.equal(sends, 0);
@@ -115,12 +116,32 @@ test('hosted job persists before sending, preserves the checkpoint on failed rea
   const stateKey = [...r.data.keys()].find(k => k.endsWith(':state'))!;
   const checkpoint = JSON.parse(r.data.get(stateKey)!).checkpoint;
   time = 1300;
-  const failed = await notifyPool({ ...options, inspect: async () => { throw new Error('secret RPC'); } });
-  assert.equal(failed.status, 'check_failed');
+  let calls = 0;
+  const failed = await notifyPool({ ...options, inspect: async () => { calls++; throw new Error('secret RPC'); } });
+  assert.equal(failed.status, 'check_failed'); assert.equal(failed.readFailures, 1); assert.equal(failed.acceptedEmails, 0);
+  assert.equal(calls, 3, 'each check retries its read'); assert.deepEqual(waits, [2000, 4000]);
   assert.deepEqual(JSON.parse(r.data.get(stateKey)!).checkpoint, checkpoint);
-  time = 1600;
-  assert.equal((await notifyPool(options)).acceptedEmails, 1);
-  assert.equal(sends, 3);
+  assert.equal((await notifyPool({ ...options, inspect: async () => { calls++; throw new Error('secret RPC'); } })).readFailures, 2);
+  // A read that fails once and then succeeds is a normal check.
+  time = 1600; let flaky = 0;
+  const recovered = await notifyPool({ ...options, inspect: async () => { if (flaky++ === 0) throw new Error('blip'); return observed(f.manifest, time); } });
+  assert.equal(recovered.status, 'attention_required'); assert.equal(JSON.parse(r.data.get(stateKey)!).readFailures, 0);
+  assert.equal(recovered.acceptedEmails, 0, 'nothing changed on chain, so nothing new to send');
+  assert.equal(sends, 1);
+});
+
+test('read failures across pools send one email after two failed checks in a row, and one on recovery', () => {
+  let state: any = { schema: 'flurbo.settlement-mail.v1', identity: 'x', checkpoint: null, report: null, signature: null, lastQueuedAt: 0, queue: [] };
+  state = queueReadFailures(state, [], config, 1000); assert.equal(state.queue.length, 0);
+  const two = [{ pool: '0x' + 'aa'.repeat(20), readFailures: 2 }, { pool: '0x' + 'bb'.repeat(20), readFailures: 3 }];
+  state = queueReadFailures(state, two, config, 1000);
+  assert.equal(state.queue.length, 1); assert.equal(state.queue[0].body.subject, 'Flurbo settlement monitor: chain reads failing');
+  assert.match(state.queue[0].body.text, /for 2 pools on at least two checks in a row/); assert.match(state.queue[0].body.text, /UTC \(05:46 IST\)/);
+  state = queueReadFailures(state, [...two].reverse(), config, 1600); assert.equal(state.queue.length, 1, 'same pools, no repeat within the hour');
+  state = queueReadFailures(state, two, config, 4600); assert.equal(state.queue.length, 2, 'hourly reminder while failing');
+  state = queueReadFailures(state, [], config, 4700);
+  assert.equal(state.queue.length, 3); assert.equal(state.queue[2].body.subject, 'Flurbo settlement monitor: chain reads recovered');
+  state = queueReadFailures(state, [], config, 4800); assert.equal(state.queue.length, 3);
 });
 
 test('queue capacity, recipient changes and corrupt state fail closed', async () => {
@@ -158,13 +179,13 @@ test('runner handles the pilot and practice pools, signals failed reads to watch
     UPSTASH_REDIS_REST_URL: 'https://fixture.upstash.io', UPSTASH_REDIS_REST_TOKEN: 'storage-secret',
     FLURBO_MONITOR_EMAIL_FROM: config.from, FLURBO_MONITOR_EMAIL_TO: config.to[0], FLURBO_MONITOR_RESEND_KEY: config.key,
     FLURBO_MONITOR_HEALTHCHECK_URL: 'https://hc-ping.com/00000000-0000-0000-0000-000000000000' };
-  const pings: string[] = [], output: string[] = [];
+  const pings: string[] = [], output: string[] = [], subjects: string[] = [];
   const request = async (url: string, init: any) => {
     if (url.includes('upstash.io')) return Response.json({ result: await r.command(...JSON.parse(init.body)) });
-    if (url === 'https://api.resend.com/emails') return Response.json({ id: 'accepted-id' });
+    if (url === 'https://api.resend.com/emails') { subjects.push(JSON.parse(init.body).subject); return Response.json({ id: 'accepted-id' }); }
     pings.push(url); return new Response('OK');
   };
-  const options = { env, args: [], request, now: () => 1000, output: (s: string) => output.push(s),
+  const options = { env, args: [], request, now: () => 1000, output: (s: string) => output.push(s), wait: async () => {},
     inspect: async ({ manifest }: any) => observed(manifest, 1000) };
   assert.equal(await runNotifications(options), 0);
   assert.equal(output.length, 1);
@@ -185,8 +206,16 @@ test('runner handles the pilot and practice pools, signals failed reads to watch
   assert.equal(await runNotifications({...options,env:generalEnv}),0);
   assert.ok(!pings.at(-1)!.endsWith('/fail'));
   assert.equal(await runNotifications({...options,env:{...env,FLURBO_PRACTICE_COLLECTIONS_JSON:JSON.stringify([{label:'Duplicate pool',manifest:rehearsal}])}}),2);
-  assert.equal(await runNotifications({ ...options, inspect: async () => { throw new Error('storage-secret'); } }), 2);
+  // One failed check (after retries) pages nobody; the second in a row sends one email and fails the watchdog.
+  const failingRead = { ...options, inspect: async () => { throw new Error('storage-secret'); } };
+  const mailBefore = subjects.length;
+  assert.equal(await runNotifications(failingRead), 0);
+  assert.ok(!pings.at(-1)!.endsWith('/fail')); assert.equal(subjects.length, mailBefore);
+  assert.equal(await runNotifications(failingRead), 2);
   assert.ok(pings.at(-1)!.endsWith('/fail'));
+  assert.deepEqual(subjects.slice(mailBefore), ['Flurbo settlement monitor: chain reads failing']);
+  assert.equal(await runNotifications(options), 0);
+  assert.deepEqual(subjects.slice(mailBefore), ['Flurbo settlement monitor: chain reads failing', 'Flurbo settlement monitor: chain reads recovered']);
   assert.ok(!output.join('').includes('storage-secret'));
   assert.equal(await runNotifications({ ...options, env: { ...env, FLURBO_MONITOR_RESEND_KEY: '' } }), 2);
 });

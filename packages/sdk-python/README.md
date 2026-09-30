@@ -17,8 +17,10 @@ Python 3.11 or later. From a checkout of the repository:
 cd packages/sdk-python
 python -m venv .venv
 .venv/bin/pip install -e .          # Windows: .venv\Scripts\pip install -e .
-python -m flurbo_sdk init --config flurbo-agent.json
+python -m flurbo_sdk init --config flurbo-agent.json --markets <names from the agent's Setup page>
 ```
+
+Install before running: `pip install -e .` installs the one runtime dependency. Running `python -m flurbo_sdk` from the source folder without it prints that instruction instead of starting.
 
 Runtime dependency: `eth-account` (MIT, Ethereum Foundation) for secp256k1 signing, EIP-1559 serialization and keccak. The protocol core (`claims`, `abi`, `amounts`, `policy`, `recovery`, `effects`, `research`, `strategy`, `transaction`, `protocol`) uses only the standard library.
 

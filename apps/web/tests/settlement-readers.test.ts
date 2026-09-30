@@ -200,6 +200,27 @@ test('the rule check says whether a market would still be a prediction', async (
   assert.equal((await checkRule(future, { now: T0, request: broken as any })).status, 'source-error');
 });
 
+test('a snapshot of an interval must wait for late additions before its window opens', async () => {
+  const { settlementRuleAuthoringIssues, assertSettlementRuleAuthoring, SNAPSHOT_SETTLE_SECONDS } = await import('../server/settlement-rules.mjs');
+  const { checkRule } = await import('../scripts/check-settlement-rule.mjs');
+  const end = T0 - SNAPSHOT_SETTLE_SECONDS, count = { select: '/features', aggregate: 'count' };
+  const interval = (scheduledAt: number) => ({ ...rule('json-api.v1', count, { scheduledAt }),
+    observation: { series: 'catalogue-count', period: `${new Date((end - 3600) * 1000).toISOString().replace('.000Z', 'Z')}/${new Date(end * 1000).toISOString().replace('.000Z', 'Z')}`, unit: 'events' } });
+  assert.deepEqual(settlementRuleAuthoringIssues(interval(T0)), [], 'three hours after the interval is enough');
+  const early = interval(end + 35 * 60);
+  assert.match(settlementRuleAuthoringIssues(early)[0], /opens 35 minutes after .* at least 3 hours/);
+  assert.throws(() => assertSettlementRuleAuthoring(early), /event-1: The capture window opens 35 minutes/);
+  const report = await checkRule(early, { now: T0 - 7200 });
+  assert.equal(report.status, 'invalid'); assert.match(report.message, /at least 3 hours/);
+  // Existing pools still settle: the settlement validator itself is unchanged.
+  assert.equal(validateSettlementRule(early).eventId, 'event-1');
+  // Chain readers wait for finality instead, and a single dated release (not an interval) is not affected.
+  const chain = { ...rule('evm-rpc.v1', { chainId: 143, at: end - 3600, until: end, metric: 'tx-count', stride: 25, finalitySeconds: 60 },
+    { scheduledAt: end + 300, url: 'https://rpc.monad.xyz/' }), observation: { ...early.observation, unit: 'transactions' } };
+  assert.deepEqual(settlementRuleAuthoringIssues(chain), []);
+  assert.deepEqual(settlementRuleAuthoringIssues(rule('json-api.v1', { select: '/value', aggregate: 'value' }, { scheduledAt: T0 })), []);
+});
+
 test('a market can mix readers and still binds every rule on-chain', async () => {
   const { settlementEvent, validateSettlementPublication, settlementBindings } = await import('../server/settlement-publication.mjs');
   const close = T0 - 600;

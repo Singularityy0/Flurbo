@@ -1,6 +1,6 @@
 # Agent configuration reference
 
-All four runtimes (TypeScript, Python, Rust, C++) read the same `flurbo.agent-config.v1` JSON file. `init` writes a paper-mode file with safe defaults; this page describes every key. Key names are camelCase in every language. Secrets never go in this file: it names environment variables instead, and the runtimes refuse a file with a `privateKey` or `secret` field holding a key.
+All four runtimes (TypeScript, Python, Rust, C++) read the same `flurbo.agent-config.v1` JSON file. `init` writes a paper-mode file with safe defaults; `init --markets A,B` also writes the agent's markets (the agent's Setup page on Flurbo shows that exact line). This page describes every key. Key names are camelCase in every language. Secrets never go in this file: it names environment variables instead, and the runtimes refuse a file with a `privateKey` or `secret` field holding a key.
 
 ## Top level
 
@@ -8,7 +8,7 @@ All four runtimes (TypeScript, Python, Rust, C++) read the same `flurbo.agent-co
 |---|---|---|
 | `schema` | `flurbo.agent-config.v1` | Required, exact. |
 | `mode` | `paper` | `paper` simulates fills; `live` signs and sends. Live trading also needs "Allow live testnet trades" on the agent's Flurbo page. |
-| `markets` | `["pilot"]` | Market namespaces the agent may read: `pilot` or `practice-<pool address without 0x>`. |
+| `markets` | `["pilot"]`, or the list given to `init --markets` | Market namespaces the agent may read: `pilot` or `practice-<pool address without 0x>`. |
 | `stateDir` | `.flurbo-agent` | Journal, paper book and runtime status. Keep it private; never delete the journal of a live agent. |
 | `api.baseUrl` | `https://flurbo.singu.online` | Flurbo API. |
 | `api.credentialEnv` | `FLURBO_AGENT_TOKEN` | Environment variable holding the agent credential issued on the Agents page. |
@@ -114,7 +114,7 @@ The runtime enforces these before anything is signed, and tightens them with any
 
 | Key | Default | Meaning |
 |---|---|---|
-| `policy.markets` | `["pilot"]` | Must be a subset of `markets`. |
+| `policy.markets` | Same as `markets` | Must be a subset of `markets`. |
 | `policy.maxQuantityAtoms` | `2000000` | Shares per trade. |
 | `policy.maxTradeCostAtoms` | `2000000` | Cost per trade. |
 | `policy.maxSlippageBps` | `50` | 10, 50 or 100. |
@@ -124,7 +124,7 @@ The runtime enforces these before anything is signed, and tightens them with any
 | `policy.maxWorstCaseLossAtoms` | `10000000` | Worst-case loss across overlapping claims. |
 | `policy.gas.maxFeeWei`, `policy.gas.reserveWei` | 0.1 MON, 0.2 MON | Largest fee per transaction; MON always kept back. |
 | `policy.quoteMaxAgeSeconds` | `30` | Quotes older than this are refreshed, never used. |
-| `policy.minSecondsBeforeClose` | `3600` | Stop trading this long before a market closes. |
+| `policy.minSecondsBeforeClose` | `120` | Stop trading this long before a market closes. The runtime logs `too_close_to_close` and skips the market. The site's own trading stays open until the close. |
 | `policy.maxPending` | `2` | Unconfirmed transactions allowed at once. |
 | `policy.allowSell`, `policy.allowRedeem` | `false`, `false` | Permit sells and redemptions. |
 

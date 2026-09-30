@@ -8,6 +8,8 @@
 .combination-leg { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--s-3); padding: var(--s-3); border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--bg); transition: border-color var(--t-fast), background-color var(--t-fast); }
 .combination-leg.selected { border-color: var(--ink); background: var(--surface); }
 .combination-leg > label { line-height: 1.45; font-size: 14px; }
+.combination-leg.unavailable { background: var(--surface); }
+.combination-leg.unavailable > label { color: var(--ink-3); cursor: not-allowed; }
 .combination-leg small { display: block; margin-top: 2px; color: var(--ink-3); font-size: 12px; }
 .combination-answer .segmented button { min-height: 32px; padding: 0 var(--s-3); font-size: 13px; }
 .combination-rules { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }

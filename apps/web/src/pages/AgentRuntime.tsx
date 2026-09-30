@@ -48,7 +48,7 @@ export function RuntimeCreateForm({ directory }: { directory: { namespace: strin
   }
   return <form className="agents-card agents-register" id="register-agent" onSubmit={create} aria-label="Register an agent">
     <h2>Register an agent</h2><ol className="agent-setup-steps"><li>Name your agent and choose its markets.</li><li>Associate a dedicated wallet and create a credential.</li><li>Run the SDK in paper mode, then review its activity.</li></ol>
-    <p className="agents-fine">Your agent runs on your own computer or server with the Flurbo SDK. It researches, forecasts and trades with its own dedicated wallet, within limits you set. Flurbo shows its status, decisions and verified trades here.</p>
+    <p className="agents-fine">Your agent runs on your own computer or server with the Flurbo SDK. It researches, forecasts and trades with its own dedicated wallet, within limits you set. Flurbo shows its status, decisions and verified trades here. By default it stops trading 120 seconds before a market closes.</p>
     <label>Name<input value={name} onChange={e => setName(e.target.value)} maxLength={48} required placeholder="Release relationship agent"/></label>
     <fieldset className="agents-choice"><legend>Related markets it may trade</legend>
       {directory.map(d => <label key={d.namespace}><input type="checkbox" checked={markets.includes(d.namespace)} disabled={!d.open} onChange={e => setMarkets(m => (e.target.checked ? [...m, d.namespace] : m.filter(x => x !== d.namespace)))}/>{d.label}<small>{d.open?'Open for predictions':'Unavailable for new trades'}</small></label>)}
@@ -140,6 +140,7 @@ function Controls({ id, policy, busy, act }: { id: string; policy: any; busy: bo
       <label>Most per trade, test AUSD (Flurbo limit)<input inputMode="decimal" value={limit} onChange={e => setLimit(e.target.value)} placeholder="No Flurbo limit"/></label>
       <label>Most per 24 hours, test AUSD<input inputMode="decimal" value={daily} onChange={e => setDaily(e.target.value)} placeholder="No Flurbo limit"/></label>
     </div>
+    <p className="agents-fine">The runtime also stops trading 120 seconds before each market closes by default (<code>policy.minSecondsBeforeClose</code> in its configuration file), and skips that market with <code>too_close_to_close</code> in its log.</p>
     <p className="agents-fine">These limits only tighten the runtime's own limits. They are software checks in a compliant runtime; the amount in the agent wallet is the hard bound on what it can spend.</p>
     {error && <p className="state-inline error" role="alert">{error}</p>}
     <button className="button button-outline" disabled={busy} onClick={save}>Save limits</button>
@@ -204,12 +205,18 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
   const [language, setLanguage] = useState<'typescript' | 'python' | 'rust' | 'cpp'>('typescript');
   const [copyStatus,setCopyStatus]=useState('');
   const origin = typeof window === 'undefined' ? 'https://flurbo.singu.online' : window.location.origin;
+  // init writes this agent's registered markets into the file, so it trades exactly what Flurbo allows.
+  const markets = (profile.markets ?? []).join(',');
+  const review = [
+    `# init sets markets to ${markets || 'the ones listed on this page'}. Check api.baseUrl is "${origin}", then set`,
+    '# research.provider (your model provider), strategy and policy. Keep "mode": "paper" until ready.',
+    '# Agents stop trading 120 seconds before a market closes (policy.minSecondsBeforeClose).',
+  ];
   const ts = [
     '# Node 24 or later, in your copy of the Flurbo SDK source',
     'cd packages/sdk && npm ci',
-    'node bin/flurbo-agent.ts init --config flurbo-agent.json',
-    `# Edit flurbo-agent.json: api.baseUrl "${origin}", markets ${JSON.stringify(profile.markets ?? [])},`,
-    '# research.provider (your model provider), strategy and policy. Keep "mode": "paper" until ready.',
+    `node bin/flurbo-agent.ts init --config flurbo-agent.json --markets ${markets}`,
+    ...review,
     'export FLURBO_AGENT_TOKEN=...            # PowerShell: $env:FLURBO_AGENT_TOKEN="..."',
     'export FLURBO_AGENT_PRIVATE_KEY=...      # agent wallet key, live mode only',
     'export OPENAI_API_KEY=...                # or the variable your provider uses',
@@ -224,9 +231,9 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
     '# Windows Git Bash: source .venv/Scripts/activate',
     '# Windows PowerShell: .venv\\Scripts\\Activate.ps1',
     'python -m pip install -e .',
-    'python -m flurbo_sdk init --config flurbo-agent.json',
-    `# Same configuration format as TypeScript: api.baseUrl "${origin}", markets ${JSON.stringify(profile.markets ?? [])},`,
-    '# research.provider, strategy and policy. Keep "mode": "paper" until ready.',
+    `python -m flurbo_sdk init --config flurbo-agent.json --markets ${markets}`,
+    '# Same configuration format as TypeScript.',
+    ...review,
     'export FLURBO_AGENT_TOKEN=...            # PowerShell: $env:FLURBO_AGENT_TOKEN="..."',
     'export FLURBO_AGENT_PRIVATE_KEY=...      # agent wallet key, live mode only',
     'python -m flurbo_sdk start --config flurbo-agent.json',
@@ -236,9 +243,9 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
   const rs = [
     '# A Rust toolchain, in your copy of the Flurbo SDK source',
     'cd packages/sdk-rust && cargo build --release',
-    './target/release/flurbo-agent-rs init --config flurbo-agent.json',
-    `# Same configuration format as TypeScript: api.baseUrl "${origin}", markets ${JSON.stringify(profile.markets ?? [])},`,
-    '# research.provider, strategy and policy. Keep "mode": "paper" until ready.',
+    `./target/release/flurbo-agent-rs init --config flurbo-agent.json --markets ${markets}`,
+    '# Same configuration format as TypeScript.',
+    ...review,
     'export FLURBO_AGENT_TOKEN=...            # PowerShell: $env:FLURBO_AGENT_TOKEN="..."',
     'export FLURBO_AGENT_PRIVATE_KEY=...      # agent wallet key, live mode only',
     './target/release/flurbo-agent-rs start --config flurbo-agent.json',
@@ -248,9 +255,10 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
   const cpp = [
     '# GCC or Clang (C++20) and OpenSSL 3.2 or later, in your copy of the Flurbo SDK source',
     'cd packages/sdk-cpp && make            # Windows (MSYS2): mingw32-make',
-    './build/flurbo-agent-cpp init --config flurbo-agent.json',
-    `# Same configuration format as TypeScript: api.baseUrl "${origin}", markets ${JSON.stringify(profile.markets ?? [])},`,
-    '# research.provider, strategy and policy. Keep "mode": "paper" until ready.',
+    '# Windows: keep C:\\msys64\\ucrt64\\bin on PATH when you run it, or it exits at once (code 127) without a message',
+    `./build/flurbo-agent-cpp init --config flurbo-agent.json --markets ${markets}`,
+    '# Same configuration format as TypeScript.',
+    ...review,
     'export FLURBO_AGENT_TOKEN=...            # PowerShell: $env:FLURBO_AGENT_TOKEN="..."',
     'export FLURBO_AGENT_PRIVATE_KEY=...      # agent wallet key, live mode only',
     './build/flurbo-agent-cpp start --config flurbo-agent.json',

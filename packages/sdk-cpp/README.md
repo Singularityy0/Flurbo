@@ -16,8 +16,10 @@ GNU make, a C++20 compiler with `__int128` (GCC or Clang), and OpenSSL 3.2 or la
 ```bash
 cd packages/sdk-cpp
 make                                   # Windows (MSYS2): mingw32-make, with C:\msys64\ucrt64\bin on PATH
-./build/flurbo-agent-cpp init --config flurbo-agent.json
+./build/flurbo-agent-cpp init --config flurbo-agent.json --markets <names from the agent's Setup page>
 ```
+
+On Windows, keep `C:\msys64\ucrt64\bin` on PATH whenever you run the program too, not only while building. The executable loads the compiler's runtime and OpenSSL libraries from there; without them Windows stops it before it starts, with exit code 127 and no message. In Git Bash: `export PATH="/c/msys64/ucrt64/bin:$PATH"`. In PowerShell: `$env:Path = "C:\msys64\ucrt64\bin;" + $env:Path`.
 
 ### Linux with an older system OpenSSL
 

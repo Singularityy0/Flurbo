@@ -54,6 +54,27 @@ export function evidenceURI(value) {
   catch { return false; }
 }
 
+// Mirrors FactoredCost.validate: pricing eliminates questions in the pool's fixed order, and eliminating one may
+// join at most three questions (induced width 2). Every distinct combination ever traded stays in the pool, so
+// once some questions are linked, a new combination can be refused although each question is still open.
+export const COMBINATION_LIMIT_MESSAGE='This pool cannot accept this combination. Combinations already bought here link these questions as far as the pool can price, so this one would link one question to more than two others. Each question and other combinations can still be traded; see Docs, Combined predictions.';
+export function combinationFits(events, order, scopes, scope) {
+  if (!Array.isArray(order) || order.length !== events || !Array.isArray(scopes)) return false;
+  if (scopes.includes(scope)) return true;
+  const popcount = value => value.toString(2).replace(/0/g, '').length;
+  const pending = [...scopes, scope];
+  for (const index of order) {
+    const bit = 1 << index;
+    let joined = bit;
+    for (let j = 0; j < pending.length; j++) {
+      if (pending[j] & bit) { joined |= pending[j]; pending[j] = 0; }
+    }
+    if (popcount(joined) - 1 > 2) return false;
+    pending.push(joined & ~bit);
+  }
+  return true;
+}
+
 export function validClaim(scope, mask, count) {
   const width = Number(scope).toString(2).replace(/0/g, '').length;
   return Number.isInteger(scope) && scope > 0 && scope < 2 ** count && width <= 3

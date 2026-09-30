@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { pilotCall } from '../../shared/pilot.mjs';
+import { pilotCall, COMBINATION_LIMIT_MESSAGE } from '../../shared/pilot.mjs';
 import { agentStore, memoryBackend, redisBackend, addPaperFill, addConfirmedPurchase, compactReview, transactionDigest, ownsPurchase, VERIFIED, AGENT_LIMITS } from './agent-store.mjs';
 import { quoteClaims, verifyReceipt, readResolution } from './agent-market.mjs';
 import { runtimeApi, defaultRuntimePolicy, policyView, connection } from './runtime-api.mjs';
@@ -179,7 +179,10 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
     const svc = service(profile.market.namespace), p = decision.proposal;
     let review;
     try { review = await svc.prepare({ owner, action: 'buy', scope: p.claim.scope, mask: p.claim.mask.toString(), quantity: p.quantityAtoms.toString(), slippageBps: p.slippageBps }); }
-    catch (e) { fail(409, /Not enough test AUSD/.test(e?.message) ? 'This wallet does not hold enough test AUSD for this purchase.' : 'The purchase could not be prepared at the current price. Evaluate again.'); }
+    catch (e) {
+      if (e?.message === COMBINATION_LIMIT_MESSAGE) fail(409, COMBINATION_LIMIT_MESSAGE, 'COMBINATION_UNAVAILABLE');
+      fail(409, /Not enough test AUSD/.test(e?.message) ? 'This wallet does not hold enough test AUSD for this purchase.' : 'The purchase could not be prepared at the current price. Evaluate again.');
+    }
     const call = pilotCall({ to: review.transaction.to, data: review.transaction.data, manifest: svc.manifest });
     const limit = BigInt(review.amountAtoms);
     if (!call || review.schema !== 'flurbo.pilot-review.v1' || review.transaction.from.toLowerCase() !== owner) fail(503, 'Unexpected transaction review.');
@@ -383,7 +386,8 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
 
   function profileFrom(input, existing = null) {
     const name = input.name ?? existing?.name;
-    if (typeof name !== 'string' || !/^[\p{L}\p{N} ._-]{3,48}$/u.test(name.trim())) fail(400, 'Use a name of 3 to 48 letters, numbers or spaces.');
+    // Plus, hash and brackets allow names like "C++ agent" or "C# bot (test)".
+    if (typeof name !== 'string' || !/^[\p{L}\p{N} ._+#()'-]{3,48}$/u.test(name.trim())) fail(400, "Use a name of 3 to 48 characters: letters, numbers, spaces and . _ - + # ( ) '");
     const mode = input.mode ?? existing?.mode;
     if (!MODES.includes(mode)) fail(400, 'Choose paper or approval mode.');
     const status = input.status ?? existing?.status ?? 'active';

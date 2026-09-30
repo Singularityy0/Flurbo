@@ -141,7 +141,7 @@ type ClockFn = dyn Fn() -> i64 + Send + Sync;
 pub struct Shared {
     pub config: AgentConfig,
     pub stop_file: PathBuf,
-    /// Set only for the final heartbeat after a requested stop, so Flurbo shows the runtime as stopped.
+    /// Set only for the final heartbeat when a run ends, so Flurbo shows the runtime as stopped.
     pub stopped: std::sync::atomic::AtomicBool,
     pub flurbo: Mutex<Option<(FlurboPolicy, i64)>>,
     pub blocked_by: Mutex<Option<String>>,
@@ -701,12 +701,12 @@ impl AgentRunner {
                 break;
             }
         }
-        if self.stop_requested() {
-            let _ = fs::remove_file(&self.shared.stop_file);
-            self.shared.stopped.store(true, std::sync::atomic::Ordering::SeqCst);
-            self.heartbeat();
-            self.shared.stopped.store(false, std::sync::atomic::Ordering::SeqCst);
-        }
+        // Every ended run tells Flurbo it stopped, whether it was asked to stop or ran once, so the dashboard
+        // never shows a finished runtime as running.
+        let _ = fs::remove_file(&self.shared.stop_file);
+        self.shared.stopped.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.heartbeat();
+        self.shared.stopped.store(false, std::sync::atomic::Ordering::SeqCst);
         self.log("stopped", json!({"runtimeId": self.runtime_id}));
     }
 

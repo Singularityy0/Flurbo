@@ -1,8 +1,9 @@
 import { preparePilot, disputePolicy, VOID_POLICY } from './pilot-config';
-import { settlementEvent } from '../../../apps/web/server/settlement-publication.mjs';
+import { settlementEvent, SNAPSHOT_SETTLE_SECONDS } from '../../../apps/web/server/settlement-publication.mjs';
 
 // This rehearsal measures a publisher's bounded catalogue snapshot, not the final
-// physical earthquake count. Its immutable windows start only on explicit preparation.
+// physical earthquake count. Its immutable windows start only on explicit preparation. The snapshot opens
+// SNAPSHOT_SETTLE_SECONDS (3 hours) after each interval so late catalogue additions are included.
 export function prepareDeterministicTest(selection: {creator: string; reviewers: {name: string; address: string}[]}, now: number,
   closesAt = Math.ceil(now / 60) * 60 + 90 * 60) {
   const policy = { creator: selection.creator, reviewers: selection.reviewers, reviewerControl: 'single-operator' as const,
@@ -10,7 +11,7 @@ export function prepareDeterministicTest(selection: {creator: string; reviewers:
   const iso = (seconds: number) => new Date(seconds * 1000).toISOString().replace('.000Z', 'Z');
   const settlementRules = [0, 1].map(bit => {
     const start = closesAt + 120 + bit * 360, end = start + 300;
-    const scheduledAt = end + 120, publicationCutoff = scheduledAt + 300;
+    const scheduledAt = end + SNAPSHOT_SETTLE_SECONDS, publicationCutoff = scheduledAt + 300;
     const period = `${iso(start)}/${iso(end)}`, url = new URL('https://earthquake.usgs.gov/fdsnws/event/1/query');
     for (const [key, value] of Object.entries({format: 'geojson', starttime: iso(start), endtime: iso(end), eventtype: 'earthquake', orderby: 'time-asc'})) url.searchParams.set(key, value);
     const condition = bit === 0 ? 'at least one earthquake' : 'zero earthquakes';
