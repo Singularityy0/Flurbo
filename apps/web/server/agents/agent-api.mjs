@@ -407,9 +407,9 @@ export function agentApi({ command = null, hosted = false, serviceFor, links, rp
       wallet: null, walletHistory: [], createdAt: now(), updatedAt: now() };
   }
   async function runtimeView(account, profile, state) {
-    const t = now(), conn = connection(state.runtime.heartbeats, t);
+    const t = now(), heartbeats = runtime.heartbeatsFor(account, profile.id, state.runtime.heartbeats), conn = connection(heartbeats, t);
     return { profile, records: [], runtime: { connection: { state: conn.state, ageSeconds: conn.ageSeconds ?? null },
-      heartbeats: state.runtime.heartbeats, policy: policyView(profile, t),
+      heartbeats, policy: policyView(profile, t),
       acknowledged: conn.latest ? conn.latest.policy.flurboVersion === profile.runtimePolicy.version : false,
       decisions: state.runtime.decisions, executions: state.runtime.executions, totals: state.runtime.totals,
       credentials: await runtime.session.credentials(account, profile.id), wallet: profile.wallet, walletHistory: profile.walletHistory ?? [] } };

@@ -290,3 +290,20 @@ test('agents start with published default live limits, and allowing live trades 
   await s.call(alice,'POST',`/api/agents/${other.id}/runtime-policy`,{liveEnabled:true,maxTradeCostAtoms:'3000000',windows:[]});
   assert.deepEqual((await s.call(alice,'GET',`/api/agents/${other.id}`)).body.runtime.policy.limits,{maxTradeCostAtoms:'3000000',windows:[]});
 });
+
+test('heartbeats are shown at once but written to Redis only on a visible change or every 5 minutes',async()=>{
+  const s=setup(),agent=await runtimeAgent(s),{token}=await credential(s,agent.id);
+  let commands=0;const counted=s.make({command:async(...c:any[])=>{commands++;return s.redis.command(...c);},localCounters:true});
+  const beat={runtimeId:'rt-1',sdk:{language:'typescript',version:'0.2.0'},mode:'paper',state:'running',policy:{hash:'a'.repeat(64),flurboVersion:1,summary:{}},pending:0,startedAt:s.clock()};
+  const send=async(over:Record<string,unknown>={})=>{const before=commands;assert.equal((await rt(s,token,'POST','heartbeat',{...beat,...over},{},counted)).status,200);return commands-before;};
+  const persisted=await send();
+  const quiet:number[]=[];
+  for(let i=0;i<9;i++){s.advance(30);quiet.push(await send());}
+  assert.ok(quiet.every(n=>n<persisted/2),`unchanged beats skip the write: first ${persisted}, then ${quiet}`);
+  const view=(await s.call(alice,'GET',`/api/agents/${agent.id}`,undefined,counted)).body.runtime;
+  assert.equal(view.connection.state,'connected');assert.equal(view.heartbeats[0].receivedAt,s.clock(),'the dashboard shows the newest beat, not the stored one');
+  s.advance(30);assert.ok(await send()>=persisted/2,'written again once the stored beat is 5 minutes old');
+  s.advance(30);assert.ok(await send({state:'stopped'})>=persisted/2,'a stop is written at once');
+  // Another server instance (or a restart) sees the stored stop.
+  assert.equal((await s.call(alice,'GET',`/api/agents/${agent.id}`)).body.runtime.connection.state,'stopped');
+});

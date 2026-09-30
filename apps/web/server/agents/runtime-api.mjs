@@ -13,7 +13,7 @@ import { PROTOCOL_VERSION, SCOPES, parseForecast, FlurboError, isNamespace } fro
 // Headless agent runtime API (protocol/openapi/agent-runtime.v1.yaml). Called only with an agent credential:
 // cookies are never read here, and browsers are refused so tokens stay out of web pages. Nothing here signs
 // or sends a transaction; runtimes sign with their own keys and report what they sent.
-const RATE_PER_MINUTE = 120, SERVICE_PER_MINUTE = 1200, HEARTBEAT_ONLINE = 90, HEARTBEAT_STALE = 600;
+const RATE_PER_MINUTE = 120, SERVICE_PER_MINUTE = 1200, HEARTBEAT_ONLINE = 90, HEARTBEAT_STALE = 600, HEARTBEAT_PERSIST_SECONDS = 300;
 const fail = (status, code, message) => { throw new RuntimeError(status, code, message); };
 const exact = (v, keys, optional = []) => {
   if (!v || typeof v !== 'object' || Array.isArray(v) || Object.keys(v).some(k => !keys.includes(k) && !optional.includes(k)) || keys.some(k => !(k in v))) fail(400, 'INVALID_INPUT', 'Unexpected request fields.');
@@ -62,6 +62,25 @@ function account(totals, action, status, collateral) {
 // `count` replaces the shared Redis rate windows with another counter (in memory on a single server).
 export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, reservedWallets = new Set(), links = null, count = null }) {
   const bump = count ?? ((key, seconds) => store.count(key, seconds));
+  // Heartbeats arrive every 30 seconds per runtime, and writing each one cost about nine Redis commands. The
+  // latest beat per runtime is kept in this process and shown on the dashboard straight away; it is written to
+  // Redis only when something a person would see changes (mode, state, pending count, SDK, policy, credential,
+  // last error, a new run) or when the stored one is HEARTBEAT_PERSIST_SECONDS old. After a restart the stored
+  // beat is at most that old, which the dashboard shows as "stale" rather than "running" until the next beat.
+  const live = new Map(), written = new Map();
+  const material = b => JSON.stringify([b.mode, b.state, b.pending, b.sdk, b.policy.hash, b.policy.flurboVersion, b.credentialId, b.lastErrorCode, b.startedAt]);
+  const agentKey = (acct, id) => `${acct.toLowerCase()}:${id}`;
+  function remember(acct, id, beat) {
+    if (live.size >= 5000) for (const [k, beats] of live) if ([...beats.values()].every(b => now() - b.receivedAt > HEARTBEAT_STALE)) { live.delete(k); for (const r of beats.keys()) written.delete(k + ':' + r); }
+    const k = agentKey(acct, id), beats = live.get(k) ?? new Map();
+    beats.set(beat.runtimeId, beat); live.set(k, beats);
+  }
+  // Stored heartbeats merged with the newer ones held here, newest first, as the dashboard expects.
+  function heartbeatsFor(acct, id, stored = []) {
+    const merged = new Map(stored.map(b => [b.runtimeId, b]));
+    for (const b of live.get(agentKey(acct, id))?.values() ?? []) if (!merged.has(b.runtimeId) || merged.get(b.runtimeId).receivedAt < b.receivedAt) merged.set(b.runtimeId, b);
+    return [...merged.values()].sort((a, b) => b.receivedAt - a.receivedAt).slice(0, AGENT_LIMITS.heartbeats);
+  }
   const service = namespace => {
     const svc = isNamespace(namespace) ? serviceFor(namespace) : null;
     return svc ?? fail(404, 'NOT_FOUND', 'That market is not available.');
@@ -300,10 +319,15 @@ export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, 
       const beat = { runtimeId: input.runtimeId, sdk: { language: input.sdk.language, version: input.sdk.version }, mode: input.mode, state: input.state, pending: input.pending,
         startedAt: input.startedAt, lastCycleAt: input.lastCycleAt ?? null, lastErrorCode: input.lastErrorCode ?? null,
         policy: { hash: input.policy.hash, flurboVersion: input.policy.flurboVersion, summary: input.policy.summary ?? {} }, credentialId: record.credentialId, receivedAt: now() };
-      await store.mutate(record.account, profile.id, state => {
-        state.runtime.heartbeats = [beat, ...state.runtime.heartbeats.filter(h => h.runtimeId !== beat.runtimeId)].slice(0, AGENT_LIMITS.heartbeats);
-        return true;
-      });
+      remember(record.account, profile.id, beat);
+      const k = agentKey(record.account, profile.id) + ':' + beat.runtimeId, previous = written.get(k);
+      if (!previous || material(previous) !== material(beat) || beat.receivedAt - previous.receivedAt >= HEARTBEAT_PERSIST_SECONDS) {
+        await store.mutate(record.account, profile.id, state => {
+          state.runtime.heartbeats = [beat, ...state.runtime.heartbeats.filter(h => h.runtimeId !== beat.runtimeId)].slice(0, AGENT_LIMITS.heartbeats);
+          return true;
+        });
+        written.set(k, beat);
+      }
       return { ...policyView(profile, now()), acknowledged: input.policy.flurboVersion === profile.runtimePolicy.version };
     },
     async decisions({ record, profile, input }) {
@@ -347,7 +371,7 @@ export function runtimeApi({ store, serviceFor, rpc, now, previewAllows = null, 
       return checkExecution(record.account, profile.id, hash);
     },
   };
-  return { handle, session };
+  return { handle, session, heartbeatsFor };
 }
 
 // A self-reported decision from the runtime. Stored for the owner and labelled as reported; never used to
