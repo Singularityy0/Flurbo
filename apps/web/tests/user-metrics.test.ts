@@ -178,6 +178,10 @@ test('metrics routes are for the operator passkey only, and trading requires a l
       assert.equal(refused.status, 403); assert.equal(refused.json.code, 'WALLET_NOT_LINKED');
       assert.equal((await call('POST', '/api/pilot/prepare', 'member', { action, owner: linked.toUpperCase().replace('0X', '0x') })).status, 200);
     }
+    // Loading linked wallets records an older link for the metrics without changing the response.
+    assert.deepEqual((await call('GET', '/api/account/wallets', 'member')).json.wallets, [linked]);
+    await new Promise(r => setTimeout(r, 20));
+    assert.equal(JSON.parse(redis.hashes.get(LINKS)!.get(linked)!).account, member);
     // Redeeming is never blocked, so winnings cannot be stranded in an unlinked wallet.
     assert.equal((await call('POST', '/api/pilot/prepare', 'member', { action: 'redeem', owner: other })).status, 200);
     assert.deepEqual(prepared, ['buy', 'sell', 'redeem']);
@@ -193,4 +197,19 @@ test('the trade scan takes a capped number of steps per run, leaving RPC capacit
   assert.equal(first.steps, 3); assert.deepEqual(steps, ['p1', 'p2', 'p1']); assert.equal(first.complete, false);
   const more = userMetrics({ command: redis.command, origin: 'x', pools: () => [pool(1, 0)], now: () => NOW, env: { FLURBO_METRICS_SCAN_STEPS: '5' } })!;
   assert.equal((await more.sync()).steps, 5);
+});
+
+test('links made before metrics shipped are counted when the member next loads their wallets, without overwriting dated links', async () => {
+  const { metrics, redis, people } = fixture();
+  const older = addr(0x51), dated = addr(0x11);
+  const datedBefore = redis.hashes.get(LINKS)!.get(dated);
+  await metrics.recordExistingLinks(people.dave, [older.toUpperCase().replace('0X', '0x'), 'nonsense']);
+  await metrics.recordExistingLinks(people.dave, [older]);
+  await metrics.recordExistingLinks(people.bob, [dated]);
+  assert.deepEqual(JSON.parse(redis.hashes.get(LINKS)!.get(older)!), { account: people.dave, at: null });
+  assert.equal(redis.hashes.get(LINKS)!.get(dated), datedBefore);
+  assert.equal(redis.calls.filter(c => c === 'HSETNX').length, 2, 'each wallet is written once per process');
+  const r = await metrics.report();
+  assert.equal(r.users.find((u: any) => u.account === people.dave).wallets, 1);
+  assert.equal(r.funnel.find((s: any) => s.key === 'linked').count, 3);
 });
