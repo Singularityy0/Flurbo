@@ -56,7 +56,23 @@ export function configureApplications(env = process.env, request = fetch) {
       return result;
     } catch { throw unavailable(); }
   };
-  return {...applicationService({db, send, secret}), stats};
+  // Position notices only (migration 003): verified emails of approved accounts among those asked about.
+  const contacts = async accounts => {
+    const list = [...new Set(accounts.map(a => String(a).toLowerCase()).filter(a => accountPattern.test(a)))].slice(0, 500);
+    if (!list.length) return {};
+    try {
+      const response = await request(new URL('/rest/v1/rpc/flurbo_member_contacts', url), {
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
+        headers: {'Content-Type': 'application/json', apikey: key, ...(key.startsWith('sb_secret_') ? {} : {Authorization: `Bearer ${key}`})},
+        body: JSON.stringify({p_accounts: list}),
+      });
+      if (!response.ok) throw unavailable();
+      const rows = await response.json();
+      if (!Array.isArray(rows)) throw unavailable();
+      return Object.fromEntries(rows.filter(r => accountPattern.test(r?.account || '') && emailPattern.test(r?.email || '')).map(r => [r.account, r.email]));
+    } catch { throw unavailable(); }
+  };
+  return {...applicationService({db, send, secret}), stats, contacts, noticeSecret: secret, noticeEmail: {key: emailKey, from}};
 }
 
 export function applicationService({db, send, secret}) {
@@ -111,7 +127,7 @@ export function applicationService({db, send, secret}) {
         await budget('email');
         const code = String(randomInt(0, 1000000)).padStart(6, '0');
         const id = randomUUID();
-        const result = await db('submit', account, {email, codeHash: codeDigest(account, code), noticeVersion: '2026-09-27', id});
+        const result = await db('submit', account, {email, codeHash: codeDigest(account, code), noticeVersion: '2026-09-30', id});
         if (!result.send) return result;
         try {
           await send({account,to: email, id, subject: 'Verify your Flurbo application email',

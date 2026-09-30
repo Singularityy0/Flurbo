@@ -53,7 +53,7 @@ export function AccessApplication({refresh,checking}:{refresh():Promise<void>;ch
       <h2>Request your invitation.</h2><p>Leave your email. We’ll let you know when your account is approved.</p>
       <label htmlFor="application-email">Email address</label>
       <input id="application-email" type="email" autoComplete="email" maxLength={254} required value={email} onChange={e=>setEmail(e.target.value)} disabled={busy}/>
-      <label className="application-consent check-row"><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)} required disabled={busy}/><span>I understand Flurbo will use my email for application and access updates. <a href="/docs#application-data">How we use this data</a></span></label>
+      <label className="application-consent check-row"><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)} required disabled={busy}/><span>I understand Flurbo will use my email for application and access updates, and for notices about my own positions that I can turn off. <a href="/docs#application-data">How we use this data</a></span></label>
       <div className="access-actions"><button className="button button-dark" disabled={busy||!accepted}>{busy?'Saving…':'Request access'}</button>
       {editing&&<button type="button" className="text-link" onClick={()=>setEditing(false)}>Cancel</button>}</div>
     </form>:state==='unverified'?<form onSubmit={e=>{e.preventDefault();void act('verify',{code});}}>

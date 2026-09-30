@@ -91,4 +91,6 @@ test('operator metrics run after the worker each cycle, and a metrics failure ne
   assert.equal(bot.status().metrics, 'failed'); assert.equal(bot.status().worker, 'wait'); assert.equal(timers.length, 1);
   bot.stop();
   assert.equal(settlementBot({ env: both }).status().metrics, 'disabled');
+  assert.equal(settlementBot({ env: both }).status().notices, 'disabled');
+  assert.equal(settlementBot({ env: both, notices: async () => 'idle' }).status().notices, 'not_run');
 });
