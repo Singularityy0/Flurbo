@@ -9,12 +9,18 @@ export const TESTNET = Object.freeze({
   faucetSelector: '0x544c7cf9',
 });
 
+// Monad testnet RPC hosts the server may read through: the public endpoint, Alchemy, and a QuickNode endpoint
+// (https://<name>.monad-testnet.quiknode.pro/<token>/). Provider tokens sit in the URL path, so the configured URL
+// is a secret: it is never sent to browsers or agents, and read errors never include it.
+export const testnetRpcHost = hostname => ['testnet-rpc.monad.xyz', 'monad-testnet.g.alchemy.com'].includes(hostname)
+  || /^[a-z0-9-]{1,63}\.monad-testnet\.quiknode\.pro$/.test(hostname);
+
 export function hostedConfig(env = process.env) {
   if (env.FLURBO_ORIGIN !== 'https://flurbo.singu.online') throw new Error('Set FLURBO_ORIGIN to the canonical HTTPS origin');
   if (env.FLURBO_NETWORK !== 'public_testnet') throw new Error('This release supports public Monad testnet only');
   const rpc = new URL(env.FLURBO_ALCHEMY_TESTNET_RPC_URL || TESTNET.rpc);
   if (rpc.protocol !== 'https:' || rpc.username || rpc.password || rpc.hash || rpc.port ||
-      !['testnet-rpc.monad.xyz', 'monad-testnet.g.alchemy.com'].includes(rpc.hostname)) throw new Error('Unsupported public testnet RPC');
+      !testnetRpcHost(rpc.hostname)) throw new Error('Unsupported public testnet RPC');
   const port = Number(env.PORT || 3000);
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid server port');
   const testFaucet = env.FLURBO_TEST_AUSD_FAUCET?.toLowerCase() || null;

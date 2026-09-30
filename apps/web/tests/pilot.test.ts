@@ -135,3 +135,17 @@ test('a combination the pool cannot price is refused before quoting, with a reas
   // Selling a combination already held is never limited.
   await f.service.prepare({ owner, action: 'sell', scope: 5, mask: '8', quantity: '1000000', slippageBps: 50 });
 });
+
+test('a QuickNode Monad testnet endpoint is accepted everywhere the server reads the chain, and its token never leaks', async () => {
+  const { testnetRpcHost, hostedConfig } = await import('../server/network.mjs');
+  const { agentRpc } = await import('../server/agents/agent-market.mjs');
+  const { learningRpc } = await import('../server/learning-pool.mjs');
+  const quicknode = 'https://little-dawn-cloud.monad-testnet.quiknode.pro/secret-token-123/';
+  for (const host of ['testnet-rpc.monad.xyz', 'monad-testnet.g.alchemy.com', 'little-dawn-cloud.monad-testnet.quiknode.pro']) assert.equal(testnetRpcHost(host), true, host);
+  for (const host of ['x.monad-mainnet.quiknode.pro', 'a.b.monad-testnet.quiknode.pro', 'monad-testnet.quiknode.pro.evil.com', 'evil.com']) assert.equal(testnetRpcHost(host), false, host);
+  assert.throws(() => pilotRpc('https://x.monad-mainnet.quiknode.pro/token/'), /testnet RPC required/);
+  agentRpc(quicknode); learningRpc(quicknode);
+  assert.equal(hostedConfig({ FLURBO_ORIGIN: 'https://flurbo.singu.online', FLURBO_NETWORK: 'public_testnet', FLURBO_ALCHEMY_TESTNET_RPC_URL: quicknode }).rpcUrl, quicknode);
+  const rpc = pilotRpc(quicknode, async () => new Response('upstream said secret-token-123', { status: 500 }));
+  await assert.rejects(rpc('eth_chainId', []), (e: Error) => !String(e.message).includes('secret-token-123'));
+});

@@ -23,6 +23,8 @@ Copy these from the GitHub repository variables and secrets into the Render serv
 | `FLURBO_RESOLUTION_FINISH_ALLOWLIST` and `FLURBO_RESOLUTION_COLLECTIONS_JSON` | Both or neither, matching exactly |
 | `FLURBO_EVIDENCE_GEMINI_KEY`, `FLURBO_EVIDENCE_MODEL`, `FLURBO_EVIDENCE_FREE_TIER_CONFIRMED` | Optional. Release-milestone YES assertions come from the deterministic GitHub release check; these only add a written explanation when available, and enable the operator evidence tool. |
 
+`FLURBO_ALCHEMY_TESTNET_RPC_URL` is the Monad testnet RPC the whole server reads through (site, bot, agents, starter funds), despite its name. It may be the public endpoint, an Alchemy URL, or a QuickNode Monad testnet endpoint (`https://<name>.monad-testnet.quiknode.pro/<token>/`). Provider URLs carry a token, so set it only as a Render secret; the server never sends it to browsers or agents and never includes it in errors or logs.
+
 Leave `FLURBO_RESOLUTION_SOURCE_MODE` and `FLURBO_RESOLUTION_EVIDENCE_ORIGIN` unset unless the primary pool is a `deterministic-source-v1` collection.
 
 Each cycle also updates the operator member metrics after the settlement work; see [USER_METRICS.md](USER_METRICS.md) for its optional variables and daily email.
