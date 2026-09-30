@@ -371,9 +371,18 @@ function evmRpc(body, rule, capture) {
   return { value: fromUnits(total, r.scale ?? 0), publishedAt: null };
 }
 
-async function rpc(url, method, params, request, id) {
+const pause = ms => new Promise(done => setTimeout(done, ms));
+// Public RPCs rate-limit bursts. A refused or overloaded call is retried a few times with backoff; anything else
+// fails the capture, and the bot tries again on its next cycle.
+async function rpc(url, method, params, request, id, attempt = 0) {
   const response = await request(url, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(12_000),
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id, method, params }) });
+  if ([429, 502, 503, 504].includes(response.status) && attempt < 5) {
+    await response.body?.cancel?.().catch?.(() => {});
+    const wait = Number(response.headers?.get?.('retry-after'));
+    await pause(Number.isFinite(wait) && wait > 0 && wait <= 10 ? wait * 1000 : 400 * 2 ** attempt);
+    return rpc(url, method, params, request, id, attempt + 1);
+  }
   if (response.status !== 200 || response.redirected) issue('SOURCE_FETCH_FAILED');
   const raw = await response.arrayBuffer();
   if (raw.byteLength > 2_000_000) issue('SOURCE_TOO_LARGE');
@@ -405,8 +414,8 @@ export async function retrieveEvmCapture(rule, url, { request = fetch, now = () 
   const pair = async target => { const n = await firstAtOrAfter(target); if (n < 1) issue('EVM_BOUNDARY_INVALID'); await record('eth_getBlockByNumber', [hex(n - 1), false]); await record('eth_getBlockByNumber', [hex(n), false]); return n; };
   const first = await pair(r.at), end = r.until !== undefined ? await pair(r.until) : null;
   const calls = metricRequests(r, first, end);
-  for (let i = 0; i < calls.length; i += 8) {
-    const batch = calls.slice(i, i + 8), base = id; id += batch.length;
+  for (let i = 0; i < calls.length; i += 4) {
+    const batch = calls.slice(i, i + 4), base = id; id += batch.length;
     const done = await Promise.all(batch.map(([method, params], k) => rpc(url, method, params, request, base + k).then(res => ({ request: { jsonrpc: '2.0', id: base + k, method, params }, response: res }))));
     exchanges.push(...done);
   }

@@ -33,10 +33,12 @@ export async function checkRule(raw, { now = Math.floor(Date.now() / 1000), clos
       const record = parseSettlementCapture(rule, { ...capture, fetchedAt: now }, now);
       row.value = record.value; row.unit = rule.observation.unit;
       if (rule.vintage === 'initial') row.publishedAt = iso(record.publishedAt);
-      // A value that is already public before the observation window is a known answer, not a prediction.
-      const early = rule.vintage === 'initial' ? record.publishedAt < rule.timing.scheduledAt : now < rule.timing.scheduledAt;
-      if (early) { row.result = 'already-public'; report.status = report.status === 'source-error' ? report.status : 'already-public'; }
-      else row.result = 'value-available';
+      // A release already published before the observation window is a known answer, not a prediction. Snapshot
+      // rules are decided by the first capture inside their window, so an earlier reading is only informational:
+      // check that it can still change (a count over a future window, a price, a block not yet produced).
+      if (rule.vintage === 'initial' && record.publishedAt < rule.timing.scheduledAt) {
+        row.result = 'already-public'; if (report.status !== 'source-error') report.status = 'already-public';
+      } else row.result = rule.vintage === 'first-observed-snapshot' && now < rule.timing.scheduledAt ? 'current-reading' : 'value-available';
     } catch (error) {
       const reason = error.reason ?? 'SOURCE_ERROR';
       row.result = WAITING.has(reason) ? 'not-yet-available' : 'source-error';

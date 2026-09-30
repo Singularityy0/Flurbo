@@ -187,7 +187,11 @@ test('the rule check says whether a market would still be a prediction', async (
   const { checkRule } = await import('../scripts/check-settlement-rule.mjs');
   const request = async () => new Response('{"value":5}', { status: 200, headers: { 'content-type': 'application/json' } });
   const future = rule('json-api.v1', { select: '/value', aggregate: 'value' }, { scheduledAt: T0 + 600 });
-  assert.equal((await checkRule(future, { now: T0, request: request as any })).status, 'already-public', 'the answer can be read before the window');
+  const reading = await checkRule(future, { now: T0, request: request as any });
+  assert.equal(reading.status, 'ok'); assert.equal(reading.sources[0].result, 'current-reading', 'a snapshot rule is decided inside its window');
+  const released = rule('json-api.v1', { select: '/value', aggregate: 'value', publishedAt: { path: '/at', format: 'unix-seconds' } }, { scheduledAt: T0 + 600, vintage: 'initial' });
+  const known = async () => new Response(`{"value":5,"at":${T0 - 60}}`, { status: 200, headers: { 'content-type': 'application/json' } });
+  assert.equal((await checkRule(released, { now: T0, request: known as any })).status, 'already-public', 'a release published before the window is a known answer');
   const missing = async () => new Response('{"other":1}', { status: 200, headers: { 'content-type': 'application/json' } });
   const waiting = await checkRule(future, { now: T0, request: missing as any });
   assert.equal(waiting.status, 'ok'); assert.equal(waiting.sources[0].result, 'not-yet-available');
@@ -210,4 +214,15 @@ test('a market can mix readers and still binds every rule on-chain', async () =>
   publication.settlementRules[1] = { ...rules[1], source: { ...rules[1].source, reader: { ...rules[1].source.reader, finalitySeconds: 31 } } };
   assert.throws(() => validateSettlementPublication(publication), /committed draft event/, 'changing any reader setting breaks the on-chain commitment');
   assert.match(before, /^0x[0-9a-f]{64}$/);
+});
+
+test('evm-rpc retries a rate-limited public RPC instead of failing the capture', async () => {
+  const c = chain(); let refused = 0;
+  const flaky = async (url: string, init: any) => {
+    if (JSON.parse(init.body).method === 'eth_getTransactionCount' && refused < 2) { refused++; return { status: 429, headers: new Headers({ 'retry-after': '0' }), body: null } as any; }
+    return c.request(url, init);
+  };
+  const r = validateSettlementRule(evm({ at: T0 - 500, metric: 'nonce', address: '0x' + 'cd'.repeat(20) }));
+  const cap = await retrieveSettlementCapture(r, r.source.urls[0], { request: flaky as any, now: () => T0 + 30 });
+  assert.equal(refused, 2); assert.equal(parseSettlementCapture(r, cap, T0 + 60).value, '42');
 });
