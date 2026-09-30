@@ -1,4 +1,5 @@
 import {installRpcCapacity} from './rpc-capacity.mjs';
+import {routedCommand, supabaseKv} from './supabase-kv.mjs';
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
@@ -96,7 +97,11 @@ async function main() {
   const config = hostedConfig();
   config.applications = configureApplications();
   config.androidAssetLinks = androidAssetLinks();
-  const store = new RedisSessionStore(redisCommand());
+  // With FLURBO_SUPABASE_KV=true, price history, the trade history and payout indexes and operator metrics live
+  // in Supabase (migration 004) instead of Redis; every other key stays in Redis. Copy them first with
+  // scripts/move-kv-to-supabase.mjs.
+  const redis = redisCommand();
+  const store = new RedisSessionStore(process.env.FLURBO_SUPABASE_KV === 'true' ? routedCommand(redis, supabaseKv()) : redis);
   await store.command('PING');
   // Rate windows (chain requests, page requests, agent runtime requests) count in this process by default:
   // Render runs one instance, and a shared Redis counter cost one command per request. Set

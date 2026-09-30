@@ -31,6 +31,17 @@ Each cycle also updates the operator member metrics after the settlement work; s
 
 Rate limits (chain requests, page requests and agent runtime requests) count in the server's memory, because Render runs a single instance; counting them in Redis cost one command per request. Sign-in lookups are cached in memory for 30 seconds and dropped at once on sign-out. Set `FLURBO_SHARED_LIMITS=true` only when running more than one instance, so they share the budgets through Redis again. A monitor observation that repeats the saved one is rewritten at most every 5 minutes. Agent heartbeats (every 30 seconds per running agent) are kept in memory and shown on the dashboard at once; they are written to Redis only when the runtime's mode, state, pending count, SDK, policy, credential or error changes, or every 5 minutes. After a restart, a running agent shows as stale until its next heartbeat. Even so, each agent running around the clock uses about 4,000 to 5,000 commands a day, so on the free Upstash plan ask invited users to run agents for trading sessions (`start`, then `stop`) rather than all day.
 
+### Moving rebuildable data to Supabase
+
+Price history (`flurbo:prices:*`), the trade history index (`flurbo:pilot:index:*`), the payout index (`flurbo:pilot:payouts:*`) and operator metrics (`flurbo:metrics:*`) can live in Supabase instead of Redis. Sessions, agents, wallet links, settlement and monitor state, email dedupe, starter funds and settlement evidence always stay in Redis. The server routes each command by key prefix, so no feature changes. It uses the same Supabase project and service key as access applications (`FLURBO_APPLICATIONS_SUPABASE_URL`, `FLURBO_APPLICATIONS_SUPABASE_SECRET`).
+
+1. Run `apps/web/server/migrations/004_kv_store.sql` once in that project's SQL editor.
+2. With the Redis and Supabase variables in your shell, dry run `node apps/web/scripts/move-kv-to-supabase.mjs`, then run it with `--copy`. It checks every copied value.
+3. Set `FLURBO_SUPABASE_KV=true` on Render and redeploy straight away, so little is written to Redis in between. Anything that was (a price sample, an index step) is rebuilt from the chain.
+4. Optionally, once the site works, run the script with `--copy --delete` to remove the moved keys from Redis.
+
+To roll back, unset `FLURBO_SUPABASE_KV` and redeploy: the server reads Redis again, and the indexes rebuild from the chain. `wipe-retired-collections.mjs` only removes the Redis copies of a retired pool's data.
+
 ## Keep the service awake
 
 Free Render web services stop after 15 minutes without inbound traffic, and the bot's own outbound requests do not count. Create a free external job, for example on cron-job.org, that sends `GET https://flurbo.singu.online/healthz` every 10 minutes. One always-on service uses about 720 to 744 of the 750 free instance hours a month, so it must be the only free service in the Render workspace.
