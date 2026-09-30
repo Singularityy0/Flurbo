@@ -16,6 +16,7 @@ import {agentRpc} from './agents/agent-market.mjs';
 import {assessSemantics,activeSemanticConfig,semanticDiagnostics} from './semantic-validation.mjs';
 import {ApplicationError} from './access-applications.mjs';
 import {settlementPacketHandler,SETTLEMENT_PACKET_PATH} from './settlement-persistence.mjs';
+import {userMetrics} from './user-metrics.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
@@ -40,6 +41,12 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
   // Agents: account-isolated profiles, paper trading and user-approved proposals. Never a signer.
   const agents=(()=>{try{return agentApi({command:store.command||null,hosted,links,rpc:agentRpc(rpcUrl,{hosted}),previewAllows,reservedWallets,
     serviceFor:namespace=>namespace==='pilot'?publishedPilot:practiceCollections?.services.get(namespace)||null});}catch{return null;}})();
+  // Operator-only growth metrics. Needs durable storage; members never see these numbers.
+  const metrics=userMetrics({command:store.command||null,origin:publicOrigin||`http://${hosts[0]}`,links,applications,operatorAccount:testingOperatorAccount,
+    openAccess:!previewAllows,reservedWallets,rpcUrl,pools:()=>[
+      ...(publishedPilot?[{namespace:'pilot',label:(practiceCollections?.catalog?.collections||[]).find(c=>c.pool===publishedPilot.manifest.pool)?.label||'Release milestones',service:publishedPilot}]:[]),
+      ...[...(practiceCollections?.services||[])].map(([namespace,service])=>({namespace,label:practiceCollections.catalog.collections.find(c=>c.namespace===namespace)?.label||namespace,service}))]
+      .filter(p=>p.service.index)});
   const assistant=publishedPilot&&store.command?evidenceAssistant({manifest:publishedPilot.manifest,command:store.command,...evidenceOptions}):null;
   if (hosted && (publicOrigin !== 'https://flurbo.singu.online' || !rpcUrl.startsWith('https://'))) throw new Error('Invalid hosted API configuration');
   // Anonymous/public traffic never consumes authenticated account capacity.
@@ -54,7 +61,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
     for await (const chunk of req) { text += chunk; if (text.length > 24_000) throw new Error('Request too large'); }
     return JSON.parse(text);
   }
-  return async (req, res, next) => {
+  const handler = async (req, res, next) => {
     if (!req.url?.startsWith('/api/')) return next();
     const host = req.headers.host;
     if (hosted ? host !== new URL(publicOrigin).host : !hosts.includes(host)) return send(res, 403, { error: 'Unsupported application host' });
@@ -117,6 +124,20 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           .filter(([, service]) => service).map(([namespace, service]) => ({ namespace, manifest: service.manifest }));
         try { return send(res, 200, semanticDiagnostics(activeSemanticConfig(), services)); }
         catch { return send(res, 503, {code:'SEMANTICS_UNAVAILABLE', error:'Semantic configuration could not be loaded.'}); }
+      }
+      if (url.pathname === '/api/admin/metrics' || url.pathname === '/api/admin/metrics/sync') {
+        const login = await getLogin();
+        if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
+        if (!isTestingOperator(login, testingOperatorAccount)) return send(res, 403, {error:'Operator access only.'});
+        if (url.search) return send(res, 400, {error:'Metrics accept no query parameters.'});
+        if (!metrics) return send(res, 503, {error:'Metrics need durable storage.'});
+        if (url.pathname === '/api/admin/metrics') {
+          if (req.method !== 'GET') return send(res, 405, {error:'Method not allowed.'});
+          try { return send(res, 200, await metrics.report()); } catch { return send(res, 503, {error:'Metrics could not be loaded. Try again shortly.'}); }
+        }
+        if (req.method !== 'POST') return send(res, 405, {error:'Method not allowed.'});
+        await limits.take('admin-metrics-sync:' + login.address.toLowerCase(), 4);
+        try { return send(res, 200, {sync: await metrics.sync({budgetMs:18_000,maxSteps:6})}); } catch { return send(res, 503, {error:'Trade data could not be scanned right now.'}); }
       }
       if (url.pathname === '/api/account/access' && req.method === 'GET') {
         const login = await getLogin();
@@ -207,11 +228,12 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         try {
           if(url.pathname==='/api/account/wallets/challenge'&&Object.keys(input).join(',')==='wallet')return send(res,200,await links.challenge(login.address,input.wallet,origin,sid));
           if(url.pathname==='/api/account/wallets/verify'&&Object.keys(input).sort().join(',')==='id,signature'&&typeof input.id==='string'&&typeof input.signature==='string'){
-            const before=starter?(await links.list(login.address,origin)).wallets:[];
+            const before=starter||metrics?(await links.list(login.address,origin)).wallets:[];
             const linked=await links.verify(login.address,input.id,input.signature,origin,sid);
             // A newly linked wallet gets the one-time free test MON in the background; linking never waits on it.
-            const added=starter&&linked.wallets.find(w=>!before.includes(w));
-            if(added)void starter.send(login.address,added).catch(()=>{});
+            const added=(starter||metrics)&&linked.wallets.find(w=>!before.includes(w));
+            if(added&&metrics)void metrics.recordLink(login.address,added).catch(()=>{});
+            if(added&&starter)void starter.send(login.address,added).catch(()=>{});
             return send(res,200,linked);
           }
         } catch(e) {
@@ -298,6 +320,13 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if(req.method==='POST' && url.pathname==='/api/pilot/prepare') {
           const input = await body(req);
           if (!['buy','sell','redeem','dispute','withdrawBond'].includes(input?.action) && !isTestingOperator(login, testingOperatorAccount)) return send(res,403,{error:'Testing tools are restricted to the operator.'});
+          // Buying and selling go only through wallets linked to this Flurbo account, so every bet made on the
+          // site belongs to a member. Redeeming stays open so winnings can never be stranded.
+          if(['buy','sell'].includes(input?.action)){
+            if(hosted&&!store.command)return send(res,503,{error:'Account wallet storage is unavailable.'});
+            const {wallets}=await links.list(login.address,origin);
+            if(!wallets.includes(String(input.owner||'').toLowerCase()))return send(res,403,{code:'WALLET_NOT_LINKED',error:'Link this MetaMask wallet to your Flurbo account before trading.'});
+          }
           if(input?.action==='dispute'){
             if(input.authorization||input.signature)return send(res,400,{error:'Request a fresh account eligibility check.'});
             if(hosted&&!store.command)return send(res,503,{error:'Account wallet storage is unavailable.'});
@@ -411,6 +440,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if (url.pathname === '/api/auth/verify') {
           const input = await body(req);
           const session = await store.verify(cookieValue(req.headers.cookie, 'flurbo_challenge'), input.signature, origin);
+          if (metrics && session.method === 'passkey') void metrics.recordSignIn(session.address).catch(() => {});
           await store.revoke(sid);
           res.setHeader('Set-Cookie', [cookie('flurbo_session', session.sessionId, LOGIN_MS / 1000), cookie('flurbo_challenge', '', 0), toolsCookie(session, session.sessionId)]);
           return send(res, 200, { session: { address: session.address, expiresAt: session.expiresAt, method: session.method } });
@@ -461,4 +491,6 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
       return send(res, upstream.status, result);
     } catch(e) { if(e instanceof CapacityError){res.setHeader('Retry-After',String(e.retryAfter));return send(res,429,{code:e.code,error:e.message});} if(e instanceof ApplicationError){if(e.status===429)res.setHeader('Retry-After','60');return send(res,e.status,{error:e.message});} return send(res, 503, { error: 'Service unavailable or request rejected. Refresh before retrying. No automatic transaction retry is performed.' }); }
   };
+  handler.metrics = metrics;
+  return handler;
 }

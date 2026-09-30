@@ -42,7 +42,21 @@ export function configureApplications(env = process.env, request = fetch) {
     });
     if (!response.ok) throw unavailable();
   };
-  return applicationService({db, send, secret});
+  // Operator metrics only (migration 002). Account, state and dates; never email addresses.
+  const stats = async () => {
+    try {
+      const response = await request(new URL('/rest/v1/rpc/flurbo_application_stats', url), {
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
+        headers: {'Content-Type': 'application/json', apikey: key, ...(key.startsWith('sb_secret_') ? {} : {Authorization: `Bearer ${key}`})},
+        body: '{}',
+      });
+      if (!response.ok) throw unavailable();
+      const result = await response.json();
+      if (!result || !Array.isArray(result.rows)) throw unavailable();
+      return result;
+    } catch { throw unavailable(); }
+  };
+  return {...applicationService({db, send, secret}), stats};
 }
 
 export function applicationService({db, send, secret}) {

@@ -75,3 +75,20 @@ test('a single local check forces execution off and reports the cycle', async ()
   assert.equal(seen.FLURBO_RESOLUTION_EXECUTE, 'false');
   assert.equal(status.cycles, 1); assert.equal(status.monitor, 'ok'); assert.equal(status.worker, 'wait');
 });
+
+test('operator metrics run after the worker each cycle, and a metrics failure never touches settlement', async () => {
+  const calls: string[] = [], timers: { fn: () => Promise<void> }[] = [];
+  let fail = false;
+  const bot = settlementBot({ env: both, log: () => {}, monitor: async () => { calls.push('monitor'); return 0; },
+    resolve: async () => { calls.push('worker'); return { status: 'wait' }; }, failure: async () => ({}),
+    metrics: async () => { calls.push('metrics'); if (fail) throw Error('redis down'); return 'synced; digest not_due'; },
+    schedule: ((fn: () => Promise<void>) => { timers.push({ fn }); return 1; }) as any, cancel: (() => {}) as any });
+  assert.equal(bot.status().metrics, 'not_run');
+  bot.start(); await timers.shift()!.fn();
+  assert.deepEqual(calls, ['monitor', 'worker', 'metrics']);
+  assert.equal(bot.status().metrics, 'synced; digest not_due');
+  fail = true; await timers.shift()!.fn();
+  assert.equal(bot.status().metrics, 'failed'); assert.equal(bot.status().worker, 'wait'); assert.equal(timers.length, 1);
+  bot.stop();
+  assert.equal(settlementBot({ env: both }).status().metrics, 'disabled');
+});

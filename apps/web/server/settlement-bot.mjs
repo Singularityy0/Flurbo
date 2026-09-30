@@ -8,10 +8,10 @@ export function settlementBot({ env = process.env, intervalMs = 120_000, firstDe
   monitor = async () => (await import('../scripts/notify-settlement.mjs')).runNotifications({ env, args: [], output: line => log('[settlement-monitor] ' + line) }),
   resolve = async () => (await import('../scripts/run-resolution.mjs')).runResolution(env),
   failure = async error => (await import('../scripts/run-resolution.mjs')).resolutionFailure(error),
-  sleep = ms => new Promise(done => setTimeout(done, ms)), now = Date.now, schedule = setTimeout, cancel = clearTimeout } = {}) {
+  metrics = null, sleep = ms => new Promise(done => setTimeout(done, ms)), now = Date.now, schedule = setTimeout, cancel = clearTimeout } = {}) {
   if (!Number.isSafeInteger(intervalMs) || intervalMs < 60_000) throw Error('Settlement cycles must be at least one minute apart');
   let timer = null, stopped = true, running = false;
-  const status = { enabled: true, intervalSeconds: intervalMs / 1000, cycles: 0, lastStartedAt: null, lastFinishedAt: null, monitor: 'not_run', worker: 'not_run' };
+  const status = { enabled: true, intervalSeconds: intervalMs / 1000, cycles: 0, lastStartedAt: null, lastFinishedAt: null, monitor: 'not_run', worker: 'not_run', metrics: metrics ? 'not_run' : 'disabled' };
 
   async function work() {
     const deadline = now() + 150_000;
@@ -34,9 +34,12 @@ export function settlementBot({ env = process.env, intervalMs = 120_000, firstDe
       } else status.monitor = 'disabled';
       // Like the scheduled Actions worker, this runs even after a failed monitor pass. The worker
       // itself refuses pools whose monitoring is stale and can still finish healthy ones.
-      status.worker = env.FLURBO_RESOLUTION_ENABLED === 'true' ? await work() : 'disabled';
-    } catch { status.worker = 'failed'; }
-    finally {
+      try { status.worker = env.FLURBO_RESOLUTION_ENABLED === 'true' ? await work() : 'disabled'; } catch { status.worker = 'failed'; }
+      // Operator metrics run last, so settlement never waits on them, and a metrics failure never stops settlement.
+      if (metrics && !stopped) {
+        try { status.metrics = String(await metrics()); } catch { status.metrics = 'failed'; log('[metrics] {"status":"failed"}'); }
+      }
+    } finally {
       running = false; status.lastFinishedAt = new Date(now()).toISOString();
       if (!stopped) timer = schedule(cycle, Math.max(1_000, intervalMs - (Date.parse(status.lastFinishedAt) - Date.parse(status.lastStartedAt))));
     }

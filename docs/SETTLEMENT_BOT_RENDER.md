@@ -25,6 +25,8 @@ Copy these from the GitHub repository variables and secrets into the Render serv
 
 Leave `FLURBO_RESOLUTION_SOURCE_MODE` and `FLURBO_RESOLUTION_EVIDENCE_ORIGIN` unset unless the primary pool is a `deterministic-source-v1` collection.
 
+Each cycle also updates the operator member metrics after the settlement work; see [USER_METRICS.md](USER_METRICS.md) for its optional variables and daily email.
+
 ## Keep the service awake
 
 Free Render web services stop after 15 minutes without inbound traffic, and the bot's own outbound requests do not count. Create a free external job, for example on cron-job.org, that sends `GET https://flurbo.singu.online/healthz` every 10 minutes. One always-on service uses about 720 to 744 of the 750 free instance hours a month, so it must be the only free service in the Render workspace.
