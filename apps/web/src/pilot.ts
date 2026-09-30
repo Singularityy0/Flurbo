@@ -2,6 +2,7 @@ import { keccak256, type Hex } from 'viem';
 import {eligibilityTypedData} from '../shared/holder-challenge.mjs';
 import {verifyTypedData} from 'viem';
 import { appFetch as fetch } from './platform-fetch.ts';
+import { takeEarly } from './prefetch.ts';
 import { pilotCall, type PilotManifest } from '../shared/pilot.mjs';
 import type { AuthController } from './auth/controller';
 import { semanticError } from '../../../packages/sdk/src/semantics.ts';
@@ -50,7 +51,7 @@ export const pendingKeyFor=(namespace:PilotNamespace)=>{
 
 export async function pilotRequest<T>(path:string,input?:unknown,namespace:PilotNamespace='pilot',signal?:AbortSignal):Promise<T> {
   if(namespace!=='pilot'&&!isPracticeNamespace(namespace))throw Error('Invalid collection');
-  const response=await fetch('/api/'+namespace+'/'+path,{method:input===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',
+  const response=(input===undefined?await takeEarly('/api/'+namespace+'/'+path):null)??await fetch('/api/'+namespace+'/'+path,{method:input===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',
     headers:input===undefined?{}:{'Content-Type':'application/json'},body:input===undefined?undefined:JSON.stringify(input),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60_000)]):AbortSignal.timeout(60_000)});
   const result=await response.json();
   if(!response.ok) {

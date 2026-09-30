@@ -13,6 +13,10 @@ import "./styles.css";
 import App from "./App";
 import { AuthProvider } from "./auth/context";
 import LoaderHost from "./loading/LoaderHost";
+import { prefetchAccess } from "./prefetch";
+
+// Start the access check now, alongside the sign-in check, instead of after it.
+prefetchAccess(window.location.pathname);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

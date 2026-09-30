@@ -1,6 +1,7 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {useAuth} from './context';
 import {appFetch} from '../platform-fetch';
+import {prefetchApprovedData,takeEarly} from '../prefetch';
 
 export type Access = {approved:boolean;applicationUrl:string|null;nativeApplications?:boolean;testingTools?:boolean};
 type Snapshot={account:string;access:Access|null;error:string;checking:boolean};
@@ -17,10 +18,12 @@ export function usePreviewAccess(){
     if(!options.silent)setResult(old=>({account,access:old?.account===account?old.access:null,error:'',checking:true}));
     const promise=(async()=>{
       try{
-        const response=await appFetch('/api/account/access',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.any([abort.signal,AbortSignal.timeout(12000)])});
+        const response=(await takeEarly('/api/account/access'))??await appFetch('/api/account/access',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.any([abort.signal,AbortSignal.timeout(12000)])});
         if(!response.ok)throw Error(response.status===429?'Too many checks. Please wait a moment before trying again.':'We couldn’t refresh your access status. Please try again.');
         const value=await response.json();
         if(typeof value.approved!=='boolean')throw Error('We couldn’t refresh your access status. Please try again.');
+        // Approved: the current page's market data starts now, before the page mounts, in one parallel round.
+        if(value.approved===true&&!abort.signal.aborted)prefetchApprovedData(window.location.pathname);
         if(!abort.signal.aborted)setResult({account,access:{approved:value.approved,applicationUrl:value.applicationUrl||null,nativeApplications:value.nativeApplications===true,testingTools:value.testingTools===true},error:'',checking:false});
       }catch(e){
         // A silent background check keeps the current state on failure; the next check retries.
