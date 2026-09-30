@@ -190,6 +190,8 @@ class AgentRunner:
         return p
 
     def state(self) -> str:
+        if getattr(self, "_stopped", False):
+            return "stopped"  # sent once, in the final heartbeat after a requested stop
         return "stopping" if self.stop_file.exists() else "blocked" if self.blocked_by else "paused" if (self.flurbo or {}).get("paused") else "running"
 
     def _api(self, fn):
@@ -372,7 +374,11 @@ class AgentRunner:
                 break
         if self.stop_file.exists():
             self.stop_file.unlink(missing_ok=True)
-            self.heartbeat()
+            self._stopped = True
+            try:
+                self.heartbeat()
+            finally:
+                self._stopped = False
         self.log("stopped", {"runtimeId": self.runtime_id})
 
     def status(self) -> dict:

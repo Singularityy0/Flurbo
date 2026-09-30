@@ -8,10 +8,10 @@ export function settlementBot({ env = process.env, intervalMs = 120_000, firstDe
   monitor = async () => (await import('../scripts/notify-settlement.mjs')).runNotifications({ env, args: [], output: line => log('[settlement-monitor] ' + line) }),
   resolve = async () => (await import('../scripts/run-resolution.mjs')).runResolution(env),
   failure = async error => (await import('../scripts/run-resolution.mjs')).resolutionFailure(error),
-  metrics = null, sleep = ms => new Promise(done => setTimeout(done, ms)), now = Date.now, schedule = setTimeout, cancel = clearTimeout } = {}) {
+  metrics = null, funds = null, sleep = ms => new Promise(done => setTimeout(done, ms)), now = Date.now, schedule = setTimeout, cancel = clearTimeout } = {}) {
   if (!Number.isSafeInteger(intervalMs) || intervalMs < 60_000) throw Error('Settlement cycles must be at least one minute apart');
   let timer = null, stopped = true, running = false;
-  const status = { enabled: true, intervalSeconds: intervalMs / 1000, cycles: 0, lastStartedAt: null, lastFinishedAt: null, monitor: 'not_run', worker: 'not_run', metrics: metrics ? 'not_run' : 'disabled' };
+  const status = { enabled: true, intervalSeconds: intervalMs / 1000, cycles: 0, lastStartedAt: null, lastFinishedAt: null, monitor: 'not_run', worker: 'not_run', metrics: metrics ? 'not_run' : 'disabled', funds: funds ? 'not_run' : 'disabled' };
 
   async function work() {
     const deadline = now() + 150_000;
@@ -38,6 +38,9 @@ export function settlementBot({ env = process.env, intervalMs = 120_000, firstDe
       // Operator metrics run last, so settlement never waits on them, and a metrics failure never stops settlement.
       if (metrics && !stopped) {
         try { status.metrics = String(await metrics()); } catch { status.metrics = 'failed'; log('[metrics] {"status":"failed"}'); }
+      }
+      if (funds && !stopped) {
+        try { status.funds = String(await funds()); } catch { status.funds = 'failed'; log('[funds] {"status":"failed"}'); }
       }
     } finally {
       running = false; status.lastFinishedAt = new Date(now()).toISOString();

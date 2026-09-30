@@ -49,7 +49,7 @@ export function pilotRpc(endpoint,request=fetch,{allowLocal=false}={}) {
   return rpc;
 }
 
-export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)}) {
+export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000), snapshotReuseMs=0}) {
   if(manifest?.publication?.mode===DETERMINISTIC_MODE || manifest?.publication?.settlementRules !== undefined
     || manifest?.publication?.draft?.events?.some(event => event.source?.recordId?.startsWith('settlement-rule:'))) validateSettlementManifest(manifest);
   if(manifest?.schema!=='flurbo.pilot-manifest.v1' || manifest.status!=='verified_pilot_snapshot' || manifest.chainId!==10143
@@ -62,7 +62,17 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
     const data=encodeFunctionData({abi,functionName,args});
     return decodeFunctionResult({abi,functionName,data:await rpc('eth_call',[{to,data},tag])});
   }
-  async function snapshot() {
+  // Holdings pages from one Portfolio visit arrive together; with snapshotReuseMs set, they share one verified
+  // snapshot for that long instead of re-verifying the deployment for each page. Each page still checks that
+  // the snapshot block is canonical (stable) before answering. Other reads always take a fresh snapshot.
+  let recent=null;
+  async function snapshot({reuse=false}={}) {
+    if(reuse&&snapshotReuseMs>0&&recent&&Date.now()-recent.at<snapshotReuseMs)return recent.value;
+    const value=freshSnapshot();
+    if(snapshotReuseMs>0){const entry={at:Date.now(),value};recent=entry;value.catch(()=>{if(recent===entry)recent=null;});}
+    return value;
+  }
+  async function freshSnapshot() {
     const [chain,anchor,head]=await Promise.all([rpc('eth_chainId',[]),rpc('eth_getBlockByNumber',['0x'+BigInt(manifest.verifiedBlock).toString(16),false]),rpc('eth_getBlockByNumber',['latest',false])]);
     if(BigInt(chain)!==10143n) throw new Error('Wrong network');
     if(anchor?.hash?.toLowerCase()!==manifest.verifiedBlockHash) throw new Error('Deployment anchor changed');
@@ -205,10 +215,10 @@ export function pilotService({manifest, rpc, now=()=>Math.floor(Date.now()/1000)
   }
   async function positions(owner,claims) {
     address(owner);
-    if(!Array.isArray(claims)||claims.length>30)throw new Error('Use pages of at most thirty claims');
-    const s=await snapshot(),tag=tagFor(s),resolved=await read(manifest.pool,pilotPoolAbi,'resolved',[],tag),rows=[];
+    if(!Array.isArray(claims)||claims.length>60)throw new Error('Use pages of at most sixty claims');
+    const s=await snapshot({reuse:true}),tag=tagFor(s),resolved=await read(manifest.pool,pilotPoolAbi,'resolved',[],tag),rows=[];
     // Validate the entire request before doing holdings reads. Bound parallelism
-    // so a page does not serialize thirty RPC round trips (or burst thirty).
+    // so a page does not serialize sixty RPC round trips (or burst sixty).
     for(const claim of claims){
       const mask=uint(claim.mask);
       if(!validClaim(claim.scope,mask,manifest.publication.draft.events.length))throw new Error('Unsupported claim');

@@ -175,6 +175,10 @@ test('heartbeats, policy acknowledgement and pause are visible to the owner, and
   assert.equal((await s.call(alice,'GET',`/api/agents/${agent.id}`)).body.runtime.acknowledged,true);
   s.advance(100);assert.equal((await s.call(alice,'GET',`/api/agents/${agent.id}`)).body.runtime.connection.state,'stale');
   s.advance(600);assert.equal((await s.call(alice,'GET',`/api/agents/${agent.id}`)).body.runtime.connection.state,'disconnected');
+  // A runtime that reports its own stop is shown as stopped at once, not as connected.
+  await rt(s,token,'POST','heartbeat',{...beat,state:'stopped',policy:{...beat.policy,flurboVersion:2}});
+  assert.equal((await s.call(alice,'GET',`/api/agents/${agent.id}`)).body.runtime.connection.state,'stopped');
+  s.advance(700);assert.equal((await s.call(alice,'GET',`/api/agents/${agent.id}`)).body.runtime.connection.state,'stopped');
   assert.equal((await s.call(alice,'POST',`/api/agents/${agent.id}/runtime-policy`,{maxTradeCostAtoms:'100000001'})).status,400);
   // Decisions.
   const decision={schema:'flurbo.agent-runtime-decision.v1',decisionId:'d-1',namespace:'pilot',createdAt:s.clock(),outcome:'abstain',reasons:['insufficient_evidence'],provenance:{kind:'model',name:'example/model'},summary:'Abstained: no fresh evidence.'};
@@ -263,4 +267,23 @@ test('an execution survives wallet replacement and archive, and one transaction 
   await s.call(alice,'POST',`/api/agents/${agent.id}/delete`,{});
   assert.equal((await rt(s,token,'GET','executions/'+hash)).body.status,'confirmed','still readable after archive');
   assert.equal((await rt(s,token,'POST','executions',{namespace:'pilot',hash:'0x'+'d2'.repeat(32),intent:buyIntent})).body.status,'recorded','archived agents can still report sent transactions');
+});
+
+test('agents start with published default live limits, and allowing live trades never leaves an agent without them',async()=>{
+  const s=setup(),agent=await runtimeAgent(s);
+  const view=async()=>(await s.call(alice,'GET',`/api/agents/${agent.id}`)).body.runtime.policy;
+  const DEFAULTS={maxTradeCostAtoms:'2000000',windows:[{seconds:86400,atoms:'10000000'}]};
+  assert.deepEqual((await view()).limits,DEFAULTS,'a new agent has 2 test AUSD per trade and 10 per 24 hours');
+  // An owner can remove Flurbo's limits while live trading is off; turning live on then restores the defaults.
+  await s.call(alice,'POST',`/api/agents/${agent.id}/runtime-policy`,{maxTradeCostAtoms:null,windows:[]});
+  assert.deepEqual((await view()).limits,{maxTradeCostAtoms:null,windows:[]});
+  await s.call(alice,'POST',`/api/agents/${agent.id}/runtime-policy`,{liveEnabled:true});
+  const live=await view();
+  assert.equal(live.liveEnabled,true);assert.deepEqual(live.limits,DEFAULTS);
+  // Limits chosen in the same request, or changed once live, are kept as chosen.
+  await s.call(alice,'POST',`/api/agents/${agent.id}/runtime-policy`,{maxTradeCostAtoms:'5000000'});
+  assert.equal((await view()).limits.maxTradeCostAtoms,'5000000');
+  const other=await runtimeAgent(s,alice,'Second agent');
+  await s.call(alice,'POST',`/api/agents/${other.id}/runtime-policy`,{liveEnabled:true,maxTradeCostAtoms:'3000000',windows:[]});
+  assert.deepEqual((await s.call(alice,'GET',`/api/agents/${other.id}`)).body.runtime.policy.limits,{maxTradeCostAtoms:'3000000',windows:[]});
 });

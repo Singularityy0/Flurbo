@@ -20,7 +20,7 @@ import {userMetrics} from './user-metrics.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(),
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
-  applications = null, previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {}, settlementPackets = null, starter = null } = {}) {
+  applications = null, previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {}, settlementPackets = null, starter = null, funding = null } = {}) {
   const hosted = publicOrigin !== null;
   // Agent wallets cannot also be linked for manual MetaMask trading; with Redis the two claims exclude each other atomically.
   const links = walletLinks({command:store.command,isReserved:wallet=>agents?agents.isAgentWallet(wallet):false,reservedKey:store.command?agentWalletKey:null});
@@ -42,7 +42,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
   const agents=(()=>{try{return agentApi({command:store.command||null,hosted,links,rpc:agentRpc(rpcUrl,{hosted}),previewAllows,reservedWallets,
     serviceFor:namespace=>namespace==='pilot'?publishedPilot:practiceCollections?.services.get(namespace)||null});}catch{return null;}})();
   // Operator-only growth metrics. Needs durable storage; members never see these numbers.
-  const metrics=userMetrics({command:store.command||null,origin:publicOrigin||`http://${hosts[0]}`,links,applications,operatorAccount:testingOperatorAccount,
+  const metrics=userMetrics({command:store.command||null,origin:publicOrigin||`http://${hosts[0]}`,links,applications,operatorAccount:testingOperatorAccount,funding,
     openAccess:!previewAllows,reservedWallets,rpcUrl,pools:()=>[
       ...(publishedPilot?[{namespace:'pilot',label:(practiceCollections?.catalog?.collections||[]).find(c=>c.pool===publishedPilot.manifest.pool)?.label||'Release milestones',service:publishedPilot}]:[]),
       ...[...(practiceCollections?.services||[])].map(([namespace,service])=>({namespace,label:practiceCollections.catalog.collections.find(c=>c.namespace===namespace)?.label||namespace,service}))]

@@ -28,7 +28,7 @@ const schemas = {
   'heartbeat.v1.json': { title: 'Runtime heartbeat', type: 'object', additionalProperties: false, required: ['runtimeId', 'sdk', 'mode', 'state', 'policy', 'pending', 'startedAt'],
     properties: { runtimeId: { type: 'string', minLength: 1, maxLength: 64 },
       sdk: { type: 'object', required: ['language', 'version'], properties: { language: { enum: ['typescript', 'python', 'rust', 'cpp'] }, version: { type: 'string', maxLength: 32 } } },
-      mode: { enum: ['paper', 'live'] }, state: { enum: ['running', 'paused', 'blocked', 'stopping'] },
+      mode: { enum: ['paper', 'live'] }, state: { enum: ['running', 'paused', 'blocked', 'stopping', 'stopped'] },
       policy: { type: 'object', required: ['hash', 'flurboVersion'], properties: {
         hash: { type: 'string', pattern: '^[0-9a-f]{64}$', description: 'SHA-256 of the canonical JSON of the effective local policy' },
         flurboVersion: { type: ['integer', 'null'], description: 'Version of the Flurbo policy the runtime applies' }, summary: { type: 'object' } } },

@@ -16,7 +16,7 @@ export class RuntimeApiError extends FlurboError {
   }
 }
 export type RuntimePolicy = FlurboPolicy & { schema: 'flurbo.agent-runtime-policy.v1'; markets: string[]; serverTime: number; acknowledged?: boolean };
-export type Heartbeat = { runtimeId: string; sdk: { language: 'typescript'; version: string }; mode: 'paper' | 'live'; state: 'running' | 'paused' | 'blocked' | 'stopping';
+export type Heartbeat = { runtimeId: string; sdk: { language: 'typescript'; version: string }; mode: 'paper' | 'live'; state: 'running' | 'paused' | 'blocked' | 'stopping' | 'stopped';
   policy: { hash: string; flurboVersion: number | null; summary: Record<string, unknown> }; pending: number; startedAt: number; lastCycleAt?: number | null; lastErrorCode?: string | null };
 export type ExecutionReport = { namespace: string; hash: string; intent: { action: string; claim: { scope: number; mask: string } | null; quantityAtoms: string; limitAtoms: string; deadline: number | null };
   decisionId?: string | null; nonce?: number; sdk?: { language: string; version: string } };

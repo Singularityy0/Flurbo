@@ -55,7 +55,7 @@ const publicTrades = t => ({ buys: t.buys, singles: t.singles, combined: t.combi
   spentAtoms: String(t.spentAtoms), receivedAtoms: String(t.receivedAtoms), markets: t.markets.size, byRule: t.byRule, byLegs: t.byLegs,
   firstBuyAt: t.firstBuyAt, lastBuyAt: t.lastBuyAt });
 
-export function userMetrics({ command, origin, pools, links = null, applications = null, operatorAccount = null, openAccess = false,
+export function userMetrics({ command, origin, pools, links = null, applications = null, funding = null, operatorAccount = null, openAccess = false,
   reservedWallets = new Set(), rpcUrl = null, env = process.env, now = Date.now, rpc = null, deliver = null }) {
   if (!command) return null;
   // Block times come from the public testnet RPC; a local fork simply leaves bet times unrecorded.
@@ -275,6 +275,7 @@ export function userMetrics({ command, origin, pools, links = null, applications
 
     return {
       schema: 'flurbo.user-metrics.v1', generatedAt: t,
+      funds: funding ? (funding.latest() ?? await funding.check().catch(() => null)) : null,
       notes: { signInsTrackedSince: Math.min(...members.map(u => u.firstSignIn).filter(x => x !== null), t), applications: applicationsStatus,
         excludedAccounts: team.size, inviteOnly: !openAccess },
       funnel,
@@ -310,6 +311,8 @@ export function userMetrics({ command, origin, pools, links = null, applications
       `Wallets that traded without a linked Flurbo account: ${r.unlinked.length}${r.unlinked.length ? '. Someone may be calling the contracts directly.' : ''}`,
       r.notes.applications === 'ok' ? null : 'Application numbers are unavailable. Run migration 002 in Supabase.',
       pending.length ? `Trade data still scanning: ${pending.join(', ')}` : 'Trade data is up to date.',
+      ...[['AUSD dispenser', r.funds?.dispenser], ['Starter MON wallet', r.funds?.starter]].filter(([, w]) => w)
+        .map(([name, w]) => `${name}: ${w.balance} ${w.unit}, about ${w.left} ${w.leftLabel} left${w.low ? '. LOW, top it up.' : '.'}`),
       'Details: https://flurbo.singu.online/metrics',
     ].filter(Boolean).join('\n\n');
   }

@@ -19,7 +19,7 @@ export async function configurePilot({env=process.env,rpcUrl,command,read=readFi
   const raw=env.FLURBO_PILOT_MANIFEST_JSON !== undefined
     ? env.FLURBO_PILOT_MANIFEST_JSON
     : await read(new URL('../../../config/pilot-testnet.json',import.meta.url),'utf8');
-  const service=pilotService({manifest:JSON.parse(raw),rpc:pilotRpc(rpcUrl)});
+  const service=pilotService({manifest:JSON.parse(raw),rpc:pilotRpc(rpcUrl),snapshotReuseMs:2500});
   if(['rehearsal','ethereum-activity',DETERMINISTIC_MODE].includes(service.manifest.publication.mode))throw new Error('New collections cannot replace the original pilot');
   service.index=pilotIndex({manifest:service.manifest,rpc:pilotRpc(rpcUrl),command});
   service.payouts=payouts({manifest:service.manifest,rpcUrl,command});
@@ -33,7 +33,7 @@ export async function configureRehearsal({env=process.env,rpcUrl,command}) {
   if(env.FLURBO_REHEARSAL_MANIFEST_JSON===undefined)return null;
   const manifest=JSON.parse(env.FLURBO_REHEARSAL_MANIFEST_JSON);
   if(manifest.publication?.mode!=='rehearsal'||manifest.publication.draft?.title!=='Public rehearsal: scripted settlement checks')throw new Error('Verified scripted rehearsal required');
-  const service=pilotService({manifest,rpc:pilotRpc(rpcUrl)});
+  const service=pilotService({manifest,rpc:pilotRpc(rpcUrl),snapshotReuseMs:2500});
   service.index=pilotIndex({manifest,rpc:pilotRpc(rpcUrl),command});
   service.payouts=payouts({manifest:service.manifest,rpcUrl,command});
   service.analytics=pairAnalytics({service,rpc:pilotRpc(rpcUrl)});
@@ -47,7 +47,7 @@ export async function configureCollection({manifest,rpcUrl,command}){
   if(manifest?.publication?.mode===DETERMINISTIC_MODE)validateSettlementManifest(manifest);
   else if(manifest?.publication?.mode==='ethereum-activity')validateActivityDraft(manifest.publication.draft);
   else throw Error('Unsupported collection mode');
-  const service=pilotService({manifest,rpc:pilotRpc(rpcUrl)});
+  const service=pilotService({manifest,rpc:pilotRpc(rpcUrl),snapshotReuseMs:2500});
   service.index=pilotIndex({manifest,rpc:pilotRpc(rpcUrl),command});
   service.payouts=payouts({manifest:service.manifest,rpcUrl,command});
   service.analytics=pairAnalytics({service,rpc:pilotRpc(rpcUrl)});
