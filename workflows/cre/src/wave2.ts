@@ -1,6 +1,5 @@
 import { preparePilot, disputePolicy, VOID_POLICY } from './pilot-config';
 import { settlementEvent } from '../../../apps/web/server/settlement-publication.mjs';
-import { readFileSync } from 'node:fs';
 
 const iso = (s: number) => new Date(s * 1000).toISOString().replace('.000Z', 'Z');
 const hm = (s: number) => iso(s).slice(11, 16);
@@ -10,9 +9,9 @@ const timing = (scheduledAt: number, cutoff: number, assertionPeriod: number = 4
 });
 const base = { schema: 'flurbo.settlement-rule.v1', vintage: 'first-observed-snapshot', missingPolicy: 'resolver-timeout-void' };
 
-// We read thresholds from config file (resolved relative to repo root). We must fail if missing.
-const root = new URL('../../../', import.meta.url);
-const thresholds = JSON.parse(readFileSync(new URL('config/wave2-thresholds.json', root), 'utf8'));
+// Crypto thresholds are set on listing day from live prices (config/wave2-thresholds.json, read by the prepare
+// script). Workflow sources stay free of file access.
+export type Wave2Thresholds = { f2?: { mon: number; btc: number; eth: number; sol: number } };
 
 // -------------------------------------------------------------------------------------------------
 // F3: Brazil Election (Primary pool for 4 Oct)
@@ -94,7 +93,7 @@ export const F2_TIMES = {
   captureUntil: at(4, 4, 5),
 };
 
-export function wave2F2Rules() {
+export function wave2F2Rules(thresholds: Wave2Thresholds) {
   const T = F2_TIMES;
   const t = thresholds.f2;
   if (!t || !t.mon || !t.btc || !t.eth || !t.sol) throw Error('Missing f2 thresholds in config/wave2-thresholds.json');
@@ -119,9 +118,9 @@ export function wave2F2Rules() {
   ];
 }
 
-export function prepareWave2F2(selection: { creator: string; reviewers: { name: string; address: string }[] }, now: number) {
+export function prepareWave2F2(selection: { creator: string; reviewers: { name: string; address: string }[] }, now: number, thresholds: Wave2Thresholds) {
   const close = F2_TIMES.closesAt;
-  const settlementRules = wave2F2Rules();
+  const settlementRules = wave2F2Rules(thresholds);
   const policy = { creator: selection.creator, reviewers: selection.reviewers, reviewerControl: 'single-operator' as const,
     independentReviewersConfirmed: false, rulesReviewed: true, bondAtoms: '1000000', assertionPeriod: 43200, challengePeriod: 43200, votingPeriod: 43200 };
   

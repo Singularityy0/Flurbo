@@ -6,8 +6,10 @@ const selection = { creator: '0xf1fea08ebba92ed342acc5639db312c3694bc391', revie
 const at = (d: number, h: number, m: number) => Date.UTC(2026, 9, d) / 1000 + h * 3600 + m * 60;
 const testNow = at(1, 12, 0); // 1 Oct 2026 12:00
 
+test('F2 refuses to prepare without thresholds', () => { expect(() => prepareWave2F2(selection, testNow, {})).toThrow(); });
+
 test('F2 rule hashes stable, passes validator, chain 143, timings after close', () => {
-  const prepared = prepareWave2F2(selection, testNow);
+  const prepared = prepareWave2F2(selection, testNow, { f2: { mon: 0.034, btc: 85000, eth: 2700, sol: 120 } });
   const rules = validateSettlementPublication(prepared.publication);
   
   expect(prepared.liquidityAtoms).toBe('100000000'); // b = 100

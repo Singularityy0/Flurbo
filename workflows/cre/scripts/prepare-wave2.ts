@@ -9,18 +9,18 @@ if (args[0] !== '--prepare' || !args[1] || !['f2', 'f3'].includes(args[1].toLowe
 const poolName = args[1].toLowerCase();
 const root = new URL('../../../', import.meta.url), now = Math.floor(Date.now() / 1000);
 const selection = await Bun.file(new URL('config/pilot-alpha-selection.json', root)).json();
+// F2 thresholds come from live prices on listing day; a missing file is an error.
+const thresholds = poolName === 'f2' ? await Bun.file(new URL('config/wave2-thresholds.json', root)).json() : {};
 const destination = new URL(`target/deployments/wave2-${poolName}-prepared.json`, root);
 await mkdir(new URL('target/deployments/', root), { recursive: true });
 
 let prepared;
 if (await Bun.file(destination).exists()) {
   const previous = await Bun.file(destination).json();
-  const prepareFn = poolName === 'f3' ? prepareWave2F3 : prepareWave2F2;
-  prepared = prepareFn(selection, now);
+  prepared = poolName === 'f3' ? prepareWave2F3(selection, now) : prepareWave2F2(selection, now, thresholds);
   if (prepared.configHash !== previous.configHash) throw Error(`An earlier wave2-${poolName} preparation differs. Keep it, or move it aside before preparing another.`);
 } else {
-  const prepareFn = poolName === 'f3' ? prepareWave2F3 : prepareWave2F2;
-  prepared = prepareFn(selection, now);
+  prepared = poolName === 'f3' ? prepareWave2F3(selection, now) : prepareWave2F2(selection, now, thresholds);
   await writeFile(destination, JSON.stringify(prepared, null, 2) + '\n', { flag: 'wx' });
 }
 
