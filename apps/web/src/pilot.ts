@@ -49,7 +49,30 @@ export const pendingKeyFor=(namespace:PilotNamespace)=>{
   return namespace==='pilot'?pilotPendingKey:`flurbo.${namespace}.pending.v1`;
 };
 
+// The market view and the position card both read a market's status as a page opens, one right after the other.
+// A status read that is in flight, or finished less than STATUS_REUSE_MS ago, is shared instead of read again;
+// it is never older than that, and reads with a wallet (the trade ticket) are always fresh.
+const STATUS_REUSE_MS=2_000;
+const sharedStatus=new Map<string,{at:number|null;promise:Promise<unknown>}>();
 export async function pilotRequest<T>(path:string,input?:unknown,namespace:PilotNamespace='pilot',signal?:AbortSignal):Promise<T> {
+  if(path==='status'&&input===undefined){
+    const key=namespace,entry=sharedStatus.get(key);
+    if(entry&&(entry.at===null||Date.now()-entry.at<STATUS_REUSE_MS))return structuredClone(await abortable(entry.promise,signal)) as T;
+    const shared={at:null as number|null,promise:readPilot('status',undefined,namespace)};
+    sharedStatus.set(key,shared);
+    shared.promise.then(()=>{shared.at=Date.now();},()=>{if(sharedStatus.get(key)===shared)sharedStatus.delete(key);});
+    return structuredClone(await abortable(shared.promise,signal)) as T;
+  }
+  return readPilot<T>(path,input,namespace,signal);
+}
+// A shared read keeps going for the others when one caller aborts; that caller still stops waiting.
+function abortable<T>(promise:Promise<T>,signal?:AbortSignal):Promise<T>{
+  if(!signal)return promise;
+  if(signal.aborted)return Promise.reject(signal.reason);
+  return new Promise((resolve,reject)=>{const stop=()=>reject(signal.reason);signal.addEventListener('abort',stop,{once:true});
+    promise.then(v=>{signal.removeEventListener('abort',stop);resolve(v);},e=>{signal.removeEventListener('abort',stop);reject(e);});});
+}
+async function readPilot<T>(path:string,input?:unknown,namespace:PilotNamespace='pilot',signal?:AbortSignal):Promise<T> {
   if(namespace!=='pilot'&&!isPracticeNamespace(namespace))throw Error('Invalid collection');
   const response=(input===undefined?await takeEarly('/api/'+namespace+'/'+path):null)??await fetch('/api/'+namespace+'/'+path,{method:input===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',
     headers:input===undefined?{}:{'Content-Type':'application/json'},body:input===undefined?undefined:JSON.stringify(input),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60_000)]):AbortSignal.timeout(60_000)});

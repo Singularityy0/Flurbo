@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {linkTradingWallet} from '../wallet-links';
-import {portfolioSources,type PortfolioSources} from '../portfolio-sources';
+import {forgetPortfolioSources,portfolioSources,type PortfolioSources} from '../portfolio-sources';
 import {discoverWallets,type BrowserWallet} from '../auth/wallet-choice';
 import AccountHoldings from './AccountHoldings';
 import PortfolioDashboard from './PortfolioDashboard';
@@ -12,6 +12,8 @@ export default function AccountPortfolio({account,namespace,groups}:{account:str
   const [sources,setSources]=useState<PortfolioSources|null>(null);
   const currentAccount=useRef(account);currentAccount.current=account;
   async function refreshSources(){
+    // A refresh the member asked for always reads the current list.
+    forgetPortfolioSources();
     try{const data=await portfolioSources();if(currentAccount.current!==account)return;
       if(data.account.toLowerCase()!==account.toLowerCase())throw Error('Account changed. Sign in again.');
       setError('');setSources(data);setWallets([...new Set([...data.wallets,...(data.agentWallets||[])])]);

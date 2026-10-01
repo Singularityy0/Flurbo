@@ -39,7 +39,9 @@ export function schedulerFor(url: string, lane = 'api') {
   if (!scheduler) {
     // Do not evict active budgets: excessive distinct origins fail closed.
     if (schedulers.size >= 64) throw new Error('Too many request origins.');
-    scheduler = requestScheduler({perWindow:lane==='rpc'?600:100}); schedulers.set(origin, scheduler);
+    // Six API requests at once, the usual browser limit per site, so a page's parallel reads (one per wallet,
+    // for example) finish in one round; chain reads stay at four.
+    scheduler = requestScheduler({perWindow:lane==='rpc'?600:100,concurrency:lane==='rpc'?4:6}); schedulers.set(origin, scheduler);
   }
   return scheduler;
 }
