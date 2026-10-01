@@ -14,10 +14,12 @@ async function rpc(method:string,params:unknown[]){
   return value.result;
 }
 const MAX={mon:parseEther('2'),ausd:parseUnits('200',6)};
+// The SDK keeps this much test MON back for fees (policy.gas.reserveWei) and does not trade below it.
+const RESERVE=parseEther('0.2');
 
 export default function AgentFunding({wallet}:{wallet:string}){
   const [balances,setBalances]=useState<{mon:bigint;ausd:bigint}|null>(null),[wallets,setWallets]=useState<BrowserWallet[]>([]);
-  const [mon,setMon]=useState('0.2'),[ausd,setAusd]=useState('20'),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[hash,setHash]=useState('');
+  const [mon,setMon]=useState('0.5'),[ausd,setAusd]=useState('5'),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[hash,setHash]=useState('');
   const agent=wallet.toLowerCase();
   async function read(){
     try{
@@ -55,6 +57,8 @@ export default function AgentFunding({wallet}:{wallet:string}){
     <h3>Fund this agent</h3>
     <p className="agents-fine">The agent wallet pays its own network fees in test MON and trades with its own test AUSD. Send both from your MetaMask wallet. The Flurbo AUSD dispenser only pays the wallet that asks, so it cannot send to the agent directly.</p>
     <p>{balances?`Agent wallet holds ${shown(balances.mon,18)} test MON and ${shown(balances.ausd,6)} test AUSD.`:'Agent wallet balance unavailable.'} <button className="text-link" disabled={busy} onClick={()=>void read()}>Refresh</button></p>
+    <p className="agents-fine">The runtime always keeps {formatEther(RESERVE)} test MON for fees and will not trade below it, so send more than that: 0.5 test MON and 5 test AUSD are plenty to start.</p>
+    {balances&&balances.mon<=RESERVE&&<p className="agents-note" role="status">The agent holds {shown(balances.mon,18)} test MON, not more than the {formatEther(RESERVE)} it keeps for fees. It will not trade until you send more.</p>}
     <div className="agents-pair">
       <label>Test MON to send<input inputMode="decimal" value={mon} onChange={e=>setMon(e.target.value)} disabled={busy}/></label>
       <button className="button button-outline" disabled={busy} onClick={()=>void send('mon')}>Send test MON</button>

@@ -15,7 +15,8 @@ export const isNamespace = (v: unknown): v is Namespace => v === 'pilot' || (typ
 
 export type Snapshot = { chainId: number; pool: string; blockNumber: bigint; blockHash: string; timestamp: number };
 export type DirectoryEntry = { namespace: Namespace; label: string; pool: string; closesAt: number };
-export type MarketEvent = { index: number; id: string; question: string; yesRule: string; noRule: string; observationEndsAt: number };
+// source: the record settlement reads, when the server lists it. Runtimes cite it as evidence when its host is allowed.
+export type MarketEvent = { index: number; id: string; question: string; yesRule: string; noRule: string; observationEndsAt: number; source?: { publisher: string | null; referenceUrl: string | null } };
 export type Market = {
   namespace: Namespace; pool: string; rulesHash: string; title: string; closesAt: number; open: boolean; resolved: boolean;
   events: MarketEvent[]; snapshot: Snapshot;
@@ -69,7 +70,9 @@ export function parseMarket(v: unknown, namespace: Namespace): Market {
   const events = (draft.events as unknown[]).map((raw, index) => {
     const e = obj(raw, 'event');
     if (typeof e.id !== 'string' || typeof e.question !== 'string') bad('event');
-    return { index, id: e.id as string, question: e.question as string, yesRule: String(e.yesRule ?? ''), noRule: String(e.noRule ?? ''), observationEndsAt: int(e.observationEndsAt, 'observation time') };
+    const src = e.source && typeof e.source === 'object' ? e.source as Record<string, unknown> : null;
+    const source = src && typeof src.referenceUrl === 'string' && /^https:\/\//.test(src.referenceUrl) ? { source: { publisher: typeof src.publisher === 'string' ? src.publisher : null, referenceUrl: src.referenceUrl } } : {};
+    return { index, id: e.id as string, question: e.question as string, yesRule: String(e.yesRule ?? ''), noRule: String(e.noRule ?? ''), observationEndsAt: int(e.observationEndsAt, 'observation time'), ...source };
   });
   const prices = (m.prices as unknown[]).map(raw => {
     const p = obj(raw, 'price');

@@ -116,7 +116,7 @@ pub struct HttpRetriever {
 
 impl HttpRetriever {
     pub fn new(allow_hosts: &[String], allow_local_http: bool) -> Self {
-        HttpRetriever { allow: allow_hosts.iter().map(|h| h.to_lowercase()).collect(), allow_local_http, max_bytes: 300_000, max_sources: 6, agent: agent(Duration::from_secs(10)) }
+        HttpRetriever { allow: allow_hosts.iter().map(|h| h.to_lowercase()).collect(), allow_local_http, max_bytes: 2_000_000, max_sources: 6, agent: agent(Duration::from_secs(10)) }
     }
 
     fn allowed(&self, url: &str) -> bool {

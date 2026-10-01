@@ -99,6 +99,7 @@ export default function FirstBotGuide() {
         <Code>{RESEARCH_BLOCK}</Code>
         <ul>
           <li><code>model</code>: replace the placeholder with a model name from your provider's list of models.</li>
+          <li><code>"pilot"</code> is this example market's name. Use your agent's market names instead: the agent's Setup page shows a <em>Research settings</em> section already filled in for its markets, which you can copy in place of this one.</li>
           <li><code>evidenceRequirements</code>: one line per question in the market, numbered from 0. The market in this example has two questions. The <code>background</code> setting lets the bot use pages that have no publication date, such as a GitHub releases list; without it, the bot waits for dated evidence and usually decides nothing.</li>
           <li>Leave <code>"mode": "paper"</code> near the top of the file unchanged for now.</li>
         </ul>
@@ -139,7 +140,10 @@ export default function FirstBotGuide() {
       <thead><tr><th scope="col">You see</th><th scope="col">Meaning</th><th scope="col">What to do</th></tr></thead>
       <tbody>
         <tr><td><code>provider_not_configured</code></td><td>No AI model is connected.</td><td>Do step 7.</td></tr>
-        <tr><td><code>no_sources</code></td><td>It could not read any evidence page.</td><td>Check your internet connection, and that each page's site (for example <code>github.com</code>) is in <code>allowHosts</code>.</td></tr>
+        <tr><td><code>no_sources</code></td><td>It could not read any evidence page.</td><td>Check your internet connection, and that each page's site (for example <code>github.com</code>) is in <code>allowHosts</code>. If the market's own records are not published yet, add pages under <code>extraSources</code>.</td></tr>
+        <tr><td><code>missing_event_evidence</code></td><td>At least one question had no readable page this cycle. Each question needs its own.</td><td>The record settlement reads may not be published yet, or may be a chain endpoint the page reader cannot use. Add a page for that question under <code>extraSources</code> and its site to <code>allowHosts</code> (see the optional note in step 7). Pages over 2 MB are skipped.</td></tr>
+        <tr><td><code>invalid_evidence</code></td><td>A page was read but could not be used, for example it was empty or cut short.</td><td>Use another page for that question.</td></tr>
+        <tr><td><code>too_close_to_close</code></td><td>The market closes within <code>policy.minSecondsBeforeClose</code> (120 seconds by default).</td><td>Nothing; the bot no longer trades that market.</td></tr>
         <tr><td><code>stale_evidence</code></td><td>The evidence has no recent publication date.</td><td>Add <code>background</code> lines for the market's questions (step 7).</td></tr>
         <tr><td><code>edge_below_threshold</code></td><td>Its forecast is too close to the market price to be worth a trade.</td><td>Nothing; this is a normal, sensible decision.</td></tr>
         <tr><td><code>model_abstained</code>, <code>insufficient_evidence</code></td><td>The AI model declined to forecast.</td><td>Nothing; it will try again next cycle.</td></tr>

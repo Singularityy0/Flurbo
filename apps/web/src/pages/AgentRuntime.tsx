@@ -8,6 +8,7 @@ import { Link, useLocation } from 'wouter';
 import { runtimeAdmin, agentClient, message, type ProfileJSON } from '../agents-client';
 import { describeClaim, amount } from '../portfolio';
 import { parseDecimal } from '../../../../packages/sdk/src/index.ts';
+import { researchBlock } from '../agent-research';
 import type { PilotNamespace } from '../pilot';
 
 // Agents that run on the user's own infrastructure. This page configures them and shows what they report
@@ -60,18 +61,21 @@ export function RuntimeCreateForm({ directory }: { directory: { namespace: strin
 
 export function RuntimeAgentDetail({ id }: { id: string }) {
   const [view,setView]=useState('Overview');
-  const [data, setData] = useState<any>(null), [questions, setQuestions] = useState<Record<string, string[]>>({}), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const [data, setData] = useState<any>(null), [questions, setQuestions] = useState<Record<string, string[]>>({}), [sources, setSources] = useState<Record<string, (string | null)[]>>({}), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
     const d = await runtimeAdmin.get(id);
     setData(d);
-    for (const ns of d.profile.markets ?? []) if (!questions[ns]) agentClient.market(ns as PilotNamespace).then(m => setQuestions(q => ({ ...q, [ns]: m.events.map(e => e.question) }))).catch(() => {});
+    for (const ns of d.profile.markets ?? []) if (!questions[ns]) agentClient.market(ns as PilotNamespace).then(m => { setQuestions(q => ({ ...q, [ns]: m.events.map(e => e.question) })); setSources(x => ({ ...x, [ns]: m.events.map(e => e.source?.referenceUrl ?? null) })); }).catch(() => {});
   }, [id]);
   useEffect(() => {
     let live = true;
     const tick = () => load().catch(e => { if (live) setError(message(e)); });
     void tick();
     const timer = setInterval(() => { if (document.visibilityState === 'visible') void tick(); }, 15_000);
-    return () => { live = false; clearInterval(timer); };
+    // Polling pauses while the tab is hidden (for example while a terminal runs the agent), so read at once on return.
+    const back = () => { if (document.visibilityState === 'visible') void tick(); };
+    document.addEventListener('visibilitychange', back);
+    return () => { live = false; clearInterval(timer); document.removeEventListener('visibilitychange', back); };
   }, [load]);
   async function act(fn: () => Promise<unknown>) { setBusy(true); setError(''); try { await fn(); await load(); } catch (e) { setError(message(e)); } finally { setBusy(false); } }
   useLoadGate('agent-runtime', { pending: !data && !error, error: !data ? error : null, label: 'Loading your agent' });
@@ -111,6 +115,7 @@ export function RuntimeAgentDetail({ id }: { id: string }) {
     {!archived && <WalletSetup id={id} profile={profile} busy={busy} act={act}/>}
     {!archived && <Credentials id={id} credentials={rt.credentials} busy={busy} act={act}/>}
     {!archived && <Setup profile={profile} hasWallet={!!profile.wallet}/>}
+    {!archived && <ResearchSetup markets={profile.markets ?? []} questions={questions} sources={sources}/>}
     </div><div hidden={view!=='Activity'}><Decisions decisions={rt.decisions} questions={questions}/>{!rt.decisions.length&&<p>No decisions yet. Start the agent in paper mode from Setup.</p>}</div>
     <div hidden={view!=='Settings'}>{!archived&&<><Controls id={id} policy={policy} busy={busy} act={act}/><Archive id={id} busy={busy} act={act}/></>}{archived&&<p>This agent is archived. Its verified activity remains available.</p>}</div>
   </>;
@@ -276,6 +281,20 @@ function Setup({ profile, hasWallet }: { profile: ProfileJSON; hasWallet: boolea
   </section>;
 }
 
+function ResearchSetup({ markets, questions, sources }: { markets: string[]; questions: Record<string, string[]>; sources: Record<string, (string | null)[]> }) {
+  const [copyStatus, setCopyStatus] = useState('');
+  if (!markets.length || markets.some(ns => !questions[ns])) return null;
+  const block = researchBlock(markets, sources, Object.fromEntries(markets.map(ns => [ns, questions[ns].length])));
+  return <section className="agents-card" aria-label="Research settings">
+    <h2>Research settings for these markets</h2>
+    <p className="agents-fine">Replace the <code>"research"</code> section of <code>flurbo-agent.json</code> with this, then set your model provider. It allows the sites settlement reads and lets undated pages count as background evidence.</p>
+    <pre className="agents-code">{block}</pre>
+    <button className="button button-outline" onClick={async () => { try { await navigator.clipboard.writeText(block); setCopyStatus('Research settings copied.'); } catch { setCopyStatus('Copy is unavailable. Select the text above to copy it.'); } }}><Copy aria-hidden="true" strokeWidth={1.75}/>Copy research settings</button><span role="status" className="agents-fine"> {copyStatus}</span>
+    <p className="agents-fine">Every question needs at least one readable page in each cycle, or the agent decides nothing. The runtime reads the record settlement reads for each question, listed below, but that record may not exist until the result is published, and chain endpoints answer JSON-RPC rather than page requests. For such a question, add a page about it under <code>extraSources</code>, for example <code>{'{ "event": 1, "url": "https://..." }'}</code>, and add its site to <code>allowHosts</code>. Pages over 2 MB are skipped.</p>
+    <ul className="agents-fine">{markets.flatMap(ns => (questions[ns] ?? []).map((q, i) => <li key={ns + i}>Question {i} ({ns}): {q} Settlement reads: <code>{sources[ns]?.[i] ?? 'not listed'}</code></li>))}</ul>
+  </section>;
+}
+
 function Verified({ id, rt, questions, busy, act }: { id: string; rt: any; questions: Record<string, string[]>; busy: boolean; act: (fn: () => Promise<unknown>) => Promise<void> }) {
   const t = rt.totals;
   return <section className="agents-card" aria-label="Verified trades">
@@ -310,7 +329,7 @@ function Decisions({ decisions, questions }: { decisions: any[]; questions: Reco
         {s && s.length === 4 && <span className="agents-fine"> Forecast: {questions[d.namespace]?.[joint.events[0]]||`Question ${joint.events[0]+1}`} {pct(s[1] + s[3])}, {questions[d.namespace]?.[joint.events[1]]||`Question ${joint.events[1]+1}`} {pct(s[2] + s[3])}, both {pct(s[3])}.</span>}
         {d.candidate && <span className="agents-fine"> Claim: {describeClaim(d.candidate.claim.scope, Number(d.candidate.claim.mask), questions[d.namespace])}, quote {amount(d.candidate.quoteAtoms)} test AUSD.</span>}
         <span className="agents-fine"> Source: {d.provenance.kind === 'model' ? `model ${d.provenance.name}` : d.provenance.kind === 'fixture' ? `fixture ${d.provenance.name} (not AI)` : d.provenance.name}.</span>
-        {d.forecast?.evidence?.length > 0 && <details className="agents-assumptions"><summary>Evidence ({d.forecast.evidence.length})</summary><ul>{d.forecast.evidence.map((e: any) => <li key={e.id}>{e.url ? <a href={e.url} rel="noreferrer noopener" target="_blank">{e.title}</a> : e.title} ({e.source}, {new Date(e.observedAt).toLocaleDateString()})</li>)}</ul></details>}
+        {d.forecast?.evidence?.length > 0 && <details className="agents-assumptions"><summary>Evidence ({d.forecast.evidence.length})</summary><ul className="agents-evidence-list">{d.forecast.evidence.map((e: any) => <li key={e.id}>{e.url ? <a href={e.url} rel="noreferrer noopener" target="_blank">{e.title}</a> : <span>{e.title}</span>}<small>{e.source}, {new Date(e.observedAt).toLocaleDateString()}</small></li>)}</ul></details>}
       </div></li>;
     })}</ol>{decisions.length>5&&<button className="button button-outline" onClick={()=>setShowAll(v=>!v)}>{showAll?'Show recent only':`Show all ${decisions.length} decisions`}</button>}
   </section>;

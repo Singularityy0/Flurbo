@@ -126,7 +126,7 @@ TEST(retrieval_rejects_partial_empty_and_oversized_bodies) {
     Headers type = {{"Content-Type", "text/plain"}};
     if (path == "/empty") return {200, type, ""};
     if (path == "/blank") return {200, type, "   "};
-    if (path == "/oversize") return {200, type, std::string(300001, 'x')};
+    if (path == "/oversize") return {200, type, std::string(2000001, 'x')};
     if (path == "/partial") return {206, type, "abc"};
     if (path == "/range") return {200, {{"Content-Type", "text/plain"}, {"Content-Range", "bytes 0-2/100"}}, "abc"};
     if (path == "/short") return {200, {{"Content-Type", "text/plain"}, {"Content-Length", "20"}}, "abc"};

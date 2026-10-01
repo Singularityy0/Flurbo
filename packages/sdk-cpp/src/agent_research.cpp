@@ -93,7 +93,7 @@ std::vector<Evidence> HttpRetriever::retrieve(const std::vector<Source>& sources
       std::string url = sources[i].url;
       std::optional<HttpResponse> r;
       for (int hop = 0; hop < 4 && allowed(url); ++hop) {
-        HttpResponse resp = http_request({"GET", url, {{"Accept", "text/html,application/json,text/plain"}, {"Accept-Encoding", "identity"}}, "", 10000, 300000});
+        HttpResponse resp = http_request({"GET", url, {{"Accept", "text/html,application/json,text/plain"}, {"Accept-Encoding", "identity"}}, "", 10000, 2000000});
         auto location = resp.header("Location");
         if (resp.status >= 300 && resp.status < 400 && location) {
           url = join_url(url, *location);  // redirects are followed by hand, re-checking the allowlist
