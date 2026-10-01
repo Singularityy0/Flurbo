@@ -1,7 +1,7 @@
 import { Link } from 'wouter';
 import BrandLogo from './BrandLogo';
 
-export const LITEPAPER = { href: '/technical_litepaper.pdf', label: 'Technical litepaper', detail: 'PDF, 95 KB' } as const;
+export const LITEPAPER = { href: '/technical_litepaper.pdf', label: 'Technical litepaper', detail: 'PDF, 99 KB' } as const;
 
 export default function SiteFooter({ compact = false }: { compact?: boolean }) {
   return (

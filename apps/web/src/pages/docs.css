@@ -71,3 +71,10 @@
 .docs-table th, .docs-table td { text-align: left; vertical-align: top; padding: var(--s-2) var(--s-3); border-bottom: 1px solid var(--rule); }
 /* Long inline addresses in the guide wrap instead of widening the page on phones. */
 #first-bot p code, #first-bot li code, #first-bot td code { overflow-wrap: anywhere; word-break: break-word; }
+
+/* Screenshots: framed like a window of the app, narrow captures (forms, tickets) kept at a readable width. */
+.docs-shot { margin: var(--s-5) 0; display: grid; gap: var(--s-2); }
+.docs-shot img { display: block; width: 100%; max-width: 100%; height: auto; border: 1px solid var(--rule-strong); border-radius: var(--r-panel); background: var(--surface); }
+.docs-shot-narrow img { max-width: 380px; }
+.docs-shot figcaption { font-size: 14px; line-height: 1.5; color: var(--ink-3); }
+.docs-steps li .docs-shot { margin-bottom: var(--s-2); }

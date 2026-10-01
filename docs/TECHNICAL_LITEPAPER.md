@@ -2,9 +2,9 @@
 
 ## A Coherent Market for Related Events
 
-### Technical Litepaper, Version 0.2
+### Technical Litepaper, Version 0.3
 
-29 September 2026
+1 October 2026
 
 Flurbo Research and Engineering
 
@@ -244,7 +244,26 @@ The public pilot uses an optimistic testnet resolver. Assertions require test AU
 
 For new holder-restricted deployments, challenge eligibility can require a current related holding linked to the same Mera account. Existing legacy resolvers do not retroactively obtain that restriction. Holder eligibility restricts access to the challenge function; it does not make the asserted outcome correct.
 
-### 6.2 Uniform void semantics
+### 6.2 Deterministic settlement and general readers
+
+Most questions are now proposed by a settlement bot rather than by the operator. Each question's rule, `flurbo.settlement-rule.v1`, names its source, one of four general readers and that reader's settings, the decision (a decimal threshold, a category or a UTC timestamp comparison) and its timing. The complete rule is hashed and bound to the resolver configuration before trading opens, so it cannot change after deployment and a new market that fits a reader needs no new code.
+
+| Reader | Sources |
+| --- | --- |
+| `json-api.v1` | Any public JSON API: a value, a count, a sum, a maximum or minimum over a filtered list |
+| `stat-table.v1` | Official statistics published as CSV, SDMX-JSON or JSON-stat |
+| `html-text.v1` | One anchored sentence on an official page, as a last resort |
+| `evm-rpc.v1` | Any EVM chain: contract reads, balances, block fields, transaction and log counts over a time range |
+
+The bot captures the source inside the rule's window, stores each retained response with its SHA-256 hash, extracts the value with exact decimal arithmetic, and asserts YES or NO with a public evidence reference. Block evidence keeps neighbouring blocks so the chosen boundary block is provable. Missing, malformed or conflicting data is not an answer: the question stays unresolved and, if nothing valid is retained before its deadline, resolves VOID. Before a market is prepared, a rule check reads each source and refuses a rule whose answer is already public. Trading closes before every observation window.
+
+A deterministic parser does not prove that the publisher is correct. Catalogues can add records after the interval they describe; in one rehearsal an earthquake catalogue added an event five minutes after the capture, so the authoring policy now requires catalogue captures to open at least three hours after the counted interval. Sources that need a login or secret key, pages built only by JavaScript, PDFs and subjective questions are not automated; for those the operator proposes the answer with its evidence. No AI model decides an outcome.
+
+### 6.3 Result times and payouts
+
+Each question has its own observation window and result time, and the market page shows them separately. Base outcomes are delivered to the pool together: payouts for every claim in a pool, including single-question claims, wait until every question in that pool is final.
+
+### 6.4 Uniform void semantics
 
 For resolved YES or NO events, the corresponding bit is fixed. Each VOID event is averaged uniformly over its two possible binary answers. If V is the set of void events and K is the fixed partial assignment, the payout fraction of claim W is
 
@@ -254,7 +273,7 @@ phi(W | K,V) = |{x compatible with K : x in W}| / 2^|V|.
 
 Thus a unit of A AND B pays 0.5 when A is YES and B is VOID, 0 when A is NO and B is VOID, and 0.25 when both events are VOID. VOID is not equivalent to NO and does not refund the purchase price. Redemption converts this fraction into collateral atoms with conservative rounding.
 
-### 6.3 Redemption
+### 6.5 Redemption
 
 After all base outcomes are delivered, the owner redeems an exact claim and quantity. Winning or fractional payout is calculated from the claim truth table and the final YES and VOID masks. The redeemed holding is burned. Partial redemption is supported, and the remaining reserve continues to protect other holders.
 
@@ -301,7 +320,9 @@ API credentials authorize read and reporting operations. They are not signing ke
 
 The reference policy checks market allowlists, market close time, quantity, trade cost, slippage, quote age, total and rolling spend, position size, worst-case loss, gas fee, gas reserve, and the number of pending transactions. The journal preserves planned, signed, broadcast, confirmed, reverted, replaced, expired, and mismatch states so a restart can reconcile uncertain submissions without blindly duplicating a transaction.
 
-These controls are software policy in a compliant runtime. Possession of a raw externally owned account key can bypass them. Dashboard pause and credential revocation stop new actions by compliant runtimes; they do not cancel an already submitted transaction or remove the wallet's on-chain authority. Cryptographically enforced delegation would require a separate smart-account design.
+These controls are software policy in a compliant runtime. Possession of a raw externally owned account key can bypass them.
+
+Every forecast must cite evidence records retrieved by the runtime. Each question's evidence requirement sets how fresh that evidence must be, with a background setting for undated reference pages. Agents receive the source each question's settlement reads in the market data, and the Setup page generates research settings that allow those hosts and list every question. Retrieved pages are limited to 2 MB; larger pages are skipped rather than truncated. Dashboard pause and credential revocation stop new actions by compliant runtimes; they do not cancel an already submitted transaction or remove the wallet's on-chain authority. Cryptographically enforced delegation would require a separate smart-account design.
 
 The SDK validates each joint forecast and computes worst-case payout across pool states. A semantic compatibility layer can reject configured impossible claims before signing. This layer depends on reviewed observation mappings. It must abstain when the relationship is unknown rather than infer exclusivity from question text alone.
 
@@ -343,7 +364,7 @@ The system still depends on:
 - accurate event definitions and publication of the committed rule preimage;
 - the designated resolution process and its evidence sources;
 - RPC availability and correct canonical-chain responses;
-- durable hosted storage for sessions, evidence, indices, and agent records;
+- durable hosted storage: Redis for sessions, evidence, access state and agent records, and a Postgres table for rebuildable data such as price history, trade and payout indexes and metrics;
 - users protecting passkeys and transaction-signing wallets;
 - operators maintaining monitoring and settlement transactions;
 - the collateral token preserving expected ERC-20 balance semantics.
@@ -358,7 +379,7 @@ No combination is favorable merely because its events are correlated. An observa
 
 ## 11. Implementation status
 
-| Component | Status at version 0.2 | Scope |
+| Component | Status at version 0.3 | Scope |
 | --- | --- | --- |
 | Public web application | Deployed testnet beta | Invite-based, test assets |
 | Small-cluster PilotPool | Deployed on Monad testnet | Factored local scopes over a small event cluster |
@@ -369,11 +390,12 @@ No combination is favorable merely because its events are correlated. An observa
 | Agent runtime and SDKs | Implemented in four languages | Local keys, paper and testnet live modes |
 | Bounded-width factored pricing | Used by deployed PilotPool | Public pilot restricted to two to four events |
 | General FactoredPool with larger event domain | Local implementation and tests | Larger public clusters not operationally validated |
+| Deterministic settlement bot with four general readers | Implemented; unattended testnet rehearsals | Public sources; disputes still go to the operator panel |
 | Independent oracle or appeal system | Not implemented | Current alpha remains operator dependent |
 | Mainnet or real-value market | Not launched | No real-value readiness claim |
 | Independent security audit | Not completed | Required before real-value deployment |
 
-The pilot manifest records pool address `0x28d5ee02b1eda6959ac3ee5a4f834237c84dee02` on Monad testnet. The repository's 29 September 2026 read-only deployment assessment reports that deployed bytecode hashes match the manifest at the inspected blocks. A chain-to-manifest match is not an independent reproduction of compiled source bytecode; that source-to-bytecode linkage was not re-derived in that assessment. The source implementation of PilotPool inherits FactoredTrading. Addresses and active market configuration can change through new deployments, so the hosted application and its manifests provide the operational configuration for current testnet markets.
+Several pools are deployed on Monad testnet, each with its own resolver, schedule and rules hash. Their addresses and configuration are published in the hosted manifests that the application and agents read, which are the operational source for current markets. A chain-to-manifest match is not an independent reproduction of compiled source bytecode. The source implementation of PilotPool inherits FactoredTrading.
 
 ## 12. Limitations and research agenda
 
@@ -438,7 +460,7 @@ This procedure separates human-readable logic from execution representation. Con
 
 [4] Pennock, D. M., and Xia, L. (2012). Price updating in combinatorial prediction markets with Bayesian networks. *Proceedings of the 28th Conference on Uncertainty in Artificial Intelligence*. https://doi.org/10.48550/arXiv.1202.3756
 
-[5] Flurbo Research and Engineering. (2026). Repository specifications for quoting, factored pricing, settlement, account challenges, and autonomous agents. Implementation assessed at source revision fb10b64; documentation revision 0.2, 29 September 2026.
+[5] Flurbo Research and Engineering. (2026). Repository specifications for quoting, factored pricing, settlement, account challenges, and autonomous agents. Implementation assessed at source revision 1324e74; documentation revision 0.3, 1 October 2026.
 
 ## Document status
 

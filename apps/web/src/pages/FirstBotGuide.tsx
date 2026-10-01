@@ -1,4 +1,8 @@
 import { Link } from 'wouter';
+import DocsShot from './DocsShot';
+import researchShot from './docs-media/agent-research.png';
+import runShot from './docs-media/agent-run.png';
+import { SHOT_SIZE } from './docs-media/sizes';
 
 // A step-by-step guide for someone who has never run a trading bot: what each step does, why it is
 // needed, exactly what to type, and what they should see. Python is used because it needs the least setup.
@@ -103,6 +107,7 @@ export default function FirstBotGuide() {
           <li><code>evidenceRequirements</code>: one line per question in the market, numbered from 0. The market in this example has two questions. The <code>background</code> setting lets the bot use pages that have no publication date, such as a GitHub releases list; without it, the bot waits for dated evidence and usually decides nothing.</li>
           <li>Leave <code>"mode": "paper"</code> near the top of the file unchanged for now.</li>
         </ul>
+        <DocsShot src={researchShot} {...SHOT_SIZE['agent-research']} alt="Research settings panel on the agent's Setup page with a filled-in research section and a Copy research settings button" caption="Research settings on the agent's Setup page, already filled in for its markets. Example markets."/>
         <div className="docs-note"><strong>Optional: let the bot read exactly what settlement reads</strong>
           <p>Each market page lists, under <em>What decides the answer?</em>, the exact address settlement checks for every question. Agents also receive it in the market data as <code>settlement</code>. Your bot can read the same record. For an address marked as a normal web address, add its site to <code>allowHosts</code> and the address itself to <code>extraSources</code>, under the market and question number. For example, if question 0 is checked at <code>https://api.github.com/repos/ethereum/go-ethereum/releases/tags/v1.17.7</code>:</p>
           <Code>{'"allowHosts": ["github.com", "api.github.com"],\n"extraSources": {\n  "pilot": [\n    { "event": 0, "url": "https://api.github.com/repos/ethereum/go-ethereum/releases/tags/v1.17.7" }\n  ]\n}'}</Code>
@@ -114,6 +119,7 @@ export default function FirstBotGuide() {
       <li><strong>Run one practice cycle.</strong>
         <p><em>Why:</em> this runs the bot once, in practice mode, so you can see what it decides without spending anything.</p>
         <Code>python -m flurbo_sdk start --config flurbo-agent.json --once</Code>
+        <DocsShot src={runShot} {...SHOT_SIZE['agent-run']} alt="Run the agent panel on the agent's Setup page with a language choice and the commands to install, initialise and start the runtime" caption="The agent's Setup page shows these commands for your own agent and language."/>
         <p><em>You should see</em> a few lines, one per event, for example:</p>
         <Code>{'{"event": "started", "mode": "paper", ...}\n{"event": "paper_trade", "namespace": "pilot", "claim": {...}}\n{"event": "stopped", ...}'}</Code>
         <p><code>paper_trade</code> means it would have bought that prediction. A line ending in <code>_abstained</code> means it chose not to trade and says why (see the table below). Deciding not to trade is normal and often correct. The same decisions appear in the <em>Activity</em> tab on Flurbo.</p>

@@ -51,7 +51,7 @@ class NumberedDocTemplate(BaseDocTemplate):
             bottomMargin=20 * mm,
             title="Flurbo: A Coherent Market for Related Events",
             author="Flurbo Research and Engineering",
-            subject="Technical Litepaper, Version 0.2",
+            subject="Technical Litepaper, Version 0.3",
         )
         frame = Frame(
             self.leftMargin,
@@ -75,7 +75,7 @@ def draw_page(canvas, doc):
         canvas.drawImage(ImageReader(LOGO), 22 * mm, A4[1] - 15.7 * mm, width=27 * mm, height=6.75 * mm, mask="auto", preserveAspectRatio=True)
         canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(MOSS)
-        canvas.drawRightString(A4[0] - 22 * mm, A4[1] - 13.8 * mm, "TECHNICAL LITEPAPER  |  VERSION 0.2")
+        canvas.drawRightString(A4[0] - 22 * mm, A4[1] - 13.8 * mm, "TECHNICAL LITEPAPER  |  VERSION 0.3")
         canvas.setStrokeColor(LINE)
         canvas.setLineWidth(0.5)
         canvas.line(22 * mm, A4[1] - 17 * mm, A4[0] - 22 * mm, A4[1] - 17 * mm)
@@ -203,8 +203,8 @@ def cover(story, style):
     story.append(Image(str(LOGO), width=108 * mm, height=27 * mm, mask="auto"))
     story.append(Spacer(1, 12 * mm))
     story.append(Paragraph("A Coherent Market<br/>for Related Events", ParagraphStyle("covertitle", fontName="Helvetica-Bold", fontSize=35, leading=38, textColor=FOREST, spaceAfter=12)))
-    story.append(Paragraph("Technical Litepaper  |  Version 0.2", ParagraphStyle("coversub", fontName="Helvetica", fontSize=12, leading=15, textColor=MOSS, spaceAfter=5)))
-    story.append(Paragraph("29 September 2026", ParagraphStyle("coverdate", fontName="Helvetica", fontSize=9, leading=12, textColor=MOSS, spaceAfter=36)))
+    story.append(Paragraph("Technical Litepaper  |  Version 0.3", ParagraphStyle("coversub", fontName="Helvetica", fontSize=12, leading=15, textColor=MOSS, spaceAfter=5)))
+    story.append(Paragraph("1 October 2026", ParagraphStyle("coverdate", fontName="Helvetica", fontSize=9, leading=12, textColor=MOSS, spaceAfter=36)))
     story.append(Table([[Paragraph("MONAD PUBLIC TESTNET", style["body"]), Paragraph("TEST ASSETS ONLY", style["body"]) ]], colWidths=[72*mm,72*mm], style=TableStyle([
         ("LINEABOVE",(0,0),(-1,0),0.6,LINE),("LINEBELOW",(0,0),(-1,0),0.6,LINE),
         ("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7),
