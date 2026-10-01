@@ -27,7 +27,7 @@ A decision needs a forecast, and a forecast must cite retrieved evidence.
 | Key | Default | Meaning |
 |---|---|---|
 | `research.provider` | `{"kind": "none"}` | Where forecasts come from; see below. With `none`, every cycle abstains with `provider_not_configured`. |
-| `research.retriever.allowHosts` | `["github.com"]` | HTTPS hosts evidence may be fetched from. A market's own source hosts must be listed here. |
+| `research.retriever.allowHosts` | `["github.com"]` | HTTPS hosts evidence may be fetched from. Each cycle the runtime fetches the record settlement reads for each question (the market's `source.referenceUrl`) plus `extraSources`; a market's own source hosts must be listed here. Responses over 2 MB are skipped. |
 | `research.retriever.allowLocalHttp` | `false` | Allows `http://127.0.0.1` sources for local testing only. |
 | `research.retriever.extraSources` | none | Additional evidence pages, **keyed by market namespace**, see below. |
 | `research.perCycle`, `research.perHour` | `2`, `20` | Provider request budgets. |
@@ -77,6 +77,8 @@ A map from market namespace to a list of `{event, url}`. It is **not** a plain l
 ```
 
 `event` is the question index within that market (0 for the first question). Every URL's host must also be in `allowHosts`.
+
+Every question in a decision needs at least one readable page that cycle, or the runtime abstains: `no_sources` when nothing could be read, `missing_event_evidence` when one question has nothing. The record settlement reads often cannot serve: it may not exist until the result is published (a dated statistics release, for example), and chain endpoints answer JSON-RPC rather than page requests. Add a page for each such question here. The agent's Setup page on Flurbo shows a research section already filled in for its markets.
 
 ### `evidenceRequirements`
 

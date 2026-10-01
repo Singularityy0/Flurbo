@@ -29,6 +29,7 @@ export default function AccountHoldings({account,wallets,namespace}:{account:str
     return()=>c.abort();
   },[namespace,revision,isPilot]);
   const identity=accountOwners(account,wallets).join(',');
+  const tradingOpen=!!results&&!results.resolved&&Date.now()/1000<results.manifest.publication.draft.closesAt;
   useEffect(()=>{
     const controller=new AbortController(),signal=controller.signal,owners=identity.split(',');
     const current=()=>!signal.aborted;
@@ -112,7 +113,7 @@ export default function AccountHoldings({account,wallets,namespace}:{account:str
     <div className="portfolio-section-heading"><h2>Your shares</h2><button className="button button-outline" disabled={payoutBusy} onClick={()=>setRevision(n=>n+1)}>{busy?'Refreshing…':'Refresh'}</button></div>
     {error&&<p role="alert">Some shares couldn’t be loaded. Refresh to complete your portfolio.</p>}
     <div className="portfolio-table"><table><thead><tr><th>Prediction</th><th>Shares</th><th>Redeemable test AUSD</th></tr></thead>
-      <tbody>{rows.map(row=><tr key={`${row.scope}:${row.mask}`}><td><strong>{questions.length?questions.filter((_q,i)=>row.scope&(1<<i)).join(' + '):describeClaim(row.scope,Number(row.mask))}</strong><small>{describeClaimAnswers(row.scope,Number(row.mask))}</small></td><td><span className="holding-mobile-label" aria-hidden="true">Shares</span>{amount(row.quantity)}</td><td><span className="holding-mobile-label" aria-hidden="true">Redeemable test AUSD</span><span className="holding-payout-amount">{row.payoutAtoms===null?'Awaiting settlement':BigInt(row.payoutAtoms)===0n?'No payout':amount(row.payoutAtoms)}</span>
+      <tbody>{rows.map(row=><tr key={`${row.scope}:${row.mask}`}><td><strong>{questions.length?questions.filter((_q,i)=>row.scope&(1<<i)).join(' + '):describeClaim(row.scope,Number(row.mask))}</strong><small>{describeClaimAnswers(row.scope,Number(row.mask))}</small></td><td><span className="holding-mobile-label" aria-hidden="true">Shares</span>{amount(row.quantity)}</td><td><span className="holding-mobile-label" aria-hidden="true">Redeemable test AUSD</span><span className="holding-payout-amount">{row.payoutAtoms===null?(tradingOpen?'Open for trading':'Awaiting settlement'):BigInt(row.payoutAtoms)===0n?'No payout':amount(row.payoutAtoms)}</span>
         {isPilot&&row.payoutAtoms!==null&&BigInt(row.payoutAtoms)>0n&&ownersFor(row.scope,row.mask).length>0&&<button className="button button-dark holding-collect" disabled={payoutBusy||!!selection} onClick={()=>setSelection({scope:row.scope,mask:row.mask})}>Collect payout</button>}
       </td></tr>)}</tbody></table></div>
     {selection&&isPilot&&<><Pilot key={`${namespace}:${selection.scope}:${selection.mask}`} namespace={namespace as PilotNamespace} payout={{...selection,owners:ownersFor(selection.scope,selection.mask).map(w=>w.toLowerCase()),title:title(selection.scope)+' · '+describeClaimAnswers(selection.scope,Number(selection.mask))}} onBusy={setPayoutBusy} onTradeConfirmed={collected}/><button className="button button-outline" disabled={payoutBusy} onClick={()=>setSelection(null)}>Close payout</button></>}

@@ -36,7 +36,7 @@ class HttpRetriever:
     allow_local_http permits plain HTTP to this machine only (local test evidence)."""
     name = "http"
 
-    def __init__(self, allow_hosts: list[str], allow_local_http: bool = False, max_bytes: int = 300_000, timeout: float = 10.0, max_sources: int = 6, opener=None):
+    def __init__(self, allow_hosts: list[str], allow_local_http: bool = False, max_bytes: int = 2_000_000, timeout: float = 10.0, max_sources: int = 6, opener=None):
         self.allow = {h.lower() for h in allow_hosts}
         self.allow_local_http, self.max_bytes, self.timeout, self.max_sources = allow_local_http, max_bytes, timeout, max_sources
         self._open = (opener or urllib.request.build_opener(_NoRedirect)).open

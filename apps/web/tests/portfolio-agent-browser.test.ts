@@ -23,15 +23,18 @@ test('agent holdings and receipt-verified trades join one portfolio before index
    if(p.endsWith('/account'))return route.fulfill({json:await f.service.account(u.searchParams.get('wallet'))});
    if(p.endsWith('/positions')){
     const q=route.request().postDataJSON();assert.ok(q.claims.length<=30);
-    return route.fulfill({json:{owner:q.owner,snapshot:{blockNumber:'210'},rows:q.claims.map((c:any)=>({...c,quantity:q.owner===agent&&executions.some(e=>e.scope===c.scope&&e.mask===c.mask)?'1000000':'0',payoutAtoms:q.owner===agent&&executions.some(e=>e.scope===c.scope&&e.mask===c.mask)?'1000000':'0'}))}});
+    return route.fulfill({json:{owner:q.owner,snapshot:{blockNumber:'210'},rows:q.claims.map((c:any)=>({...c,quantity:q.owner===agent&&executions.some(e=>e.scope===c.scope&&e.mask===c.mask)?'1000000':q.owner===owner&&c.scope===1&&c.mask==='2'?'2000000':'0',payoutAtoms:q.owner===agent&&executions.some(e=>e.scope===c.scope&&e.mask===c.mask)?'1000000':'0'}))}});
    }
    if(p.endsWith('/collected-payouts'))return route.fulfill({json:{complete:true,logs:[]}});
    if(p.endsWith('/history'))return route.fulfill({json:{complete:indexed,logs:indexed?executions.map((e,i)=>({name:'Traded',hash:e.hash,block:e.block,index:4+i,args:{trader:agent,scope:e.scope,mask:e.mask,quantity:e.quantity,collateralAmount:e.cash,isBuy:true}})):[]}});
    if(p.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unused'}});
    const file=p.startsWith('/assets/')?p.slice(1):'index.html';return route.fulfill({body:await readFile(new URL('../dist/'+file,import.meta.url)),contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});
   });
-  await page.goto('https://flurbo.singu.online/portfolio');await page.getByRole('button',{name:'Holdings · 2',exact:true}).waitFor();
+  await page.goto('https://flurbo.singu.online/portfolio');await page.getByRole('button',{name:'Holdings · 3',exact:true}).waitFor();
   assert.equal(await page.getByRole('link',{name:'Via Rust October E2E',exact:true}).count(),2);
+  // The member's own 2 shares and the agent's 1 share of the same prediction are separate rows, never one row of 3.
+  const holdings=await page.locator('.unified-holdings tbody tr').evaluateAll((trs:any[])=>trs.map(tr=>({shares:tr.querySelector('td.num').lastChild.textContent.trim(),agent:!!tr.querySelector('.portfolio-agent-label')})));
+  assert.deepEqual(holdings.map(h=>`${h.shares}:${h.agent}`).sort(),['1:true','1:true','2:false'],'own and agent holdings stay in separate rows');
   assert.equal(await page.getByRole('button',{name:'Collect payout',exact:true}).count(),0,'agent wallet cannot enter manual payout signer flow');
   await page.getByText('Agent wallet payouts must be collected by that wallet through its agent runtime.').waitFor();
   await page.getByRole('button',{name:'Activity',exact:true}).click();assert.equal(await page.locator('.portfolio-activity tbody tr').count(),2);
@@ -39,7 +42,7 @@ test('agent holdings and receipt-verified trades join one portfolio before index
   indexed=true;await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByText('Indexed activity',{exact:true}).waitFor();
   assert.equal(await page.locator('.portfolio-activity tbody tr').count(),2,'receipt seed and history logs never double count');
   assert.equal(await page.getByRole('link',{name:'Via Rust October E2E',exact:true}).count(),2);
-  await page.reload();await page.getByRole('button',{name:'Holdings · 2',exact:true}).waitFor();
+  await page.reload();await page.getByRole('button',{name:'Holdings · 3',exact:true}).waitFor();
   await mkdir(new URL('../../../target/agent-portfolio/',import.meta.url),{recursive:true});
   for(const width of [1440,390]){await page.setViewportSize({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:new URL(`../../../target/agent-portfolio/holdings-${width}.png`,import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),fullPage:true});}
   assert.deepEqual(errors,[]);

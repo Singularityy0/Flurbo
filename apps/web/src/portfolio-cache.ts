@@ -24,6 +24,19 @@ export function readPortfolioCache(account:string,identity:string,now=Date.now()
   return out;
 }
 
+// A confirmed trade makes the saved holdings of that market out of date: drop them for every account in this
+// browser, so Portfolio waits for the fresh read of that market instead of showing pre-trade numbers.
+export function forgetPortfolioCachePool(namespace:string){
+  try{
+    for(let i=localStorage.length-1;i>=0;i--){
+      const key=localStorage.key(i);if(!key?.startsWith(KEY))continue;
+      const stored=JSON.parse(localStorage.getItem(key)||'null') as Stored|null;
+      if(!stored?.pools?.[namespace])continue;
+      delete stored.pools[namespace];localStorage.setItem(key,JSON.stringify(stored));
+    }
+  }catch{/* Optional cache: nothing to undo. */}
+}
+
 export function writePortfolioCache(account:string,identity:string,namespace:string,read:PoolRead,now=Date.now()){
   if(!read.holdingsComplete||read.error||read.cachedAt)return;
   try{

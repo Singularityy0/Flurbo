@@ -255,7 +255,7 @@ test('portfolio shares one discovery read across linked wallets, bounds reads an
     await page.getByRole('cell',{name:'4',exact:true}).waitFor();
     await page.getByText('Earlier activity is still being verified. Current holdings and collected payouts remain available.',{exact:true}).waitFor();
     assert.equal(scans,1,'one shared discovery read, not one per wallet');
-    assert.ok(peak<=2,`at most two concurrent account reads, saw ${peak}`);
+    assert.ok(peak<=4,`at most four concurrent holdings reads (two pools, two wallets each), saw ${peak}`);
     assert.ok(batches.length>0&&batches.every(n=>n>0&&n<=60),`position batches exceed sixty claims: ${batches}`);
     await page.clock.runFor(3100);
     await page.getByRole('button',{name:'Refresh',exact:true}).waitFor();

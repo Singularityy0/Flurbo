@@ -14,7 +14,7 @@ export interface Retriever { readonly name: string; retrieve(sources: RetrievalS
 // allowLocalHttp permits plain HTTP to this machine only (local test evidence); never remote plain HTTP.
 export function httpRetriever(options: { allowHosts: string[]; allowLocalHttp?: boolean; maxBytes?: number; timeoutMs?: number; maxSources?: number; fetch?: typeof fetch }): Retriever {
   const allow = new Set(options.allowHosts.map(h => h.toLowerCase())), request = options.fetch ?? fetch;
-  const maxBytes = options.maxBytes ?? 300_000, timeoutMs = options.timeoutMs ?? 10_000;
+  const maxBytes = options.maxBytes ?? 2_000_000, timeoutMs = options.timeoutMs ?? 10_000;
   const allowed = (u: URL) => !u.username && !u.password && ((u.protocol === 'https:' && allow.has(u.hostname.toLowerCase()))
     || (!!options.allowLocalHttp && u.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(u.hostname)));
   async function get(url: string): Promise<{ response: Response; finalUrl: string }> {

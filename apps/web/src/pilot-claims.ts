@@ -1,6 +1,7 @@
 import { validClaim } from '../shared/pilot.mjs';
 import {CLAIM_RULES, encodeClaim} from '../shared/claims.mjs';
 import type { PilotPending, PilotNamespace } from './pilot';
+import { forgetPortfolioCachePool } from './portfolio-cache.ts';
 
 export type ClaimHint={scope:number;mask:string};
 const key=(namespace:PilotNamespace,pool:string,owner:string)=>`flurbo.claims.v1:10143:${namespace}:${pool.toLowerCase()}:${owner.toLowerCase()}`;
@@ -18,6 +19,7 @@ export function rememberedClaims(namespace:PilotNamespace,pool:string,owner:stri
 }
 export function rememberConfirmedClaim(namespace:PilotNamespace,saved:PilotPending){
   if(!['buy','sell','redeem'].includes(saved.review.action))return;
+  forgetPortfolioCachePool(namespace);
   const {manifest,requested}=saved.review,claim={scope:requested.scope!,mask:requested.mask!};
   const events=manifest.publication.draft.events.length;
   if(!valid(claim,events))return;
