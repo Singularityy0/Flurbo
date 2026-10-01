@@ -1,8 +1,8 @@
 import { verifyPilot } from '../src/pilot-verification';
 
 const root=new URL('../../../',import.meta.url);
-if(process.argv.length>3 || process.argv.length===3&&!['--rehearsal','--october-demo','--showcase','--activity-test','--deterministic-test','--pre-test-v1'].includes(process.argv[2]))throw new Error('Use --rehearsal, --october-demo, --showcase, --activity-test or --deterministic-test');
-const deterministic=['--deterministic-test','--pre-test-v1'].includes(process.argv[2]),showcase=['--showcase','--activity-test'].includes(process.argv[2]),rehearsal=['--rehearsal','--october-demo'].includes(process.argv[2]),prefix=process.argv[2]==='--pre-test-v1'?'pre-test-v1':deterministic?'deterministic-test':process.argv[2]==='--activity-test'?'activity-test':showcase?'showcase-v0':process.argv[2]==='--october-demo'?'october-demo':rehearsal?'rehearsal':'pilot';
+if(process.argv.length>3 || process.argv.length===3&&!['--rehearsal','--october-demo','--showcase','--activity-test','--deterministic-test','--pre-test-v1','--pre-test-v2'].includes(process.argv[2]))throw new Error('Use --rehearsal, --october-demo, --showcase, --activity-test or --deterministic-test');
+const deterministic=['--deterministic-test','--pre-test-v1','--pre-test-v2'].includes(process.argv[2]),showcase=['--showcase','--activity-test'].includes(process.argv[2]),rehearsal=['--rehearsal','--october-demo'].includes(process.argv[2]),prefix=process.argv[2]==='--pre-test-v1'?'pre-test-v1':process.argv[2]==='--pre-test-v2'?'pre-test-v2':deterministic?'deterministic-test':process.argv[2]==='--activity-test'?'activity-test':showcase?'showcase-v0':process.argv[2]==='--october-demo'?'october-demo':rehearsal?'rehearsal':'pilot';
 const prepared=await Bun.file(new URL(`target/deployments/${prefix}-prepared.json`,root)).json();
 const deployment=await Bun.file(new URL(`target/deployments/${prefix}-unverified.json`,root)).json();
 if((prepared.publication.mode==='rehearsal')!==rehearsal)throw new Error('Deployment mode mismatch');
