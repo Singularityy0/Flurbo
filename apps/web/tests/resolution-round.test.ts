@@ -123,7 +123,20 @@ test('dry run reports every pool with its monitoring state and never signs',asyn
   assert.equal(result.status,'dry-run');
   assert.deepEqual(result.pools.map((p:any)=>[p.pool,p.plan.kind,p.monitoring]),[[a.manifest.pool,'evidence','not-ready'],[b.manifest.pool,'transaction','healthy']]);
   await assert.rejects(resolutionRound({pools:[b,b],owner,command:store([]).command,transport:signer,now:()=>now}),/Duplicate/);
-  await assert.rejects(resolutionRound({pools:[a,{...b,evidence:forbidden}],owner,command:store([]).command,transport:signer,now:()=>now}),/Only one/);
+});
+
+test('several proposing pools are each asked for evidence in one round, and idle pools are not read',async()=>{
+  const asked:string[]=[];
+  const a=await evidencePool(async()=>{asked.push('a');return null;}),second=await evidencePool(async()=>{asked.push('c');return null;});
+  const c={...second,manifest:{...second.manifest,pool:'0x'+'cc'.repeat(20),resolver:'0x'+'cd'.repeat(20)}};
+  const db=store([a.manifest,c.manifest]);
+  const result=await resolutionRound({pools:[a,c],owner,command:db.command,transport:signer,enabled:true,now:()=>now});
+  assert.equal(result.status,'wait');assert.deepEqual(asked.sort(),['a','c']);
+  const journal=JSON.parse(db.data.get(journalKey)!);
+  assert.ok(journal.pools[a.manifest.pool].deferred[0]>now&&journal.pools[c.manifest.pool].deferred[0]>now,'each pool defers its own retry');
+  const unread={...(await finishPool()),service:{status:async()=>assert.fail('an idle pool must not be read'),prepare:forbidden}};
+  const quiet=await resolutionRound({pools:[unread],owner,command:store([unread.manifest]).command,transport:signer,enabled:true,now:()=>now,idle:new Set([unread.manifest.pool])});
+  assert.equal(quiet.status,'wait');assert.equal(quiet.idle,1);
 });
 
 test('finishing pools need a bundle and an exact allowlist; unset keeps single-pool mode',async()=>{

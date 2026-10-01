@@ -50,3 +50,33 @@ test('directory and portfolio include multiple pools without a collection select
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });
+
+test('the directory lists twelve collections and the release pilot (thirteen markets) without errors',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+  const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
+  const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
+  const f=pilotFixture(Math.floor(Date.now()/1000),4),errors:string[]=[];
+  f.manifest.publication.mode='rehearsal';
+  const groups=Array.from({length:12},(_,i)=>{const pool='0x'+(0x20+i).toString(16).padStart(2,'0').repeat(20);return {namespace:'practice-'+pool.slice(2),label:`Collection ${i+1}`,pool,closesAt:f.manifest.publication.draft.closesAt};});
+  const pilotPool='0x'+'99'.repeat(20);
+  try{
+    const page=await browser.newPage({viewport:{width:1280,height:900}});
+    page.on('pageerror',(e:Error)=>errors.push(e.message));
+    await page.route('**/*',async(route:any)=>{
+      const url=new URL(route.request().url()),path=url.pathname;
+      if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:true}});
+      if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600000}}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',markets:[...groups,{namespace:'pilot',label:'Release milestones',pool:pilotPool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      const group=groups.find(g=>path.startsWith('/api/'+g.namespace+'/'))||(path.startsWith('/api/pilot/')?{pool:pilotPool}:null);
+      if(group&&path.endsWith('/markets')){const v=await f.service.markets();return route.fulfill({json:{...v,manifest:{...v.manifest,pool:group.pool}}});}
+      if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unexpected route'}});
+      const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
+      return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
+    });
+    await page.goto('https://flurbo.singu.online/markets');
+    await page.waitForFunction(()=>document.querySelectorAll('.market-card').length>=52,null,{timeout:30000});
+    assert.equal(await page.locator('.market-card').count(),52,'four questions in each of thirteen markets');
+    assert.equal(await page.getByText('Market directory is unavailable.').count(),0);
+    assert.equal(await page.getByRole('alert').count(),0);
+    assert.deepEqual(errors,[]);
+  }finally{await browser.close();}
+});

@@ -220,6 +220,48 @@ test('runner handles the pilot and practice pools, signals failed reads to watch
   assert.equal(await runNotifications({ ...options, env: { ...env, FLURBO_MONITOR_RESEND_KEY: '' } }), 2);
 });
 
+test('bot schedule: a pool far from due is re-read only every few minutes, a settled one once; registry pools are watched', async () => {
+  const r = redis(), pilot = pilotFixture().manifest, general = deterministicManifest();
+  general.pool = '0x' + 'ac'.repeat(20); general.resolver = '0x' + 'ad'.repeat(20);
+  general.codeHashes = { [general.pool]: pilot.codeHashes[pilot.pool], [general.resolver]: pilot.codeHashes[pilot.resolver] };
+  const { settlementBindings, pilotRulesHash } = await import('../server/settlement-publication.mjs');
+  general.rulesHash = pilotRulesHash(settlementBindings(general.publication).config, general.resolver, general.publication.creator);
+  const registry = { schema: 'flurbo.collections.v1', featured: general.pool, pilotSettlement: 'finish-only',
+    collections: [{ label: 'Source test', settlement: 'auto', status: 'active', manifest: general }] };
+  const env = { FLURBO_PILOT_MANIFEST_JSON: JSON.stringify(pilot), FLURBO_COLLECTIONS_SOURCE: 'registry',
+    UPSTASH_REDIS_REST_URL: 'https://fixture.upstash.io', UPSTASH_REDIS_REST_TOKEN: 'storage-secret',
+    FLURBO_MONITOR_EMAIL_FROM: config.from, FLURBO_MONITOR_EMAIL_TO: config.to[0], FLURBO_MONITOR_RESEND_KEY: config.key,
+    FLURBO_MONITOR_HEALTHCHECK_URL: 'https://hc-ping.com/00000000-0000-0000-0000-000000000000' };
+  const request = async (url: string, init: any) => url.includes('upstash.io') ? Response.json({ result: await r.command(...JSON.parse(init.body)) })
+    : url === 'https://api.resend.com/emails' ? Response.json({ id: 'accepted-id' }) : new Response('OK');
+  let time = 10_000, settled = false;
+  const reads: string[] = [], output: string[] = [], schedule = new Map();
+  // The pilot is quiet for two hours; the registry pool is quiet until it settles.
+  const inspect = async ({ manifest }: any) => {
+    reads.push(manifest.pool);
+    const o: any = observed(manifest, time, false);
+    o.report.snapshot.timestamp = time; o.report.events = [{ ...o.report.events[0], phase: 'Pending' }];
+    o.report.timing = { observationEnds: [time + 7200] };
+    if (settled && manifest.pool === general.pool) { o.report.lifecycle = 'settled'; o.checkpoint.delivered = true; }
+    return o;
+  };
+  const options = { env, args: [], request, now: () => time, output: (s: string) => output.push(s), wait: async () => {}, inspect, schedule,
+    readRegistry: async () => JSON.stringify(registry) };
+  assert.equal(await runNotifications(options), 0);
+  assert.deepEqual(reads, [pilot.pool, general.pool], 'the registry pool is watched beside the pilot');
+  time += 120; assert.equal(await runNotifications(options), 0);
+  assert.equal(reads.length, 2, 'two minutes later nothing is due soon, so nothing is re-read');
+  const skipped = output.slice(-2).map(line => JSON.parse(line));
+  assert.deepEqual(skipped.map(s => [s.status, s.nextDueAt]), [['skipped', 10_000 + 7200], ['skipped', 10_000 + 7200]]);
+  time += 480; settled = true; assert.equal(await runNotifications(options), 0);
+  assert.equal(reads.length, 4, 'after the recheck interval both are read again');
+  time += 3600; assert.equal(await runNotifications(options), 0);
+  assert.deepEqual(reads.slice(4), [pilot.pool], 'a settled pool is not read again');
+  // Without the bot's schedule (GitHub job, CLI) every pool is read on every run.
+  const before = reads.length; assert.equal(await runNotifications({ ...options, schedule: null }), 0);
+  assert.equal(reads.length - before, 2);
+});
+
 test('next due time follows observation ends, deadlines and delivery; repeated observations skip rewriting state', async () => {
   const { nextDueAt, CHECKPOINT_REFRESH_SECONDS } = await import('../scripts/notify-settlement.mjs');
   const report = (events: any[], lifecycle = 'trading_closed') => ({ lifecycle, snapshot: { timestamp: 1000 }, timing: { observationEnds: [5000, 9000] }, events });

@@ -36,8 +36,10 @@ export async function verifyPublicSettlementEvidence(evidence, archive, { origin
 }
 
 /** No signer dependency. Sources cannot select an outcome, transaction or new rule. */
+// retainedCache (optional, process lifetime): rule hashes whose first snapshot is already retained. Captures are never
+// deleted, so a retained rule stays retained; the cache only saves re-reading its capture history on every cycle.
 export function deterministicEvidence({ manifest, owner, command, archive, captureStore, packetStore, origin,
-  request = fetch, now = () => Math.floor(Date.now() / 1000) }) {
+  request = fetch, now = () => Math.floor(Date.now() / 1000), retainedCache = null }) {
   if (manifest.publication?.mode !== DETERMINISTIC_MODE) throw Error('Explicit deterministic publication required');
   const rules = validateSettlementManifest(manifest);
   settlementPublicOrigin(origin);
@@ -63,14 +65,13 @@ export function deterministicEvidence({ manifest, owner, command, archive, captu
       if (state.delivered || state.cases[event].phase !== 0 || at >= rule.timing.observationEndsAt + rule.timing.assertionPeriod) continue;
       if (rule.vintage === 'first-observed-snapshot') {
         if (at < rule.timing.scheduledAt) { results.push({ event, status: 'waiting-for-snapshot-window' }); continue; }
-        const retained = await captureStore.list(hash);
-        const selected = retained.some(capture => {
+        const selected = retainedCache?.has(hash) || (await captureStore.list(hash)).some(capture => {
           try { const record = parseSettlementCapture(rule, capture, at); return capture.fetchedAt >= rule.timing.scheduledAt
             && capture.fetchedAt <= rule.timing.publicationCutoff && record.publishedAt >= rule.timing.scheduledAt && record.publishedAt <= rule.timing.publicationCutoff; }
           catch { return false; }
         });
         // This policy commits to its first complete retained snapshot. Refreshing it would change the question.
-        if (selected) { await captureStore.recordAttempt(hash, { at, ok: true, issues: [] }); results.push({ event, status: 'snapshot-retained' }); continue; }
+        if (selected) { retainedCache?.add(hash); await captureStore.recordAttempt(hash, { at, ok: true, issues: [] }); results.push({ event, status: 'snapshot-retained' }); continue; }
         if (at > rule.timing.publicationCutoff) {
           await captureStore.recordAttempt(hash, { at, ok: false, issues: ['SNAPSHOT_WINDOW_MISSED'] });
           results.push({ event, status: 'unresolved', issues: ['SNAPSHOT_WINDOW_MISSED'] }); continue;

@@ -13,6 +13,8 @@ import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
 import {DETERMINISTIC_MODE,validateSettlementManifest} from '../server/settlement-publication.mjs';
 import {deterministicEvidence} from '../server/deterministic-evidence.mjs';
 import {createSettlementStores,settlementPublicOrigin} from '../server/settlement-persistence.mjs';
+import {readFile} from 'node:fs/promises';
+import {heldPools,loadRegistry,registryEnabled} from '../server/collection-registry.mjs';
 
 const diagnosticMessages={
   CONFIGURATION_INVALID:'Check the manifest, pool, rules hash, execution mode and public signer settings.',
@@ -39,7 +41,11 @@ export function resolutionSigner(value,owner){
   if(account.address.toLowerCase()!==owner.toLowerCase())throw new ResolutionDiagnostic('BOT_KEY_MISMATCH');
   return account;
 }
-const guarded=(code,fn)=>async(...args)=>{try{return await fn(...args);}catch{throw new ResolutionDiagnostic(code);}};
+// The RPC reader's Multicall batch is kept, so a pool status read stays one batched call rather than many.
+const guarded=(code,fn)=>{
+  const wrap=f=>async(...args)=>{try{return await f(...args);}catch{throw new ResolutionDiagnostic(code);}};
+  const g=wrap(fn);if(typeof fn.readBatch==='function')g.readBatch=wrap(fn.readBatch);return g;
+};
 
 // Opt-in multi-pool finishing. Both the bundle and an exact pool:rulesHash allowlist are required
 // and must match one to one, so editing the secret bundle alone cannot add a pool.
@@ -88,21 +94,75 @@ export async function legacyReleaseEvidence({manifest,event,env,archive,owner,as
   return {...saved,outcome:2};
 }
 
+// Registry mode: every registered pool except those set to "off", plus the release pilot under the registry's
+// pilotSettlement. "auto" pools read their committed sources and propose; held pools (FLURBO_RESOLUTION_HOLD)
+// keep collecting evidence but do not assert. Every pool can still be finalized after its deadlines and delivered.
+export function registryPlan({registry,base,proposals,hold}){
+  const rows=[...(base?[{manifest:base,settlement:registry.pilotSettlement}]:[]),
+    ...registry.collections.map(row=>({manifest:row.manifest,settlement:row.settlement}))].filter(row=>row.settlement!=='off');
+  const pools=rows.map(row=>row.manifest.pool.toLowerCase());
+  if(new Set(pools).size!==pools.length)throw Error('A pool is registered twice');
+  if(rows.some(row=>row.manifest.chainId!==10143))throw Error('Registered pools must be Monad testnet');
+  const known=new Set([...(base?[base.pool.toLowerCase()]:[]),...registry.collections.map(row=>row.manifest.pool.toLowerCase())]);
+  for(const pool of hold)if(!known.has(pool))throw Error('FLURBO_RESOLUTION_HOLD names a pool that is not registered');
+  return rows.map(row=>{
+    const auto=proposals&&row.settlement==='auto';
+    return {...row,collects:auto,proposing:auto&&!hold.has(row.manifest.pool.toLowerCase())};
+  });
+}
+
+// Pools the bot's monitor read within the last ten minutes with nothing due for at least five more. The worker
+// skips their chain reads; a pool with a pending transaction is always reconciled first.
+export function idlePools(schedule,at){
+  const idle=new Set();
+  for(const [pool,seen] of schedule||[]){
+    if(!Number.isSafeInteger(seen?.checkedAt)||at-seen.checkedAt>600||seen.checkedAt>at)continue;
+    if(seen.nextDueAt==='none'||(Number.isSafeInteger(seen.nextDueAt)&&seen.nextDueAt-at>300))idle.add(pool);
+  }
+  return idle;
+}
+
+// Source collection for each collecting pool, only while one of its rules can still use an observation: snapshot
+// rules from their window opening, until the assertion deadline. One pool's failure never stops the others.
+async function collectSources(pools,at){
+  const out=[];
+  for(const p of pools){
+    if(!p.collects||!p.sources)continue;
+    const rules=p.manifest.publication.settlementRules||[];
+    if(!rules.some(r=>(r.vintage!=='first-observed-snapshot'||at>=r.timing.scheduledAt)&&at<r.timing.observationEndsAt+r.timing.assertionPeriod))continue;
+    try{
+      const results=(await p.sources.collect(await p.service.status())).filter(r=>r.status!=='waiting-for-snapshot-window');
+      if(results.length)out.push({pool:p.manifest.pool,results});
+    }catch{out.push({pool:p.manifest.pool,status:'collect-failed'});}
+  }
+  return out;
+}
+
+async function basePilotManifest(env){
+  if(env.FLURBO_PILOT_DISABLED==='true')return null;
+  const base=JSON.parse(env.FLURBO_PILOT_MANIFEST_JSON??await readFile(new URL('../../../config/pilot-testnet.json',import.meta.url),'utf8'));
+  if(['rehearsal','ethereum-activity',DETERMINISTIC_MODE].includes(base.publication?.mode))throw Error('Configure the release pilot pool');
+  return base;
+}
+
 export async function runResolution(env=process.env,deps={}){
   let configured=false;
   try{
-  const manifest=JSON.parse(env.FLURBO_RESOLUTION_MANIFEST_JSON||'null');
-  if(!manifest||manifest.pool!==env.FLURBO_RESOLUTION_POOL||manifest.rulesHash!==env.FLURBO_RESOLUTION_RULES_HASH)throw Error('Explicit pool and immutable rules allowlist required');
-  if(manifest.publication?.mode==='ethereum-activity')validateActivityDraft(manifest.publication.draft);
-  const deterministic=manifest.publication?.mode===DETERMINISTIC_MODE;
-  if(deterministic){
-    validateSettlementManifest(manifest);
-    if(env.FLURBO_RESOLUTION_SOURCE_MODE!==DETERMINISTIC_MODE)throw Error('Explicit deterministic worker source mode required');
-    settlementPublicOrigin(env.FLURBO_RESOLUTION_EVIDENCE_ORIGIN);
-  }else if(env.FLURBO_RESOLUTION_SOURCE_MODE&&env.FLURBO_RESOLUTION_SOURCE_MODE!=='legacy')throw Error('Source mode and immutable publication differ');
+  const registry=registryEnabled(env)?(deps.registry||await loadRegistry()):null;
+  const manifest=registry?null:JSON.parse(env.FLURBO_RESOLUTION_MANIFEST_JSON||'null');
+  const deterministic=manifest?.publication?.mode===DETERMINISTIC_MODE;
+  if(!registry){
+    if(!manifest||manifest.pool!==env.FLURBO_RESOLUTION_POOL||manifest.rulesHash!==env.FLURBO_RESOLUTION_RULES_HASH)throw Error('Explicit pool and immutable rules allowlist required');
+    if(manifest.publication?.mode==='ethereum-activity')validateActivityDraft(manifest.publication.draft);
+    if(deterministic){
+      validateSettlementManifest(manifest);
+      if(env.FLURBO_RESOLUTION_SOURCE_MODE!==DETERMINISTIC_MODE)throw Error('Explicit deterministic worker source mode required');
+      settlementPublicOrigin(env.FLURBO_RESOLUTION_EVIDENCE_ORIGIN);
+    }else if(env.FLURBO_RESOLUTION_SOURCE_MODE&&env.FLURBO_RESOLUTION_SOURCE_MODE!=='legacy')throw Error('Source mode and immutable publication differ');
+  }
   const now=deps.now||(()=>Math.floor(Date.now()/1000));
   const endpoint=env.FLURBO_ALCHEMY_TESTNET_RPC_URL||'https://testnet-rpc.monad.xyz';
-  const rpc=guarded('RPC_READ_FAILED',deps.rpc||pilotRpc(endpoint)),service=deps.service||pilotService({manifest,rpc}),command=guarded('DURABLE_STATE_FAILED',deps.command||redisCommand(env));
+  const rpc=guarded('RPC_READ_FAILED',deps.rpc||pilotRpc(endpoint)),service=registry?null:deps.service||pilotService({manifest,rpc}),command=guarded('DURABLE_STATE_FAILED',deps.command||redisCommand(env));
   const enabled=env.FLURBO_RESOLUTION_EXECUTE==='true';
   if(!['true','false'].includes(env.FLURBO_RESOLUTION_EXECUTE||'false'))throw Error('Invalid execution mode');
   const owner=env.FLURBO_RESOLUTION_SIGNER_ADDRESS?.toLowerCase();
@@ -142,11 +202,12 @@ export async function runResolution(env=process.env,deps={}){
   const origin=env.FLURBO_RESOLUTION_EVIDENCE_ORIGIN||'https://flurbo.singu.online';
   if(env.FLURBO_RESOLUTION_EVIDENCE_ORIGIN)settlementPublicOrigin(origin);
   const archive=deps.archive||pilotEvidence(command,origin,()=>now()*1000);
-  const sources=deterministic?deterministicEvidence({manifest,owner,command,archive,origin,now,
-    ...(deps.settlementStores||createSettlementStores({command,origin,now})),request:deps.request||fetch}):null;
-  const evidenceFor=manifest=>async event=>{
+  const stores=()=>deps.settlementStores||createSettlementStores({command,origin,now});
+  const sourcesFor=m=>deterministicEvidence({manifest:m,owner,command,archive,origin,now,...stores(),request:deps.request||fetch,retainedCache:deps.retainedCaptures});
+  const sources=deterministic?sourcesFor(manifest):null;
+  const evidenceFor=(manifest,source=sources)=>async event=>{
     const q=manifest.publication.draft.events[event];
-    if(manifest.publication.mode===DETERMINISTIC_MODE)return sources.proposal(event);
+    if(manifest.publication.mode===DETERMINISTIC_MODE)return source.proposal(event);
     if(manifest.publication.mode==='ethereum-activity'){
       try{return await (await activityEvidence(manifest,command,archive,owner))(event);}catch{return null;}
     }
@@ -162,6 +223,22 @@ export async function runResolution(env=process.env,deps={}){
   // Proposals are off unless explicitly enabled, independently of execution, so rollout testing can
   // execute finishing actions while no outcome is ever proposed.
   const proposals=proposalMode(env);
+  if(registry){
+    const base=deps.baseManifest!==undefined?deps.baseManifest:await basePilotManifest(env);
+    const plan=registryPlan({registry,base,proposals,hold:heldPools(env)});
+    // Deterministic pools archive and re-verify public evidence, so they need the public evidence origin.
+    if(plan.some(p=>p.manifest.publication.mode===DETERMINISTIC_MODE))settlementPublicOrigin(env.FLURBO_RESOLUTION_EVIDENCE_ORIGIN);
+    const pools=plan.map(p=>{
+      const m=p.manifest,poolSources=m.publication.mode===DETERMINISTIC_MODE?(deps.sourcesFor?.(m)||sourcesFor(m)):null;
+      return {manifest:m,collects:p.collects,sources:poolSources,service:deps.serviceFor?.(m)||pilotService({manifest:m,rpc}),
+        evidence:p.proposing?evidenceFor(m,poolSources):null,verifyPendingEvidence:poolSources?.verifyPending,
+        ...(p.proposing?{proposerHoldings:deps.proposerHoldingsFor?.(m)||(()=>readProposerHoldings({manifest:m,rpc,owner}))}:{})};
+    });
+    configured=true;
+    const sourceObservations=proposals?await collectSources(pools,now()):[];
+    const round=await resolutionRound({pools,owner,command,transport,enabled,now,idle:idlePools(deps.schedule,now())});
+    return {...round,proposals,mode:'registry',...(sourceObservations.length?{sourceObservations}:{})};
+  }
   const finishing=finishingManifests(env,manifest);
   configured=true;
   // Observe before fixed cutoffs as well as after observation end. The same persistent source
