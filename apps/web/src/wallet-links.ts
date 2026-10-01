@@ -1,9 +1,13 @@
 import { stringToHex } from 'viem';
 import { appFetch } from './platform-fetch';
+import { forgetPortfolioSources } from './portfolio-sources';
 type Provider = { request(input: {method:string;params?:unknown[]}):Promise<unknown> };
 export type LinkedWallets = {account:string;wallets:string[]};
 async function call<T>(suffix='', input?:unknown, signal?:AbortSignal):Promise<T> {
+  // Linking or removing a wallet changes the account's portfolio sources: never reuse the earlier list.
+  if(input!==undefined)forgetPortfolioSources();
   const response=await appFetch('/api/account/wallets'+suffix,{method:input===undefined?'GET':'POST',credentials:'same-origin',headers:input===undefined?undefined:{'Content-Type':'application/json'},body:input===undefined?undefined:JSON.stringify(input),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000)});
+  if(input!==undefined)forgetPortfolioSources();
   const value=await response.json();if(!response.ok)throw Error(value.error||'Your linked wallets could not be loaded.');return value;
 }
 export const linkedWallets=(signal?:AbortSignal)=>call<LinkedWallets>('',undefined,signal);
