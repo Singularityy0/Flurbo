@@ -1,6 +1,6 @@
 {
   "schema": "flurbo.collections.v1",
-  "featured": "0xb7b872e9372eaee17d8de9f4c82861f1aa673198",
+  "featured": "0xc4409edbfb9e9d47167b028de22f0b0d6b630077",
   "pilotSettlement": "finish-only",
   "collections": [
     {
@@ -646,6 +646,1059 @@
         "receipts": [
           "0xd8f5366065109226279380345c58f88084c7791f",
           "0x0c27be5e69a5312a0b035fbf057c45e213dabd9d"
+        ],
+        "notice": "Compiled code and reviewed configuration verified at one snapshot. Named panel trust, test assets only. Kuru pairs and authenticated CRE delivery are not established by this manifest."
+      }
+    },
+    {
+      "label": "Jobs Friday",
+      "settlement": "auto",
+      "status": "active",
+      "manifest": {
+        "schema": "flurbo.pilot-manifest.v1",
+        "status": "verified_pilot_snapshot",
+        "chainId": 10143,
+        "pool": "0xc4409edbfb9e9d47167b028de22f0b0d6b630077",
+        "resolver": "0x1fd002bf38f4e246f55000e64b8405d18aa5e0f6",
+        "rulesHash": "0x81b841593bf4420a98ee6ed2b85b92039cd2e2f0d3f9137a1c713d016e39b46d",
+        "draftHash": "0x0bb98a86b6ffd3111cabf829bfdef4fe440a93a30187a2631bad5f2d472b06aa",
+        "publication": {
+          "schema": "flurbo.pilot-publication.v1",
+          "mode": "deterministic-source-v1",
+          "settlementRules": [
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "us-unemployment-sep",
+              "question": "Will the US unemployment rate for September 2026 be at least 4.2%, as published by the Bureau of Labor Statistics data API (series LNS14000000) and first captured between 12:35 and 16:30 UTC on 2 October 2026?",
+              "source": {
+                "id": "bls-lns14000000",
+                "publisher": "U.S. Bureau of Labor Statistics",
+                "urls": [
+                  "https://api.bls.gov/publicAPI/v1/timeseries/data/LNS14000000"
+                ],
+                "adapter": "json-api.v1",
+                "reader": {
+                  "select": "/Results/series/0/data",
+                  "aggregate": "only",
+                  "field": "/value",
+                  "filter": [
+                    {
+                      "path": "/year",
+                      "op": "eq",
+                      "value": "2026"
+                    },
+                    {
+                      "path": "/period",
+                      "op": "eq",
+                      "value": "M09"
+                    }
+                  ],
+                  "checks": [
+                    {
+                      "path": "/status",
+                      "equals": "REQUEST_SUCCEEDED"
+                    },
+                    {
+                      "path": "/Results/series/0/seriesID",
+                      "equals": "LNS14000000"
+                    }
+                  ]
+                }
+              },
+              "observation": {
+                "series": "LNS14000000",
+                "period": "2026-09",
+                "unit": "percent"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "4.2"
+              },
+              "timing": {
+                "scheduledAt": 1790944500,
+                "publicationCutoff": 1790958600,
+                "correctionCutoff": 1790958600,
+                "observationEndsAt": 1790958600,
+                "assertionPeriod": 43200,
+                "challengePeriod": 43200,
+                "votingPeriod": 43200
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "us-u6-sep",
+              "question": "Will the US U-6 underutilization rate for September 2026 be at least 7.8%, as published by the Bureau of Labor Statistics data API (series LNS13327709) and first captured between 12:35 and 16:30 UTC on 2 October 2026?",
+              "source": {
+                "id": "bls-lns13327709",
+                "publisher": "U.S. Bureau of Labor Statistics",
+                "urls": [
+                  "https://api.bls.gov/publicAPI/v1/timeseries/data/LNS13327709"
+                ],
+                "adapter": "json-api.v1",
+                "reader": {
+                  "select": "/Results/series/0/data",
+                  "aggregate": "only",
+                  "field": "/value",
+                  "filter": [
+                    {
+                      "path": "/year",
+                      "op": "eq",
+                      "value": "2026"
+                    },
+                    {
+                      "path": "/period",
+                      "op": "eq",
+                      "value": "M09"
+                    }
+                  ],
+                  "checks": [
+                    {
+                      "path": "/status",
+                      "equals": "REQUEST_SUCCEEDED"
+                    },
+                    {
+                      "path": "/Results/series/0/seriesID",
+                      "equals": "LNS13327709"
+                    }
+                  ]
+                }
+              },
+              "observation": {
+                "series": "LNS13327709",
+                "period": "2026-09",
+                "unit": "percent"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "7.8"
+              },
+              "timing": {
+                "scheduledAt": 1790944500,
+                "publicationCutoff": 1790958600,
+                "correctionCutoff": 1790958600,
+                "observationEndsAt": 1790958600,
+                "assertionPeriod": 43200,
+                "challengePeriod": 43200,
+                "votingPeriod": 43200
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "us-participation-sep",
+              "question": "Will the US labor force participation rate for September 2026 be at least 61.6%, as published by the Bureau of Labor Statistics data API (series LNS11300000) and first captured between 12:35 and 16:30 UTC on 2 October 2026?",
+              "source": {
+                "id": "bls-lns11300000",
+                "publisher": "U.S. Bureau of Labor Statistics",
+                "urls": [
+                  "https://api.bls.gov/publicAPI/v1/timeseries/data/LNS11300000"
+                ],
+                "adapter": "json-api.v1",
+                "reader": {
+                  "select": "/Results/series/0/data",
+                  "aggregate": "only",
+                  "field": "/value",
+                  "filter": [
+                    {
+                      "path": "/year",
+                      "op": "eq",
+                      "value": "2026"
+                    },
+                    {
+                      "path": "/period",
+                      "op": "eq",
+                      "value": "M09"
+                    }
+                  ],
+                  "checks": [
+                    {
+                      "path": "/status",
+                      "equals": "REQUEST_SUCCEEDED"
+                    },
+                    {
+                      "path": "/Results/series/0/seriesID",
+                      "equals": "LNS11300000"
+                    }
+                  ]
+                }
+              },
+              "observation": {
+                "series": "LNS11300000",
+                "period": "2026-09",
+                "unit": "percent"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "61.6"
+              },
+              "timing": {
+                "scheduledAt": 1790944500,
+                "publicationCutoff": 1790958600,
+                "correctionCutoff": 1790958600,
+                "observationEndsAt": 1790958600,
+                "assertionPeriod": 43200,
+                "challengePeriod": 43200,
+                "votingPeriod": 43200
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "us-hourly-earnings-sep",
+              "question": "Will US average hourly earnings of all private employees for September 2026 be at least 37.85 dollars, as published by the Bureau of Labor Statistics data API (series CES0500000003) and first captured between 12:35 and 16:30 UTC on 2 October 2026?",
+              "source": {
+                "id": "bls-ces0500000003",
+                "publisher": "U.S. Bureau of Labor Statistics",
+                "urls": [
+                  "https://api.bls.gov/publicAPI/v1/timeseries/data/CES0500000003"
+                ],
+                "adapter": "json-api.v1",
+                "reader": {
+                  "select": "/Results/series/0/data",
+                  "aggregate": "only",
+                  "field": "/value",
+                  "filter": [
+                    {
+                      "path": "/year",
+                      "op": "eq",
+                      "value": "2026"
+                    },
+                    {
+                      "path": "/period",
+                      "op": "eq",
+                      "value": "M09"
+                    }
+                  ],
+                  "checks": [
+                    {
+                      "path": "/status",
+                      "equals": "REQUEST_SUCCEEDED"
+                    },
+                    {
+                      "path": "/Results/series/0/seriesID",
+                      "equals": "CES0500000003"
+                    }
+                  ]
+                }
+              },
+              "observation": {
+                "series": "CES0500000003",
+                "period": "2026-09",
+                "unit": "USD per hour"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "37.85"
+              },
+              "timing": {
+                "scheduledAt": 1790944500,
+                "publicationCutoff": 1790958600,
+                "correctionCutoff": 1790958600,
+                "observationEndsAt": 1790958600,
+                "assertionPeriod": 43200,
+                "challengePeriod": 43200,
+                "votingPeriod": 43200
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            }
+          ],
+          "creator": "0xf1fea08ebba92ed342acc5639db312c3694bc391",
+          "draft": {
+            "schema": "flurbo.event-draft.v1",
+            "status": "draft",
+            "chainId": 10143,
+            "clusterId": "wave2-f1-1790942400",
+            "title": "F1 Jobs Friday",
+            "closesAt": 1790942400,
+            "events": [
+              {
+                "id": "us-unemployment-sep",
+                "question": "Will the US unemployment rate for September 2026 be at least 4.2%, as published by the Bureau of Labor Statistics data API (series LNS14000000) and first captured between 12:35 and 16:30 UTC on 2 October 2026?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"4.2\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"4.2\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1790944500,
+                "observationEndsAt": 1790958600,
+                "source": {
+                  "publisher": "U.S. Bureau of Labor Statistics",
+                  "referenceUrl": "https://api.bls.gov/publicAPI/v1/timeseries/data/LNS14000000",
+                  "recordId": "settlement-rule:sha256:bf80bbdeb1c1c80db89dac1255c8cc79c270ec81be92f232047701ff17502335",
+                  "selectionRule": "Adapter json-api.v1; source bls-lns14000000; series LNS14000000; period 2026-09; unit percent. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1790944500; publication cutoff 1790958600; correction cutoff and observation end 1790958600. Assertion window 43200; challenge window 43200; voting window 43200. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "us-u6-sep",
+                "question": "Will the US U-6 underutilization rate for September 2026 be at least 7.8%, as published by the Bureau of Labor Statistics data API (series LNS13327709) and first captured between 12:35 and 16:30 UTC on 2 October 2026?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"7.8\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"7.8\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1790944500,
+                "observationEndsAt": 1790958600,
+                "source": {
+                  "publisher": "U.S. Bureau of Labor Statistics",
+                  "referenceUrl": "https://api.bls.gov/publicAPI/v1/timeseries/data/LNS13327709",
+                  "recordId": "settlement-rule:sha256:8ebc687da84d63dc2a39f37b0fb0831150eba098faeec96f88fa300093c2732d",
+                  "selectionRule": "Adapter json-api.v1; source bls-lns13327709; series LNS13327709; period 2026-09; unit percent. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1790944500; publication cutoff 1790958600; correction cutoff and observation end 1790958600. Assertion window 43200; challenge window 43200; voting window 43200. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "us-participation-sep",
+                "question": "Will the US labor force participation rate for September 2026 be at least 61.6%, as published by the Bureau of Labor Statistics data API (series LNS11300000) and first captured between 12:35 and 16:30 UTC on 2 October 2026?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"61.6\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"61.6\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1790944500,
+                "observationEndsAt": 1790958600,
+                "source": {
+                  "publisher": "U.S. Bureau of Labor Statistics",
+                  "referenceUrl": "https://api.bls.gov/publicAPI/v1/timeseries/data/LNS11300000",
+                  "recordId": "settlement-rule:sha256:333a8fed9eb307c7eba5b5c617ddec7722f6518900cb5244b035c4ddba1110f7",
+                  "selectionRule": "Adapter json-api.v1; source bls-lns11300000; series LNS11300000; period 2026-09; unit percent. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1790944500; publication cutoff 1790958600; correction cutoff and observation end 1790958600. Assertion window 43200; challenge window 43200; voting window 43200. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "us-hourly-earnings-sep",
+                "question": "Will US average hourly earnings of all private employees for September 2026 be at least 37.85 dollars, as published by the Bureau of Labor Statistics data API (series CES0500000003) and first captured between 12:35 and 16:30 UTC on 2 October 2026?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"37.85\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"37.85\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1790944500,
+                "observationEndsAt": 1790958600,
+                "source": {
+                  "publisher": "U.S. Bureau of Labor Statistics",
+                  "referenceUrl": "https://api.bls.gov/publicAPI/v1/timeseries/data/CES0500000003",
+                  "recordId": "settlement-rule:sha256:44a685df125bd73046cfcb641f95c6efb8b3b2c89474979032470f7c5feccdbb",
+                  "selectionRule": "Adapter json-api.v1; source bls-ces0500000003; series CES0500000003; period 2026-09; unit USD per hour. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1790944500; publication cutoff 1790958600; correction cutoff and observation end 1790958600. Assertion window 43200; challenge window 43200; voting window 43200. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              }
+            ],
+            "exceptionPolicy": "Valid event outcomes stay fixed. Each void event receives equal YES and NO weight, independently of other void events. Each claim pays its average truth-table payout across compatible states, rounded down to test AUSD atoms on each redemption. This is not a refund of purchase cost. Missing evidence, unresolved ambiguity and reviewer nonresponse produce VOID under the fixed deadlines. No creator override or reviewer replacement is permitted.",
+            "disputeModel": "reviewer-panel",
+            "disputePolicy": "Operator-run testnet alpha. All reviewer wallets are controlled by the creator (0xf1fea08ebba92ed342acc5639db312c3694bc391). These wallets are not independent reviewers. The operator can determine disputed outcomes through the voting quorum. Named testnet reviewer panel: Operator test reviewer 1 (0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201), Operator test reviewer 2 (0x41c28b86170b5ec7b261d954e0185fca348b19a4), Operator test reviewer 3 (0x555d165001f60103c9429dbb15bf764caa8ae538). Quorum 2 of 3 matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: 1000000 atoms each. Assertion window: 43200 seconds after observation end. Challenge window: 43200 seconds after assertion. Vote window: 43200 seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted."
+          },
+          "reviewers": [
+            {
+              "name": "Operator test reviewer 1",
+              "address": "0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201"
+            },
+            {
+              "name": "Operator test reviewer 2",
+              "address": "0x41c28b86170b5ec7b261d954e0185fca348b19a4"
+            },
+            {
+              "name": "Operator test reviewer 3",
+              "address": "0x555d165001f60103c9429dbb15bf764caa8ae538"
+            }
+          ],
+          "reviewerControl": "single-operator",
+          "independentReviewersConfirmed": false,
+          "rulesReviewed": true,
+          "bondAtoms": "1000000",
+          "assertionPeriod": 43200,
+          "challengePeriod": 43200,
+          "votingPeriod": 43200
+        },
+        "configHash": "0x084b2d953289e9624fb91078d843ef115caaf3356ba5ac689908a468c4fd0981",
+        "verifiedBlock": "67354706",
+        "verifiedBlockHash": "0x8589a753e5df4711c175cc6e62e6ca671fb33d8c414ebdbd159af2d3dc3864b3",
+        "verifiedTimestamp": 1790887140,
+        "codeHashes": {
+          "0xc4409edbfb9e9d47167b028de22f0b0d6b630077": "0x3dd9a0c5ef24fc16a2cacead2ffed1027360beb43c2c8f3246673428ffd71cfb",
+          "0x1fd002bf38f4e246f55000e64b8405d18aa5e0f6": "0x521c4a83348288757ee1d647f16c456c6d52998c6de451a11cfbf17530e6de7f",
+          "0x903b1d14f60e96c07efe24c7cc758f35b8f841ef": "0x1c745983843d2cad54683709f89172094076beb19d9608f7f627a8c1fcf6e838",
+          "0x6e9f43e0b01d754fd7cabd8f0e8b69f8bea70ac8": "0x0dfd40b9a43c81849c60ca0965ce996386cdb3f376712174c608a0ad783d4d2f",
+          "0x22b5685453fba28025c8bd65c378de1c69b8e062": "0x1aaf1d74677d70da0bfc2df00e9f379a2bf8b308c559dea36889ce8d537fe112",
+          "0xe82bddfd135ab81ef3cd9cab671cfac5d7c1812d": "0x4815875875d3d3637e19a501be7895175529641752405e54dd1bd98f91184f2c",
+          "0x25dcb82a93366ae20be0d8917f9e5ab3ee2183fe": "0x8c82783136a176f7792011212eb016b820f591ee10218489539154eb779707ac"
+        },
+        "receipts": [
+          "0x6e9f43e0b01d754fd7cabd8f0e8b69f8bea70ac8",
+          "0x22b5685453fba28025c8bd65c378de1c69b8e062",
+          "0xe82bddfd135ab81ef3cd9cab671cfac5d7c1812d",
+          "0x25dcb82a93366ae20be0d8917f9e5ab3ee2183fe"
+        ],
+        "notice": "Compiled code and reviewed configuration verified at one snapshot. Named panel trust, test assets only. Kuru pairs and authenticated CRE delivery are not established by this manifest."
+      }
+    },
+    {
+      "label": "Crypto weekend",
+      "settlement": "auto",
+      "status": "active",
+      "manifest": {
+        "schema": "flurbo.pilot-manifest.v1",
+        "status": "verified_pilot_snapshot",
+        "chainId": 10143,
+        "pool": "0xf8beba5827bfaaf6ace08a40cd9db740233ca9fe",
+        "resolver": "0x04f29daa15d01f833d02794d97f9648bff078c17",
+        "rulesHash": "0xe5a599dd8746121f4083239e034475878dbd7944ee735a67b946040b85a5078e",
+        "draftHash": "0xf7a4f860eb7f7949d52bb3e2cc1614fc2bf923362006a549d0dac32ec557867a",
+        "publication": {
+          "schema": "flurbo.pilot-publication.v1",
+          "mode": "deterministic-source-v1",
+          "settlementRules": [
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "crypto-weekend-mon",
+              "question": "Will the Chainlink MON/USD feed on Monad mainnet report at least 0.0343 USD (latestAnswer) at the first block at or after 00:00 UTC on 4 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-mon-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1791072000,
+                  "metric": "call",
+                  "call": {
+                    "to": "0xBcD78f76005B7515837af6b50c7C52BCf73822fb",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-mon-usd-latest-answer",
+                "period": "2026-10-04T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "0.0343"
+              },
+              "timing": {
+                "scheduledAt": 1791072300,
+                "publicationCutoff": 1791086700,
+                "correctionCutoff": 1791086700,
+                "observationEndsAt": 1791086700,
+                "assertionPeriod": 43200,
+                "challengePeriod": 43200,
+                "votingPeriod": 43200
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "crypto-weekend-btc",
+              "question": "Will the Chainlink BTC/USD feed on Monad mainnet report at least 84750 USD (latestAnswer) at the first block at or after 00:00 UTC on 4 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-btc-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1791072000,
+                  "metric": "call",
+                  "call": {
+                    "to": "0xc1d4C3331635184fA4C3c22fb92211B2Ac9E0546",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-btc-usd-latest-answer",
+                "period": "2026-10-04T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "84750"
+              },
+              "timing": {
+                "scheduledAt": 1791072300,
+                "publicationCutoff": 1791086700,
+                "correctionCutoff": 1791086700,
+                "observationEndsAt": 1791086700,
+                "assertionPeriod": 43200,
+                "challengePeriod": 43200,
+                "votingPeriod": 43200
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "crypto-weekend-eth",
+              "question": "Will the Chainlink ETH/USD feed on Monad mainnet report at least 2700 USD (latestAnswer) at the first block at or after 00:00 UTC on 4 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-eth-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1791072000,
+                  "metric": "call",
+                  "call": {
+                    "to": "0x1B1414782B859871781bA3E4B0979b9ca57A0A04",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-eth-usd-latest-answer",
+                "period": "2026-10-04T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "2700"
+              },
+              "timing": {
+                "scheduledAt": 1791072300,
+                "publicationCutoff": 1791086700,
+                "correctionCutoff": 1791086700,
+                "observationEndsAt": 1791086700,
+                "assertionPeriod": 43200,
+                "challengePeriod": 43200,
+                "votingPeriod": 43200
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "crypto-weekend-sol",
+              "question": "Will the Chainlink SOL/USD feed on Monad mainnet report at least 118 USD (latestAnswer) at the first block at or after 00:00 UTC on 4 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-sol-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1791072000,
+                  "metric": "call",
+                  "call": {
+                    "to": "0x16F8008c3e89f62e5e2b909Ce70999370D38F4F2",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-sol-usd-latest-answer",
+                "period": "2026-10-04T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "118"
+              },
+              "timing": {
+                "scheduledAt": 1791072300,
+                "publicationCutoff": 1791086700,
+                "correctionCutoff": 1791086700,
+                "observationEndsAt": 1791086700,
+                "assertionPeriod": 43200,
+                "challengePeriod": 43200,
+                "votingPeriod": 43200
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            }
+          ],
+          "creator": "0xf1fea08ebba92ed342acc5639db312c3694bc391",
+          "draft": {
+            "schema": "flurbo.event-draft.v1",
+            "status": "draft",
+            "chainId": 10143,
+            "clusterId": "wave2-f2-1791050400",
+            "title": "F2 Crypto weekend",
+            "closesAt": 1791050400,
+            "events": [
+              {
+                "id": "crypto-weekend-mon",
+                "question": "Will the Chainlink MON/USD feed on Monad mainnet report at least 0.0343 USD (latestAnswer) at the first block at or after 00:00 UTC on 4 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"0.0343\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"0.0343\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1791072300,
+                "observationEndsAt": 1791086700,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:603a407b701e41e11907030060a56eef5164e37d439e1600288f4e9d7f4bdf80",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-mon-usd-monad; series chainlink-mon-usd-latest-answer; period 2026-10-04T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1791072300; publication cutoff 1791086700; correction cutoff and observation end 1791086700. Assertion window 43200; challenge window 43200; voting window 43200. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "crypto-weekend-btc",
+                "question": "Will the Chainlink BTC/USD feed on Monad mainnet report at least 84750 USD (latestAnswer) at the first block at or after 00:00 UTC on 4 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"84750\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"84750\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1791072300,
+                "observationEndsAt": 1791086700,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:ba09276acd0178579cc32051f1a47b9288268a7940b132d9c141808692b7f733",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-btc-usd-monad; series chainlink-btc-usd-latest-answer; period 2026-10-04T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1791072300; publication cutoff 1791086700; correction cutoff and observation end 1791086700. Assertion window 43200; challenge window 43200; voting window 43200. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "crypto-weekend-eth",
+                "question": "Will the Chainlink ETH/USD feed on Monad mainnet report at least 2700 USD (latestAnswer) at the first block at or after 00:00 UTC on 4 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"2700\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"2700\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1791072300,
+                "observationEndsAt": 1791086700,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:ba03246d4e1836c0dcdbffd5b9fdb22b4022c11852103a358569f92e53db759c",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-eth-usd-monad; series chainlink-eth-usd-latest-answer; period 2026-10-04T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1791072300; publication cutoff 1791086700; correction cutoff and observation end 1791086700. Assertion window 43200; challenge window 43200; voting window 43200. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "crypto-weekend-sol",
+                "question": "Will the Chainlink SOL/USD feed on Monad mainnet report at least 118 USD (latestAnswer) at the first block at or after 00:00 UTC on 4 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"118\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"118\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1791072300,
+                "observationEndsAt": 1791086700,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:bba639c27962473ffd524ef32dd82e5072d26b16d0ce4f10dd62cad2dd0d7973",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-sol-usd-monad; series chainlink-sol-usd-latest-answer; period 2026-10-04T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1791072300; publication cutoff 1791086700; correction cutoff and observation end 1791086700. Assertion window 43200; challenge window 43200; voting window 43200. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              }
+            ],
+            "exceptionPolicy": "Valid event outcomes stay fixed. Each void event receives equal YES and NO weight, independently of other void events. Each claim pays its average truth-table payout across compatible states, rounded down to test AUSD atoms on each redemption. This is not a refund of purchase cost. Missing evidence, unresolved ambiguity and reviewer nonresponse produce VOID under the fixed deadlines. No creator override or reviewer replacement is permitted.",
+            "disputeModel": "reviewer-panel",
+            "disputePolicy": "Operator-run testnet alpha. All reviewer wallets are controlled by the creator (0xf1fea08ebba92ed342acc5639db312c3694bc391). These wallets are not independent reviewers. The operator can determine disputed outcomes through the voting quorum. Named testnet reviewer panel: Operator test reviewer 1 (0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201), Operator test reviewer 2 (0x41c28b86170b5ec7b261d954e0185fca348b19a4), Operator test reviewer 3 (0x555d165001f60103c9429dbb15bf764caa8ae538). Quorum 2 of 3 matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: 1000000 atoms each. Assertion window: 43200 seconds after observation end. Challenge window: 43200 seconds after assertion. Vote window: 43200 seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted."
+          },
+          "reviewers": [
+            {
+              "name": "Operator test reviewer 1",
+              "address": "0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201"
+            },
+            {
+              "name": "Operator test reviewer 2",
+              "address": "0x41c28b86170b5ec7b261d954e0185fca348b19a4"
+            },
+            {
+              "name": "Operator test reviewer 3",
+              "address": "0x555d165001f60103c9429dbb15bf764caa8ae538"
+            }
+          ],
+          "reviewerControl": "single-operator",
+          "independentReviewersConfirmed": false,
+          "rulesReviewed": true,
+          "bondAtoms": "1000000",
+          "assertionPeriod": 43200,
+          "challengePeriod": 43200,
+          "votingPeriod": 43200
+        },
+        "configHash": "0xfb8bdb03caf12cd21633e3d97cf98dc8be749e340cf5ba8d86e1d2b995cf1a62",
+        "verifiedBlock": "67354786",
+        "verifiedBlockHash": "0x12a06305315d5461f8d0d11487109e27826e7d26d4313bd5c5be425285f6de89",
+        "verifiedTimestamp": 1790887164,
+        "codeHashes": {
+          "0xf8beba5827bfaaf6ace08a40cd9db740233ca9fe": "0x552db8fec82b1274c26c5c898f031ea7b14041b5805c2145e34c184d4823a24b",
+          "0x04f29daa15d01f833d02794d97f9648bff078c17": "0xcb0fd7f97643cc455ebebe448b711374a1304446cf81d712a7b9eaa6fd452d52",
+          "0x9db7ec7b1379eb1e1a86609ffad1328eecbdda0b": "0x1c745983843d2cad54683709f89172094076beb19d9608f7f627a8c1fcf6e838",
+          "0xb740a8280630bcfb0b61cc17ffa7762233076ef7": "0xfce878f555f1901a4be9b83ff2402dfeef93d4fe7fef731b53b8bd852123902f",
+          "0xe63505c8a9bd3e964b888bf11b974d00419d961a": "0xc8afc5f9fa04c8633e936c16b16021e7be9cf55a8422b7296262bffd0074f671",
+          "0x0792929003a193c3129462116cfe9c70c73db15b": "0x2bdd734912b72cd16d99f910d0ee271314f51f6f7d9b6145bba9f1846f9cc027",
+          "0x3a1a47762f400cb8f5e4b7db9a40f27eeb8e281f": "0xc4a34c39d9217d835ee95f4307d5060f07dcf0a8b33ca787cc6096dffe0b53e1"
+        },
+        "receipts": [
+          "0xb740a8280630bcfb0b61cc17ffa7762233076ef7",
+          "0xe63505c8a9bd3e964b888bf11b974d00419d961a",
+          "0x0792929003a193c3129462116cfe9c70c73db15b",
+          "0x3a1a47762f400cb8f5e4b7db9a40f27eeb8e281f"
+        ],
+        "notice": "Compiled code and reviewed configuration verified at one snapshot. Named panel trust, test assets only. Kuru pairs and authenticated CRE delivery are not established by this manifest."
+      }
+    },
+    {
+      "label": "Brazil election",
+      "settlement": "auto",
+      "status": "active",
+      "manifest": {
+        "schema": "flurbo.pilot-manifest.v1",
+        "status": "verified_pilot_snapshot",
+        "chainId": 10143,
+        "pool": "0x160647d16405f44989c56b83609a171247068dcc",
+        "resolver": "0xe747a8d1d42317edf6e6a68a05ffaf3b27dd8d56",
+        "rulesHash": "0xed3214360d514555ff4c5dad576056360df095ae83bfffdbd17f09722b7ef926",
+        "draftHash": "0x912d5c7e1386ff7660bc2b1c3584815063c3df4240ddfaa2484f4d0bb6812bab",
+        "publication": {
+          "schema": "flurbo.pilot-publication.v1",
+          "mode": "deterministic-source-v1",
+          "settlementRules": [
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "lula-first-round-first",
+              "question": "Will Lula (ballot number 13) finish first in the 4 October 2026 first round of Brazil's presidential election, as shown by TSE's fully counted official result file (election 6257) first captured between 5 October 06:00 and 7 October 06:00 UTC?",
+              "source": {
+                "id": "tse-presidente-6257",
+                "publisher": "Tribunal Superior Eleitoral (Brazil)",
+                "urls": [
+                  "https://resultados.tse.jus.br/oficial/ele2026/6257/dados-simplificados/br/br-c0001-e006257-r.json"
+                ],
+                "adapter": "json-api.v1",
+                "reader": {
+                  "select": "/cand",
+                  "aggregate": "only",
+                  "field": "/seq",
+                  "filter": [
+                    {
+                      "path": "/n",
+                      "op": "eq",
+                      "value": "13"
+                    }
+                  ],
+                  "checks": [
+                    {
+                      "path": "/pst",
+                      "equals": "100,00"
+                    }
+                  ]
+                }
+              },
+              "observation": {
+                "series": "tse-presidente-6257-lula-rank",
+                "period": "2026-10-04",
+                "unit": "rank"
+              },
+              "decision": {
+                "type": "category",
+                "operator": "eq",
+                "value": "1"
+              },
+              "timing": {
+                "scheduledAt": 1791180000,
+                "publicationCutoff": 1791352800,
+                "correctionCutoff": 1791352800,
+                "observationEndsAt": 1791352800,
+                "assertionPeriod": 172800,
+                "challengePeriod": 43200,
+                "votingPeriod": 43200
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "brazil-runoff",
+              "question": "Will Brazil's 2026 presidential election go to a runoff, with the first-placed candidate in TSE's fully counted first-round result file (election 6257) holding status 2º turno, first captured between 5 October 06:00 and 7 October 06:00 UTC?",
+              "source": {
+                "id": "tse-presidente-6257",
+                "publisher": "Tribunal Superior Eleitoral (Brazil)",
+                "urls": [
+                  "https://resultados.tse.jus.br/oficial/ele2026/6257/dados-simplificados/br/br-c0001-e006257-r.json"
+                ],
+                "adapter": "json-api.v1",
+                "reader": {
+                  "select": "/cand",
+                  "aggregate": "only",
+                  "field": "/st",
+                  "filter": [
+                    {
+                      "path": "/seq",
+                      "op": "eq",
+                      "value": "1"
+                    }
+                  ],
+                  "checks": [
+                    {
+                      "path": "/pst",
+                      "equals": "100,00"
+                    }
+                  ]
+                }
+              },
+              "observation": {
+                "series": "tse-presidente-6257-leader-status",
+                "period": "2026-10-04",
+                "unit": "status"
+              },
+              "decision": {
+                "type": "category",
+                "operator": "eq",
+                "value": "2º turno"
+              },
+              "timing": {
+                "scheduledAt": 1791180000,
+                "publicationCutoff": 1791352800,
+                "correctionCutoff": 1791352800,
+                "observationEndsAt": 1791352800,
+                "assertionPeriod": 172800,
+                "challengePeriod": 43200,
+                "votingPeriod": 43200
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "flavio-runoff",
+              "question": "Will Flávio Bolsonaro (ballot number 22) qualify for Brazil's 25 October presidential runoff, as shown by TSE's fully counted first-round result file (election 6257) first captured between 5 October 06:00 and 7 October 06:00 UTC?",
+              "source": {
+                "id": "tse-presidente-6257",
+                "publisher": "Tribunal Superior Eleitoral (Brazil)",
+                "urls": [
+                  "https://resultados.tse.jus.br/oficial/ele2026/6257/dados-simplificados/br/br-c0001-e006257-r.json"
+                ],
+                "adapter": "json-api.v1",
+                "reader": {
+                  "select": "/cand",
+                  "aggregate": "only",
+                  "field": "/st",
+                  "filter": [
+                    {
+                      "path": "/n",
+                      "op": "eq",
+                      "value": "22"
+                    }
+                  ],
+                  "checks": [
+                    {
+                      "path": "/pst",
+                      "equals": "100,00"
+                    }
+                  ]
+                }
+              },
+              "observation": {
+                "series": "tse-presidente-6257-flavio-status",
+                "period": "2026-10-04",
+                "unit": "status"
+              },
+              "decision": {
+                "type": "category",
+                "operator": "eq",
+                "value": "2º turno"
+              },
+              "timing": {
+                "scheduledAt": 1791180000,
+                "publicationCutoff": 1791352800,
+                "correctionCutoff": 1791352800,
+                "observationEndsAt": 1791352800,
+                "assertionPeriod": 172800,
+                "challengePeriod": 43200,
+                "votingPeriod": 43200
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "lula-elected-runoff",
+              "question": "Will Lula (ballot number 13) be elected President of Brazil in the 25 October 2026 runoff, as shown by TSE's fully counted runoff result file (election 6258) first captured between 25 October 23:00 and 27 October 12:00 UTC? If no runoff is held, the answer is No, asserted by the operator from the first-round result.",
+              "source": {
+                "id": "tse-presidente-6258",
+                "publisher": "Tribunal Superior Eleitoral (Brazil)",
+                "urls": [
+                  "https://resultados.tse.jus.br/oficial/ele2026/6258/dados-simplificados/br/br-c0001-e006258-r.json"
+                ],
+                "adapter": "json-api.v1",
+                "reader": {
+                  "select": "/cand",
+                  "aggregate": "only",
+                  "field": "/st",
+                  "filter": [
+                    {
+                      "path": "/n",
+                      "op": "eq",
+                      "value": "13"
+                    }
+                  ],
+                  "checks": [
+                    {
+                      "path": "/pst",
+                      "equals": "100,00"
+                    }
+                  ]
+                }
+              },
+              "observation": {
+                "series": "tse-presidente-6258-lula-status",
+                "period": "2026-10-25",
+                "unit": "status"
+              },
+              "decision": {
+                "type": "category",
+                "operator": "eq",
+                "value": "Eleito"
+              },
+              "timing": {
+                "scheduledAt": 1792969200,
+                "publicationCutoff": 1793102400,
+                "correctionCutoff": 1793102400,
+                "observationEndsAt": 1793102400,
+                "assertionPeriod": 172800,
+                "challengePeriod": 43200,
+                "votingPeriod": 43200
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            }
+          ],
+          "creator": "0xf1fea08ebba92ed342acc5639db312c3694bc391",
+          "draft": {
+            "schema": "flurbo.event-draft.v1",
+            "status": "draft",
+            "chainId": 10143,
+            "clusterId": "wave2-f3-1791142200",
+            "title": "F3 Brazil election",
+            "closesAt": 1791142200,
+            "events": [
+              {
+                "id": "lula-first-round-first",
+                "question": "Will Lula (ballot number 13) finish first in the 4 October 2026 first round of Brazil's presidential election, as shown by TSE's fully counted official result file (election 6257) first captured between 5 October 06:00 and 7 October 06:00 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies category eq \"1\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy category eq \"1\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1791180000,
+                "observationEndsAt": 1791352800,
+                "source": {
+                  "publisher": "Tribunal Superior Eleitoral (Brazil)",
+                  "referenceUrl": "https://resultados.tse.jus.br/oficial/ele2026/6257/dados-simplificados/br/br-c0001-e006257-r.json",
+                  "recordId": "settlement-rule:sha256:8aa624304f7c765dc7769f96198148727c29dcfb36dfdab09a309ae1420d7434",
+                  "selectionRule": "Adapter json-api.v1; source tse-presidente-6257; series tse-presidente-6257-lula-rank; period 2026-10-04; unit rank. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1791180000; publication cutoff 1791352800; correction cutoff and observation end 1791352800. Assertion window 172800; challenge window 43200; voting window 43200. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "brazil-runoff",
+                "question": "Will Brazil's 2026 presidential election go to a runoff, with the first-placed candidate in TSE's fully counted first-round result file (election 6257) holding status 2º turno, first captured between 5 October 06:00 and 7 October 06:00 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies category eq \"2º turno\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy category eq \"2º turno\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1791180000,
+                "observationEndsAt": 1791352800,
+                "source": {
+                  "publisher": "Tribunal Superior Eleitoral (Brazil)",
+                  "referenceUrl": "https://resultados.tse.jus.br/oficial/ele2026/6257/dados-simplificados/br/br-c0001-e006257-r.json",
+                  "recordId": "settlement-rule:sha256:1fad26ce67eb10c5264f86a2733076c0ecf1d0ed8de8e2eccb8024cb8ea396db",
+                  "selectionRule": "Adapter json-api.v1; source tse-presidente-6257; series tse-presidente-6257-leader-status; period 2026-10-04; unit status. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1791180000; publication cutoff 1791352800; correction cutoff and observation end 1791352800. Assertion window 172800; challenge window 43200; voting window 43200. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "flavio-runoff",
+                "question": "Will Flávio Bolsonaro (ballot number 22) qualify for Brazil's 25 October presidential runoff, as shown by TSE's fully counted first-round result file (election 6257) first captured between 5 October 06:00 and 7 October 06:00 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies category eq \"2º turno\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy category eq \"2º turno\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1791180000,
+                "observationEndsAt": 1791352800,
+                "source": {
+                  "publisher": "Tribunal Superior Eleitoral (Brazil)",
+                  "referenceUrl": "https://resultados.tse.jus.br/oficial/ele2026/6257/dados-simplificados/br/br-c0001-e006257-r.json",
+                  "recordId": "settlement-rule:sha256:2638597c8d51f7f1f5c1dc58289f1756d8ff2afc7eed24651bdd4086c0bca21d",
+                  "selectionRule": "Adapter json-api.v1; source tse-presidente-6257; series tse-presidente-6257-flavio-status; period 2026-10-04; unit status. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1791180000; publication cutoff 1791352800; correction cutoff and observation end 1791352800. Assertion window 172800; challenge window 43200; voting window 43200. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "lula-elected-runoff",
+                "question": "Will Lula (ballot number 13) be elected President of Brazil in the 25 October 2026 runoff, as shown by TSE's fully counted runoff result file (election 6258) first captured between 25 October 23:00 and 27 October 12:00 UTC? If no runoff is held, the answer is No, asserted by the operator from the first-round result.",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies category eq \"Eleito\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy category eq \"Eleito\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1792969200,
+                "observationEndsAt": 1793102400,
+                "source": {
+                  "publisher": "Tribunal Superior Eleitoral (Brazil)",
+                  "referenceUrl": "https://resultados.tse.jus.br/oficial/ele2026/6258/dados-simplificados/br/br-c0001-e006258-r.json",
+                  "recordId": "settlement-rule:sha256:c23fc3da2a46154d7eb855bcb851e141ff15dde1cf6cedd69866e99b6730ec9c",
+                  "selectionRule": "Adapter json-api.v1; source tse-presidente-6258; series tse-presidente-6258-lula-status; period 2026-10-25; unit status. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1792969200; publication cutoff 1793102400; correction cutoff and observation end 1793102400. Assertion window 172800; challenge window 43200; voting window 43200. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              }
+            ],
+            "exceptionPolicy": "Valid event outcomes stay fixed. Each void event receives equal YES and NO weight, independently of other void events. Each claim pays its average truth-table payout across compatible states, rounded down to test AUSD atoms on each redemption. This is not a refund of purchase cost. Missing evidence, unresolved ambiguity and reviewer nonresponse produce VOID under the fixed deadlines. No creator override or reviewer replacement is permitted.",
+            "disputeModel": "reviewer-panel",
+            "disputePolicy": "Operator-run testnet alpha. All reviewer wallets are controlled by the creator (0xf1fea08ebba92ed342acc5639db312c3694bc391). These wallets are not independent reviewers. The operator can determine disputed outcomes through the voting quorum. Named testnet reviewer panel: Operator test reviewer 1 (0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201), Operator test reviewer 2 (0x41c28b86170b5ec7b261d954e0185fca348b19a4), Operator test reviewer 3 (0x555d165001f60103c9429dbb15bf764caa8ae538). Quorum 2 of 3 matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: 1000000 atoms each. Assertion window: 172800 seconds after observation end. Challenge window: 43200 seconds after assertion. Vote window: 43200 seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted."
+          },
+          "reviewers": [
+            {
+              "name": "Operator test reviewer 1",
+              "address": "0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201"
+            },
+            {
+              "name": "Operator test reviewer 2",
+              "address": "0x41c28b86170b5ec7b261d954e0185fca348b19a4"
+            },
+            {
+              "name": "Operator test reviewer 3",
+              "address": "0x555d165001f60103c9429dbb15bf764caa8ae538"
+            }
+          ],
+          "reviewerControl": "single-operator",
+          "independentReviewersConfirmed": false,
+          "rulesReviewed": true,
+          "bondAtoms": "1000000",
+          "assertionPeriod": 172800,
+          "challengePeriod": 43200,
+          "votingPeriod": 43200
+        },
+        "configHash": "0x7d930c3436d69523831f9db706441c1bab0c3f5bd098c9b3f27a6ce7d9eb08ad",
+        "verifiedBlock": "67354865",
+        "verifiedBlockHash": "0x4dd8d53f9b57cbd7c0ebf64aba7ffa6f40f3027e2b46f2bb5e63330b5cac7215",
+        "verifiedTimestamp": 1790887188,
+        "codeHashes": {
+          "0x160647d16405f44989c56b83609a171247068dcc": "0x882068869a1ee7b562d871b5b4300c5608095d10f63ab7814c266f593bf7297a",
+          "0xe747a8d1d42317edf6e6a68a05ffaf3b27dd8d56": "0xb6fefb535c646c79b28bff3cf737adeea2ce3ff60541fc52157665d4db373751",
+          "0xcf8788f90161458293f93d552b6236a2e71a5190": "0x1c745983843d2cad54683709f89172094076beb19d9608f7f627a8c1fcf6e838",
+          "0x3de46851a9df868cef9fad9617ef092885331300": "0x916cdb57b37496e10ce9e2efd371e103f87ab2055a1a850cede104b9b86508ea",
+          "0xaaa32b0feb3b3973ff67203111a27a05cc598cff": "0x8b3bda194ed9bfbc119b4b9df6597d89433aeb367ac8375b80c3f5487374a7b9",
+          "0xd7f76d5e5f4349f37aa8478246bb78fc2d1d1a17": "0x04404fa2f4979796d0f0a8d7205937d409ac70955e0cbe5302d477917f0fb269",
+          "0x7a8a79df698c3512ed0a84b140d2a793262f7b88": "0x7fd01d2e83db5099fb5ba1da4261c89e8ab0f67919743d1aa23a2bcb78e8f26e"
+        },
+        "receipts": [
+          "0x3de46851a9df868cef9fad9617ef092885331300",
+          "0xaaa32b0feb3b3973ff67203111a27a05cc598cff",
+          "0xd7f76d5e5f4349f37aa8478246bb78fc2d1d1a17",
+          "0x7a8a79df698c3512ed0a84b140d2a793262f7b88"
         ],
         "notice": "Compiled code and reviewed configuration verified at one snapshot. Named panel trust, test assets only. Kuru pairs and authenticated CRE delivery are not established by this manifest."
       }
