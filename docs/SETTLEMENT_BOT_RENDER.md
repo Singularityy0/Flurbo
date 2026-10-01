@@ -6,6 +6,8 @@ Trade-offs: the settlement signer key lives in the web service environment, and 
 
 ## Render environment
 
+**Registry mode (recommended for more than one pool).** With `FLURBO_COLLECTIONS_SOURCE=registry`, the site, monitor and worker read every pool from the committed `config/collections.json`. Every `auto` pool proposes, and the others are finished. The primary-pool and finish-allowlist variables in the table below are then ignored. `FLURBO_RESOLUTION_HOLD` (pool addresses, comma separated) stops assertions for chosen pools. See [MULTI_POOL_OPERATIONS.md](MULTI_POOL_OPERATIONS.md). The table below describes environment mode, which applies while `FLURBO_COLLECTIONS_SOURCE` is unset.
+
 Copy these from the GitHub repository variables and secrets into the Render service environment. Values already present for the website (`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `FLURBO_PRACTICE_COLLECTIONS_JSON`, and `FLURBO_ALCHEMY_TESTNET_RPC_URL` if set) are shared and must not be duplicated.
 
 | Variable | Value |

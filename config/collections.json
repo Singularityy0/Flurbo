@@ -1,0 +1,654 @@
+{
+  "schema": "flurbo.collections.v1",
+  "featured": "0xb7b872e9372eaee17d8de9f4c82861f1aa673198",
+  "pilotSettlement": "finish-only",
+  "collections": [
+    {
+      "label": "Showcase v0",
+      "settlement": "finish-only",
+      "status": "active",
+      "manifest": {
+        "schema": "flurbo.pilot-manifest.v1",
+        "status": "verified_pilot_snapshot",
+        "chainId": 10143,
+        "pool": "0xd8ed3137446d99372f82573e716b3340d3dba7b3",
+        "resolver": "0x37eff955633a76472f77b88629710432bccf1654",
+        "rulesHash": "0xc97e2c3a87926182f36fc58cfd1a171f4de3f18d3176bbed52c011a527aab115",
+        "draftHash": "0x2d58481e2400a18b0a8be76e50678d4e38cacdef34ee9fb551c1abc3371eeec2",
+        "publication": {
+          "schema": "flurbo.pilot-publication.v1",
+          "mode": "ethereum-activity",
+          "creator": "0xf1fea08ebba92ed342acc5639db312c3694bc391",
+          "draft": {
+            "schema": "flurbo.event-draft.v1",
+            "status": "draft",
+            "chainId": 10143,
+            "clusterId": "showcase-v0-1790365560",
+            "title": "Showcase v0",
+            "closesAt": 1790365560,
+            "events": [
+              {
+                "id": "ethereum-fullness",
+                "question": "Will Ethereum fill at least 75% of a block?",
+                "yesRule": "YES if gasUsed * 4 >= gasLimit * 3 in the selected finalized Ethereum mainnet block.",
+                "noRule": "NO if the selected finalized block is available and the YES condition is false. Missing, conflicting or unfinalized data is not NO.",
+                "observationStartsAt": 1790365680,
+                "observationEndsAt": 1790367480,
+                "source": {
+                  "publisher": "Ethereum mainnet",
+                  "referenceUrl": "https://ethereum.org/developers/docs/apis/json-rpc/",
+                  "recordId": "ethereum-activity.v1:fullness:1790365680",
+                  "selectionRule": "Select the first Ethereum mainnet execution block with timestamp >= 1790365680; its immediate parent must have timestamp < 1790365680. Read gasUsed, gasLimit, transaction count, baseFeePerGas and blobGasUsed from that block; compare fees with its parent.",
+                  "finalityRule": "PublicNode (https://ethereum-rpc.publicnode.com) and dRPC (https://eth.drpc.org) must both report the selected block as finalized and agree on its hash, parent and measured fields. RPC reports are evidence, not a cryptographic finality proof. The bonded assertion and challenge process decides the final outcome.",
+                  "revisionRule": "Archive the first corroborated observation. Conflicting later data requires a challenge, never silent evidence replacement. Missing or unfinalized evidence leaves the assertion unset; fixed contract deadlines and VOID rules apply."
+                }
+              },
+              {
+                "id": "ethereum-transactions",
+                "question": "Will Ethereum include at least 150 transactions?",
+                "yesRule": "YES if transaction count >= 150 in the selected finalized Ethereum mainnet block.",
+                "noRule": "NO if the selected finalized block is available and the YES condition is false. Missing, conflicting or unfinalized data is not NO.",
+                "observationStartsAt": 1790365680,
+                "observationEndsAt": 1790367480,
+                "source": {
+                  "publisher": "Ethereum mainnet",
+                  "referenceUrl": "https://ethereum.org/developers/docs/apis/json-rpc/",
+                  "recordId": "ethereum-activity.v1:transactions:1790365680",
+                  "selectionRule": "Select the first Ethereum mainnet execution block with timestamp >= 1790365680; its immediate parent must have timestamp < 1790365680. Read gasUsed, gasLimit, transaction count, baseFeePerGas and blobGasUsed from that block; compare fees with its parent.",
+                  "finalityRule": "PublicNode (https://ethereum-rpc.publicnode.com) and dRPC (https://eth.drpc.org) must both report the selected block as finalized and agree on its hash, parent and measured fields. RPC reports are evidence, not a cryptographic finality proof. The bonded assertion and challenge process decides the final outcome.",
+                  "revisionRule": "Archive the first corroborated observation. Conflicting later data requires a challenge, never silent evidence replacement. Missing or unfinalized evidence leaves the assertion unset; fixed contract deadlines and VOID rules apply."
+                }
+              },
+              {
+                "id": "ethereum-fees",
+                "question": "Will Ethereum’s base fee rise?",
+                "yesRule": "YES if baseFeePerGas > parent.baseFeePerGas in the selected finalized Ethereum mainnet block.",
+                "noRule": "NO if the selected finalized block is available and the YES condition is false. Missing, conflicting or unfinalized data is not NO.",
+                "observationStartsAt": 1790365680,
+                "observationEndsAt": 1790367480,
+                "source": {
+                  "publisher": "Ethereum mainnet",
+                  "referenceUrl": "https://ethereum.org/developers/docs/apis/json-rpc/",
+                  "recordId": "ethereum-activity.v1:fees:1790365680",
+                  "selectionRule": "Select the first Ethereum mainnet execution block with timestamp >= 1790365680; its immediate parent must have timestamp < 1790365680. Read gasUsed, gasLimit, transaction count, baseFeePerGas and blobGasUsed from that block; compare fees with its parent.",
+                  "finalityRule": "PublicNode (https://ethereum-rpc.publicnode.com) and dRPC (https://eth.drpc.org) must both report the selected block as finalized and agree on its hash, parent and measured fields. RPC reports are evidence, not a cryptographic finality proof. The bonded assertion and challenge process decides the final outcome.",
+                  "revisionRule": "Archive the first corroborated observation. Conflicting later data requires a challenge, never silent evidence replacement. Missing or unfinalized evidence leaves the assertion unset; fixed contract deadlines and VOID rules apply."
+                }
+              },
+              {
+                "id": "ethereum-blobs",
+                "question": "Will Ethereum carry at least 3 blobs?",
+                "yesRule": "YES if blobGasUsed >= 393216 in the selected finalized Ethereum mainnet block.",
+                "noRule": "NO if the selected finalized block is available and the YES condition is false. Missing, conflicting or unfinalized data is not NO.",
+                "observationStartsAt": 1790365680,
+                "observationEndsAt": 1790367480,
+                "source": {
+                  "publisher": "Ethereum mainnet",
+                  "referenceUrl": "https://ethereum.org/developers/docs/apis/json-rpc/",
+                  "recordId": "ethereum-activity.v1:blobs:1790365680",
+                  "selectionRule": "Select the first Ethereum mainnet execution block with timestamp >= 1790365680; its immediate parent must have timestamp < 1790365680. Read gasUsed, gasLimit, transaction count, baseFeePerGas and blobGasUsed from that block; compare fees with its parent.",
+                  "finalityRule": "PublicNode (https://ethereum-rpc.publicnode.com) and dRPC (https://eth.drpc.org) must both report the selected block as finalized and agree on its hash, parent and measured fields. RPC reports are evidence, not a cryptographic finality proof. The bonded assertion and challenge process decides the final outcome.",
+                  "revisionRule": "Archive the first corroborated observation. Conflicting later data requires a challenge, never silent evidence replacement. Missing or unfinalized evidence leaves the assertion unset; fixed contract deadlines and VOID rules apply."
+                }
+              }
+            ],
+            "exceptionPolicy": "Valid event outcomes stay fixed. Each void event receives equal YES and NO weight, independently of other void events. Each claim pays its average truth-table payout across compatible states, rounded down to test AUSD atoms on each redemption. This is not a refund of purchase cost. Missing evidence, unresolved ambiguity and reviewer nonresponse produce VOID under the fixed deadlines. No creator override or reviewer replacement is permitted.",
+            "disputeModel": "reviewer-panel",
+            "disputePolicy": "Operator-run testnet alpha. All reviewer wallets are controlled by the creator (0xf1fea08ebba92ed342acc5639db312c3694bc391). These wallets are not independent reviewers. The operator can determine disputed outcomes through the voting quorum. Named testnet reviewer panel: Operator test reviewer 1 (0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201), Operator test reviewer 2 (0x41c28b86170b5ec7b261d954e0185fca348b19a4), Operator test reviewer 3 (0x555d165001f60103c9429dbb15bf764caa8ae538). Quorum 2 of 3 matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: 1000000 atoms each. Assertion window: 3600 seconds after observation end. Challenge window: 3600 seconds after assertion. Vote window: 3600 seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted."
+          },
+          "reviewers": [
+            {
+              "name": "Operator test reviewer 1",
+              "address": "0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201"
+            },
+            {
+              "name": "Operator test reviewer 2",
+              "address": "0x41c28b86170b5ec7b261d954e0185fca348b19a4"
+            },
+            {
+              "name": "Operator test reviewer 3",
+              "address": "0x555d165001f60103c9429dbb15bf764caa8ae538"
+            }
+          ],
+          "reviewerControl": "single-operator",
+          "independentReviewersConfirmed": false,
+          "rulesReviewed": true,
+          "bondAtoms": "1000000",
+          "assertionPeriod": 3600,
+          "challengePeriod": 3600,
+          "votingPeriod": 3600
+        },
+        "configHash": "0x6fa13aabd4e681f51915458a8dbc47483ed3315d6b8980312777dbc476cc1327",
+        "verifiedBlock": "65611061",
+        "verifiedBlockHash": "0x59b0699571d24e21602f96008bc20af82e5764801705c5975c602f75155336bf",
+        "verifiedTimestamp": 1790351215,
+        "codeHashes": {
+          "0xd8ed3137446d99372f82573e716b3340d3dba7b3": "0xa36b6b0785808b0656a31561953590eeeace69b040175cb8a749b294641788a3",
+          "0x37eff955633a76472f77b88629710432bccf1654": "0xca247eabe18211f2e4aee3afcdf460905d5c93f99112685f775b1bbdedbe9a07",
+          "0x1b38a4e74fe7aae3d992e734caeeda915c02c5c1": "0x1c745983843d2cad54683709f89172094076beb19d9608f7f627a8c1fcf6e838",
+          "0xbee2cada9f29f33942ae4081fb1498e3a5dd95df": "0x926d41b412cab2d1ddda88e7bddb15ef2e9defa69e5d65259a8fe43db74919a1",
+          "0x7c94c6bf8539f8a2e8bbcf3da25ab5ff53bfbb2d": "0xa6df3bacaf68f4e3baab8a3ed08ef492127973c49e174720b6294f8332deac77",
+          "0x7a1083f9a111f32a1f3b6d12b9dd7f821c4fb29a": "0xc92b8b33ddef753d943609f62811abad9a0ce68844cc19030dd90b16b0759c46",
+          "0xec95e82b5967b607606820c3b75e21caf32bbe27": "0x2ef9e12002fb6be33b52e9a9a170fa4149d6fa1405735c7d24c883d462a59ed5"
+        },
+        "receipts": [
+          "0xbee2cada9f29f33942ae4081fb1498e3a5dd95df",
+          "0x7c94c6bf8539f8a2e8bbcf3da25ab5ff53bfbb2d",
+          "0x7a1083f9a111f32a1f3b6d12b9dd7f821c4fb29a",
+          "0xec95e82b5967b607606820c3b75e21caf32bbe27"
+        ],
+        "notice": "Compiled code and reviewed configuration verified at one snapshot. Named panel trust, test assets only. Kuru pairs and authenticated CRE delivery are not established by this manifest."
+      }
+    },
+    {
+      "label": "pre-test-v1",
+      "settlement": "finish-only",
+      "status": "active",
+      "manifest": {
+        "schema": "flurbo.pilot-manifest.v1",
+        "status": "verified_pilot_snapshot",
+        "chainId": 10143,
+        "pool": "0x939bd2bac6a163ed39a62152c759a0c2e7ccef57",
+        "resolver": "0x23f1ec448d34a3d6964e7f4408f303c692681a40",
+        "rulesHash": "0xe42d0ad3877b1e0aa2ab60fe0eec30dba21a318c232090249f6545c834776527",
+        "draftHash": "0x6b571e35fdb9414c735b617e4d6e1906e1e98467b01b7217c7f2fdb61f5582b1",
+        "publication": {
+          "schema": "flurbo.pilot-publication.v1",
+          "mode": "deterministic-source-v1",
+          "settlementRules": [
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void",
+              "eventId": "nbp-usd-pln",
+              "question": "Will the National Bank of Poland's table A mid rate for USD on 30 September 2026 be at least 3.8537 PLN (the 29 September rate), as published by the NBP API and first captured between 09:50 and 10:14 UTC?",
+              "source": {
+                "id": "nbp-table-a-usd",
+                "publisher": "Narodowy Bank Polski",
+                "urls": [
+                  "https://api.nbp.pl/api/exchangerates/rates/a/usd/2026-09-30/?format=json"
+                ],
+                "adapter": "json-api.v1",
+                "reader": {
+                  "select": "/rates/0/mid",
+                  "aggregate": "value",
+                  "checks": [
+                    {
+                      "path": "/code",
+                      "equals": "USD"
+                    },
+                    {
+                      "path": "/rates/0/effectiveDate",
+                      "equals": "2026-09-30"
+                    }
+                  ]
+                }
+              },
+              "observation": {
+                "series": "nbp-table-a-usd-mid",
+                "period": "2026-09-30",
+                "unit": "PLN per USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "3.8537"
+              },
+              "timing": {
+                "scheduledAt": 1790761800,
+                "publicationCutoff": 1790763240,
+                "correctionCutoff": 1790763240,
+                "observationEndsAt": 1790763240,
+                "assertionPeriod": 3600,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              }
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void",
+              "eventId": "monad-activity",
+              "question": "Will Monad mainnet record at least 4,500 transactions across every 25th block from the first block at or after 08:45 UTC to the first block at or after 09:15 UTC on 30 September 2026, read from the public Monad RPC between 09:20 and 09:32 UTC?",
+              "source": {
+                "id": "monad-mainnet-rpc",
+                "publisher": "Monad Foundation public RPC",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1790757900,
+                  "until": 1790759700,
+                  "metric": "tx-count",
+                  "stride": 25,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "monad-mainnet-sampled-transactions",
+                "period": "2026-09-30T08:45:00Z/2026-09-30T09:15:00Z",
+                "unit": "transactions"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "4500"
+              },
+              "timing": {
+                "scheduledAt": 1790760000,
+                "publicationCutoff": 1790760720,
+                "correctionCutoff": 1790760720,
+                "observationEndsAt": 1790760720,
+                "assertionPeriod": 3600,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              }
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void",
+              "eventId": "usgs-m25-hour",
+              "question": "Will the USGS earthquake catalogue, first captured between 09:00 and 09:12 UTC, list at least 2 earthquakes of magnitude 2.5 or more worldwide with origin times from 07:30 to 08:30 UTC on 30 September 2026?",
+              "source": {
+                "id": "usgs-fdsn-m25",
+                "publisher": "United States Geological Survey",
+                "urls": [
+                  "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2026-09-30T07%3A30%3A00Z&endtime=2026-09-30T08%3A30%3A00Z&minmagnitude=2.5&eventtype=earthquake&orderby=time-asc"
+                ],
+                "adapter": "json-api.v1",
+                "reader": {
+                  "select": "/features",
+                  "aggregate": "count",
+                  "checks": [
+                    {
+                      "path": "/type",
+                      "equals": "FeatureCollection"
+                    }
+                  ]
+                }
+              },
+              "observation": {
+                "series": "usgs-earthquakes-m2.5-plus",
+                "period": "2026-09-30T07:30:00Z/2026-09-30T08:30:00Z",
+                "unit": "earthquakes"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "2"
+              },
+              "timing": {
+                "scheduledAt": 1790758800,
+                "publicationCutoff": 1790759520,
+                "correctionCutoff": 1790759520,
+                "observationEndsAt": 1790759520,
+                "assertionPeriod": 3600,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              }
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void",
+              "eventId": "emsc-m3-hour",
+              "question": "Will the EMSC earthquake catalogue, first captured between 09:05 and 09:17 UTC, list at least 5 earthquakes of magnitude 3.0 or more worldwide with origin times from 07:30 to 08:30 UTC on 30 September 2026?",
+              "source": {
+                "id": "emsc-fdsn-m3",
+                "publisher": "European-Mediterranean Seismological Centre",
+                "urls": [
+                  "https://www.seismicportal.eu/fdsnws/event/1/query?format=json&start=2026-09-30T07%3A30%3A00Z&end=2026-09-30T08%3A30%3A00Z&minmag=3"
+                ],
+                "adapter": "json-api.v1",
+                "reader": {
+                  "select": "/features",
+                  "aggregate": "count",
+                  "checks": [
+                    {
+                      "path": "/type",
+                      "equals": "FeatureCollection"
+                    }
+                  ]
+                }
+              },
+              "observation": {
+                "series": "emsc-earthquakes-m3-plus",
+                "period": "2026-09-30T07:30:00Z/2026-09-30T08:30:00Z",
+                "unit": "earthquakes"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "5"
+              },
+              "timing": {
+                "scheduledAt": 1790759100,
+                "publicationCutoff": 1790759820,
+                "correctionCutoff": 1790759820,
+                "observationEndsAt": 1790759820,
+                "assertionPeriod": 3600,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              }
+            }
+          ],
+          "creator": "0xf1fea08ebba92ed342acc5639db312c3694bc391",
+          "draft": {
+            "schema": "flurbo.event-draft.v1",
+            "status": "draft",
+            "chainId": 10143,
+            "clusterId": "pre-test-v1-1790753400",
+            "title": "pre-test-v1: macro, Monad and earthquakes",
+            "closesAt": 1790753400,
+            "events": [
+              {
+                "id": "nbp-usd-pln",
+                "question": "Will the National Bank of Poland's table A mid rate for USD on 30 September 2026 be at least 3.8537 PLN (the 29 September rate), as published by the NBP API and first captured between 09:50 and 10:14 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"3.8537\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"3.8537\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1790761800,
+                "observationEndsAt": 1790763240,
+                "source": {
+                  "publisher": "Narodowy Bank Polski",
+                  "referenceUrl": "https://api.nbp.pl/api/exchangerates/rates/a/usd/2026-09-30/",
+                  "recordId": "settlement-rule:sha256:de649ac4492b8379ccb9fdfeaafea45aada8396b611aa8fe6d4de92014de3386",
+                  "selectionRule": "Adapter json-api.v1; source nbp-table-a-usd; series nbp-table-a-usd-mid; period 2026-09-30; unit PLN per USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1790761800; publication cutoff 1790763240; correction cutoff and observation end 1790763240. Assertion window 3600; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "monad-activity",
+                "question": "Will Monad mainnet record at least 4,500 transactions across every 25th block from the first block at or after 08:45 UTC to the first block at or after 09:15 UTC on 30 September 2026, read from the public Monad RPC between 09:20 and 09:32 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"4500\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"4500\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1790760000,
+                "observationEndsAt": 1790760720,
+                "source": {
+                  "publisher": "Monad Foundation public RPC",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:27848668a3aefc7d35c31ab6e52f65edae6b2350262a9990ebf1bdf2bbbe0b6b",
+                  "selectionRule": "Adapter evm-rpc.v1; source monad-mainnet-rpc; series monad-mainnet-sampled-transactions; period 2026-09-30T08:45:00Z/2026-09-30T09:15:00Z; unit transactions. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1790760000; publication cutoff 1790760720; correction cutoff and observation end 1790760720. Assertion window 3600; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "usgs-m25-hour",
+                "question": "Will the USGS earthquake catalogue, first captured between 09:00 and 09:12 UTC, list at least 2 earthquakes of magnitude 2.5 or more worldwide with origin times from 07:30 to 08:30 UTC on 30 September 2026?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"2\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"2\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1790758800,
+                "observationEndsAt": 1790759520,
+                "source": {
+                  "publisher": "United States Geological Survey",
+                  "referenceUrl": "https://earthquake.usgs.gov/fdsnws/event/1/query",
+                  "recordId": "settlement-rule:sha256:33c6f26ae650cc1cec5f2fb01325bbadae898bf3d8c943b2231bbcf28e341459",
+                  "selectionRule": "Adapter json-api.v1; source usgs-fdsn-m25; series usgs-earthquakes-m2.5-plus; period 2026-09-30T07:30:00Z/2026-09-30T08:30:00Z; unit earthquakes. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1790758800; publication cutoff 1790759520; correction cutoff and observation end 1790759520. Assertion window 3600; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "emsc-m3-hour",
+                "question": "Will the EMSC earthquake catalogue, first captured between 09:05 and 09:17 UTC, list at least 5 earthquakes of magnitude 3.0 or more worldwide with origin times from 07:30 to 08:30 UTC on 30 September 2026?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"5\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"5\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1790759100,
+                "observationEndsAt": 1790759820,
+                "source": {
+                  "publisher": "European-Mediterranean Seismological Centre",
+                  "referenceUrl": "https://www.seismicportal.eu/fdsnws/event/1/query",
+                  "recordId": "settlement-rule:sha256:747279a9fe584050ab148a4c9ea0a9f4a6dafd33074d5a7d2e2971bf8e36defb",
+                  "selectionRule": "Adapter json-api.v1; source emsc-fdsn-m3; series emsc-earthquakes-m3-plus; period 2026-09-30T07:30:00Z/2026-09-30T08:30:00Z; unit earthquakes. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1790759100; publication cutoff 1790759820; correction cutoff and observation end 1790759820. Assertion window 3600; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              }
+            ],
+            "exceptionPolicy": "Valid event outcomes stay fixed. Each void event receives equal YES and NO weight, independently of other void events. Each claim pays its average truth-table payout across compatible states, rounded down to test AUSD atoms on each redemption. This is not a refund of purchase cost. Missing evidence, unresolved ambiguity and reviewer nonresponse produce VOID under the fixed deadlines. No creator override or reviewer replacement is permitted.",
+            "disputeModel": "reviewer-panel",
+            "disputePolicy": "Operator-run testnet alpha. All reviewer wallets are controlled by the creator (0xf1fea08ebba92ed342acc5639db312c3694bc391). These wallets are not independent reviewers. The operator can determine disputed outcomes through the voting quorum. Named testnet reviewer panel: Operator test reviewer 1 (0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201), Operator test reviewer 2 (0x41c28b86170b5ec7b261d954e0185fca348b19a4), Operator test reviewer 3 (0x555d165001f60103c9429dbb15bf764caa8ae538). Quorum 2 of 3 matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: 1000000 atoms each. Assertion window: 3600 seconds after observation end. Challenge window: 3600 seconds after assertion. Vote window: 3600 seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted."
+          },
+          "reviewers": [
+            {
+              "name": "Operator test reviewer 1",
+              "address": "0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201"
+            },
+            {
+              "name": "Operator test reviewer 2",
+              "address": "0x41c28b86170b5ec7b261d954e0185fca348b19a4"
+            },
+            {
+              "name": "Operator test reviewer 3",
+              "address": "0x555d165001f60103c9429dbb15bf764caa8ae538"
+            }
+          ],
+          "reviewerControl": "single-operator",
+          "independentReviewersConfirmed": false,
+          "rulesReviewed": true,
+          "bondAtoms": "1000000",
+          "assertionPeriod": 3600,
+          "challengePeriod": 3600,
+          "votingPeriod": 3600
+        },
+        "configHash": "0xc5be8a82e902d419d03c0fe911eab109eaecd7ee6e01532e256905dc6668c176",
+        "verifiedBlock": "66894992",
+        "verifiedBlockHash": "0xa96030aedc1a963959fbb298279a088019c28557f8cb2a695a8ae6a26c056438",
+        "verifiedTimestamp": 1790748216,
+        "codeHashes": {
+          "0x939bd2bac6a163ed39a62152c759a0c2e7ccef57": "0x6924924b63c7fc084febfe9f146d6df304a1ed7fbb6688044117e639bfe245df",
+          "0x23f1ec448d34a3d6964e7f4408f303c692681a40": "0xa5ace94692bb42fd2b0eb3d9cc25b17932a1beb5e3a7344136300b53a01c06f5",
+          "0x9282a4e6c3e064d8a9e4b936e8842a7bd782910d": "0x1c745983843d2cad54683709f89172094076beb19d9608f7f627a8c1fcf6e838",
+          "0x45427fac2fba39c9f9790b8aa80666b89a328f6e": "0xd2eff15919cbae71d9711b81b6f04058209a25efe3f944fe8cbc8d8b1fb11adc",
+          "0x44b8499d06fc0a4cdd4aad3e6300f0707bce6c9b": "0x0a84179a7052fea5e38ac9bed9450e07de04c3881f878686200a017611f88bec",
+          "0xd6cd60fb7eed700de1fca780d962ee3eb810b14c": "0xa92c90b5212b5ff8a25aed41b889e43751ab10d5c32ed666903f76b3ebe0b168",
+          "0x00359f8fcd14820c64c201879b4bc4f790981c96": "0x87f6a4eb54c437c05b39b6d0561a17205f6072bad9264378e443dab69c067ef8"
+        },
+        "receipts": [
+          "0x45427fac2fba39c9f9790b8aa80666b89a328f6e",
+          "0x44b8499d06fc0a4cdd4aad3e6300f0707bce6c9b",
+          "0xd6cd60fb7eed700de1fca780d962ee3eb810b14c",
+          "0x00359f8fcd14820c64c201879b4bc4f790981c96"
+        ],
+        "notice": "Compiled code and reviewed configuration verified at one snapshot. Named panel trust, test assets only. Kuru pairs and authenticated CRE delivery are not established by this manifest."
+      }
+    },
+    {
+      "label": "pre-test-v2",
+      "settlement": "finish-only",
+      "status": "active",
+      "manifest": {
+        "schema": "flurbo.pilot-manifest.v1",
+        "status": "verified_pilot_snapshot",
+        "chainId": 10143,
+        "pool": "0xb7b872e9372eaee17d8de9f4c82861f1aa673198",
+        "resolver": "0x2b0e3204b74c1c8e542fc9f747c11204a3c779c1",
+        "rulesHash": "0xa7bbff7e3dcdd4f1c2be4bf51b687ce4c032896d38bdbc8212f544a6f2fbe685",
+        "draftHash": "0xbaefb8bc9424a546e76fe884ee20ebbc384ad59873a7d449dbb8b297be6b9c38",
+        "publication": {
+          "schema": "flurbo.pilot-publication.v1",
+          "mode": "deterministic-source-v1",
+          "settlementRules": [
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void",
+              "eventId": "nbp-usd-pln-oct1",
+              "question": "Will the National Bank of Poland's table A mid rate for USD on 1 October 2026 be at least 3.8449 PLN (the 30 September rate), as published by the NBP API and first captured between 09:50 and 10:14 UTC?",
+              "source": {
+                "id": "nbp-table-a-usd",
+                "publisher": "Narodowy Bank Polski",
+                "urls": [
+                  "https://api.nbp.pl/api/exchangerates/rates/a/usd/2026-10-01/?format=json"
+                ],
+                "adapter": "json-api.v1",
+                "reader": {
+                  "select": "/rates/0/mid",
+                  "aggregate": "value",
+                  "checks": [
+                    {
+                      "path": "/code",
+                      "equals": "USD"
+                    },
+                    {
+                      "path": "/rates/0/effectiveDate",
+                      "equals": "2026-10-01"
+                    }
+                  ]
+                }
+              },
+              "observation": {
+                "series": "nbp-table-a-usd-mid",
+                "period": "2026-10-01",
+                "unit": "PLN per USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "3.8449"
+              },
+              "timing": {
+                "scheduledAt": 1790848200,
+                "publicationCutoff": 1790849640,
+                "correctionCutoff": 1790849640,
+                "observationEndsAt": 1790849640,
+                "assertionPeriod": 3600,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              }
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void",
+              "eventId": "monad-activity-oct1",
+              "question": "Will Monad mainnet record at least 5,100 transactions across every 25th block from the first block at or after 08:45 UTC to the first block at or after 09:15 UTC on 1 October 2026, read from the public Monad RPC between 09:20 and 09:32 UTC?",
+              "source": {
+                "id": "monad-mainnet-rpc",
+                "publisher": "Monad Foundation public RPC",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1790844300,
+                  "until": 1790846100,
+                  "metric": "tx-count",
+                  "stride": 25,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "monad-mainnet-sampled-transactions",
+                "period": "2026-10-01T08:45:00Z/2026-10-01T09:15:00Z",
+                "unit": "transactions"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "5100"
+              },
+              "timing": {
+                "scheduledAt": 1790846400,
+                "publicationCutoff": 1790847120,
+                "correctionCutoff": 1790847120,
+                "observationEndsAt": 1790847120,
+                "assertionPeriod": 3600,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              }
+            }
+          ],
+          "creator": "0xf1fea08ebba92ed342acc5639db312c3694bc391",
+          "draft": {
+            "schema": "flurbo.event-draft.v1",
+            "status": "draft",
+            "chainId": 10143,
+            "clusterId": "pre-test-v2-1790837400",
+            "title": "pre-test-v2: macro and Monad",
+            "closesAt": 1790837400,
+            "events": [
+              {
+                "id": "nbp-usd-pln-oct1",
+                "question": "Will the National Bank of Poland's table A mid rate for USD on 1 October 2026 be at least 3.8449 PLN (the 30 September rate), as published by the NBP API and first captured between 09:50 and 10:14 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"3.8449\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"3.8449\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1790848200,
+                "observationEndsAt": 1790849640,
+                "source": {
+                  "publisher": "Narodowy Bank Polski",
+                  "referenceUrl": "https://api.nbp.pl/api/exchangerates/rates/a/usd/2026-10-01/",
+                  "recordId": "settlement-rule:sha256:8aca0386bb5ce97a729e15377e6cc3f90424e7898f6593e724705287507e4fb6",
+                  "selectionRule": "Adapter json-api.v1; source nbp-table-a-usd; series nbp-table-a-usd-mid; period 2026-10-01; unit PLN per USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1790848200; publication cutoff 1790849640; correction cutoff and observation end 1790849640. Assertion window 3600; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "monad-activity-oct1",
+                "question": "Will Monad mainnet record at least 5,100 transactions across every 25th block from the first block at or after 08:45 UTC to the first block at or after 09:15 UTC on 1 October 2026, read from the public Monad RPC between 09:20 and 09:32 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"5100\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"5100\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1790846400,
+                "observationEndsAt": 1790847120,
+                "source": {
+                  "publisher": "Monad Foundation public RPC",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:89daf22bab31eb16cade53335f46245004454888626716bbcb5213a92836e90a",
+                  "selectionRule": "Adapter evm-rpc.v1; source monad-mainnet-rpc; series monad-mainnet-sampled-transactions; period 2026-10-01T08:45:00Z/2026-10-01T09:15:00Z; unit transactions. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1790846400; publication cutoff 1790847120; correction cutoff and observation end 1790847120. Assertion window 3600; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              }
+            ],
+            "exceptionPolicy": "Valid event outcomes stay fixed. Each void event receives equal YES and NO weight, independently of other void events. Each claim pays its average truth-table payout across compatible states, rounded down to test AUSD atoms on each redemption. This is not a refund of purchase cost. Missing evidence, unresolved ambiguity and reviewer nonresponse produce VOID under the fixed deadlines. No creator override or reviewer replacement is permitted.",
+            "disputeModel": "reviewer-panel",
+            "disputePolicy": "Operator-run testnet alpha. All reviewer wallets are controlled by the creator (0xf1fea08ebba92ed342acc5639db312c3694bc391). These wallets are not independent reviewers. The operator can determine disputed outcomes through the voting quorum. Named testnet reviewer panel: Operator test reviewer 1 (0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201), Operator test reviewer 2 (0x41c28b86170b5ec7b261d954e0185fca348b19a4), Operator test reviewer 3 (0x555d165001f60103c9429dbb15bf764caa8ae538). Quorum 2 of 3 matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: 1000000 atoms each. Assertion window: 3600 seconds after observation end. Challenge window: 3600 seconds after assertion. Vote window: 3600 seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted."
+          },
+          "reviewers": [
+            {
+              "name": "Operator test reviewer 1",
+              "address": "0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201"
+            },
+            {
+              "name": "Operator test reviewer 2",
+              "address": "0x41c28b86170b5ec7b261d954e0185fca348b19a4"
+            },
+            {
+              "name": "Operator test reviewer 3",
+              "address": "0x555d165001f60103c9429dbb15bf764caa8ae538"
+            }
+          ],
+          "reviewerControl": "single-operator",
+          "independentReviewersConfirmed": false,
+          "rulesReviewed": true,
+          "bondAtoms": "1000000",
+          "assertionPeriod": 3600,
+          "challengePeriod": 3600,
+          "votingPeriod": 3600
+        },
+        "configHash": "0x56e0528e40c458426c701822403761d276ac074241680b297e93c8bf15bdb1e2",
+        "verifiedBlock": "67171216",
+        "verifiedBlockHash": "0x01c7d7d77483c34605952c8e79a382b22712f91a8d30ca92d9acf3f412725867",
+        "verifiedTimestamp": 1790831702,
+        "codeHashes": {
+          "0xb7b872e9372eaee17d8de9f4c82861f1aa673198": "0x6ff68bdc8dbca26df9b9f7a839174e8057e996fb0d8e735ec98a7cd37b5408f3",
+          "0x2b0e3204b74c1c8e542fc9f747c11204a3c779c1": "0x4a32c52f303d9c1bfbee2baaaeb0f7c8d9cb7337bd3f2749af4d583043cad9fe",
+          "0x3c35de0b17237fc1ecaa566201698d8f394ec3e0": "0x1c745983843d2cad54683709f89172094076beb19d9608f7f627a8c1fcf6e838",
+          "0xd8f5366065109226279380345c58f88084c7791f": "0x6574ecebb627f3f0c25ce714a69277d38720f9aeb421bcbe6cc7f070de703593",
+          "0x0c27be5e69a5312a0b035fbf057c45e213dabd9d": "0x4e96a1dbfee0c88faeb0573e3809c68cdc4f3bd2b107b597c2ec4b0e5e588ac5"
+        },
+        "receipts": [
+          "0xd8f5366065109226279380345c58f88084c7791f",
+          "0x0c27be5e69a5312a0b035fbf057c45e213dabd9d"
+        ],
+        "notice": "Compiled code and reviewed configuration verified at one snapshot. Named panel trust, test assets only. Kuru pairs and authenticated CRE delivery are not established by this manifest."
+      }
+    }
+  ]
+}

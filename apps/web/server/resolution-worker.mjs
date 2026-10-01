@@ -182,14 +182,16 @@ const roleConflict=(manifest,owner)=>owner.toLowerCase()===manifest.publication.
 const TRANSACTIONAL=new Set(['submitted','resubmitted','pending','confirmed','reverted']);
 
 // Plans every registered pool, earliest deadline first. Signing still goes through resolutionTick,
-// which holds the one signer lease and journal. Only pools given an evidence function may propose;
-// all others only finalize timeouts, their own assertions and deliver. One unreadable or unmonitored
-// pool is skipped and reported, never allowed to block the others.
-export async function resolutionRound({pools,owner,command,transport,enabled=false,now=()=>Math.floor(Date.now()/1000)}){
+// which holds the one signer lease and journal, so there is one pending transaction at a time across
+// every pool. Only pools given an evidence function may propose (the caller decides which: one
+// allowlisted pool in environment mode, the registry's "auto" pools in registry mode); all others only
+// finalize timeouts, their own assertions and deliver. One unreadable or unmonitored pool is skipped and
+// reported, never allowed to block the others. Pools in `idle` (nothing due, per a fresh monitor read)
+// are not read at all, unless a pending transaction belongs to them.
+export async function resolutionRound({pools,owner,command,transport,enabled=false,now=()=>Math.floor(Date.now()/1000),idle=null}){
   if(!Array.isArray(pools)||!pools.length)throw Error('Register at least one pool');
   const keys=pools.map(p=>p.manifest.pool.toLowerCase());
   if(new Set(keys).size!==keys.length)throw Error('Duplicate pool registration');
-  if(pools.filter(p=>p.evidence).length>1)throw Error('Only one explicitly allowlisted pool may propose outcomes');
   const raw=await command('GET',journalKey(owner)),stored=raw?JSON.parse(raw):null;
   const book=stored?.schema==='flurbo.resolution-journals.v2'?stored.pools:stored?{[stored.pool]:stored}:{};
   const pending=Object.values(book||{}).find(entry=>entry?.pending);
@@ -201,8 +203,10 @@ export async function resolutionRound({pools,owner,command,transport,enabled=fal
     return {...await tick(target,enabled),pool:target.manifest.pool};
   }
   const rows=[],skipped=[];
+  let resting=0;
   for(const p of pools){
     const pool=p.manifest.pool;
+    if(idle?.has(pool)){resting++;continue;}
     if(p.manifest.chainId!==10143||roleConflict(p.manifest,owner)){skipped.push({pool,reason:'signer-role-conflict'});continue;}
     try{
       const state=await p.service.status(),saved=book?.[pool];
@@ -217,7 +221,7 @@ export async function resolutionRound({pools,owner,command,transport,enabled=fal
     const pools=[];
     for(const r of rows)pools.push({pool:r.pool,plan:r.plan,monitoring:await monitoring(r.p),...(r.plan.kind==='evidence'?{proposer:await proposerStatus(r.p.proposerHoldings)}
       :r.p.proposerHoldings&&undecided(r.state)?{proposerPreflight:await proposerStatus(r.p.proposerHoldings)}:{})});
-    return {status:'dry-run',pools,skipped,nextWake:wake};
+    return {status:'dry-run',pools,skipped,nextWake:wake,...(resting?{idle:resting}:{})};
   }
   const entryFor=r=>r.calendar.entries.find(e=>e.action===(r.plan.kind==='evidence'?'evidence':r.plan.action)&&e.event===(r.plan.event??null))
     ||{deadline:null,readyAt:0};
@@ -227,12 +231,12 @@ export async function resolutionRound({pools,owner,command,transport,enabled=fal
   for(const r of candidates){
     if(await monitoring(r.p)!=='healthy'){skipped.push({pool:r.pool,reason:'monitoring-stale'});continue;}
     const result=await tick(r.p,true);
-    if(TRANSACTIONAL.has(result.status))return {...result,pool:r.pool,skipped,nextWake:wake};
+    if(TRANSACTIONAL.has(result.status))return {...result,pool:r.pool,skipped,nextWake:wake,...(resting?{idle:resting}:{})};
     results.push({pool:r.pool,status:result.status,event:result.event});
   }
   const status=rows.length&&rows.every(r=>r.plan.kind==='complete')&&!skipped.length?'complete'
     :skipped.some(s=>s.reason==='monitoring-stale')?'monitoring-stale':'wait';
   const proposing=rows.find(r=>r.p.proposerHoldings&&r.plan.kind!=='evidence'&&undecided(r.state));
   const preflightResult=proposing?{proposerPreflight:{pool:proposing.pool,...await proposerStatus(proposing.p.proposerHoldings)}}:{};
-  return {status,results,skipped,nextWake:wake,...preflightResult};
+  return {status,results,skipped,nextWake:wake,...(resting?{idle:resting}:{}),...preflightResult};
 }

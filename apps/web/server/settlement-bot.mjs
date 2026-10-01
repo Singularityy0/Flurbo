@@ -16,7 +16,10 @@ export function nextPeriod({ intervalMs, idleIntervalMs, nextDue, monitor, worke
 
 export function settlementBot({ env = process.env, intervalMs = 120_000, idleIntervalMs = 600_000, firstDelayMs = 30_000, log = console.log,
   monitor = null,
-  resolve = async () => (await import('../scripts/run-resolution.mjs')).runResolution(env),
+  // One schedule (pool -> last monitor read and next due time) and one retained-capture cache for the life of the
+  // process: the monitor re-reads pools far from their next action less often, and the worker skips their chain reads.
+  poolSchedule = new Map(), retainedCaptures = new Set(),
+  resolve = async () => (await import('../scripts/run-resolution.mjs')).runResolution(env, { schedule: poolSchedule, retainedCaptures }),
   failure = async error => (await import('../scripts/run-resolution.mjs')).resolutionFailure(error),
   metrics = null, funds = null, notices = null, sleep = ms => new Promise(done => setTimeout(done, ms)), now = Date.now, schedule = setTimeout, cancel = clearTimeout } = {}) {
   if (!Number.isSafeInteger(intervalMs) || intervalMs < 60_000) throw Error('Settlement cycles must be at least one minute apart');
@@ -26,7 +29,7 @@ export function settlementBot({ env = process.env, intervalMs = 120_000, idleInt
   // unknown, which keeps the normal interval.
   monitor ??= async () => {
     let due = 'none';
-    const code = await (await import('../scripts/notify-settlement.mjs')).runNotifications({ env, args: [], output: line => {
+    const code = await (await import('../scripts/notify-settlement.mjs')).runNotifications({ env, args: [], schedule: poolSchedule, output: line => {
       log('[settlement-monitor] ' + line);
       let value; try { value = JSON.parse(line).nextDueAt; } catch { value = null; }
       if (due === null || value === 'none') return;

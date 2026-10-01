@@ -8,6 +8,7 @@ import { settlementLease } from '../server/settlement-store.mjs';
 import { emailConfig, resendDelivery, validateEmailState, queueReport, drainEmails, queueReadFailures, READ_FAILURE_IDENTITY } from '../server/settlement-email.mjs';
 import {validateActivityDraft} from '../shared/ethereum-activity.mjs';
 import {DETERMINISTIC_MODE} from '../server/settlement-publication.mjs';
+import {loadRegistry, monitoredCollections, registryEnabled} from '../server/collection-registry.mjs';
 
 export function watchdog(env, request = fetch) {
   const url = env.FLURBO_MONITOR_HEALTHCHECK_URL || '';
@@ -68,7 +69,10 @@ export async function notifyPool({ manifest, command, rpc, config, send,
     // Five-minute jobs have scheduling jitter. Use a 15-minute hosted gap alarm;
     // the independent watchdog covers a job that never returns at all.
     result.report.alerts = result.report.alerts.filter(a => a.code !== 'CHECK_GAP');
-    if (state.checkpoint && now() - state.checkpoint.checkedAt > 900) result.report.alerts.push({
+    // A delivered pool has nothing left to miss, so a long gap since its last read (a restart, or a pool the bot
+    // no longer re-reads) is not an alarm.
+    const settled = loaded.report?.lifecycle === 'settled' && result.report.lifecycle === 'settled';
+    if (state.checkpoint && !settled && now() - state.checkpoint.checkedAt > 900) result.report.alerts.push({
       code: 'HOSTED_CHECK_GAP', severity: 'critical', message: 'Over 15 minutes since the last verified read. Intermediate assertions may have been missed; review chain history manually.',
     });
     if (result.report.status !== 'check_failed') result.report.status = result.report.alerts.some(a => a.severity !== 'info') ? 'attention_required' : 'observed';
@@ -106,8 +110,22 @@ export async function notifyReadFailures({ command, config, send, now, failing }
   } finally { await lease.release(); }
 }
 
+// The settlement bot keeps one schedule for the life of the process: pool -> { checkedAt, nextDueAt }. A pool far
+// from its next action is re-read at most every POOL_RECHECK_SECONDS, well inside the 15-minute gap alarm and the
+// worker's 900-second freshness rule, so a 2-minute cadence for one pool does not re-read every other pool. A
+// delivered pool ('none') is read once and then left alone until the process restarts. Without a schedule (the
+// GitHub job, the CLI) every pool is read on every run, as before.
+export const MAX_MONITORED_POOLS = 32;
+export const POOL_RECHECK_SECONDS = 480;
+const DUE_SOON_SECONDS = 900;
+export function skipCheck(seen, nowSeconds) {
+  if (seen.nextDueAt === 'none') return true;
+  return Number.isSafeInteger(seen.nextDueAt) && seen.nextDueAt - nowSeconds > DUE_SOON_SECONDS
+    && nowSeconds - seen.checkedAt < POOL_RECHECK_SECONDS && nowSeconds >= seen.checkedAt;
+}
+
 export async function runNotifications({ env = process.env, args = process.argv.slice(2), request = fetch,
-  output = console.log, now = () => Math.floor(Date.now() / 1000), inspect = checkSettlement, wait = pause } = {}) {
+  output = console.log, now = () => Math.floor(Date.now() / 1000), inspect = checkSettlement, wait = pause, schedule = null, readRegistry = null } = {}) {
   let ping;
   try {
     ping = watchdog(env, request);
@@ -116,8 +134,10 @@ export async function runNotifications({ env = process.env, args = process.argv.
     const root = fileURLToPath(new URL('../../../', import.meta.url));
     const manifests = [JSON.parse(env.FLURBO_PILOT_MANIFEST_JSON ?? await readFile(resolve(root, 'config/pilot-testnet.json'), 'utf8'))];
     if (['rehearsal','ethereum-activity',DETERMINISTIC_MODE].includes(manifests[0].publication?.mode)) throw new Error('Configure the release pilot pool');
-    const extras=env.FLURBO_PRACTICE_COLLECTIONS_JSON?JSON.parse(env.FLURBO_PRACTICE_COLLECTIONS_JSON):[];
-    if(!Array.isArray(extras)||extras.length>8)throw Error('Invalid practice collections');
+    // With the registry, every pool the bot may act on is watched, plus every listed pool.
+    const extras=registryEnabled(env)?monitoredCollections(await loadRegistry(readRegistry?{read:readRegistry}:{})).map(({label,manifest})=>({label,manifest}))
+      :env.FLURBO_PRACTICE_COLLECTIONS_JSON?JSON.parse(env.FLURBO_PRACTICE_COLLECTIONS_JSON):[];
+    if(!Array.isArray(extras)||extras.length>MAX_MONITORED_POOLS)throw Error('Invalid practice collections');
     for(const row of extras){
       if(!row?.manifest||!['rehearsal','ethereum-activity',DETERMINISTIC_MODE].includes(row.manifest.publication?.mode)
         ||manifests.some(manifest=>manifest.pool===row.manifest.pool||manifest.resolver===row.manifest.resolver))throw Error('Duplicate or invalid practice collection');
@@ -129,17 +149,27 @@ export async function runNotifications({ env = process.env, args = process.argv.
     let failed = false;
     const failing = [];
     for (const manifest of manifests) {
+      const seen = schedule?.get(manifest.pool);
+      if (seen && skipCheck(seen, now())) {
+        output(JSON.stringify({ status: 'skipped', pool: manifest.pool, nextDueAt: seen.nextDueAt }));
+        continue;
+      }
       try {
         const deadline = AbortSignal.timeout(45_000);
         const rpc = pilotRpc(env.FLURBO_ALCHEMY_TESTNET_RPC_URL || 'https://testnet-rpc.monad.xyz', (url, options) =>
           request(url, { ...options, signal: AbortSignal.any([deadline, options.signal]) }));
         const result = await notifyPool({ manifest, command, rpc, config, send, now, inspect, wait, test: args[0] === '--test-email' });
         output(JSON.stringify(result));
+        if (schedule) {
+          if (result.status === 'check_failed' || result.pendingEmails > 0) schedule.delete(manifest.pool);
+          else schedule.set(manifest.pool, { checkedAt: now(), nextDueAt: result.nextDueAt ?? null });
+        }
         if (result.pendingEmails > 0) failed = true;
         if (result.status === 'check_failed') {
           if (result.readFailures >= READ_FAILURE_THRESHOLD) failing.push({ pool: manifest.pool, readFailures: result.readFailures });
         }
       } catch {
+        schedule?.delete(manifest.pool);
         failed = true; output(JSON.stringify({ status: 'notification_failed', message: 'Inspect RPC, mail, durable state and lease configuration. No transaction submitted; upstream details withheld.' }));
       }
     }
