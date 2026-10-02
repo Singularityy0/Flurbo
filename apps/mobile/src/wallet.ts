@@ -65,7 +65,7 @@ export const externalWallet = {
       }},login!,address,()=>auth.getSnapshot().address===login);
       if(auth.getSnapshot().address!==login)throw Error('Flurbo account changed');
       topic = session.topic; update({ address });
-    } catch { topic = undefined; update({ address: null, error: 'MetaMask connection did not finish. Open MetaMask, select Monad testnet, then reconnect.' }); }
+    } catch (e: any) { topic = undefined; update({ address: null, error: `MetaMask connection did not finish. Open MetaMask, select Monad testnet, then reconnect.${e?.message ? ` (${e.message})` : ''}` }); }
     finally { update({ busy: false }); }
   },
   async disconnect() {
