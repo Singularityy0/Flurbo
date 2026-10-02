@@ -17,7 +17,7 @@
       "bundleIdentifier": "dev.flurbo.preview"
     },
     "android": {
-      "versionCode": 4,
+      "versionCode": 5,
       "package": "dev.flurbo.preview",
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/adaptive-foreground.png",

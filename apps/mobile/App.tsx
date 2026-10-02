@@ -1,5 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
-import { AppState, BackHandler, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Animated, AppState, BackHandler, Easing, Image, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as Clipboard from 'expo-clipboard';
@@ -252,6 +252,67 @@ function TransactionLookup() {
   );
 }
 
+function ContourLoadingScreen({ initError, onRetry }: { initError: string | null; onRetry: () => void }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 1200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+
+  const scale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.96, 1.04],
+  });
+
+  const opacity = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.75, 1],
+  });
+
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, minHeight: 380 }}>
+      <Animated.View style={{ transform: [{ scale }], opacity, marginBottom: 24, alignItems: 'center' }}>
+        <Image
+          source={require('./assets/brand/mark.png')}
+          style={{ width: 84, height: 84 }}
+          resizeMode="contain"
+        />
+      </Animated.View>
+      <Text style={{ fontSize: 24, fontWeight: '700', letterSpacing: -1, color: colors.ink, marginBottom: 6 }}>
+        flurbo<Text style={{ color: colors.lime }}>.</Text>
+      </Text>
+      <Text style={{ fontSize: 14, color: colors.muted, letterSpacing: 0.2, marginBottom: 16 }}>
+        {initError ? 'Connection interrupted' : 'Connecting to Monad testnet...'}
+      </Text>
+      {initError ? (
+        <View style={{ width: '100%', maxWidth: 360, marginTop: 12, gap: 12 }}>
+          <Notice>{initError}</Notice>
+          <Button title="Retry connection" onPress={onRetry} />
+        </View>
+      ) : (
+        <Copy small>Restoring account session and market directory</Copy>
+      )}
+    </View>
+  );
+}
+
 function Main() {
   const login = useSyncExternalStore(auth.subscribe, auth.getSnapshot);
   const wallet = useSyncExternalStore(externalWallet.subscribe, externalWallet.getSnapshot);
@@ -351,24 +412,36 @@ function Main() {
     <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       <StatusBar style="dark" />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={[s.row, { paddingHorizontal: 22, paddingVertical: 14, justifyContent: 'space-between' }]}>
-          <Text style={{ fontSize: 29, fontWeight: '700', letterSpacing: -1.7, color: colors.ink }}>
-            flurbo<Text style={{ color: colors.lime }}>.</Text>
-          </Text>
-          <Copy small>MONAD TESTNET</Copy>
+        <View style={[s.row, { paddingHorizontal: 22, paddingVertical: 14, justifyContent: 'space-between', alignItems: 'center' }]}>
+          <View style={[s.row, { alignItems: 'center', gap: 10 }]}>
+            <Image
+              source={require('./assets/brand/mark.png')}
+              style={{ width: 32, height: 32 }}
+              resizeMode="contain"
+            />
+            <Text style={{ fontSize: 28, fontWeight: '700', letterSpacing: -1.5, color: colors.ink }}>
+              flurbo<Text style={{ color: colors.lime }}>.</Text>
+            </Text>
+          </View>
+          <View style={{ backgroundColor: colors.ink, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.lime, letterSpacing: 0.6 }}>MONAD TESTNET</Text>
+          </View>
         </View>
 
         <ScrollView key={page} keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
           {!ready ? (
-            <>
-              <Title>Welcome to Flurbo.</Title>
-              <Notice>{initError || 'Restoring your account and saved transactions...'}</Notice>
-              {initError && <Button title="Retry" onPress={() => void boot()} />}
-            </>
+            <ContourLoadingScreen initError={initError} onRetry={() => void boot()} />
           ) : !login.address ? (
             <>
-              <Copy small>ONE SHARED MARKET</Copy>
-              <Title>A view worth combining.</Title>
+              <View style={{ alignItems: 'center', marginVertical: 12 }}>
+                <Image
+                  source={require('./assets/brand/mark.png')}
+                  style={{ width: 64, height: 64, marginBottom: 12 }}
+                  resizeMode="contain"
+                />
+                <Copy small>ONE SHARED MARKET</Copy>
+                <Title>A view worth combining.</Title>
+              </View>
               <Copy>Explore individual predictions and see how the market prices the relationships between events.</Copy>
               <Card>
                 <Heading>Your account starts with a passkey.</Heading>
@@ -489,7 +562,14 @@ function Main() {
 
               {page === 'about' && (
                 <>
-                  <Title>One pool. More possibilities.</Title>
+                  <View style={{ alignItems: 'center', marginVertical: 14 }}>
+                    <Image
+                      source={require('./assets/brand/mark.png')}
+                      style={{ width: 56, height: 56, marginBottom: 12 }}
+                      resizeMode="contain"
+                    />
+                    <Title>One pool. More possibilities.</Title>
+                  </View>
                   <Copy>
                     Flurbo brings individual and combined predictions into one shared market, letting you see how the
                     market prices relationships between events.
