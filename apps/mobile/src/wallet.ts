@@ -47,24 +47,34 @@ export const externalWallet = {
       await this.initialize();
       if (!client) throw new Error('Wallet connection is unavailable.');
       const login = auth.getSnapshot().address;
-      const { uri, approval } = await client.connect({ requiredNamespaces: {
-        eip155: { chains: [CHAIN], methods: ['eth_sendTransaction','personal_sign'], events: ['chainChanged', 'accountsChanged'] },
-      } });
-      const approved = approval();
-      // Attach rejection handling before leaving the app so expiry is never unhandled.
-      void approved.catch(() => undefined);
-      if (uri) await Linking.openURL(`https://metamask.app.link/wc?uri=${encodeURIComponent(uri)}`);
-      const session = await approved;
+      // Reuse the existing WalletConnect session when the wallet is paired
+      // but linking failed on a previous attempt (mobile deep-link bounce).
+      let session;
+      if (topic) { try { const s = client.session.get(topic); sessionAddress(s); session = s; } catch { /* stale, re-pair */ } }
+      if (!session) {
+        const { uri, approval } = await client.connect({ requiredNamespaces: {
+          eip155: { chains: [CHAIN], methods: ['eth_sendTransaction','personal_sign'], events: ['chainChanged', 'accountsChanged'] },
+        } });
+        const approved = approval();
+        void approved.catch(() => undefined);
+        if (uri) await Linking.openURL(`https://metamask.app.link/wc?uri=${encodeURIComponent(uri)}`);
+        session = await approved;
+      }
       if (auth.getSnapshot().address !== login) { await client.disconnect({ topic: session.topic, reason: { code: 6000, message: 'Flurbo login changed' } }); return; }
       const address = sessionAddress(session);
-      await linkTradingWallet({request:async input=>{
-        if(input.method==='eth_accounts')return [sessionAddress(client!.session.get(session.topic))];
-        if(input.method!=='personal_sign')throw Error('Unsupported account-link request');
-        const response=client!.request({topic:session.topic,chainId:CHAIN,request:{method:input.method,params:input.params??[]}});
-        void response.catch(()=>undefined);void Linking.openURL('https://metamask.app.link/').catch(()=>undefined);return response;
-      }},login!,address,()=>auth.getSnapshot().address===login);
-      if(auth.getSnapshot().address!==login)throw Error('Flurbo account changed');
+      // Commit the connection before attempting the linking signature so the
+      // user sees their wallet even when the second MetaMask handoff drops.
       topic = session.topic; update({ address });
+      try {
+        await linkTradingWallet({request:async input=>{
+          if(input.method==='eth_accounts')return [sessionAddress(client!.session.get(session.topic))];
+          if(input.method!=='personal_sign')throw Error('Unsupported account-link request');
+          const response=client!.request({topic:session.topic,chainId:CHAIN,request:{method:input.method,params:input.params??[]}});
+          void response.catch(()=>undefined);void Linking.openURL('https://metamask.app.link/').catch(()=>undefined);return response;
+        }},login!,address,()=>auth.getSnapshot().address===login);
+      } catch {
+        update({ error: 'Connected, but wallet linking needs one more signature. Tap Connect MetaMask to finish.' });
+      }
     } catch (e: any) { topic = undefined; update({ address: null, error: `MetaMask connection did not finish. Open MetaMask, select Monad testnet, then reconnect.${e?.message ? ` (${e.message})` : ''}` }); }
     finally { update({ busy: false }); }
   },
