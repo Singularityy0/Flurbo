@@ -1,100 +1,193 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { formatUnits } from 'viem';
-import { pilotRequest, validatePilotReview, type PilotNamespace, type PilotState, type PilotReview } from '../../web/src/pilot';
-import { amount, describeClaimAnswers } from '../../web/src/portfolio';
-import { auth, storage } from './runtime';
-import { externalWallet, type WalletKind } from './wallet';
-import { transactions } from './transactions';
-import { makeClaim, quantityAtoms } from './market-model';
+import { pilotRequest, type PilotState } from '../../web/src/pilot';
+import { loadMarketDirectory, marketStatus, type MarketGroup, type MarketSnapshot } from '../../web/src/market-directory';
+import { amount } from '../../web/src/portfolio';
 import { useRequest } from './hooks';
-import { semanticCollision, semanticReady, type SemanticConsent } from './semantic';
-import { semanticAcknowledgment } from '../../web/src/pilot';
 import { Button, Card, Choice, Copy, Field, Heading, Notice, Title, s } from './ui';
 
-export type MarketList = Pick<PilotState, 'manifest' | 'snapshot'> & { open: boolean; prices: { event: number; yes: string | null; no: string | null }[] };
-export function Markets({ namespace, kind, onPortfolio }: { namespace: PilotNamespace; kind: WalletKind; onPortfolio: () => void }) {
-  const data = useRequest<MarketList>(), quote = useRequest<PilotReview>();
-  const login = useSyncExternalStore(auth.subscribe, auth.getSnapshot), wallet = useSyncExternalStore(externalWallet.subscribe, externalWallet.getSnapshot);
-  const tx = useSyncExternalStore(transactions.subscribe, transactions.getSnapshot);
-  const owner = wallet.address;
-  const [search, setSearch] = useState(''), [answers, setAnswers] = useState<Record<number, boolean>>({}), [mode, setMode] = useState<'all' | 'any'>('all');
-  const [quantity, setQuantity] = useState('1'), [side, setSide] = useState<'buy' | 'sell' | 'redeem'>('buy'), [error, setError] = useState('');
-  const [clock, setClock] = useState(Date.now()), [rules, setRules] = useState(false);
-  const [consent, setConsent] = useState<SemanticConsent>({ review: null, phrase: '' });
-  const key = `flurbo.mobile.checkout:${namespace}:${login.address}`;
-  useEffect(() => {
-    try { const saved = JSON.parse(storage.getItem(key) ?? 'null'); if (saved) { makeClaim(saved.answers, saved.mode); quantityAtoms(saved.quantity); setAnswers(saved.answers); setQuantity(saved.quantity); setMode(saved.mode === 'any' ? 'any' : 'all'); } else setAnswers({}); } catch { setAnswers({}); }
-    void data.run(signal => pilotRequest('markets', undefined, namespace, signal), true);
-    return () => { data.cancel(); quote.cancel(); };
-  }, [namespace, login.address]);
-  useEffect(() => { const timer = setInterval(() => setClock(Date.now()), 1000); return () => clearInterval(timer); }, []);
-  useEffect(() => {
-    quote.cancel(true); setError('');
-    try { storage.setItem(key, JSON.stringify({ answers, quantity, mode })); } catch { setError('Cannot save this purchase. Restart the app before trading.'); }
-    if (!owner || !Object.keys(answers).length || tx.pending) return;
-    const timer = setTimeout(() => {
-      void quote.run(async signal => {
-        const { scope, mask } = makeClaim(answers, mode), units = quantityAtoms(quantity);
-        const input = { owner, action: side, scope, mask, quantity: units, slippageBps: 50 };
-        const result = await pilotRequest<PilotReview>('prepare', input, namespace, signal);
-        validatePilotReview(result);
-        if (result.requested.owner.toLowerCase() !== owner.toLowerCase() || result.requested.scope !== scope || result.requested.mask !== mask || result.requested.quantity !== units || result.requested.action !== side || result.manifest.pool !== data.value?.manifest.pool) throw new Error('Price differs from your selection. Refresh before trading.');
-        return result;
-      }, true);
-    }, 400);
-    return () => { clearTimeout(timer); quote.cancel(); };
-  }, [answers, mode, quantity, side, owner, namespace, data.value?.manifest.pool, tx.pending]);
-  const events = data.value?.manifest.publication.draft.events ?? [];
-  const names = Object.keys(answers).map(Number).sort((a, b) => a - b).map(i => events[i]?.question).join(' + ');
-  let label = ''; try { const c = makeClaim(answers, mode); label = describeClaimAnswers(c.scope, Number(c.mask)); } catch { /* Empty selection. */ }
-  function select(event: number, yes: boolean) {
-    if (tx.busy) return;
-    if (!(event in answers) && Object.keys(answers).length >= 3) { setError('Choose up to three questions for one prediction.'); return; }
-    setAnswers(previous => ({ ...previous, [event]: yes }));
-  }
-  async function confirm() {
-    if (!quote.value || quote.busy) return;
-    const reviewed = quote.value;
-    try { await transactions.submit(reviewed, namespace, kind, () => quote.isCurrent(reviewed), consent); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Could not submit. Check wallet activity.'); }
-  }
-  return <>
-    <Title>What happens next?</Title><Copy>Pick a question. Choose Yes or No. Combine up to three answers into one prediction.</Copy>
-    <Field label="Find a market" value={search} onChange={setSearch} />
-    <Button secondary title={data.busy ? 'Stop loading markets' : 'Refresh prices'} onPress={() => data.busy ? data.cancel() : void data.run(signal => pilotRequest('markets', undefined, namespace, signal))} />
-    <Notice>{data.error}</Notice>
-    {events.map((event, i) => event.question.toLowerCase().includes(search.toLowerCase()) && <Card key={event.id}>
-      <Copy small>{namespace === 'pilot' ? 'RELEASE EVENT' : 'PRACTICE'} · {data.value?.open ? 'Open' : 'Trading closed'}</Copy><Heading>{event.question}</Heading>
-      <Copy small>Closes {new Date(Number(data.value!.manifest.publication.draft.closesAt) * 1000).toLocaleString()}</Copy>
-      <View style={s.row}>{[true, false].map(yes => { const price = data.value?.prices.find(p => p.event === i)?.[yes ? 'yes' : 'no']; return <Button key={String(yes)} disabled={tx.busy} secondary={answers[i] !== yes} title={`${yes ? 'Yes' : 'No'}${price == null ? '' : ` · ${amount(price)} AUSD`}`} onPress={() => select(i, yes)} />; })}</View>
-      {i in answers && <Button secondary title="Remove from prediction" disabled={tx.busy} onPress={() => setAnswers(old => { const next = { ...old }; delete next[i]; return next; })} />}
-    </Card>)}
-    <Copy small>Prices are costs for one share, not probabilities. Test assets only. {data.value?.manifest.publication.mode === 'rehearsal' ? 'Practice outcomes are scripted.' : 'Read the published event rules before trading.'}</Copy>
-    {!!Object.keys(answers).length && <Card><Heading>Your prediction</Heading><Copy>{names}</Copy><Copy small>{label}</Copy>
-      {Object.keys(answers).length > 1 && <Choice value={mode} options={[{ value: 'all', label: 'All happen (AND)' }, { value: 'any', label: 'At least one (OR)' }]} onChange={setMode} />}
-      <Choice value={side} options={[{ value: 'buy', label: 'Buy' }, { value: 'sell', label: 'Sell' }, { value: 'redeem', label: 'Claim payout' }]} onChange={setSide} />
-      <Field label="Shares" value={quantity} onChange={setQuantity} numeric />
-      <Copy small>Trading with MetaMask: {owner ?? 'connect your wallet in Wallet'}</Copy>
-      {!owner && <Button title={wallet.busy ? 'Opening MetaMask...' : 'Connect MetaMask'} disabled={wallet.busy} onPress={() => void externalWallet.connect()} />}
-      <Notice>{wallet.error || error || quote.error}</Notice>
-      {quote.busy && <Copy>Reading a price for this prediction...</Copy>}
-      {quote.value && <><Heading>{quote.value.title}</Heading><Copy>{quote.value.action === 'approve' ? 'Allowance required: ' : side === 'sell' ? 'Minimum received: ' : 'Maximum test AUSD: '}{amount(side === 'sell' ? quote.value.minimumReceivedAtoms : quote.value.amountAtoms)}</Copy>
-        <Copy small>Maximum network fee: {formatUnits(BigInt(quote.value.maximumFeeWei), 18)} test MON. Slippage limit: 0.5%.</Copy>
-        <Copy small>{quote.value.notice}</Copy>
-        {semanticCollision(quote.value) && <Card><Heading>These outcomes cannot win together</Heading>
-          <Copy>Under the configured rules, this purchase pays 0 test AUSD when all events resolve Yes or No. The purchase cost is lost in those outcomes, plus network fees.</Copy>
-          <Copy small>VOID settlement is different. Its maximum payout for this quantity is {amount(quote.value.semanticAssessment!.maximumVoidPayoutAtoms ?? '0')} test AUSD under the existing contract rules. This is not a prediction of a VOID result.</Copy>
-          <Copy small>Automated purchases are blocked. To proceed manually, type the following acknowledgment.</Copy>
-          <Field label={semanticAcknowledgment} value={consent.review === quote.value ? consent.phrase : ''} onChange={phrase => setConsent({ review: quote.value, phrase })} />
-        </Card>}
-        {clock / 1000 >= quote.value.expiresAt ? <Notice>Price expired. Change the quantity or refresh this selection before confirming.</Notice> : <Button title={tx.busy ? 'Checking transaction...' : quote.value.action === 'approve' ? 'Approve AUSD in wallet' : `Confirm ${side === 'redeem' ? 'payout' : side} in wallet`} disabled={quote.busy || tx.busy || !!tx.pending || !semanticReady(quote.value, consent)} onPress={() => void confirm()} />}
-        {quote.value.action === 'approve' && <Copy small>Approval allows the pool to use this amount. It does not buy shares. A fresh purchase confirmation follows.</Copy>}
-      </>}
+export type DirectoryRow = {
+  group: MarketGroup;
+  event: MarketSnapshot['manifest']['publication']['draft']['events'][number];
+  index: number;
+  value: MarketSnapshot;
+};
 
-      <Button title="View portfolio" secondary onPress={onPortfolio} />
-    </Card>}
-    <Button secondary title={rules ? 'Hide market rules' : 'Read market rules'} onPress={() => setRules(!rules)} />
-    {rules && events.map(event => <Card key={event.id}><Heading>{event.question}</Heading><Copy>Yes: {event.yesRule}</Copy><Copy>No: {event.noRule}</Copy><Copy small>Observation ends {new Date(Number(event.observationEndsAt) * 1000).toLocaleString()}</Copy></Card>)}
-  </>;
+export function Markets({
+  onSelectMarket,
+  onFaucet,
+}: {
+  onSelectMarket: (group: MarketGroup, eventIndex: number) => void;
+  onFaucet: () => void;
+}) {
+  const directory = useRequest<MarketGroup[]>();
+  const [data, setData] = useState<Record<string, MarketSnapshot>>({});
+  const [loadingPrices, setLoadingPrices] = useState(false);
+  const [failed, setFailed] = useState<string[]>([]);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<'All' | 'Open' | 'Closed' | 'Settled'>('Open');
+  const [sort, setSort] = useState<'closing' | 'name'>('closing');
+  const [now, setNow] = useState(Date.now());
+  const [revision, setRevision] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // 1. Load directory of all active pools
+  useEffect(() => {
+    void directory.run(signal => loadMarketDirectory(signal), true);
+  }, [revision]);
+
+  // 2. Fetch market snapshots across all pools
+  useEffect(() => {
+    const groups = directory.value;
+    if (!groups || !groups.length) return;
+
+    const c = new AbortController();
+    const queue = [...groups];
+    setLoadingPrices(true);
+    setFailed([]);
+
+    void Promise.all(
+      Array.from({ length: Math.min(2, queue.length) }, async () => {
+        while (queue.length && !c.signal.aborted) {
+          const group = queue.shift()!;
+          try {
+            const value = await pilotRequest<MarketSnapshot>('markets', undefined, group.namespace, c.signal);
+            if (!c.signal.aborted) {
+              setData(prev => ({ ...prev, [group.namespace]: value }));
+            }
+          } catch {
+            if (!c.signal.aborted) {
+              setFailed(prev => [...prev, group.namespace]);
+            }
+          }
+        }
+      })
+    ).finally(() => {
+      if (!c.signal.aborted) setLoadingPrices(false);
+    });
+
+    return () => c.abort();
+  }, [directory.value, revision]);
+
+  const groups = directory.value || [];
+  const allRows: DirectoryRow[] = groups.flatMap(group =>
+    data[group.namespace]
+      ? data[group.namespace].manifest.publication.draft.events.map((event, index) => ({
+          group,
+          event,
+          index,
+          value: data[group.namespace],
+        }))
+      : []
+  );
+
+  const filteredRows = allRows
+    .filter(r => {
+      const status = marketStatus(r.value, now / 1000);
+      const matchesFilter = filter === 'All' || status === filter;
+      const matchesQuery = r.event.question.toLowerCase().includes(query.toLowerCase());
+      return matchesFilter && matchesQuery;
+    })
+    .sort((a, b) => {
+      if (sort === 'name') return a.event.question.localeCompare(b.event.question);
+      return a.group.closesAt - b.group.closesAt;
+    });
+
+  return (
+    <>
+      <Title>What happens next?</Title>
+      <Copy>Pick a question to trade or explore combinations with other related questions.</Copy>
+
+      <Button secondary title="Get test AUSD / MON funds" onPress={onFaucet} />
+
+      <Field label="Find a market" value={query} onChange={setQuery} />
+
+      <Choice
+        value={filter}
+        options={[
+          { value: 'Open', label: 'Open' },
+          { value: 'All', label: 'All' },
+          { value: 'Closed', label: 'Closed' },
+          { value: 'Settled', label: 'Settled' },
+        ]}
+        onChange={setFilter}
+      />
+
+      <Choice
+        value={sort}
+        options={[
+          { value: 'closing', label: 'Closing soon' },
+          { value: 'name', label: 'Question name' },
+        ]}
+        onChange={setSort}
+      />
+
+      <View style={s.row}>
+        <Button
+          secondary
+          title={loadingPrices || directory.busy ? 'Loading prices...' : 'Refresh all markets'}
+          disabled={loadingPrices || directory.busy}
+          onPress={() => setRevision(r => r + 1)}
+        />
+      </View>
+
+      <Notice>{directory.error}</Notice>
+      {failed.length > 0 && (
+        <Notice>Some pools could not be refreshed. Use Refresh to retry.</Notice>
+      )}
+
+      <Copy small>
+        {filteredRows.length} of {allRows.length} questions loaded
+      </Copy>
+
+      {/* Questions list */}
+      {filteredRows.map(({ group, event, index, value }) => {
+        const status = marketStatus(value, now / 1000);
+        const quotes = value.prices.find(p => p.event === index);
+        const closesDate = new Date(group.closesAt * 1000).toLocaleString();
+        return (
+          <Card key={`${group.namespace}:${index}`}>
+            <View style={[s.row, { justifyContent: 'space-between' }]}>
+              <Copy small>{group.label.toUpperCase()}</Copy>
+              <Copy small>{status.toUpperCase()}</Copy>
+            </View>
+
+            <Heading>{event.question}</Heading>
+            <Copy small>Closes {closesDate}</Copy>
+
+            <View style={s.row}>
+              <Button
+                secondary
+                title={`Yes · ${quotes?.yes ? amount(quotes.yes) : '--'} AUSD`}
+                onPress={() => onSelectMarket(group, index)}
+              />
+              <Button
+                secondary
+                title={`No · ${quotes?.no ? amount(quotes.no) : '--'} AUSD`}
+                onPress={() => onSelectMarket(group, index)}
+              />
+              <Button title="Trade & Details" onPress={() => onSelectMarket(group, index)} />
+            </View>
+          </Card>
+        );
+      })}
+
+      {filteredRows.length === 0 && !loadingPrices && !directory.busy && (
+        <Card>
+          <Heading>No markets match your filter</Heading>
+          <Copy>Try clearing search text or switching status to All.</Copy>
+          <Button secondary title="Reset filters" onPress={() => { setQuery(''); setFilter('All'); }} />
+        </Card>
+      )}
+
+      <Copy small>
+        Prices are cost for 1 share in test AUSD including price impact, not probabilities. A winning share pays 1 test AUSD.
+      </Copy>
+    </>
+  );
 }
