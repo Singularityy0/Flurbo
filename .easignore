@@ -47,11 +47,22 @@
 !/apps/web/src/pilot-claims.ts
 !/apps/web/src/portfolio.ts
 !/apps/web/src/kuru.ts
+!/apps/web/src/market-directory.ts
+!/apps/web/src/prefetch.ts
+!/apps/web/src/account-holdings.ts
+!/apps/web/src/portfolio-cache.ts
+!/apps/web/src/portfolio-loader.ts
+!/apps/web/src/portfolio-order.ts
+!/apps/web/src/portfolio-performance.ts
+!/apps/web/src/portfolio-sources.ts
+!/apps/web/src/wallet-links.ts
 !/apps/web/shared
 /apps/web/shared/*
 !/apps/web/shared/pilot.mjs
 !/apps/web/shared/kuru.mjs
 !/apps/web/shared/learning-contracts.mjs
+!/apps/web/shared/claims.mjs
+!/apps/web/shared/holder-challenge.mjs
 !/apps/web/server
 /apps/web/server/*
 !/apps/web/server/network.mjs
@@ -60,6 +71,15 @@
 /apps/dashboard/*
 !/apps/dashboard/claims.mjs
 !/apps/dashboard/wallet.mjs
+!/packages
+/packages/*
+!/packages/sdk
+/packages/sdk/*
+!/packages/sdk/package.json
+!/packages/sdk/src
+/packages/sdk/src/*
+!/packages/sdk/src/semantics.ts
+!/packages/sdk/src/request-scheduler.ts
 
 # These exclusions also apply to any future files within included source folders.
 node_modules/
