@@ -22,6 +22,7 @@ import { loadSemanticConfig, semanticDiagnostics } from './semantic-validation.m
 import { createSettlementStores } from './settlement-persistence.mjs';
 import { starterConfig, starterFunds } from './starter-funds.mjs';
 import { fundingAlerts } from './funding-alerts.mjs';
+import { envioProxy } from './envio-proxy.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -42,6 +43,7 @@ export function productionServer(config, store, staticRoot = dist) {
     // Liveness only. This deliberately does not claim contracts or RPC are ready.
     if (req.url === '/healthz' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ service: 'flurbo', chain_state: 'not_checked', learning_comparison: config.learningReport ? 'ready' : config.learningStatus || 'unavailable', learning_pool: config.learningPool ? 'configured' : 'unavailable', learning_model: config.learningModelStatus || 'unavailable', pilot_pool: config.pilot ? 'configured' : 'disabled', pilot_address: config.pilot?.manifest.pool || null, pilot_rules_hash: config.pilot?.manifest.rulesHash || null, settlement_bot: config.settlementBot ? config.settlementBot.status() : 'disabled', practice_collections: config.practiceCollections ? { active: config.practiceCollections.catalog.active, configured: [...config.practiceCollections.services].map(([namespace, service]) => ({ namespace, pool: service.manifest.pool, rulesHash: service.manifest.rulesHash, closesAt: service.manifest.publication.draft.closesAt })) } : null })); return; }
     if (req.headers.host !== new URL(config.origin).host) { res.writeHead(421); res.end('Use https://flurbo.singu.online'); return; }
+    if (req.url === '/envio') { await envioProxy(req, res, config.envioGraphqlUrl); return; }
     if (req.url === '/.well-known/assetlinks.json' && ['GET', 'HEAD'].includes(req.method)) {
       const body = config.androidAssetLinks;
       res.writeHead(body ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -95,6 +97,7 @@ export function productionServer(config, store, staticRoot = dist) {
 
 async function main() {
   const config = hostedConfig();
+  config.envioGraphqlUrl = process.env.FLURBO_ENVIO_GRAPHQL_URL || null;
   config.applications = configureApplications();
   config.androidAssetLinks = androidAssetLinks();
   // With FLURBO_SUPABASE_KV=true, price history, the trade history and payout indexes and operator metrics live

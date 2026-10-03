@@ -82,6 +82,8 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     throw Error('Unexpected upstream');
   };
   try {
+    assert.equal((await request('/envio', {kind:'trades',pool,limit:5})).status,503);
+    assert.equal((await request('/envio')).status,405);
     assert.equal((await request('/.well-known/assetlinks.json')).status,404);
     config.androidAssetLinks = androidAssetLinks({FLURBO_ANDROID_CERT_SHA256:Array(32).fill('AB').join(':')});
     const association = await request('/.well-known/assetlinks.json',undefined,'','flurbo.singu.online','');
