@@ -18,6 +18,7 @@ import {ApplicationError} from './access-applications.mjs';
 import {settlementPacketHandler,SETTLEMENT_PACKET_PATH} from './settlement-persistence.mjs';
 import {userMetrics} from './user-metrics.mjs';
 import {memberNotices,noticeDelivery} from './member-notices.mjs';
+import {handleAlchemyWebhook, getAlchemyActivities} from './alchemy-webhook.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(), sharedLimits = true,
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
@@ -79,6 +80,21 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
       try{limits.localTake('public-settlement-packets',60);await publicPackets(req,res);}
       catch(error){if(error instanceof CapacityError){res.setHeader('Retry-After',String(error.retryAfter));return send(res,429,{error:'Public evidence request limit reached.'});}return send(res,503,{error:'Public evidence unavailable.'});}
       return;
+    }
+    if (req.url === '/api/alchemy/webhook') {
+      if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' });
+      let text = '';
+      for await (const chunk of req) {
+        text += chunk;
+        if (text.length > 500_000) return send(res, 413, { error: 'Payload too large' });
+      }
+      const signature = req.headers['x-alchemy-signature'] || '';
+      const result = await handleAlchemyWebhook({
+        rawBody: text,
+        signature,
+        signingKey: process.env.FLURBO_ALCHEMY_WEBHOOK_SIGNING_KEY || ''
+      });
+      return send(res, result.status, result.body);
     }
     // Headless agent runtimes authenticate with a bearer credential only. Cookies are never read on these
     // routes, so the browser same-origin rules below do not apply; browsers are refused instead.
@@ -209,6 +225,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         return send(res,result.status,result.body);
       }
       if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? {...TESTNET, faucet:testFaucet || TESTNET.faucet, flurboFaucet:!!testFaucet, starterMon:starter?.amountMon ?? null} : { environment: 'local_fork', chain_id: 10143 });
+      if (req.method === 'GET' && url.pathname === '/api/alchemy/activity') return send(res, 200, getAlchemyActivities());
       if(url.pathname==='/api/market-directory'&&req.method==='GET'&&!url.search){
         const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
