@@ -66,6 +66,16 @@ export const operations = {
       await sendTracked(p, review.tx, () => current() && reviewed());
     });
   },
+  async perpl(review: { tx: Record<string, string>; expires: number; block: { number: string; hash: string } }, kind: WalletKind, reviewed: () => boolean) {
+    await this.run(kind, async (p, current) => {
+      if (Date.now() > review.expires) throw new Error('Perpl review expired. Review again.');
+      const anchor = await p.request({ method: 'eth_getBlockByNumber', params: [review.block.number, false] }) as { hash: string };
+      if (anchor?.hash !== review.block.hash) throw new Error('Chain snapshot changed. Review again.');
+      await p.request({ method: 'eth_call', params: [review.tx, 'latest'] });
+      if (rpcInteger(await p.request({ method: 'eth_estimateGas', params: [review.tx] })) > BigInt(review.tx.gas) || rpcInteger(await p.request({ method: 'eth_gasPrice' })) > BigInt(review.tx.gasPrice)) throw new Error('Network fees changed. Review again.');
+      await sendTracked(p, review.tx, () => current() && reviewed());
+    });
+  },
   async attachHash(hash: string) { if (!state.pending || state.busy || !/^0x[0-9a-f]{64}$/i.test(hash)) throw new Error('Enter the transaction hash from wallet activity.'); save({ ...state.pending, value: { ...state.pending.value, hash: hash.toLowerCase() } } as Pending); await storage.flush(); await this.check(); },
   async check() {
     if (!state.pending || state.busy) return;

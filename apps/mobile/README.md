@@ -30,8 +30,8 @@ Flurbo prediction-pool trades do not substitute for that Perpl requirement.
   H Yes receipt wrapping/unwrapping, Kuru deposits/withdrawals/orders/cancellation,
   learning proposals and research comparison, transaction lookup, and native
   assertion/challenge/vote/finalization/delivery/bond-credit controls.
-- `More` contains experimental/operator features; server and contract roles still
-  apply. No resolver, pricing or collateral behavior was changed.
+- The public `More` menu contains participant tools. Resolution and learning
+  operator screens are excluded from this build; server and contract roles still apply.
 - Shared web validators verify transactions; native adapters await durable pending
   writes before signing. Unknown outcomes keep tracking open. Confirmations check
   exact calldata, sender, nonce and canonical receipts. Read polling is bounded;
@@ -43,7 +43,9 @@ Flurbo prediction-pool trades do not substitute for that Perpl requirement.
 - Wallet address copying and test-funding instructions.
 - Live Perpl testnet market discovery. Validates chain 10143, the pinned exchange,
   collateral token linkage and six-decimal AUSD before displaying prices.
-- Cream, green and lime native screens. Perpl is explicitly a read-only preview.
+- Cream, green and lime native screens. Perpl markets are a read-only preview;
+  account opening is available as a separately reviewed on-chain action, while
+  order entry opens the official Perpl testnet app.
 - Branded launcher icon, Android adaptive/themed icons and a cream splash screen.
   Artwork in `assets/brand` reuses the website's f-and-dot favicon. PNGs are
   bundled into EAS builds; changing native branding requires a new APK.
@@ -52,8 +54,15 @@ Flurbo prediction-pool trades do not substitute for that Perpl requirement.
 
 ## Not complete
 
-This is **not yet the working Agora submission demo**. No Perpl deposit, API key
-enrollment, order placement, cancellation, position close or withdrawal is enabled.
+This is **not yet the working Agora submission demo**. The app can prepare a
+reviewed Perpl exchange-account opening transaction, but a confirmed account
+opening has not been verified on a physical device. Perpl API key enrollment,
+order placement, cancellation, position close and withdrawal are not enabled
+inside Flurbo.
+The 0.3.1 wallet handoff changes need a fresh APK and physical-device retest.
+Opening MetaMask, approving the WalletConnect session, linking the selected
+wallet with a second signature, and completing a confirmed Perpl trade are
+separate checks. A successful code build does not establish those outcomes.
 The native implementation can request Flurbo transactions after explicit review,
 but its end-to-end behavior must be accepted on a physical Android phone. In
 particular, Google Password Manager PRF, the installed APK certificate, native
@@ -89,7 +98,7 @@ dependency versions. No web server entry point, secrets or planning docs are sen
 
 The existing project is `@singuu/flurbo-mobile`, project ID
 `f8b90478-5afc-472b-91ca-67e5437e87e8`. Keep its EAS-managed signing key.
-This update uses app version 0.3.0 and Android versionCode 4.
+This update uses app version 0.3.1 and Android versionCode 6.
 
 First deploy the association endpoint on the website and verify its public JSON.
 Then, in Git Bash from `apps/mobile`:
@@ -126,7 +135,10 @@ Generated `android/`, `ios/`, `.expo/`, `dist*` and `.env*` stay uncommitted.
 10. Test Kuru deposit/order/cancel/withdraw and learning update with authorized wallets,
     checking exact receipts and balances. Do not treat a successful bundle as proof.
 11. Check Perpl market prices and refresh. Confirm they are labelled mark prices,
-   not quotes, and no trading action is implied.
+    not quotes. With disposable test funds, review account opening in MetaMask
+    and verify its receipt if you choose to submit it. Order entry must open
+    the official Perpl testnet app; confirm a fill there before claiming a
+    completed Agora trade.
 
 Only after the separate Perpl execution flow is implemented and a confirmed fill
 is demonstrated on the phone can the Agora trade requirement be marked complete.
@@ -144,7 +156,7 @@ remain Android/iOS only.
 
 ## Current Android candidate
 
-EAS build `317d7f66-161d-4db2-8282-96d3a9f73b4d` contains this native expansion
+EAS build `317d7f66-161d-4db2-8282-96d3a9f73b4d` contains the earlier native expansion
 (0.3.0 / versionCode 4) and finished successfully. Its extracted public signing
 certificate matches the hosted fingerprint. Device acceptance is not complete:
 the first phone test reported `DOMAIN_ASSOCIATION`. The server was missing the

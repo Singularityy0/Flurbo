@@ -15,15 +15,14 @@ import { MarketDetail } from './src/MarketDetail';
 import { CombinationBuilder } from './src/CombinationBuilder';
 import { AccountLedger } from './src/AccountLedger';
 import { WhatIf } from './src/WhatIf';
-import { Settlement } from './src/Settlement';
-import { Kuru, Learning } from './src/Advanced';
+import { Kuru } from './src/Advanced';
 import { Legacy } from './src/Legacy';
 import { balanceTarget } from './src/config';
 import { formatAmount, readBalance, type WalletBalance } from './src/balance';
-import { readPerplContext, type PerplContext } from './src/perpl';
 import { api } from './src/api';
 import { useRequest } from './src/hooks';
 import { AccessView } from './src/AccessView';
+import { PerplTrade } from './src/PerplTrade';
 import { Button, Card, Choice, Copy, External, Field, Heading, Notice, Title, colors, s } from './src/ui';
 
 type Page =
@@ -35,9 +34,7 @@ type Page =
   | 'history'
   | 'wallet'
   | 'tools'
-  | 'settlement'
   | 'kuru'
-  | 'learning'
   | 'legacy'
   | 'withdraw'
   | 'perpl'
@@ -202,29 +199,6 @@ function Pending() {
       <Notice>{error}</Notice>
       <Copy small>Do not repeat this action while its outcome is unknown. Tracking stays saved when you leave this screen.</Copy>
     </Card>
-  );
-}
-
-function Perpl() {
-  const data = useRequest<PerplContext>();
-  useEffect(() => {
-    void data.run(signal => readPerplContext(balanceTarget.token, signal));
-  }, []);
-  return (
-    <>
-      <Title>Perpl.</Title>
-      <Copy>Live testnet perpetual market prices.</Copy>
-      <Notice>{data.error}</Notice>
-      <Button secondary title="Refresh prices" onPress={() => void data.run(signal => readPerplContext(balanceTarget.token, signal))} />
-      {data.value?.markets.map(m => (
-        <Card key={m.id}>
-          <Heading>{m.name}</Heading>
-          <Copy>{(m.mark / 10 ** m.decimals).toLocaleString()} AUSD</Copy>
-          <Copy small>{m.open ? 'Open' : 'Closed'}</Copy>
-        </Card>
-      ))}
-      <Notice>Perpl trading is not enabled in Flurbo yet. It requires Perpl to approve the integration origin. This screen only reads prices.</Notice>
-    </>
   );
 }
 
@@ -532,13 +506,11 @@ function Main() {
               )}
 
               {page === 'wallet' && <Wallet kind={kind} onWithdraw={() => setPage('withdraw')} />}
-              {page === 'settlement' && <Settlement namespace={activeNamespace} kind={kind} />}
               {page === 'kuru' && <Kuru kind={kind} />}
-              {page === 'learning' && <Learning />}
               {(page === 'legacy' || page === 'withdraw') && (
                 <Legacy key={page} kind={kind} initialAction={page === 'withdraw' ? 'withdraw' : 'buy'} />
               )}
-              {page === 'perpl' && <Perpl />}
+              {page === 'perpl' && <PerplTrade kind={kind} accessApproved={accessApproved} />}
               {page === 'transaction' && <TransactionLookup />}
 
               {page === 'tools' && (
@@ -546,12 +518,10 @@ function Main() {
                   <Title>Explore more.</Title>
                   {(
                     [
-                      ['settlement', 'Resolution and evidence'],
                       ['kuru', 'Kuru receipt market'],
                       ['legacy', 'Earlier pools and receipts'],
-                      ['learning', 'Learning experiment'],
                       ['transaction', 'Check a transaction'],
-                      ['perpl', 'Perpl prices'],
+                      ['perpl', 'Perpl perpetual trading'],
                       ['about', 'About Flurbo'],
                     ] as [Page, string][]
                   ).map(([p, title]) => (

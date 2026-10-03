@@ -3,7 +3,7 @@ import SignClient from '@walletconnect/sign-client';
 import { Linking } from 'react-native';
 import { api } from './api';
 import { auth, storage } from './runtime';
-import { CHAIN, REOWN_PROJECT_ID, sessionAddress, checkWalletTransaction } from './wallet-policy';
+import { CHAIN, REOWN_PROJECT_ID, sessionAddress, checkWalletTransaction, walletSessionChanged } from './wallet-policy';
 import { type Provider, type PilotNamespace } from '../../web/src/pilot';
 
 type Snapshot = { address: string | null; busy: boolean; error: string | null; revision: number };
@@ -32,8 +32,11 @@ export const externalWallet = {
       client.on('session_update', restore);
       client.on('session_delete', restore);
       client.on('session_expire', restore);
-      client.on('session_event', ({ topic: changed }) => {
-        if (changed === topic) { topic = undefined; update({ address: null, error: 'Wallet account or network changed. Reconnect before trading.' }); }
+      client.on('session_event', ({ topic: changed, params }) => {
+        if (changed === topic && snapshot.address && walletSessionChanged(params.event, snapshot.address)) {
+          topic = undefined;
+          update({ address: null, error: 'Wallet account or network changed. Reconnect before trading.' });
+        }
       });
       restore();
     })().catch(() => { initialization = undefined; update({ error: 'MetaMask connection is unavailable. Try again shortly.' }); });
@@ -43,7 +46,9 @@ export const externalWallet = {
     if (!auth.getSnapshot().address) throw new Error('Sign in with Mera first.');
     if (snapshot.busy) return;
     update({ busy: true, error: null });
+    let stage = 'starting the connection';
     try {
+      stage = 'initializing WalletConnect';
       await this.initialize();
       if (!client) throw new Error('Wallet connection is unavailable.');
       const login = auth.getSnapshot().address;
@@ -52,19 +57,26 @@ export const externalWallet = {
       let session;
       if (topic) { try { const s = client.session.get(topic); sessionAddress(s); session = s; } catch { /* stale, re-pair */ } }
       if (!session) {
+        stage = 'creating the MetaMask request';
         const { uri, approval } = await client.connect({ requiredNamespaces: {
           eip155: { chains: [CHAIN], methods: ['eth_sendTransaction','personal_sign'], events: ['chainChanged', 'accountsChanged'] },
         } });
+        stage = 'waiting for MetaMask approval';
         const approved = approval();
         void approved.catch(() => undefined);
-        if (uri) await Linking.openURL(`https://metamask.app.link/wc?uri=${encodeURIComponent(uri)}`);
+        if (!uri) throw new Error('WalletConnect did not provide a pairing link.');
+        // Android can reject the app-link promise even after MetaMask opens. The
+        // WalletConnect approval, rather than Linking's return value, decides pairing.
+        void Linking.openURL(`https://metamask.app.link/wc?uri=${encodeURIComponent(uri)}`)
+          .catch(() => { if (!snapshot.address) update({ error: 'Open MetaMask to approve the pending connection.' }); });
         session = await approved;
       }
+      stage = 'checking the approved account';
       if (auth.getSnapshot().address !== login) { await client.disconnect({ topic: session.topic, reason: { code: 6000, message: 'Flurbo login changed' } }); return; }
       const address = sessionAddress(session);
       // Commit the connection before attempting the linking signature so the
       // user sees their wallet even when the second MetaMask handoff drops.
-      topic = session.topic; update({ address });
+      topic = session.topic; update({ address, error: null });
       try {
         await linkTradingWallet({request:async input=>{
           if(input.method==='eth_accounts')return [sessionAddress(client!.session.get(session.topic))];
@@ -72,10 +84,27 @@ export const externalWallet = {
           const response=client!.request({topic:session.topic,chainId:CHAIN,request:{method:input.method,params:input.params??[]}});
           void response.catch(()=>undefined);void Linking.openURL('https://metamask.app.link/').catch(()=>undefined);return response;
         }},login!,address,()=>auth.getSnapshot().address===login);
+        update({ error: null });
       } catch {
         update({ error: 'Connected, but wallet linking needs one more signature. Tap Connect MetaMask to finish.' });
       }
-    } catch (e: any) { topic = undefined; update({ address: null, error: `MetaMask connection did not finish. Open MetaMask, select Monad testnet, then reconnect.${e?.message ? ` (${e.message})` : ''}` }); }
+    } catch (e: any) {
+      const detail = e instanceof Error && e.message ? ` ${e.message}` : '';
+      // A failed handoff must not erase a session that MetaMask already approved.
+      let restored = false;
+      if (client && auth.getSnapshot().address) {
+        for (const candidate of client.session.getAll().reverse()) {
+          try {
+            const address = sessionAddress(candidate);
+            topic = candidate.topic;
+            update({ address, error: `MetaMask is connected, but ${stage} needs another try.${detail}` });
+            restored = true;
+            break;
+          } catch { /* Ignore stale or non-MetaMask sessions. */ }
+        }
+      }
+      if (!restored) { topic = undefined; update({ address: null, error: `MetaMask connection failed while ${stage}.${detail}` }); }
+    }
     finally { update({ busy: false }); }
   },
   async disconnect() {
