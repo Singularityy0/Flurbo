@@ -39,6 +39,12 @@
 .holding-action { text-align: right; white-space: nowrap; }
 .portfolio-tag { display: inline-flex; margin-bottom: 4px; padding: 1px 6px; border-radius: var(--r-chip); background: var(--surface-sunken); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-2); }
 .portfolio-activity td .text-link { font-size: 13px; }
+.portfolio-indexed-summary { padding: var(--s-4); margin: var(--s-4) 0; border: 1px solid var(--rule); border-radius: 12px; }
+.portfolio-indexed-summary p { color: var(--ink-2); }
+.portfolio-indexed-totals { display: flex; flex-wrap: wrap; gap: var(--s-4); margin: var(--s-4) 0; }
+.portfolio-indexed-totals div { min-width: 170px; }
+.portfolio-indexed-totals dt { color: var(--ink-2); font-size: 13px; }
+.portfolio-indexed-totals dd { margin: 4px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 .portfolio-activity details > summary { min-height: 28px; font-size: 12px; font-weight: 500; color: var(--ink-3); }
 .portfolio-pagination { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-top: var(--s-4); color: var(--ink-3); font-size: 13px; }
 .portfolio-empty { padding: var(--s-6) 0; }

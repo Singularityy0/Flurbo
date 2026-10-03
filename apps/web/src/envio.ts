@@ -14,6 +14,7 @@ export type EnvioTrade = {
 };
 
 export type EnvioTraderPosition = {
+  pool: string;
   trader: string;
   totalCostAtoms: string;
   totalProceedsAtoms: string;
@@ -21,6 +22,16 @@ export type EnvioTraderPosition = {
   netCashflowAtoms: string;
   tradeCount: number;
 };
+
+export async function fetchPortfolioPositions(
+  pools: string[], traders: string[], endpoint = DEFAULT_ENVIO_ENDPOINT, signal?: AbortSignal
+): Promise<EnvioTraderPosition[]> {
+  const data = await queryIndexer<{ TraderPosition: EnvioTraderPosition[] }>(
+    { kind: 'portfolio', pools, traders }, endpoint, signal
+  );
+  if (!Array.isArray(data.TraderPosition)) throw new Error('Indexed activity is unavailable.');
+  return data.TraderPosition;
+}
 
 async function queryIndexer<T>(input: object, endpoint: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(endpoint, {

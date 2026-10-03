@@ -12,6 +12,12 @@ const POSITION = `query GetPosition($id: String!) {
   }
 }`;
 
+const PORTFOLIO = `query GetPortfolioPositions($traders: [String!]!, $pools: [String!]!) {
+  TraderPosition(where: { trader: { _in: $traders }, pool: { _in: $pools } }, limit: 200) {
+    pool trader totalCostAtoms totalProceedsAtoms totalRedeemedAtoms netCashflowAtoms tradeCount
+  }
+}`;
+
 const address = value => typeof value === 'string' && /^0x[0-9a-f]{40}$/i.test(value);
 const reply = (res, status, body) => {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -33,7 +39,7 @@ export async function envioProxy(req, res, endpoint, fetcher = fetch) {
     let raw = '';
     for await (const chunk of req) {
       raw += chunk.toString();
-      if (raw.length > 1024) return reply(res, 413, { error: 'Request too large' });
+      if (raw.length > 2048) return reply(res, 413, { error: 'Request too large' });
     }
     input = JSON.parse(raw);
   } catch { return reply(res, 400, { error: 'Invalid indexer request' }); }
@@ -48,6 +54,13 @@ export async function envioProxy(req, res, endpoint, fetcher = fetch) {
     && address(input.pool) && address(input.trader)) {
     query = POSITION;
     variables = { id: `${input.trader.toLowerCase()}-${input.pool.toLowerCase()}` };
+  } else if (input?.kind === 'portfolio' && Object.keys(input).every(key => ['kind', 'pools', 'traders'].includes(key))
+    && Array.isArray(input.pools) && input.pools.length >= 1 && input.pools.length <= 25
+    && Array.isArray(input.traders) && input.traders.length >= 1 && input.traders.length <= 8
+    && input.pools.every(address) && input.traders.every(address)) {
+    query = PORTFOLIO;
+    variables = { pools: [...new Set(input.pools.map(value => value.toLowerCase()))],
+      traders: [...new Set(input.traders.map(value => value.toLowerCase()))] };
   } else return reply(res, 400, { error: 'Invalid indexer request' });
 
   try {

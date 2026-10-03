@@ -51,11 +51,26 @@ test('proxy builds a fixed trader-position ID', async () => {
   assert.match(forwarded.query, /TraderPosition_by_pk/);
 });
 
+test('proxy batches bounded portfolio positions with a server-owned query', async () => {
+  const res = response();
+  let forwarded: any;
+  await envioProxy(request({ kind: 'portfolio', pools: [POOL, POOL], traders: [TRADER] }), res, ENDPOINT,
+    async (_url: URL, options: any) => {
+      forwarded = JSON.parse(options.body);
+      return new Response(JSON.stringify({ data: { TraderPosition: [] } }), { status: 200 });
+    });
+  assert.equal(res.result.status, 200);
+  assert.match(forwarded.query, /TraderPosition\(where:/);
+  assert.deepEqual(forwarded.variables, { pools: [POOL], traders: [TRADER] });
+});
+
 test('proxy refuses arbitrary queries, out-of-range limits, and unsafe endpoints', async () => {
   for (const body of [
     { kind: 'trades', pool: POOL, limit: 21 },
     { kind: 'trades', pool: POOL, limit: 5, query: 'mutation Delete { x }' },
-    { kind: 'position', pool: POOL, trader: 'not-an-address' }
+    { kind: 'position', pool: POOL, trader: 'not-an-address' },
+    { kind: 'portfolio', pools: [POOL], traders: [TRADER], query: 'mutation Delete { x }' },
+    { kind: 'portfolio', pools: Array(26).fill(POOL), traders: [TRADER] }
   ]) {
     const res = response();
     await envioProxy(request(body), res, ENDPOINT, async () => { throw Error('Should not fetch'); });
