@@ -5,6 +5,42 @@ letting users see how the market prices relationships between events.
 The current consumer demo uses practice markets on Monad testnet and test AUSD.
 What-if is read-only; tradable conditional positions remain research.
 
+## Monad Metropolis hackathon
+
+Live site: https://flurbo.singu.online. Monad testnet and test AUSD only; Monad mainnet is read only, for Chainlink price feeds. Proof rows marked pending are filled in from real runs; nothing pending is claimed.
+
+**Kuru: new assets and markets, and consumer trading app.**
+Event-outcome receipts for correlated crypto questions trade on a Kuru order book, with a documented issuance, backing, settlement and redemption path.
+Code: [`DeployPilotKuru.s.sol`](contracts/script/DeployPilotKuru.s.sol), [`kuru-collection.mjs`](apps/web/server/kuru-collection.mjs), [`CollectionKuru.tsx`](apps/web/src/pages/CollectionKuru.tsx); write-up: [KURU_SUBMISSION.md](docs/KURU_SUBMISSION.md).
+Proof: live ETH Yes book `0xe92649cdD20425239695221191515E1E51631d2A` on Crypto weekend; lifecycle transactions for the new pools are pending.
+
+**Chainlink CRE.**
+A CRE workflow reads the Chainlink feeds on Monad mainnet at a pool's committed observation block, applies its thresholds exactly, and reports whether it agrees with the pool's on-chain result.
+Code: [`price-feed.ts`](workflows/cre/src/price-feed.ts), [`price-feed-main.ts`](workflows/cre/src/price-feed-main.ts); write-up: [CHAINLINK_CRE_INTEGRATION.md](docs/CHAINLINK_CRE_INTEGRATION.md).
+Proof: `cre workflow simulate` output for the settled Crypto weekend pool, yes mask 8 and matching on-chain, in [crypto-weekend-simulation.txt](docs/cre-evidence/crypto-weekend-simulation.txt); simulated, not deployed.
+
+**MetaMask Agent Wallet plugin.**
+Five `mm flurbo` commands (markets, quote, holdings, trade, redeem); every transaction goes through the Agent Wallet and the plugin holds no key.
+Code: [`packages/metamask-agent-plugin`](packages/metamask-agent-plugin), skill: [`SKILL.md`](skills/flurbo-trading/SKILL.md).
+Proof: unit-tested against the real SDK's request shape; a live `mm flurbo trade` transaction hash is pending.
+
+**Envio.**
+A HyperIndex indexer for pool trades, redemptions, receipt wrapping, Kuru fills and resolution, consumed by What If, Portfolio and the Kuru page.
+Code: [`packages/envio-indexer`](packages/envio-indexer) (config, schema, handlers); write-up: [ENVIO_INTEGRATION.md](docs/ENVIO_INTEGRATION.md).
+Proof: the deployed Envio Cloud endpoint, queried through the site's `/envio` route.
+
+**Alchemy.**
+Alchemy's Monad testnet RPC serves site reads, the settlement bot and the chain readers.
+Code: [`network.mjs`](apps/web/server/network.mjs); write-up: [ALCHEMY_INTEGRATION.md](docs/ALCHEMY_INTEGRATION.md).
+Proof: dashboard request counts are pending the switch.
+
+**Kimi.**
+Kimi supplies a labelled joint-probability hypothesis on Thesis and What If, and can drive the paper-trading agent through the OpenAI-compatible provider.
+Code: [`kimi-forecaster.mjs`](apps/web/server/kimi-forecaster.mjs), [`kimi-agent.json`](packages/sdk/examples/kimi-agent.json); write-up: [KIMI_INTEGRATION.md](docs/KIMI_INTEGRATION.md).
+Proof: a real Kimi response and the article are pending an API key.
+
+**Limitations.** Testnet only; the test AUSD has no value. Settlement uses an operator-run bonded resolver with a single-operator reviewer panel, not independent reviewers. The Chainlink CRE workflow observes and compares; it does not settle. Kuru liquidity is seeded by the operator, and Kuru markets cannot be paused by Flurbo, so the operator cancels its orders at close. Activity totals include team testing. Kimi output is a hypothesis, never a result. No real-money launch is planned without professional legal review.
+
 ## Product direction
 
 The product source is the user's `flurboidea.md`, currently located at
