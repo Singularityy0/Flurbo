@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { encodeAbiParameters, encodeEventTopics, encodeFunctionData, encodeFunctionResult, parseAbiParameters } from 'viem';
-import { kuruAbi, marginAbi, tokenAbi, kuruCall } from '../shared/kuru.mjs';
+import { kuruAbi, marginAbi, tokenAbi, conversionAbi, kuruCall } from '../shared/kuru.mjs';
 import { atoms, transaction, prepare, submit, matchReceipt, readPending, pendingKey, type Action, type Review, type Pending } from '../src/kuru.ts';
 
 const addr = (n: number) => '0x' + n.toString(16).padStart(40, '0');
@@ -48,6 +48,31 @@ test('all hosted Kuru actions use exact canonical calldata, limited assets and f
   assert.equal(call(marginAbi, 'withdraw', [1n, addr(7)], contracts.margin), null);
   assert.equal(call(tokenAbi, 'approve', [addr(7), 1n], contracts.cash), null);
   assert.equal(call(tokenAbi, 'approve', [contracts.margin, 2n ** 256n - 1n], contracts.cash), null);
+});
+
+test('only the listed YES claim can be wrapped or unwrapped',()=>{
+  const pair={...contracts,eventIndex:2};
+  for(const kind of ['wrap','unwrap'] as const){
+    const tx=transaction({...action,kind},owner,pair);
+    assert.equal(tx.to,contracts.pool);
+    assert.ok(kuruCall({...tx,account:owner,contracts:pair}));
+    assert.equal(kuruCall({...tx,account:owner,contracts}),null);
+  }
+  for(const args of [[1,true,1000000n],[2,false,1000000n],[2,true,0n]] as const){
+    const data=encodeFunctionData({abi:conversionAbi,functionName:'wrapBase',args});
+    assert.equal(kuruCall({to:pair.pool,data,account:owner,contracts:pair}),null);
+  }
+  const conversion={...action,kind:'wrap' as const};
+  const txData=transaction(conversion,owner,pair);
+  const review:Review={version:1,owner,login:owner,contracts:pair,action:conversion,to:txData.to,data:txData.data,
+    expires:Date.now()+300000,gas:'0x249f0',gasPrice:'0x77359400',netOut:null};
+  const pending={review,nonce:'0x79',hash,started:Date.now()};
+  const tx={hash,from:owner,to:review.to,input:review.data,value:'0x0',nonce:'0x79',chainId:'0x279f',blockHash,blockNumber:'0x64'};
+  const log={address:pair.pool,topics:encodeEventTopics({abi:conversionAbi,eventName:'BaseWrapped',args:{owner:owner as any,scope:4,mask:2}}),
+    data:encodeAbiParameters(parseAbiParameters('uint128'),[1000000n])};
+  const receipt={...tx,transactionHash:hash,status:'0x1',logs:[log]};
+  assert.equal(matchReceipt(pending,tx,receipt,{hash:blockHash},{number:'0x65'}),'confirmed');
+  assert.throws(()=>matchReceipt(pending,tx,{...receipt,logs:[{...log,address:pair.market}]},{hash:blockHash},{number:'0x65'}));
 });
 
 test('review never submits; confirmation saves tracking first and preserves numeric nonce', () => withReads(async () => {

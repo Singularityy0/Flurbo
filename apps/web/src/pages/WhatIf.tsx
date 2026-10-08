@@ -31,10 +31,22 @@ export default function WhatIf({manifest,namespace}:{manifest:PilotState['manife
   const events=manifest.publication.draft.events;
   const [a,setA]=useState(0),[b,setB]=useState(1),[result,setResult]=useState<Analysis|null>(null);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[clock,setClock]=useState(Date.now());
+  const [kimiForecast,setKimiForecast]=useState<any>(null),[kimiLoading,setKimiLoading]=useState(false);
   const request=useRef<AbortController|null>(null);
-  useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),1000);return()=>{clearInterval(timer);request.current?.abort();};},[]);
-  function cancel(){request.current?.abort();request.current=null;setBusy(false);setResult(null);setError('');}
-  function select(which:'a'|'b',value:number){cancel();if(which==='a'){setA(value);if(value===b)setB(a);}else{setB(value);if(value===a)setA(b);}}
+  const kimiRequest=useRef<AbortController|null>(null);
+  useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),1000);return()=>{clearInterval(timer);request.current?.abort();kimiRequest.current?.abort();};},[]);
+  function cancel(){request.current?.abort();kimiRequest.current?.abort();request.current=null;kimiRequest.current=null;setBusy(false);setKimiLoading(false);setResult(null);setError('');setKimiForecast(null);}
+  function select(which:'a'|'b',value:number){cancel();setKimiForecast(null);if(which==='a'){setA(value);if(value===b)setB(a);}else{setB(value);if(value===a)setA(b);}}
+  async function loadKimi(){
+    kimiRequest.current?.abort();const controller=new AbortController();kimiRequest.current=controller;
+    setKimiLoading(true);
+    try{
+      // The pool reader treats a as target and b as condition. Kimi treats its first event as condition.
+      const data=await pilotRequest<any>('kimi-forecast',{a:b,b:a},namespace,controller.signal);
+      if(!controller.signal.aborted){if(data?.source==='moonshot-api'&&data?.forecast)setKimiForecast(data);else setError('Kimi returned an invalid forecast.');}
+    }catch(e){if(!controller.signal.aborted)setError(e instanceof Error?`Kimi forecast failed: ${e.message}`:'Kimi forecast failed. Try again.');}
+    finally{if(kimiRequest.current===controller){kimiRequest.current=null;setKimiLoading(false);}}
+  }
   async function compare(){
     cancel();const controller=new AbortController();request.current=controller;setBusy(true);
     try{
@@ -58,7 +70,11 @@ export default function WhatIf({manifest,namespace}:{manifest:PilotState['manife
       <Select label="Question to explore" value={String(a)} options={events.map((event,i)=>({value:String(i),label:marketQuestion(event),text:marketQuestion(event)}))} onChange={value=>select('a',Number(value))}/>
       <Select label="Suppose this question resolves" value={String(b)} options={events.map((event,i)=>({value:String(i),label:marketQuestion(event),text:marketQuestion(event)}))} onChange={value=>select('b',Number(value))}/>
     </div>
-    <div className="what-if-actions"><button className="btn btn-primary" disabled={busy} onClick={()=>void compare()}>{busy?'Reading the shared pool...':result?'Refresh comparison':'Compare these questions'}</button>{busy&&<button className="btn btn-secondary" onClick={cancel}>Cancel</button>}</div>{busy&&<span className="progress-line" aria-hidden="true"/>}
+    <div className="what-if-actions">
+      <button className="btn btn-primary" disabled={busy} onClick={()=>void compare()}>{busy?'Reading the shared pool...':result?'Refresh comparison':'Compare these questions'}</button>
+      <button className="btn btn-secondary" disabled={kimiLoading} onClick={()=>void loadKimi()}>{kimiLoading?'Analyzing with Kimi AI...':'Kimi Joint Forecast'}</button>
+      {busy&&<button className="btn btn-secondary" onClick={cancel}>Cancel</button>}
+    </div>{busy&&<span className="progress-line" aria-hidden="true"/>}
     {busy&&<p role="status">Reading one market snapshot. You can change either question while this loads.</p>}
     {error&&<p role="alert" className="state-inline error">{error}</p>}
     {result&&!fresh&&<p role="status">This snapshot is over a minute old or its time could not be verified. Refresh the comparison to see current values.</p>}
@@ -71,6 +87,17 @@ export default function WhatIf({manifest,namespace}:{manifest:PilotState['manife
       <div className="what-if-comparison"><h3>Both Yes, together</h3><p>Compare the shared market with a baseline that assumes these answers are independent.</p>
         {(['joint','independent'] as Metric[]).map((key,i)=><div className="what-if-bar-row" key={key}><span>{i?'If independent':'Shared market'}</span><strong>{value(key)}</strong><div className={'what-if-bar '+(i?'baseline':'')} aria-hidden="true"><span style={{transform:`scaleX(${(result.values[key]??0)/1000})`}}/></div>{missing(key)}</div>)}
         <p className="what-if-gap">Difference: <strong>{result.values.difference!==null&&result.values.difference>0?'+':''}{value('difference')}</strong> <span>(percentage points)</span>{missing('difference')}</p>
+      </div>
+      {kimiForecast&&<div className="what-if-comparison" style={{marginTop:'16px',borderLeft:'3px solid var(--lime)',paddingLeft:'16px'}}>
+        <h3>Kimi model hypothesis</h3>
+        <p className="market-caption">{kimiForecast.rationale}</p>
+        <div className="what-if-bar-row"><span>Assumed question: Yes</span><strong>{kimiForecast.forecast.pA}%</strong></div>
+        <div className="what-if-bar-row"><span>Target Yes, if assumed Yes</span><strong>{kimiForecast.forecast.pBgivenYes}%</strong></div>
+        <div className="what-if-bar-row"><span>Target Yes, if assumed No</span><strong>{kimiForecast.forecast.pBgivenNo}%</strong></div>
+        <p className="what-if-gap"><small>Derived joint: {(kimiForecast.frechetBounds.actualJoint * 100).toFixed(1)}% | Frechet valid: {kimiForecast.frechetBounds.valid ? 'Yes' : 'No'}</small></p>
+      </div>}
+      <div className="what-if-comparison" style={{marginTop:'12px',background:'var(--surface-sunken)',padding:'8px 12px',borderRadius:'8px'}}>
+        <p className="market-caption" style={{margin:0}}>This comparison reads the Monad pool snapshot and its committed rules hash. AI forecasts, when available, are separate hypotheses.</p>
       </div>
       {result.sensitivity&&<details className="what-if-sensitivity disclosure"><summary>Price sensitivity: what could one trade change?</summary>
         <p>Compare two separate hypothetical purchases of one combined share. Each starts from the snapshot above. No trade is placed.</p>

@@ -77,7 +77,7 @@ export function productionServer(config, store, staticRoot = dist) {
         }
         // Serve agent deep links on direct visits too; API session and invite gates still protect data.
         const agentPage = /^\/agents(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$/.test(pathname);
-        const page = agentPage || /^\/markets\/(?:pilot|practice-[0-9a-f]{40})\/[0-3](?:\/thesis)?$/.test(pathname) || ['/', '/docs', '/markets', '/fund', '/access', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/evidence', '/metrics'].includes(pathname);
+        const page = agentPage || /^\/markets\/(?:pilot|practice-[0-9a-f]{40})\/[0-3](?:\/(?:thesis|kuru))?$/.test(pathname) || ['/', '/docs', '/markets', '/fund', '/access', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/evidence', '/metrics'].includes(pathname);
         const labPage=['/privacy-lab','/privacy-lab/'].includes(pathname);
         const labAsset=/^\/privacy-lab\/(?:assets\/[a-zA-Z0-9_.-]+|semaphore-8\.(?:wasm|zkey))$/.test(pathname);
         if(labPage||labAsset)res.setHeader('Content-Security-Policy',security['Content-Security-Policy'].replace("script-src 'self'","script-src 'self' 'wasm-unsafe-eval'")+"; worker-src 'self' blob:");

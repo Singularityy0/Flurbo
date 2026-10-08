@@ -18,6 +18,12 @@ const PORTFOLIO = `query GetPortfolioPositions($traders: [String!]!, $pools: [St
   }
 }`;
 
+const KURU_FILLS = `query GetKuruFills($market: String!, $limit: Int!) {
+  KuruFill(where: { market: { _eq: $market } }, order_by: { blockNumber: desc }, limit: $limit) {
+    id isBuy price sizeAtoms blockNumber timestamp txHash
+  }
+}`;
+
 const address = value => typeof value === 'string' && /^0x[0-9a-f]{40}$/i.test(value);
 const reply = (res, status, body) => {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -50,6 +56,10 @@ export async function envioProxy(req, res, endpoint, fetcher = fetch) {
     && input.limit >= 1 && input.limit <= 20) {
     query = TRADES;
     variables = { pool: input.pool.toLowerCase(), limit: input.limit };
+  } else if (input?.kind === 'kuru-fills' && Object.keys(input).every(key => ['kind', 'market', 'limit'].includes(key))
+    && address(input.market) && Number.isInteger(input.limit) && input.limit >= 1 && input.limit <= 20) {
+    query = KURU_FILLS;
+    variables = { market: input.market.toLowerCase(), limit: input.limit };
   } else if (input?.kind === 'position' && Object.keys(input).every(key => ['kind', 'pool', 'trader'].includes(key))
     && address(input.pool) && address(input.trader)) {
     query = POSITION;

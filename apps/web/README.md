@@ -68,6 +68,22 @@ port to be free. The existing trading dashboard (18765) and learning lab (18766)
 keep their servers. The consumer workspace reads the existing dashboard API through
 its loopback-only middleware; keep the local Anvil and block helper running.
 
+The default local API has no published market collections, so `/markets` is empty.
+To read the active collections in `config/collections.json` from Monad testnet,
+restart the dev server in PowerShell with:
+
+```powershell
+$env:FLURBO_COLLECTIONS_SOURCE = 'registry'
+# Optional: use a private Monad testnet RPC URL from Alchemy.
+# $env:FLURBO_ALCHEMY_TESTNET_RPC_URL = 'https://monad-testnet.g.alchemy.com/v2/YOUR_KEY'
+npm run dev
+```
+
+With no private RPC URL, the server uses the public Monad testnet endpoint. The
+directory and market pages verify deployed contracts and current state through that
+RPC; an unavailable RPC causes a market read error rather than sample prices.
+Unset `FLURBO_COLLECTIONS_SOURCE` to return to the local fork workflow.
+
 ```sh
 npm run build
 npm run preview

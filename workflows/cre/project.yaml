@@ -7,3 +7,22 @@ pilot:
   rpcs:
     - chain-name: monad-testnet
       url: https://testnet-rpc.monad.xyz
+# Price-feed workflows read Chainlink feeds on Monad mainnet and the pool on Monad testnet.
+crypto-weekend:
+  rpcs:
+    - chain-name: monad-testnet
+      url: https://testnet-rpc.monad.xyz
+    - chain-name: monad-mainnet
+      url: https://rpc.monad.xyz/
+crypto-saturday:
+  rpcs:
+    - chain-name: monad-testnet
+      url: https://testnet-rpc.monad.xyz
+    - chain-name: monad-mainnet
+      url: https://rpc.monad.xyz/
+crypto-judging:
+  rpcs:
+    - chain-name: monad-testnet
+      url: https://testnet-rpc.monad.xyz
+    - chain-name: monad-mainnet
+      url: https://rpc.monad.xyz/

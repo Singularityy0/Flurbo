@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flurbo architecture</title>
+<style>
+:root{--bg:#f6f5ef;--panel:#ffffff;--ink:#16241c;--muted:#5b6b61;--line:#d9ddd3;--accent:#1f6b4a;--accent-soft:#e3efe8;--warn:#8a5a00;--warn-soft:#fbf1dc;--bad:#9b2c2c;--bad-soft:#f8e3e3;--code:#eef0ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111714;--panel:#18211c;--ink:#e6ece8;--muted:#9fb0a5;--line:#2c3a32;--accent:#6fcf9f;--accent-soft:#1e3328;--warn:#e7b85a;--warn-soft:#33290f;--bad:#f09a9a;--bad-soft:#3a1d1d;--code:#202b25}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+nav{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:14px;font-size:14px;z-index:2}
+nav a{color:var(--accent);text-decoration:none}nav a[aria-current]{font-weight:700;color:var(--ink)}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:30px;margin:8px 0 4px}h2{font-size:22px;margin:40px 0 8px;border-top:1px solid var(--line);padding-top:24px}h3{font-size:17px;margin:24px 0 6px}
+p.lead{color:var(--muted);margin-top:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.note{background:var(--accent-soft);border-left:4px solid var(--accent);padding:10px 14px;border-radius:6px;margin:12px 0}
+.warn{background:var(--warn-soft);border-left:4px solid var(--warn);padding:10px 14px;border-radius:6px;margin:12px 0}
+.bad{background:var(--bad-soft);border-left:4px solid var(--bad);padding:10px 14px;border-radius:6px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:14px;background:var(--panel)}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--code)}
+.scroll{overflow-x:auto}
+code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;background:var(--code);border-radius:4px}
+code{padding:1px 4px;word-break:break-word}pre{padding:12px;overflow-x:auto;white-space:pre}
+.tag{display:inline-block;font-size:12px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+.secret{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}
+.public{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.private{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+svg{max-width:100%;height:auto}
+svg .box{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+svg .hot{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
+svg text{fill:var(--ink);font:13px system-ui,sans-serif}
+svg .small{font-size:11px;fill:var(--muted)}
+svg .arrow{stroke:var(--muted);stroke-width:1.4;fill:none;marker-end:url(#a)}
+</style>
+</head>
+<body>
+<nav>
+<a href="architecture.html" aria-current="page">Architecture and environment</a>
+<a href="wallets-and-markets.html">Wallets and listing markets</a>
+<a href="settlement.html">Settlement</a>
+<a href="gaps-and-limitations.html">Gaps and limitations</a>
+</nav>
+<main>
+<h1>How Flurbo runs</h1>
+<p class="lead">Written 1 October 2026 from the code on <code>main</code> (merge of PR #31) and the live <code>/healthz</code>. Monad testnet only, test assets only.</p>
+
+<div class="note">Flurbo is a prediction market where related yes or no questions share one pool. Each pool prices its 2 to 4 questions together with one logarithmic market scoring rule (LMSR), so people can buy single answers or combinations (AND, OR, exactly one, at least two). Answers settle from official public sources through a bonded, challengeable proposal on-chain.</div>
+
+<h2>The parts at a glance</h2>
+<svg viewBox="0 0 1060 560" role="img" aria-label="Architecture diagram">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#7d8b82"/></marker></defs>
+<rect class="box" x="20" y="30" width="200" height="90" rx="8"/><text x="36" y="58">Members (browser)</text><text class="small" x="36" y="80">Passkey account (Mera)</text><text class="small" x="36" y="98">MetaMask for trades</text>
+<rect class="box" x="20" y="170" width="200" height="90" rx="8"/><text x="36" y="198">Member agents</text><text class="small" x="36" y="220">SDKs: TS, Python, Rust, C++</text><text class="small" x="36" y="238">Own wallet, agent token</text>
+<rect class="box" x="20" y="330" width="200" height="110" rx="8"/><text x="36" y="358">Operator machine</text><text class="small" x="36" y="380">Foundry: deploy pools</text><text class="small" x="36" y="398">Bun: batch prepare, verify</text><text class="small" x="36" y="416">git: config/collections.json</text>
+<rect class="hot" x="300" y="30" width="400" height="320" rx="10"/><text x="318" y="58">Render free web service (one instance)</text><text class="small" x="318" y="78">apps/web/server/production.mjs</text>
+<rect class="box" x="318" y="92" width="170" height="70" rx="6"/><text x="330" y="116">Site and API</text><text class="small" x="330" y="136">React build, /api/*</text><text class="small" x="330" y="152">sessions, access, trades</text>
+<rect class="box" x="510" y="92" width="170" height="70" rx="6"/><text x="522" y="116">Agent API</text><text class="small" x="522" y="136">profiles, runtime</text><text class="small" x="522" y="152">never signs</text>
+<rect class="box" x="318" y="180" width="362" height="150" rx="6"/><text x="330" y="204">Settlement bot (FLURBO_SETTLEMENT_BOT=true)</text>
+<text class="small" x="330" y="226">every 10 min, every 2 min near deadlines</text>
+<text class="small" x="330" y="248">1. Monitor: reads each pool, emails alerts</text>
+<text class="small" x="330" y="268">2. Worker: reads sources, asserts, finalizes, delivers</text>
+<text class="small" x="330" y="288">3. Metrics, funding alerts, member notices</text>
+<text class="small" x="330" y="308">Pool list: config/collections.json (registry)</text>
+<rect class="box" x="780" y="30" width="260" height="70" rx="8"/><text x="796" y="58">Upstash Redis (free)</text><text class="small" x="796" y="80">sessions, agents, settlement, evidence</text>
+<rect class="box" x="780" y="120" width="260" height="70" rx="8"/><text x="796" y="148">Supabase (free)</text><text class="small" x="796" y="170">applications, prices, indexes, metrics</text>
+<rect class="hot" x="780" y="210" width="260" height="80" rx="8"/><text x="796" y="238">Monad testnet (10143)</text><text class="small" x="796" y="258">pools, resolvers, test AUSD</text><text class="small" x="796" y="276">read via QuickNode RPC</text>
+<rect class="box" x="780" y="310" width="260" height="80" rx="8"/><text x="796" y="338">Official sources</text><text class="small" x="796" y="358">BLS, TSE, ECB, NWS, USGS, GitHub</text><text class="small" x="796" y="376">Monad mainnet RPC (price feeds)</text>
+<rect class="box" x="300" y="400" width="400" height="120" rx="8"/><text x="318" y="428">Outside services</text><text class="small" x="318" y="450">Resend: alert and member emails</text><text class="small" x="318" y="470">Healthchecks.io: watchdog for the bot</text><text class="small" x="318" y="490">cron-job.org: pings /healthz every 10 min (keeps Render awake)</text><text class="small" x="318" y="510">GitHub: code, CI (checks.yml), PR review gate for the registry</text>
+<rect class="box" x="780" y="420" width="260" height="90" rx="8"/><text x="796" y="448">GitHub Actions (fallback)</text><text class="small" x="796" y="470">settlement-monitor.yml</text><text class="small" x="796" y="488">resolution-worker.yml (off)</text>
+<path class="arrow" d="M220 75 L300 120"/><path class="arrow" d="M220 215 L508 140"/><path class="arrow" d="M220 385 L780 250"/><path class="arrow" d="M220 405 L300 480"/>
+<path class="arrow" d="M700 70 L780 65"/><path class="arrow" d="M700 150 L780 155"/><path class="arrow" d="M700 250 L780 250"/><path class="arrow" d="M700 300 L780 345"/><path class="arrow" d="M500 350 L500 400"/>
+<path class="arrow" d="M120 120 L790 230"/><path class="arrow" d="M120 260 L790 260"/>
+</svg>
+
+<h2>What lives where</h2>
+<div class="scroll"><table>
+<tr><th>Component</th><th>Code</th><th>Runs on</th><th>Notes</th></tr>
+<tr><td>Website and API</td><td><code>apps/web/src</code> (React, Vite), <code>apps/web/server</code></td><td>Render web service, <code>https://flurbo.singu.online</code></td><td>One instance on the free plan. Rate limits are counted in memory unless <code>FLURBO_SHARED_LIMITS=true</code>.</td></tr>
+<tr><td>Settlement bot</td><td><code>server/settlement-bot.mjs</code>, <code>scripts/notify-settlement.mjs</code> (monitor), <code>scripts/run-resolution.mjs</code> and <code>server/resolution-worker.mjs</code> (worker)</td><td>Inside the same Render process</td><td>Holds the settlement signer key. See the Settlement page.</td></tr>
+<tr><td>Collection registry</td><td><code>config/collections.json</code>, <code>server/collection-registry.mjs</code></td><td>Committed file, read at startup and each bot cycle</td><td>Lists every pool, its settlement mode (<code>auto</code>, <code>finish-only</code>, <code>off</code>) and whether it is listed. On since 1 Oct with <code>FLURBO_COLLECTIONS_SOURCE=registry</code>.</td></tr>
+<tr><td>Release pilot</td><td><code>config/pilot-testnet.json</code></td><td>Committed file</td><td>The original pool (Release milestones, <code>0x28d5…</code>), served under the <code>pilot</code> namespace. The registry's <code>pilotSettlement</code> controls how the bot treats it.</td></tr>
+<tr><td>Contracts</td><td><code>contracts/src</code>: <code>PilotPool</code> (factored LMSR), <code>PilotResolver</code> (optimistic resolution), <code>FactoredBaseToken</code>, <code>TestAusdFaucet</code></td><td>Monad testnet</td><td>One pool and resolver pair per collection. 2 to 4 questions per pool.</td></tr>
+<tr><td>Deploy tooling</td><td><code>contracts/script/DeployPilotBatch.s.sol</code>, <code>workflows/cre/scripts/batch.ts</code>, <code>workflows/cre/src/market-batch.ts</code></td><td>Operator machine</td><td>Prepare, check, deploy, verify, register. See the Wallets and listing page.</td></tr>
+<tr><td>Settlement readers</td><td><code>server/settlement-readers.mjs</code>, <code>server/settlement-rules.mjs</code>, <code>server/settlement-evidence.mjs</code></td><td>In the bot</td><td><code>json-api.v1</code>, <code>stat-table.v1</code>, <code>html-text.v1</code>, <code>evm-rpc.v1</code>. Rule check: <code>apps/web/scripts/check-settlement-rule.mjs</code>.</td></tr>
+<tr><td>Agent SDKs</td><td><code>packages/sdk</code> (TS), <code>packages/sdk-python</code>, <code>packages/sdk-rust</code>, <code>packages/sdk-cpp</code></td><td>Members' own machines</td><td>Use an agent token from the Agents page and the member's own wallet key. Reference: <code>docs/AGENT_CONFIG_REFERENCE.md</code>.</td></tr>
+<tr><td>CI</td><td><code>.github/workflows/checks.yml</code></td><td>GitHub Actions</td><td>Typecheck and tests. The monitor and worker workflows are kept as a manual fallback.</td></tr>
+</table></div>
+
+<h2>Data stores</h2>
+<div class="grid">
+<div class="card"><h3>Upstash Redis</h3><p>Database <code>solid-fly-322049.upstash.io</code>, free plan (500,000 commands a month, no card on file). Holds sessions, agents and their heartbeats, wallet links, settlement journals, monitor state, captured source evidence, email dedupe and the starter-funds ledger.</p></div>
+<div class="card"><h3>Supabase</h3><p>Same project as access applications. With <code>FLURBO_SUPABASE_KV=true</code>, rebuildable data lives here: price history, trade index, payout index and operator metrics (prefixes <code>flurbo:prices:</code>, <code>flurbo:pilot:index:</code>, <code>flurbo:pilot:payouts:</code>, <code>flurbo:metrics:</code>). Migrations are in <code>apps/web/server/migrations</code>.</p></div>
+<div class="card"><h3>Monad testnet</h3><p>Chain 10143. Test AUSD <code>0xa9012a055bd4e0edff8ce09f960291c09d5322dc</code> (6 decimals). Read through a QuickNode endpoint stored as <code>FLURBO_ALCHEMY_TESTNET_RPC_URL</code> (the name is historical).</p></div>
+<div class="card"><h3>Monad mainnet (read only)</h3><p>Chain 143, <code>https://rpc.monad.xyz/</code>. Used only by <code>evm-rpc.v1</code> rules (Chainlink price feeds, token supplies, transaction counts). The public RPC keeps contract state for only a few days.</p></div>
+</div>
+
+<h2>Environment variables</h2>
+<p>Names only for secrets. Values are shown for public settings. "Prod" means the value set on Render today where it is known; otherwise the code default is shown.</p>
+<p><span class="tag secret">secret</span> never share or commit the value &nbsp; <span class="tag private">private</span> not a credential but not public (emails, capability URLs) &nbsp; <span class="tag public">public</span> safe to show</p>
+
+<h3>Core and hosting</h3>
+<div class="scroll"><table>
+<tr><th>Name</th><th>Kind</th><th>Value or default</th><th>What it does</th></tr>
+<tr><td><code>FLURBO_NETWORK</code></td><td><span class="tag public">public</span></td><td><code>public_testnet</code> (required)</td><td>The release refuses any other network.</td></tr>
+<tr><td><code>FLURBO_ORIGIN</code></td><td><span class="tag public">public</span></td><td><code>https://flurbo.singu.online</code> (required)</td><td>Canonical HTTPS origin.</td></tr>
+<tr><td><code>PORT</code></td><td><span class="tag public">public</span></td><td>Set by Render</td><td>Listen port.</td></tr>
+<tr><td><code>RENDER_GIT_COMMIT</code></td><td><span class="tag public">public</span></td><td>Set by Render</td><td>Shown for build identity.</td></tr>
+<tr><td><code>FLURBO_ALCHEMY_TESTNET_RPC_URL</code></td><td><span class="tag secret">secret</span></td><td>QuickNode endpoint</td><td>Monad testnet RPC for the whole server, bot and agents API. The URL contains a token.</td></tr>
+<tr><td><code>UPSTASH_REDIS_REST_URL</code>, <code>UPSTASH_REDIS_REST_TOKEN</code></td><td><span class="tag secret">secret</span></td><td></td><td>Redis access.</td></tr>
+<tr><td><code>FLURBO_SUPABASE_KV</code></td><td><span class="tag public">public</span></td><td>Prod: <code>true</code></td><td>Routes rebuildable data to Supabase.</td></tr>
+<tr><td><code>FLURBO_SHARED_LIMITS</code></td><td><span class="tag public">public</span></td><td>Unset</td><td>Set <code>true</code> only with more than one instance.</td></tr>
+<tr><td><code>FLURBO_MANIFEST_JSON</code></td><td><span class="tag public">public</span></td><td>Unset</td><td>Legacy learning deployment override.</td></tr>
+</table></div>
+
+<h3>Access, accounts and email</h3>
+<div class="scroll"><table>
+<tr><th>Name</th><th>Kind</th><th>Value or default</th><th>What it does</th></tr>
+<tr><td><code>FLURBO_APPLICATIONS_ENABLED</code></td><td><span class="tag public">public</span></td><td><code>true</code> for native invites</td><td>Native access applications (invite flow).</td></tr>
+<tr><td><code>FLURBO_APPLICATIONS_SUPABASE_URL</code></td><td><span class="tag private">private</span></td><td></td><td>Supabase project URL.</td></tr>
+<tr><td><code>FLURBO_APPLICATIONS_SUPABASE_SECRET</code></td><td><span class="tag secret">secret</span></td><td></td><td>Supabase service key (also used for the KV store).</td></tr>
+<tr><td><code>FLURBO_APPLICATIONS_CODE_SECRET</code></td><td><span class="tag secret">secret</span></td><td></td><td>Signs one-time email codes.</td></tr>
+<tr><td><code>FLURBO_APPLICATIONS_RESEND_KEY</code></td><td><span class="tag secret">secret</span></td><td></td><td>Resend key for application and member emails.</td></tr>
+<tr><td><code>FLURBO_APPLICATIONS_EMAIL_FROM</code></td><td><span class="tag private">private</span></td><td></td><td>Sender address.</td></tr>
+<tr><td><code>FLURBO_APPLICATIONS_EMAIL_DAILY_LIMIT</code></td><td><span class="tag public">public</span></td><td>Default <code>50</code></td><td>Daily cap on application emails.</td></tr>
+<tr><td><code>FLURBO_TESTNET_APPROVED_ACCOUNTS</code></td><td><span class="tag public">public</span></td><td>Comma list</td><td>Legacy allowlist of approved passkey accounts.</td></tr>
+<tr><td><code>FLURBO_TESTNET_APPLICATION_URL</code></td><td><span class="tag public">public</span></td><td>Optional</td><td>External application form (legacy).</td></tr>
+<tr><td><code>FLURBO_TESTING_OPERATOR_ACCOUNT</code></td><td><span class="tag public">public</span></td><td>Operator passkey account address</td><td>Unlocks operator pages (metrics, semantic status).</td></tr>
+<tr><td><code>FLURBO_LEARNING_OPERATOR_ACCOUNT</code></td><td><span class="tag public">public</span></td><td>Optional</td><td>Operator for the learning pool tools.</td></tr>
+<tr><td><code>FLURBO_ANDROID_CERT_SHA256</code></td><td><span class="tag public">public</span></td><td>Default from <code>config/mobile-passkeys.json</code></td><td>Android passkey association.</td></tr>
+<tr><td><code>FLURBO_NOTIFY_ENABLED</code>, <code>FLURBO_NOTIFY_DAILY_LIMIT</code></td><td><span class="tag public">public</span></td><td>Default limit <code>40</code></td><td>Member emails about their positions.</td></tr>
+</table></div>
+
+<h3>Funds for new members</h3>
+<div class="scroll"><table>
+<tr><th>Name</th><th>Kind</th><th>Value or default</th><th>What it does</th></tr>
+<tr><td><code>FLURBO_STARTER_PRIVATE_KEY</code></td><td><span class="tag secret">secret</span></td><td></td><td>Key of the starter wallet that sends 0.5 MON to each new member wallet.</td></tr>
+<tr><td><code>FLURBO_STARTER_MON</code>, <code>FLURBO_STARTER_DAILY_LIMIT</code></td><td><span class="tag public">public</span></td><td>Defaults <code>0.5</code> and <code>50</code></td><td>Amount per member and daily cap.</td></tr>
+<tr><td><code>FLURBO_TEST_AUSD_FAUCET</code></td><td><span class="tag public">public</span></td><td>Prod: <code>0x5b76a22072E97F6AEeD4Bcb6A29488467ccD0277</code></td><td>Flurbo test AUSD dispenser contract (50 AUSD per claim, once a day per wallet).</td></tr>
+<tr><td><code>FLURBO_ALERT_STARTER_MON</code>, <code>FLURBO_ALERT_DISPENSER_AUSD</code>, <code>FLURBO_ALERT_EMAIL</code></td><td><span class="tag public">public</span> / <span class="tag private">private</span></td><td>Defaults <code>5</code> MON and <code>500</code> AUSD</td><td>Low-balance alert thresholds and recipient.</td></tr>
+</table></div>
+
+<h3>Settlement bot</h3>
+<div class="scroll"><table>
+<tr><th>Name</th><th>Kind</th><th>Value or default</th><th>What it does</th></tr>
+<tr><td><code>FLURBO_SETTLEMENT_BOT</code></td><td><span class="tag public">public</span></td><td>Prod: <code>true</code></td><td>Runs monitor and worker inside the web service.</td></tr>
+<tr><td><code>FLURBO_COLLECTIONS_SOURCE</code></td><td><span class="tag public">public</span></td><td>Prod: <code>registry</code></td><td>Read pools from <code>config/collections.json</code>. Remove to fall back to the old environment bundles.</td></tr>
+<tr><td><code>FLURBO_MONITOR_ENABLED</code>, <code>FLURBO_RESOLUTION_ENABLED</code></td><td><span class="tag public">public</span></td><td>Prod: <code>true</code></td><td>Turn the monitor and worker on.</td></tr>
+<tr><td><code>FLURBO_RESOLUTION_PROPOSALS</code></td><td><span class="tag public">public</span></td><td>Prod: <code>true</code></td><td>Allows reading sources and proposing answers. Off means finishing only.</td></tr>
+<tr><td><code>FLURBO_RESOLUTION_EXECUTE</code></td><td><span class="tag public">public</span></td><td>Prod: <code>true</code></td><td>Allows signing and sending. Off means dry run.</td></tr>
+<tr><td><code>FLURBO_RESOLUTION_SIGNER_ADDRESS</code></td><td><span class="tag public">public</span></td><td><code>0x6713e2324108d1f71ec8479415eb37c08638adea</code></td><td>Settlement signer. Must never trade.</td></tr>
+<tr><td><code>FLURBO_RESOLUTION_PRIVATE_KEY</code></td><td><span class="tag secret">secret</span></td><td></td><td>Settlement signer key.</td></tr>
+<tr><td><code>FLURBO_RESOLUTION_EVIDENCE_ORIGIN</code></td><td><span class="tag public">public</span></td><td><code>https://flurbo.singu.online</code></td><td>Public host of the evidence archive. Required while any rule-based pool is registered.</td></tr>
+<tr><td><code>FLURBO_RESOLUTION_HOLD</code></td><td><span class="tag public">public</span></td><td>Unset</td><td>Pool addresses the bot must not assert for (kill switch).</td></tr>
+<tr><td><code>FLURBO_MONITOR_RESEND_KEY</code></td><td><span class="tag secret">secret</span></td><td></td><td>Resend key for settlement alerts.</td></tr>
+<tr><td><code>FLURBO_MONITOR_EMAIL_FROM</code>, <code>FLURBO_MONITOR_EMAIL_TO</code></td><td><span class="tag private">private</span></td><td></td><td>Alert sender and recipient.</td></tr>
+<tr><td><code>FLURBO_MONITOR_HEALTHCHECK_URL</code></td><td><span class="tag private">private</span></td><td><code>https://hc-ping.com/…</code></td><td>Healthchecks.io ping (watchdog).</td></tr>
+<tr><td><code>FLURBO_EVIDENCE_GEMINI_KEY</code></td><td><span class="tag secret">secret</span></td><td>Optional</td><td>Adds a written explanation to release evidence. Never decides an answer.</td></tr>
+<tr><td><code>FLURBO_EVIDENCE_MODEL</code>, <code>FLURBO_EVIDENCE_FREE_TIER_CONFIRMED</code>, <code>FLURBO_EVIDENCE_OPERATOR</code></td><td><span class="tag public">public</span></td><td>Optional</td><td>Model name, free-tier acknowledgement, operator account for the evidence page.</td></tr>
+<tr><td><code>FLURBO_CHALLENGE_AUTHORIZATION_KEY</code></td><td><span class="tag secret">secret</span></td><td>Unset in practice</td><td>Signs holder-only challenge permissions for pools built on <code>AccountPilotResolver</code>. No live pool uses it.</td></tr>
+<tr><td><code>FLURBO_METRICS_DIGEST</code>, <code>FLURBO_METRICS_DIGEST_UTC</code>, <code>FLURBO_METRICS_SCAN_STEPS</code>, <code>FLURBO_METRICS_EXCLUDE</code></td><td><span class="tag public">public</span></td><td>Defaults off, <code>03:30</code>, <code>3</code></td><td>Operator metrics and daily digest.</td></tr>
+</table></div>
+<div class="warn"><strong>Retired by registry mode, safe to delete after a good day:</strong> <code>FLURBO_PRACTICE_COLLECTIONS_JSON</code>, <code>FLURBO_PRACTICE_ACTIVE_POOL</code>, <code>FLURBO_RESOLUTION_POOL</code>, <code>FLURBO_RESOLUTION_RULES_HASH</code>, <code>FLURBO_RESOLUTION_MANIFEST_JSON</code>, <code>FLURBO_RESOLUTION_FINISH_ALLOWLIST</code>, <code>FLURBO_RESOLUTION_COLLECTIONS_JSON</code>, <code>FLURBO_RESOLUTION_SOURCE_MODE</code>. They still work if <code>FLURBO_COLLECTIONS_SOURCE</code> is removed.</div>
+
+<h3>Other and local only</h3>
+<div class="scroll"><table>
+<tr><th>Name</th><th>Kind</th><th>Where</th><th>What it does</th></tr>
+<tr><td><code>FLURBO_PILOT_MANIFEST_JSON</code>, <code>FLURBO_PILOT_DISABLED</code></td><td><span class="tag public">public</span></td><td>Server</td><td>Override or turn off the release pilot (default reads <code>config/pilot-testnet.json</code>).</td></tr>
+<tr><td><code>FLURBO_SEMANTIC_MODE</code>, <code>FLURBO_SEMANTIC_RULES_JSON</code></td><td><span class="tag public">public</span></td><td>Server</td><td>Semantic purchase guard. Off by default and in production.</td></tr>
+<tr><td><code>FLURBO_AGENT_RESERVED_WALLETS</code></td><td><span class="tag public">public</span></td><td>Server</td><td>Wallets that can never be agent wallets (operator wallets are added automatically).</td></tr>
+<tr><td><code>FLURBO_ALARM_*</code></td><td>mixed</td><td><code>scripts/run-alarm.mjs</code></td><td>Optional external alarm job.</td></tr>
+<tr><td><code>FLURBO_REHEARSAL_PRIVATE_KEY</code>, <code>FLURBO_REHEARSAL_MANIFEST_JSON</code></td><td><span class="tag secret">secret</span></td><td>Local rehearsal scripts</td><td>Local settlement rehearsal only.</td></tr>
+<tr><td><code>FLURBO_DEPLOYER</code>, <code>FLURBO_DEPLOY_IDS</code>, <code>FOUNDRY_PROFILE</code></td><td><span class="tag public">public</span></td><td>Operator shell</td><td>Deployer address, pools to deploy, Foundry profile (<code>demo</code>).</td></tr>
+<tr><td><code>FLURBO_TEST_PLAYWRIGHT</code>, <code>FLURBO_TEST_BROWSER</code></td><td><span class="tag public">public</span></td><td>Tests in Docker</td><td>Enable browser tests.</td></tr>
+<tr><td><code>FLURBO_AGENT_TOKEN</code>, <code>FLURBO_AGENT_PRIVATE_KEY</code></td><td><span class="tag secret">secret</span></td><td>Member machines</td><td>Agent credential and agent wallet key, held by each member, never by Flurbo.</td></tr>
+</table></div>
+</main>
+</body>
+</html>

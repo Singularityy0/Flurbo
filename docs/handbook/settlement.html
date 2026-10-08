@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flurbo settlement</title>
+<style>
+:root{--bg:#f6f5ef;--panel:#ffffff;--ink:#16241c;--muted:#5b6b61;--line:#d9ddd3;--accent:#1f6b4a;--accent-soft:#e3efe8;--warn:#8a5a00;--warn-soft:#fbf1dc;--bad:#9b2c2c;--bad-soft:#f8e3e3;--code:#eef0ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111714;--panel:#18211c;--ink:#e6ece8;--muted:#9fb0a5;--line:#2c3a32;--accent:#6fcf9f;--accent-soft:#1e3328;--warn:#e7b85a;--warn-soft:#33290f;--bad:#f09a9a;--bad-soft:#3a1d1d;--code:#202b25}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+nav{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:14px;font-size:14px;z-index:2}
+nav a{color:var(--accent);text-decoration:none}nav a[aria-current]{font-weight:700;color:var(--ink)}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:30px;margin:8px 0 4px}h2{font-size:22px;margin:40px 0 8px;border-top:1px solid var(--line);padding-top:24px}h3{font-size:17px;margin:24px 0 6px}
+p.lead{color:var(--muted);margin-top:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.note{background:var(--accent-soft);border-left:4px solid var(--accent);padding:10px 14px;border-radius:6px;margin:12px 0}
+.warn{background:var(--warn-soft);border-left:4px solid var(--warn);padding:10px 14px;border-radius:6px;margin:12px 0}
+.bad{background:var(--bad-soft);border-left:4px solid var(--bad);padding:10px 14px;border-radius:6px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:14px;background:var(--panel)}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--code)}
+.scroll{overflow-x:auto}
+code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;background:var(--code);border-radius:4px}
+code{padding:1px 4px;word-break:break-word}pre{padding:12px;overflow-x:auto;white-space:pre}
+.tag{display:inline-block;font-size:12px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+.secret{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}
+.public{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.private{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+svg{max-width:100%;height:auto}
+svg .box{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+svg .hot{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
+svg text{fill:var(--ink);font:13px system-ui,sans-serif}
+svg .small{font-size:11px;fill:var(--muted)}
+svg .arrow{stroke:var(--muted);stroke-width:1.4;fill:none;marker-end:url(#a)}
+</style>
+</head>
+<body>
+<nav>
+<a href="architecture.html">Architecture and environment</a>
+<a href="wallets-and-markets.html">Wallets and listing markets</a>
+<a href="settlement.html" aria-current="page">Settlement</a>
+<a href="gaps-and-limitations.html">Gaps and limitations</a>
+</nav>
+<main>
+<h1>How settlement works</h1>
+<p class="lead">From trading close to payout, what the bot does by itself, which questions Flurbo can settle automatically, and when a person has to step in. Based on <code>contracts/src/PilotResolver.sol</code>, <code>apps/web/server/resolution-worker.mjs</code> and the settlement readers, as deployed on 1 October 2026.</p>
+
+<h2>Life of one question</h2>
+<svg viewBox="0 0 1060 250" role="img" aria-label="Settlement timeline">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#7d8b82"/></marker></defs>
+<rect class="hot" x="10" y="30" width="140" height="80" rx="8"/><text x="22" y="58">1. Trading</text><text class="small" x="22" y="80">buy and sell until</text><text class="small" x="22" y="96">the pool's close</text>
+<rect class="box" x="170" y="30" width="150" height="80" rx="8"/><text x="182" y="58">2. Capture</text><text class="small" x="182" y="80">bot reads the source;</text><text class="small" x="182" y="96">first valid reading kept</text>
+<rect class="box" x="340" y="30" width="150" height="80" rx="8"/><text x="352" y="58">3. Assert</text><text class="small" x="352" y="80">answer proposed with</text><text class="small" x="352" y="96">1 AUSD bond and evidence</text>
+<rect class="box" x="510" y="30" width="150" height="80" rx="8"/><text x="522" y="58">4. Challenge</text><text class="small" x="522" y="80">anyone except reviewers</text><text class="small" x="522" y="96">and asserter may dispute</text>
+<rect class="box" x="680" y="30" width="150" height="80" rx="8"/><text x="692" y="58">5. Finalize</text><text class="small" x="692" y="80">answer fixed; bond</text><text class="small" x="692" y="96">credited for withdrawal</text>
+<rect class="hot" x="850" y="30" width="190" height="80" rx="8"/><text x="862" y="58">6. Deliver and pay</text><text class="small" x="862" y="80">after every question in</text><text class="small" x="862" y="96">the pool is final</text>
+<path class="arrow" d="M150 70 L170 70"/><path class="arrow" d="M320 70 L340 70"/><path class="arrow" d="M490 70 L510 70"/><path class="arrow" d="M660 70 L680 70"/><path class="arrow" d="M830 70 L850 70"/>
+<rect class="box" x="510" y="150" width="150" height="80" rx="8"/><text x="522" y="178">4b. Dispute vote</text><text class="small" x="522" y="200">3 reviewers, 2 matching</text><text class="small" x="522" y="216">votes decide</text>
+<rect class="box" x="340" y="150" width="150" height="80" rx="8"/><text x="352" y="178">3b. No assertion</text><text class="small" x="352" y="200">before the deadline:</text><text class="small" x="352" y="216">question is VOID</text>
+<path class="arrow" d="M585 110 L585 150"/><path class="arrow" d="M660 190 L755 110"/><path class="arrow" d="M415 110 L415 150"/><path class="arrow" d="M490 190 L700 110"/>
+</svg>
+
+<div class="scroll"><table>
+<tr><th>Stage</th><th>When</th><th>Who acts</th><th>Rules</th></tr>
+<tr><td>Trading</td><td>From listing until the pool's close</td><td>Members and agents</td><td>One close per pool, enforced on-chain. Nothing can be bought or sold after it.</td></tr>
+<tr><td>Capture</td><td>Each question's capture window (opens after the close)</td><td>Bot</td><td>The first complete, valid reading inside the window is retained and decides. A 404, an empty list, a missing row or a <code>null</code> is not an answer: the bot keeps checking until the window closes.</td></tr>
+<tr><td>Assert</td><td>From the window close (the observation end) until observation end plus the assertion period</td><td>Bot for <code>auto</code> pools; otherwise a person</td><td>1 AUSD bond. The evidence (rule, raw capture, hashes) is archived publicly first and re-checked before signing.</td></tr>
+<tr><td>Challenge</td><td>Challenge period after the assertion (12 hours for the wave 2 pools, 24 hours for Release milestones)</td><td>Any wallet that is not a reviewer and not the asserter</td><td>The disputer posts the same bond with a different answer and evidence.</td></tr>
+<tr><td>Vote</td><td>Voting period after a dispute</td><td>The 3 reviewers (operator-controlled, disclosed)</td><td>2 matching votes decide. If the panel agrees with one side, that side receives both bonds. If the panel picks a third answer, that answer stands and each bond is returned. With no quorum by the voting deadline, each bond is returned and the question is VOID.</td></tr>
+<tr><td>Finalize</td><td>After the challenge or voting deadline</td><td>Anyone; the bot finalizes its own assertions and every timeout</td><td>An unchallenged answer becomes final. <strong>The bot does not finalize assertions made by other wallets</strong>; whoever asserted by hand calls <code>finalize</code>. Bonds are not sent back automatically: they become a credit in the resolver that the owner collects with <code>withdrawBond()</code> (on the site: Collect bond credit). The bot never withdraws the settlement signer's credits.</td></tr>
+<tr><td>Deliver</td><td>When every question in the pool is final</td><td>Anyone; the bot does it</td><td>Sends the results to the pool. Payouts open.</td></tr>
+<tr><td>Redeem</td><td>Any time after delivery</td><td>Each member</td><td>Members collect in Portfolio. Nothing expires.</td></tr>
+</table></div>
+
+<h3>What a share pays</h3>
+<div class="scroll"><table>
+<tr><th>Result</th><th>Single Yes share</th><th>AND of two questions</th></tr>
+<tr><td>Yes</td><td>1 AUSD</td><td>1 if both Yes</td></tr>
+<tr><td>No</td><td>0</td><td>0 if either is a known No</td></tr>
+<tr><td>VOID</td><td>0.5 AUSD (Yes and No each get half)</td><td>0.5 if one is VOID and the other Yes; 0.25 if both VOID</td></tr>
+</table></div>
+<p>VOID is not a refund of the purchase price. Payouts round down to the AUSD atom.</p>
+<p>Bonds: an unchallenged asserter gets the bond back as a credit. After a vote, the side the panel agrees with is credited both bonds; a third answer or a voting timeout credits each side its own bond. Credits are collected with <code>withdrawBond()</code>.</p>
+
+<h2>What the bot does each cycle</h2>
+<ol>
+<li><strong>Monitor.</strong> Reads every registered pool's on-chain state and emails alerts: assertion windows open, assertions to review, finalizations due, read failures. Pools far from their next action are re-read about every 8 minutes; delivered pools once per restart. It pings the Healthchecks.io watchdog.</li>
+<li><strong>Collect sources.</strong> For each <code>auto</code> pool with a capture window open, reads the committed source URLs and stores complete readings with their hashes.</li>
+<li><strong>Act.</strong> Puts every due action across all pools into one queue, earliest deadline first: assert, finalize, deliver. One signer, one pending transaction at a time, up to 12 transactions per cycle. Each transaction is journaled before it is sent; a restart resumes from the journal and never signs a replacement.</li>
+<li><strong>Isolate failures.</strong> A pool whose source or chain read fails is skipped and reported. The others carry on.</li>
+</ol>
+<p>Cadence: every 10 minutes, and every 2 minutes from 15 minutes before anything is due. A pool listed in <code>FLURBO_RESOLUTION_HOLD</code> keeps collecting evidence but the bot never asserts for it.</p>
+
+<h2>Which questions Flurbo can settle automatically</h2>
+<div class="scroll"><table>
+<tr><th>Kind of question</th><th>Reader</th><th>Examples</th><th>Limits</th></tr>
+<tr><td>Official statistics from a JSON API</td><td><code>json-api.v1</code></td><td>US unemployment (BLS API), SOFR (NY Fed), USGS earthquake counts, NWS observed temperatures, GFZ Kp index</td><td>Public API without a login or paid key; response under 2 MB; the value must be readable by a JSON Pointer path.</td></tr>
+<tr><td>Official statistics tables</td><td><code>stat-table.v1</code></td><td>Treasury par yields (CSV), ECB exchange rates (SDMX-JSON), Eurostat (JSON-stat)</td><td>One row or one series and period must match exactly.</td></tr>
+<tr><td>Official web pages</td><td><code>html-text.v1</code></td><td>EIA weekly gasoline and diesel prices</td><td>Last resort. Breaks if the page layout changes; then nothing is captured and a person asserts.</td></tr>
+<tr><td>On-chain facts on any EVM chain</td><td><code>evm-rpc.v1</code></td><td>Chainlink prices on Monad, token supply, transaction counts, wallet balances, event counts</td><td>At most 1,000 calls per reading. The public Monad RPC keeps contract state for only a few days, so state reads must be captured within hours.</td></tr>
+<tr><td>Election results</td><td><code>json-api.v1</code> on the electoral authority's official feed</td><td>Brazil (TSE result files)</td><td>Only where an official machine-readable feed exists. Layouts often cannot be checked before election night.</td></tr>
+<tr><td>Software releases</td><td><code>json-api.v1</code> on the GitHub API</td><td>Count of stable releases; a specific tag among recent releases</td><td>Unauthenticated limit of 60 requests an hour per IP. Lists over 2 MB cannot be read. The older legacy release rule (Release milestones) can only prove Yes.</td></tr>
+</table></div>
+<h3>Not automatic</h3>
+<ul>
+<li>Sources behind a login or a secret or paid API key (nobody else could check the evidence).</li>
+<li>Pages built only by JavaScript, PDFs and images.</li>
+<li>Anything subjective or needing interpretation.</li>
+<li>Out of scope by policy: sports, pop culture and awards.</li>
+</ul>
+
+<h2>When a person has to step in</h2>
+<div class="scroll"><table>
+<tr><th>Situation</th><th>Signal</th><th>What to do</th><th>Deadline</th></tr>
+<tr><td>Source never published or unreadable in the window (outage, rate limit, layout change, shutdown)</td><td>Email: assertion window open, no assertion</td><td>Assert by hand from the official source, or let it go VOID</td><td>Observation end plus the assertion period</td></tr>
+<tr><td>The answer is No but the rule can only prove Yes (legacy release questions)</td><td>Same</td><td>Assert No by hand</td><td>Same</td></tr>
+<tr><td>The bot proposed an answer that looks wrong</td><td>Email: assertion to review</td><td>Dispute from a non-reviewer wallet; reviewers vote</td><td>Within the challenge period</td></tr>
+<tr><td>A source changed in a way the rule did not foresee</td><td>Manual check before the window, or a wrong-looking capture</td><td>Add the pool to <code>FLURBO_RESOLUTION_HOLD</code> on Render, then assert by hand</td><td>Before the capture window opens, ideally</td></tr>
+<tr><td>A manual assertion was not challenged</td><td>Challenge period over</td><td>Call <code>finalize</code> for that question (the bot only finalizes its own)</td><td>Any time after the challenge period</td></tr>
+<tr><td>Bot stopped</td><td>Healthchecks.io email; <code>/healthz</code> stale</td><td>Read Render logs; restart or redeploy</td><td>Before the next deadline</td></tr>
+</table></div>
+
+<h3>Assert by hand</h3>
+<p>Use a wallet that is not a reviewer and is not the settlement signer (asserting from the signer would confuse the bot's journal), and never the old signer. The deployer works. Outcome codes: <code>1</code> = No, <code>2</code> = Yes, <code>3</code> = VOID. Questions are numbered from 0 in pool order.</p>
+<pre>RESOLVER=0xe72386686b03d7e04554505ea0ef00ffa04ec73e   # the pool's resolver (table below)
+EVENT=1                                               # question index
+SOURCE=https://api.github.com/repos/paradigmxyz/reth/releases?per_page=30
+
+# 1. Save the evidence and hash it
+curl -s "$SOURCE" -o evidence.json
+HASH=$(cast keccak "$(cat evidence.json)")
+
+# 2. Approve the 1 AUSD bond for the resolver
+cast send 0xa9012a055bd4e0edff8ce09f960291c09d5322dc "approve(address,uint256)" $RESOLVER 1000000 --account flurbo-testnet --rpc-url https://testnet-rpc.monad.xyz
+
+# 3. Assert (here: No)
+cast send $RESOLVER "assertOutcome(uint8,uint8,bytes32,string)" $EVENT 1 $HASH "$SOURCE" --account flurbo-testnet --rpc-url https://testnet-rpc.monad.xyz
+
+# 4. After the challenge period, if nobody disputed
+cast send $RESOLVER "finalize(uint8)" $EVENT --account flurbo-testnet --rpc-url https://testnet-rpc.monad.xyz
+
+# 5. Collect the 1 AUSD bond credit
+cast send $RESOLVER "withdrawBond()" --account flurbo-testnet --rpc-url https://testnet-rpc.monad.xyz</pre>
+<p>The evidence URI must start with <code>https://</code> or <code>ipfs://</code> (8 to 512 characters). Keep <code>evidence.json</code>: its hash is what anyone can check against.</p>
+<h3>Dispute an assertion</h3>
+<pre>cast send 0xa9012a055bd4e0edff8ce09f960291c09d5322dc "approve(address,uint256)" $RESOLVER 1000000 --account &lt;wallet&gt; --rpc-url https://testnet-rpc.monad.xyz
+cast send $RESOLVER "dispute(uint8,uint8,bytes32,string)" $EVENT &lt;other outcome&gt; $HASH "$SOURCE" --account &lt;wallet&gt; --rpc-url https://testnet-rpc.monad.xyz</pre>
+<p>Reviewers then vote with <code>vote(uint8 event, uint8 outcome, bytes32 rationaleHash, string rationaleURI)</code> from their own wallets.</p>
+
+<h2>Live pools and their settlement calendar</h2>
+<div class="scroll"><table>
+<tr><th>Pool</th><th>Pool and resolver</th><th>Questions (index order)</th><th>Capture (UTC)</th><th>Expected payout</th><th>Likely manual work</th></tr>
+<tr><td>Release milestones (<code>auto</code> once PR <code>release-pilot-auto</code> is merged)</td><td><code>0x28d5ee02b1eda6959ac3ee5a4f834237c84dee02</code><br><code>0xe72386686b03d7e04554505ea0ef00ffa04ec73e</code></td><td>0 geth v1.17.7, 1 reth v2.6.1</td><td>Window ends 7 Oct 00:01; assert until 8 Oct 00:01</td><td>About 8 Oct</td><td>reth: assert No by hand (the release does not exist)</td></tr>
+<tr><td>Jobs Friday</td><td><code>0xc4409edbfb9e9d47167b028de22f0b0d6b630077</code><br><code>0x1fd002bf38f4e246f55000e64b8405d18aa5e0f6</code></td><td>0 unemployment, 1 U-6, 2 participation, 3 hourly earnings</td><td>2 Oct 12:35 to 16:30</td><td>About 3 Oct 04:40</td><td>Only if BLS refuses the bot (shared daily quota)</td></tr>
+<tr><td>Crypto weekend</td><td><code>0xf8beba5827bfaaf6ace08a40cd9db740233ca9fe</code><br><code>0x04f29daa15d01f833d02794d97f9648bff078c17</code></td><td>0 MON, 1 BTC, 2 ETH, 3 SOL</td><td>4 Oct 00:05 to 04:05</td><td>About 4 Oct 16:15</td><td>Unlikely</td></tr>
+<tr><td>Brazil election</td><td><code>0x160647d16405f44989c56b83609a171247068dcc</code><br><code>0xe747a8d1d42317edf6e6a68a05ffaf3b27dd8d56</code></td><td>0 Lula first, 1 runoff held, 2 Flavio in runoff, 3 Lula elected in runoff</td><td>5 Oct 06:00 to 7 Oct 06:00; question 3: 25 Oct 23:00 to 27 Oct 12:00</td><td>About 28 Oct</td><td>Check the TSE layout on 5 Oct 01:00 to 05:30; question 3 needs a manual No if there is no runoff or Lula is not in it</td></tr>
+<tr><td>Showcase v0, pre-test-v1, pre-test-v2</td><td colspan="3">Delivered. <code>finish-only</code>.</td><td>Paid</td><td>None</td></tr>
+</table></div>
+
+<h2>Where to look</h2>
+<ul>
+<li><code>https://flurbo.singu.online/healthz</code>: bot status, cadence, next due time, registered pools.</li>
+<li>Render logs: <code>[settlement-monitor]</code> lines per pool and <code>[settlement-worker]</code> lines with <code>"mode":"registry"</code>, captures under <code>sourceObservations</code>.</li>
+<li>Email: monitor alerts (Resend), the daily metrics digest, low-balance alerts.</li>
+<li>Evidence: each assertion links its archived evidence at <code>https://flurbo.singu.online/api/&lt;namespace&gt;/evidence/&lt;hash&gt;</code>.</li>
+</ul>
+</main>
+</body>
+</html>

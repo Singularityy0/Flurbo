@@ -1,40 +1,91 @@
-import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const registry = JSON.parse(readFileSync(resolve(root, 'config/collections.json'), 'utf8'));
-if (registry.schema !== 'flurbo.collections.v1') throw new Error('Unexpected collection registry');
-const addresses = key => [...new Set(registry.collections.filter(c => c.status === 'active').map(c => c.manifest?.[key]?.toLowerCase()))].sort();
-const pools = addresses('pool'), resolvers = addresses('resolver');
-if (!pools.length || !resolvers.length || pools.some(a => !/^0x[0-9a-f]{40}$/.test(a)) || resolvers.some(a => !/^0x[0-9a-f]{40}$/.test(a))) throw new Error('Invalid registry addresses');
-const yaml = [
-  '# Generated from config/collections.json. Run npm run config after registry changes.',
-  'name: flurbo-monad-indexer',
-  'description: Flurbo pool trades and resolution events on Monad testnet',
-  'address_format: lowercase',
-  'contracts:',
-  '  - name: PilotPool',
-  '    events:',
-  '      - event: "Traded(address indexed trader, uint32 indexed scope, uint256 indexed mask, bool isBuy, uint128 quantity, uint128 collateralAmount)"',
-  '      - event: "Redeemed(address indexed owner, uint32 indexed scope, uint256 indexed mask, uint128 quantity, uint128 collateralAmount)"',
-  '  - name: PilotResolver',
-  '    events:',
-  '      - event: "Asserted(uint8 indexed eventIndex, address indexed asserter, uint8 outcome, bytes32 evidenceHash, string evidenceURI, uint64 challengeUntil)"',
-  '      - event: "Disputed(uint8 indexed eventIndex, address indexed disputer, uint8 outcome, bytes32 evidenceHash, string evidenceURI, uint64 voteUntil)"',
-  '      - event: "Finalized(uint8 indexed eventIndex, uint8 outcome, bool timedOut)"',
-  '      - event: "Delivered(address indexed pool, uint32 yesMask, uint32 voidMask)"',
-  'chains:',
-  '  - id: 10143',
-  '    start_block: 0',
-  '    contracts:',
-  '      - name: PilotPool',
-  '        address:',
-  ...pools.map(a => `          - "${a}"`),
-  '      - name: PilotResolver',
-  '        address:',
-  ...resolvers.map(a => `          - "${a}"`),
-  ''
-].join('\n');
-writeFileSync(resolve(root, 'packages/envio-indexer/config.yaml'), yaml);
-console.log(`Configured ${pools.length} pools and ${resolvers.length} resolvers`);
+const ADDRESS = /^0x[0-9a-f]{40}$/;
+export const KURU_LISTINGS_SCHEMA = 'flurbo.kuru-listings.v1';
+
+// Validates the committed config/kuru-listings.json (verified Kuru order books, no secrets) and returns one row per market.
+export function kuruMarketsFrom(file) {
+  if (file === null) return [];
+  if (file?.schema !== KURU_LISTINGS_SCHEMA || !Array.isArray(file.listings) || file.listings.length < 1 || file.listings.length > 8) throw new Error('Invalid Kuru listings file');
+  const seen = new Set();
+  return file.listings.map(listing => {
+    const market = String(listing?.market).toLowerCase(), pool = String(listing?.pool).toLowerCase();
+    if (listing?.status !== 'verified_kuru_snapshot' || listing.chainId !== 10143 || !ADDRESS.test(market) || !ADDRESS.test(pool) ||
+        !Number.isInteger(listing.eventIndex) || listing.eventIndex < 0 || listing.eventIndex > 31 || seen.has(market)) throw new Error('Invalid Kuru listings file');
+    seen.add(market);
+    return { market, pool, eventIndex: listing.eventIndex };
+  }).sort((a, b) => a.market.localeCompare(b.market));
+}
+
+export function buildConfig({ registry, kuruListings = null }) {
+  if (registry?.schema !== 'flurbo.collections.v1') throw new Error('Unexpected collection registry');
+  const addresses = key => [...new Set(registry.collections.filter(c => c.status === 'active').map(c => c.manifest?.[key]?.toLowerCase()))].sort();
+  const pools = addresses('pool'), resolvers = addresses('resolver');
+  if (!pools.length || !resolvers.length || pools.some(a => !ADDRESS.test(a)) || resolvers.some(a => !ADDRESS.test(a))) throw new Error('Invalid registry addresses');
+  const kuru = kuruMarketsFrom(kuruListings);
+  const yaml = [
+    '# Generated from config/collections.json and config/kuru-listings.json. Run npm run config after registry or listing changes.',
+    'name: flurbo-monad-indexer',
+    'description: Flurbo pool trades, receipt wrapping, Kuru order book fills and resolution events on Monad testnet',
+    'address_format: lowercase',
+    'field_selection:',
+    '  transaction_fields:',
+    '    - hash',
+    'contracts:',
+    '  - name: PilotPool',
+    '    events:',
+    '      - event: "Traded(address indexed trader, uint32 indexed scope, uint256 indexed mask, bool isBuy, uint128 quantity, uint128 collateralAmount)"',
+    '      - event: "Redeemed(address indexed owner, uint32 indexed scope, uint256 indexed mask, uint128 quantity, uint128 collateralAmount)"',
+    '      - event: "BaseWrapped(address indexed owner, uint32 indexed scope, uint8 indexed mask, uint128 quantity)"',
+    '      - event: "BaseUnwrapped(address indexed owner, uint32 indexed scope, uint8 indexed mask, uint128 quantity)"',
+    '  - name: PilotResolver',
+    '    events:',
+    '      - event: "Asserted(uint8 indexed eventIndex, address indexed asserter, uint8 outcome, bytes32 evidenceHash, string evidenceURI, uint64 challengeUntil)"',
+    '      - event: "Disputed(uint8 indexed eventIndex, address indexed disputer, uint8 outcome, bytes32 evidenceHash, string evidenceURI, uint64 voteUntil)"',
+    '      - event: "Finalized(uint8 indexed eventIndex, uint8 outcome, bool timedOut)"',
+    '      - event: "Delivered(address indexed pool, uint32 yesMask, uint32 voidMask)"',
+    // Declared even before any Kuru market is listed, so the handlers always compile; addresses are added per chain below.
+    '  - name: KuruMarket',
+    '    events:',
+    '      - event: "Trade(uint40 orderId, address makerAddress, bool isBuy, uint256 price, uint96 updatedSize, address takerAddress, address txOrigin, uint96 filledSize)"',
+    '      - event: "OrderCreated(uint40 orderId, address owner, uint96 size, uint32 price, bool isBuy)"',
+    '      - event: "OrderCanceled(uint40 orderId, address owner, uint32 price, uint96 size, bool isBuy)"',
+    'chains:',
+    '  - id: 10143',
+    '    start_block: 0',
+    '    contracts:',
+    '      - name: PilotPool',
+    '        address:',
+    ...pools.map(a => `          - "${a}"`),
+    '      - name: PilotResolver',
+    '        address:',
+    ...resolvers.map(a => `          - "${a}"`),
+    ...(kuru.length ? [
+      '      - name: KuruMarket',
+      '        address:',
+      ...kuru.map(row => `          - "${row.market}"`),
+    ] : []),
+    ''
+  ].join('\n');
+  // Handlers read which pool and question a Kuru market belongs to from this module, so they need no files outside the package.
+  const kuruMarketsTs = [
+    '// Generated by scripts/generate-config.mjs from config/kuru-listings.json. Do not edit.',
+    'export const KURU_MARKETS: Record<string, { pool: string; eventIndex: number }> = {',
+    ...kuru.map(row => `  "${row.market}": { pool: "${row.pool}", eventIndex: ${row.eventIndex} },`),
+    '};',
+    ''
+  ].join('\n');
+  return { yaml, kuruMarketsTs, pools: pools.length, resolvers: resolvers.length, kuruMarkets: kuru.length };
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+  const registry = JSON.parse(readFileSync(resolve(root, 'config/collections.json'), 'utf8'));
+  const kuruPath = resolve(root, 'config/kuru-listings.json');
+  const result = buildConfig({ registry, kuruListings: existsSync(kuruPath) ? JSON.parse(readFileSync(kuruPath, 'utf8')) : null });
+  writeFileSync(resolve(root, 'packages/envio-indexer/config.yaml'), result.yaml);
+  writeFileSync(resolve(root, 'packages/envio-indexer/src/kuru-markets.generated.ts'), result.kuruMarketsTs);
+  console.log(`Configured ${result.pools} pools, ${result.resolvers} resolvers and ${result.kuruMarkets} Kuru markets`);
+}

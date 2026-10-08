@@ -12,3 +12,24 @@ pilot:
     workflow-path: ./src/pilot-main.ts
     config-path: ../../target/deployments/pilot-cre.json
     secrets-path: ""
+crypto-weekend:
+  user-workflow:
+    workflow-name: flurbo-price-feed-crypto-weekend
+  workflow-artifacts:
+    workflow-path: ./src/price-feed-main.ts
+    config-path: ../../target/deployments/wave2-f2-cre-price.json
+    secrets-path: ""
+crypto-saturday:
+  user-workflow:
+    workflow-name: flurbo-price-feed-crypto-saturday
+  workflow-artifacts:
+    workflow-path: ./src/price-feed-main.ts
+    config-path: ../../target/deployments/metro-crypto-sat-cre-price.json
+    secrets-path: ""
+crypto-judging:
+  user-workflow:
+    workflow-name: flurbo-price-feed-crypto-judging
+  workflow-artifacts:
+    workflow-path: ./src/price-feed-main.ts
+    config-path: ../../target/deployments/metro-crypto-judging-cre-price.json
+    secrets-path: ""

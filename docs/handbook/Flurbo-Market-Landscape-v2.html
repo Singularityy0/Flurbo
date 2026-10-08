@@ -1,0 +1,1226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flurbo Market Landscape</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a long-form briefing. Part one compares six venues as they are today; part two is Flurbo's plan.
+   Flurbo's own brand (forest, ivory, lime) is light-only by design, so this page commits to one light look. */
+:root{
+  color-scheme: light;
+  --bg:#f5f4ec; --surface:#fbfaf5; --sunken:#ecebe2; --inverse:#14271d;
+  --ink:#14271d; --ink-2:#45524a; --ink-3:#5f6a63; --on-inverse:#f5f4ec; --on-inverse-2:#babfb6;
+  --rule:rgba(20,39,29,.12); --rule-strong:rgba(20,39,29,.26);
+  --lime:#d9f76d; --lime-soft:#eef8c9;
+  --good:#2e7d55; --good-soft:#dcefe3; --warn:#8a6414; --warn-soft:#f4ead0; --bad:#9a3324; --bad-soft:#f6e3de;
+  --sans:"Space Grotesk","Segoe UI",Arial,sans-serif;
+  --serif:"Cormorant Garamond",Georgia,"Times New Roman",serif;
+  --mono:ui-monospace,"Cascadia Mono","SFMono-Regular",Consolas,monospace;
+  --r:12px; --r-sm:6px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:0 72px}
+h1,h2,h3{text-wrap:balance;margin:0}
+h1{font-family:var(--serif);font-weight:600;font-size:clamp(40px,6vw,68px);line-height:1.02;letter-spacing:-.01em}
+h2{font-family:var(--serif);font-weight:600;font-size:clamp(30px,3.6vw,42px);line-height:1.1}
+h3{font-size:18px;font-weight:600;line-height:1.3}
+p{margin:0}
+a{color:var(--ink);text-underline-offset:3px}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+code,.mono{font-family:var(--mono);font-size:.88em}
+.eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.lead{font-size:18px;color:var(--ink-2);max-width:68ch}
+.prose{max-width:68ch;color:var(--ink-2)}
+.stack{display:flex;flex-direction:column;gap:16px}
+section{padding-block:56px 8px;scroll-margin-top:64px}
+.sec-head{display:flex;flex-direction:column;gap:10px;margin-bottom:28px}
+
+/* top nav */
+nav.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--inverse);color:var(--on-inverse)}
+nav.top .in{max-width:1180px;margin:0 auto;padding-inline:16px;display:flex;gap:18px;align-items:center;overflow-x:auto;white-space:nowrap;height:48px;scrollbar-width:none}
+nav.top .in::-webkit-scrollbar{display:none}
+nav.top .brand{font-weight:700;letter-spacing:.02em;display:flex;align-items:center;gap:8px}
+nav.top .brand i{width:10px;height:10px;border-radius:50%;background:var(--lime);display:inline-block}
+nav.top a{color:var(--on-inverse-2);text-decoration:none;font-size:13px}
+nav.top a:hover{color:var(--on-inverse)}
+nav.top .part{color:var(--lime);font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600}
+
+/* hero */
+header.hero{padding-block:56px 24px;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:40px;align-items:end;border-bottom:1px solid var(--rule-strong)}
+header.hero .meta{display:flex;flex-direction:column;gap:10px;font-size:13px;color:var(--ink-3)}
+header.hero .meta b{color:var(--ink);font-weight:600}
+@media (max-width:820px){header.hero{grid-template-columns:1fr;gap:24px}}
+
+/* part banner */
+.part-banner{margin-top:64px;background:var(--inverse);color:var(--on-inverse);border-radius:var(--r);padding:28px 24px;display:flex;flex-wrap:wrap;gap:12px 32px;align-items:baseline}
+.part-banner .n{font-family:var(--mono);color:var(--lime);font-size:13px}
+.part-banner h2{color:var(--on-inverse)}
+.part-banner p{color:var(--on-inverse-2);max-width:60ch;flex:1 1 320px}
+
+/* venue cards */
+.venues{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:900px){.venues{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.venues{grid-template-columns:1fr}}
+.venue{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.venue.us{background:var(--inverse);color:var(--on-inverse);border-color:var(--inverse)}
+.venue.us .k{color:var(--on-inverse-2)}
+.venue.us .tag{background:var(--lime);color:var(--ink)}
+.venue .name{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.venue .name h3{font-family:var(--serif);font-size:28px;font-weight:600}
+.tag{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:var(--sunken);color:var(--ink-2);white-space:nowrap}
+.venue .line{font-size:14px}
+.venue dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px}
+.venue dt{margin:0}
+.venue dd{margin:0}
+.k{color:var(--ink-3)}
+
+/* matrix */
+.scroller{overflow-x:auto;border:1px solid var(--rule-strong);border-radius:var(--r);background:var(--surface)}
+table.matrix{border-collapse:separate;border-spacing:0;min-width:1100px;width:100%;font-size:13px;line-height:1.45}
+.matrix th,.matrix td{padding:11px 12px;border-bottom:1px solid var(--rule);vertical-align:top;text-align:left}
+.matrix thead th{position:sticky;top:0;background:var(--sunken);font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;z-index:2}
+.matrix tbody th{position:sticky;left:0;background:var(--surface);font-weight:600;width:150px;min-width:150px;z-index:1;border-right:1px solid var(--rule)}
+.matrix thead th:first-child{left:0;z-index:3}
+.matrix .fl{background:var(--lime-soft)}
+.matrix thead th.fl{background:var(--lime)}
+.matrix tr.group th{background:var(--inverse);color:var(--on-inverse);font-size:11px;letter-spacing:.14em;text-transform:uppercase;position:sticky;left:0}
+.matrix tr.group td{background:var(--inverse)}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;margin-bottom:4px;letter-spacing:.02em}
+.p-good{background:var(--good-soft);color:var(--good)}
+.p-warn{background:var(--warn-soft);color:var(--warn)}
+.p-bad{background:var(--bad-soft);color:var(--bad)}
+.hint{font-size:12px;color:var(--ink-3)}
+
+/* scores */
+.score-tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.seg{display:inline-flex;border:1px solid var(--rule-strong);border-radius:999px;padding:3px;background:var(--surface)}
+.seg button{font:600 13px var(--sans);border:0;background:transparent;color:var(--ink-2);padding:7px 14px;border-radius:999px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--inverse);color:var(--on-inverse)}
+table.scores{border-collapse:collapse;width:100%;min-width:760px;font-size:13px}
+.scores th,.scores td{padding:10px 12px;border-bottom:1px solid var(--rule);text-align:left}
+.scores thead th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;background:var(--sunken)}
+.scores tbody th{font-weight:600}
+.scores td.fl{background:var(--lime-soft)}
+.pips{display:inline-flex;gap:3px;vertical-align:middle}
+.pips i{width:10px;height:10px;border-radius:2px;background:var(--sunken);border:1px solid var(--rule-strong)}
+.pips i.on{background:var(--ink);border-color:var(--ink)}
+.fl .pips i.on{background:var(--good);border-color:var(--good)}
+.pips i.up{background:var(--lime);border-color:var(--good)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;margin-left:6px;color:var(--ink-3);font-size:12px}
+.scores tfoot td,.scores tfoot th{font-weight:700;border-bottom:0;background:var(--sunken)}
+
+/* pros cons */
+.pc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:760px){.pc-grid{grid-template-columns:1fr}}
+.pc{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.pc.us{border:2px solid var(--ink)}
+.pc h3{font-family:var(--serif);font-size:26px}
+.pc .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:460px){.pc .cols{grid-template-columns:1fr}}
+.pc ul{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:7px;font-size:13.5px}
+.pc li{padding-left:18px;position:relative}
+.pc .pro li::before{content:"+";position:absolute;left:0;color:var(--good);font-weight:700}
+.pc .con li::before{content:"\2212";position:absolute;left:0;color:var(--bad);font-weight:700}
+.pc .lab{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:6px}
+.pc .pro .lab{color:var(--good)} .pc .con .lab{color:var(--bad)}
+.pc .verdict{font-size:13px;color:var(--ink-2);border-top:1px solid var(--rule);padding-top:10px}
+
+/* borrow map */
+.borrow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:900px){.borrow{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.borrow{grid-template-columns:1fr}}
+.take{border-top:3px solid var(--ink);padding-top:12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.take .from{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.take h3{font-size:16px}
+.take p{font-size:13.5px;color:var(--ink-2)}
+.take.keep{border-top-color:var(--good)}
+
+/* problem blocks */
+.problem{background:var(--surface);border:1px solid var(--rule-strong);border-radius:var(--r);padding:24px;display:flex;flex-direction:column;gap:22px}
+.problem .ph{display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+.problem .ph .n{font-family:var(--mono);font-size:13px;background:var(--lime);padding:2px 8px;border-radius:4px;font-weight:700}
+.sub{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+
+/* pipeline diagram */
+.diagram{overflow-x:auto;border-radius:var(--r-sm);background:var(--bg);border:1px solid var(--rule)}
+.diagram svg{display:block;min-width:900px;width:100%;height:auto}
+.diagram text{font-family:var(--sans);fill:var(--ink)}
+
+/* reader table */
+table.readers{border-collapse:collapse;width:100%;min-width:820px;font-size:13px}
+.readers th,.readers td{padding:10px 12px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}
+.readers thead th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;background:var(--sunken)}
+.status{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.s-built{background:var(--good-soft);color:var(--good)}
+.s-next{background:var(--lime-soft);color:var(--ink);border:1px solid var(--good)}
+.s-later{background:var(--sunken);color:var(--ink-2)}
+.s-fallback{background:var(--warn-soft);color:var(--warn)}
+pre.spec{margin:0;background:var(--inverse);color:var(--on-inverse);border-radius:var(--r-sm);padding:16px;overflow-x:auto;font:12.5px/1.55 var(--mono)}
+pre.spec .c{color:var(--on-inverse-2)}
+pre.spec .h{color:var(--lime)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
+@media (max-width:820px){.two{grid-template-columns:1fr}}
+
+/* options */
+.opts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:900px){.opts{grid-template-columns:1fr}}
+.opt{border:1px solid var(--rule-strong);border-radius:var(--r-sm);padding:16px;display:flex;flex-direction:column;gap:8px;background:var(--bg);min-width:0}
+.opt.rec{border:2px solid var(--good);background:var(--surface)}
+.opt .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.opt h4{margin:0;font-size:15px}
+.opt p,.opt li{font-size:13px;color:var(--ink-2)}
+.opt ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+
+/* calculator */
+.calc{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:24px}
+@media (max-width:820px){.calc{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:13px;font-weight:600;display:flex;justify-content:space-between;gap:8px}
+.field label output{font-family:var(--mono);font-weight:500;color:var(--ink-2)}
+.field input[type=range]{width:100%;accent-color:var(--inverse)}
+.field select{font:14px var(--sans);padding:8px 10px;border-radius:var(--r-sm);border:1px solid var(--rule-strong);background:var(--surface);color:var(--ink)}
+.presets{display:flex;flex-wrap:wrap;gap:8px}
+.presets button{font:600 12px var(--sans);border:1px solid var(--rule-strong);background:var(--surface);color:var(--ink);padding:6px 12px;border-radius:999px;cursor:pointer}
+.presets button:hover{background:var(--lime-soft)}
+.results{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:560px){.results{grid-template-columns:1fr}}
+.stat{background:var(--bg);border:1px solid var(--rule);border-radius:var(--r-sm);padding:12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.stat .v{font-family:var(--mono);font-size:24px;font-variant-numeric:tabular-nums;font-weight:600}
+.stat .l{font-size:12px;color:var(--ink-3)}
+.stat.neg .v{color:var(--bad)} .stat.pos .v{color:var(--good)}
+.chart{background:var(--bg);border:1px solid var(--rule);border-radius:var(--r-sm);padding:8px}
+.chart svg{display:block;width:100%;height:auto}
+.chart text{font-family:var(--mono);font-size:11px;fill:var(--ink-3)}
+
+/* levers */
+.levers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.levers{grid-template-columns:1fr}}
+.lever{display:grid;grid-template-columns:36px 1fr;gap:12px;padding:14px;border:1px solid var(--rule);border-radius:var(--r-sm);background:var(--bg)}
+.lever .i{font-family:var(--mono);font-size:13px;font-weight:700;width:30px;height:30px;border-radius:50%;background:var(--inverse);color:var(--lime);display:grid;place-items:center}
+.lever h4{margin:0 0 4px;font-size:15px}
+.lever p{font-size:13px;color:var(--ink-2)}
+.lever .cut{font-size:12px;font-weight:600;color:var(--good);margin-top:6px}
+
+/* tradeoffs + roadmap */
+.tradeoffs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.tradeoffs{grid-template-columns:1fr}}
+.to{border-left:3px solid var(--warn);padding:4px 0 4px 14px}
+.to h4{margin:0 0 4px;font-size:15px}
+.to p{font-size:13px;color:var(--ink-2)}
+.road{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;border:1px solid var(--rule-strong);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+@media (max-width:900px){.road{grid-template-columns:1fr}}
+.phase{padding:16px;border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:8px;min-width:0}
+.phase:last-child{border-right:0}
+@media (max-width:900px){.phase{border-right:0;border-bottom:1px solid var(--rule)}.phase:last-child{border-bottom:0}}
+.phase .w{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.phase h4{margin:0;font-size:15px}
+.phase ul{margin:0;padding-left:16px;font-size:13px;color:var(--ink-2);display:flex;flex-direction:column;gap:4px}
+.phase.now{background:var(--lime-soft)}
+.sources{columns:2 320px;column-gap:32px;font-size:13px}
+.sources h4{margin:0 0 6px;font-size:13px;break-after:avoid}
+.sources ul{margin:0 0 16px;padding-left:16px;break-inside:avoid}
+.sources li{margin-bottom:3px;word-break:break-word}
+.callout{background:var(--lime-soft);border:1px solid var(--good);border-radius:var(--r-sm);padding:14px 16px;font-size:14px}
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--rule-strong);font-size:12px;color:var(--ink-3)}
+</style>
+<style>
+/* v2 additions: ten venues, Monad-native filter, coverage map */
+table.matrix{min-width:1880px}
+.matrix tbody th{width:140px;min-width:140px}
+.matrix td{min-width:165px}
+.matrix thead th .sub-h{display:block;font-size:10px;letter-spacing:.08em;color:var(--ink-3);font-weight:600;margin-top:2px}
+.matrix thead th.fl .sub-h{color:var(--ink)}
+.matrix thead th.mn{border-top:3px solid var(--good)}
+table.scores{min-width:1040px}
+.page.only-m .gcol,.page.only-g .mcol{display:none}
+.filter-row{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-bottom:14px}
+.filter-row .hint{max-width:52ch}
+.group-title{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:28px 0 12px}
+.group-title:first-of-type{margin-top:0}
+.group-title h3{font-family:var(--serif);font-size:24px}
+.native{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:var(--good-soft);color:var(--good);white-space:nowrap}
+.pc-grid .pc.mn{border-top:3px solid var(--good)}
+.cover{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.cov{border:1px solid var(--rule);border-radius:var(--r-sm);padding:12px;background:var(--bg);display:flex;flex-direction:column;gap:6px;min-width:0}
+.cov h4{margin:0;font-size:14px}
+.cov p{font-size:12.5px;color:var(--ink-2)}
+.cov .row{display:flex;gap:6px;flex-wrap:wrap}
+.lesson{border:1px dashed var(--warn);background:var(--warn-soft);border-radius:var(--r-sm);padding:14px 16px;font-size:14px;color:var(--ink)}
+.monad-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;border:1px solid var(--rule-strong);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+@media (max-width:900px){.monad-strip{grid-template-columns:1fr}}
+.ms{padding:14px;border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:6px;min-width:0}
+.ms:last-child{border-right:0}
+@media (max-width:900px){.ms{border-right:0;border-bottom:1px solid var(--rule)}.ms:last-child{border-bottom:0}}
+.ms .who{font-weight:700}
+.ms .what{font-size:12.5px;color:var(--ink-2)}
+.ms .q{font-size:12px;font-family:var(--mono);color:var(--ink-3)}
+.ms.us{background:var(--lime-soft)}
+</style>
+</head>
+<body>
+<nav class="top" aria-label="Sections">
+  <div class="in">
+    <span class="brand"><i></i>Flurbo</span>
+    <span class="part">Part 1</span>
+    <a href="#venues">The ten</a><a href="#monad">On Monad</a><a href="#matrix">Side by side</a><a href="#scores">Scores</a><a href="#proscons">Pros &amp; cons</a>
+    <span class="part">Part 2</span>
+    <a href="#shift">Best of all</a><a href="#mechanical">Every market mechanical</a><a href="#losses">Creator losses</a><a href="#after">After the shift</a><a href="#roadmap">Roadmap</a><a href="#sources">Sources</a>
+  </div>
+</nav>
+
+<div class="wrap page" id="page">
+<header class="hero">
+  <div class="stack">
+    <span class="eyebrow">Competitive research · market creation and settlement · edition 2</span>
+    <h1>Ten prediction venues, five of them on Monad, and how Flurbo can take the best of each.</h1>
+    <p class="lead">Part 1 compares Flurbo as it runs after pre-test-v1 with four Monad-native venues (Levr, Hyperstitions, Blinq, CRSHMARKET) and five global ones (Polymarket, Kalshi, Delphi, Seer, bento.fun). Part 2 is the plan: every market settled by a mechanical reader, Seer-style Reality.eth and Kleros as the fallback, and creator losses kept small.</p>
+  </div>
+  <div class="meta">
+    <span><b>Prepared</b> 30 September 2026</span>
+    <span><b>Flurbo facts</b> from the repository at <code>9b7c206</code>: contracts, resolver config, <code>SETTLEMENT_READERS.md</code>, pre-test-v1</span>
+    <span><b>Others</b> from their sites, docs, funding announcements and press. Several Monad venues publish little documentation; gaps are marked "not documented", not guessed.</span>
+    <span><b>Scores</b> are judgement, 0 to 5.</span>
+  </div>
+</header>
+
+<!-- ============ PART 1 ============ -->
+<section id="venues">
+  <div class="sec-head">
+    <span class="eyebrow">Part 1 · The field today</span>
+    <h2>The ten venues in one line each</h2>
+  </div>
+
+  <div class="group-title"><h3>Native to Monad</h3><span class="native">Monad</span></div>
+  <div class="venues">
+    <article class="venue us">
+      <div class="name"><h3>Flurbo</h3><span class="tag">Pre-test-v1</span></div>
+      <p class="line">One LMSR pool prices related yes/no questions and their combinations together. General readers settle from public sources and publish replayable evidence.</p>
+      <dl><dt class="k">Creates</dt><dd>Operator only</dd><dt class="k">Pricing</dt><dd>Joint-state LMSR</dd><dt class="k">Settles</dt><dd>Reader bot + bonded resolver</dd><dt class="k">Chain</dt><dd>Monad testnet, test AUSD</dd></dl>
+    </article>
+    <article class="venue">
+      <div class="name"><h3>Levr</h3><span class="tag">Leveraged sports</span></div>
+      <p class="line">A sports "book exchange": bets become $0–1 tokens with 2x to 5x leverage, backed by a liquidity-provider vault and an oracle-driven liquidation engine.</p>
+      <dl><dt class="k">Creates</dt><dd>Levr</dd><dt class="k">Pricing</dt><dd>Aggregated sportsbook odds; live order book</dd><dt class="k">Settles</dt><dd>Results oracle, provider not documented</dd><dt class="k">Funding</dt><dd>$5.3M raised</dd></dl>
+    </article>
+    <article class="venue">
+      <div class="name"><h3>Hyperstitions</h3><span class="tag">Coordination markets</span></div>
+      <p class="line">Markets where bettors are meant to make YES happen. The protocol subsidises NO so YES is cheap; an AI reads a zkTLS-proven API response to settle.</p>
+      <dl><dt class="k">Creates</dt><dd>Protocol; permissionless layer</dd><dt class="k">Pricing</dt><dd>Pot-split AMM with virtual liquidity</dd><dt class="k">Settles</dt><dd>Reclaim zkTLS + AI prompt</dd><dt class="k">Collateral</dt><dd>$HST token</dd></dl>
+    </article>
+    <article class="venue">
+      <div class="name"><h3>Blinq</h3><span class="tag">Short-horizon trading</span></div>
+      <p class="line">Up/down and candle-colour rounds on BTC, ETH, SOL and big tech stocks over 5, 15 and 30 minutes, priced by Pyth, with gasless smart accounts.</p>
+      <dl><dt class="k">Creates</dt><dd>Blinq (fixed products)</dd><dt class="k">Pricing</dt><dd>Predefined payouts</dd><dt class="k">Settles</dt><dd>Pyth price feeds</dd><dt class="k">Chain</dt><dd>Monad mainnet</dd></dl>
+    </article>
+    <article class="venue">
+      <div class="name"><h3>CRSHMARKET</h3><span class="tag">Livestreams</span></div>
+      <p class="line">Yes/no bets on what happens next in Twitch and Kick streams, mostly games so far, settling in as little as 60 seconds.</p>
+      <dl><dt class="k">Creates</dt><dd>Not documented</dd><dt class="k">Pricing</dt><dd>Not documented</dd><dt class="k">Settles</dt><dd>Not documented</dd><dt class="k">Chain</dt><dd>Monad mainnet</dd></dl>
+    </article>
+  </div>
+
+  <div class="group-title"><h3>Global benchmarks</h3><span class="tag">Other chains or off-chain</span></div>
+  <div class="venues">
+    <article class="venue">
+      <div class="name"><h3>Polymarket</h3><span class="tag">Largest crypto venue</span></div>
+      <p class="line">Staff-listed markets on a central limit order book, settled by the UMA optimistic oracle.</p>
+      <dl><dt class="k">Creates</dt><dd>Polymarket team</dd><dt class="k">Pricing</dt><dd>Order book</dd><dt class="k">Settles</dt><dd>UMA, $750 bond, 2h window</dd><dt class="k">Chain</dt><dd>Polygon</dd></dl>
+    </article>
+    <article class="venue">
+      <div class="name"><h3>Kalshi</h3><span class="tag">CFTC exchange</span></div>
+      <p class="line">A regulated exchange that self-certifies each contract with the CFTC and settles it against a named source.</p>
+      <dl><dt class="k">Creates</dt><dd>Kalshi</dd><dt class="k">Pricing</dt><dd>Order book, RFQ combos</dd><dt class="k">Settles</dt><dd>Kalshi, per contract rules</dd><dt class="k">Money</dt><dd>US dollars, KYC</dd></dl>
+    </article>
+    <article class="venue">
+      <div class="name"><h3>Delphi</h3><span class="tag">Gensyn</span></div>
+      <p class="line">Anyone creates an "information market"; AI analyst and judge models settle it automatically with a reproducible receipt.</p>
+      <dl><dt class="k">Creates</dt><dd>Anyone</dd><dt class="k">Pricing</dt><dd>Dynamic pari-mutuel</dd><dt class="k">Settles</dt><dd>AI judge, up to 48h</dd><dt class="k">Creator</dt><dd>Earns 1.5% of volume</dd></dl>
+    </article>
+    <article class="venue">
+      <div class="name"><h3>Seer</h3><span class="tag">Gnosis ecosystem</span></div>
+      <p class="line">Permissionless markets as Gnosis conditional tokens, answered on Reality.eth, with Kleros jurors for disputes.</p>
+      <dl><dt class="k">Creates</dt><dd>Anyone</dd><dt class="k">Pricing</dt><dd>Swapr pools per outcome</dd><dt class="k">Settles</dt><dd>Reality.eth + Kleros</dd><dt class="k">Chain</dt><dd>Gnosis, Ethereum; sDAI</dd></dl>
+    </article>
+    <article class="venue">
+      <div class="name"><h3>bento.fun</h3><span class="tag">Social duels</span></div>
+      <p class="line">Small public or invite-only "duels" created in the app or by SDK, shared into group chats.</p>
+      <dl><dt class="k">Creates</dt><dd>Anyone</dd><dt class="k">Pricing</dt><dd>Quote-based, not documented</dd><dt class="k">Settles</dt><dd>Resolve call + contest</dd><dt class="k">Chain</dt><dd>BNB Chain (Base USDC too)</dd></dl>
+    </article>
+  </div>
+</section>
+
+<section id="monad">
+  <div class="sec-head">
+    <span class="eyebrow">Part 1 · The Monad field</span>
+    <h2>Five Monad venues, five different questions</h2>
+    <p class="prose">None of the other four Monad venues competes head-on with Flurbo. Each one answers a different question, and none of them publishes the evidence behind a result the way Flurbo does.</p>
+  </div>
+  <div class="monad-strip">
+    <div class="ms us"><span class="who">Flurbo</span><span class="q">"How are these events related?"</span><span class="what">Joint prices for related questions, settled from public sources anyone can replay.</span></div>
+    <div class="ms"><span class="who">Levr</span><span class="q">"Who wins, with leverage?"</span><span class="what">Sports outcomes with 2x to 5x exposure against a vault.</span></div>
+    <div class="ms"><span class="who">Hyperstitions</span><span class="q">"Can we make it happen?"</span><span class="what">Reflexive markets where YES holders act to cause the outcome.</span></div>
+    <div class="ms"><span class="who">Blinq</span><span class="q">"Up or down in 5 minutes?"</span><span class="what">Price-direction rounds on oracle feeds.</span></div>
+    <div class="ms"><span class="who">CRSHMARKET</span><span class="q">"What happens next on stream?"</span><span class="what">Live entertainment moments, settled in about a minute.</span></div>
+  </div>
+</section>
+
+<section id="matrix">
+  <div class="sec-head">
+    <span class="eyebrow">Part 1 · Detail</span>
+    <h2>Side by side</h2>
+    <p class="prose">Flurbo's column describes the code on <code>main</code> and the pre-test-v1 deployment, not the plan. Green, amber and red tags mark where a venue is strong, mixed or weak on that row. Scroll sideways; the row names stay pinned.</p>
+  </div>
+  <div class="filter-row">
+    <div class="seg" role="group" aria-label="Which venues to show">
+      <button type="button" data-f="all" aria-pressed="true">All ten</button>
+      <button type="button" data-f="m" aria-pressed="false">Monad-native</button>
+      <button type="button" data-f="g" aria-pressed="false">Flurbo vs global</button>
+    </div>
+    <span class="hint">The filter applies to this table, the scorecard and the pros and cons.</span>
+  </div>
+  <div class="scroller" tabindex="0" role="region" aria-label="Comparison table">
+  <table class="matrix" id="matrixTable">
+    <thead><tr><th scope="col">&nbsp;</th>
+      <th scope="col" class="fl mn">Flurbo<span class="sub-h">Monad · today</span></th>
+      <th scope="col" class="mn">Levr<span class="sub-h">Monad</span></th>
+      <th scope="col" class="mn">Hyperstitions<span class="sub-h">Monad</span></th>
+      <th scope="col" class="mn">Blinq<span class="sub-h">Monad</span></th>
+      <th scope="col" class="mn">CRSHMARKET<span class="sub-h">Monad</span></th>
+      <th scope="col">Polymarket<span class="sub-h">Polygon</span></th>
+      <th scope="col">Kalshi<span class="sub-h">Off-chain, US</span></th>
+      <th scope="col">Delphi<span class="sub-h">Gensyn</span></th>
+      <th scope="col">Seer<span class="sub-h">Gnosis</span></th>
+      <th scope="col">bento.fun<span class="sub-h">BNB Chain</span></th></tr></thead>
+    <tbody>
+      <tr class="group"><th>Creating a market</th><td colspan="10"></td></tr>
+      <tr><th scope="row">Who can create</th>
+        <td class="fl"><span class="pill p-bad">Closed</span><br>Operator prepares each collection</td>
+        <td><span class="pill p-bad">Closed</span><br>Levr lists games and bet types</td>
+        <td><span class="pill p-good">Open</span><br>Protocol markets plus a permissionless layer: anyone can create a coordination market</td>
+        <td><span class="pill p-bad">Closed</span><br>Fixed product menu</td>
+        <td><span class="pill p-warn">Unclear</span><br>Not documented who opens a stream market</td>
+        <td><span class="pill p-bad">Closed</span><br>Polymarket team; users can suggest</td>
+        <td><span class="pill p-bad">Closed</span><br>Kalshi, self-certified under CFTC Reg. 40.2(a)</td>
+        <td><span class="pill p-good">Open</span><br>Anyone</td>
+        <td><span class="pill p-good">Open</span><br>Anyone</td>
+        <td><span class="pill p-good">Open</span><br>Anyone, in app or via <code>createDuel()</code></td></tr>
+      <tr><th scope="row">How a market is defined</th>
+        <td class="fl"><code>flurbo.settlement-rule.v1</code>: source URL, reader and its settings, decision, timing; SHA-256 hashed and bound on-chain, so it cannot change after deployment</td>
+        <td>Bet types copied from real sportsbooks; each tokenised as a $0–1 claim</td>
+        <td>A measurable goal (token price, holder count, social event) plus an arbitration: an API and a prompt</td>
+        <td>Asset, direction or candle colour, and a 5, 15 or 30 minute window</td>
+        <td>A moment in a live stream ("will he score the next goal?")</td>
+        <td>Staff-written rules text; on-chain "additional context" clarifications</td>
+        <td>Contract terms filed with the CFTC; look-alike contracts filed once as a class under Reg. 40.2(d)</td>
+        <td>Wizard: details, outcomes (2 to 20), economics, settlement, timing, review</td>
+        <td>Type, question, outcomes, opening date, preview</td>
+        <td>Question, type, category, start and end, public or private, collateral</td></tr>
+      <tr><th scope="row">Checks before launch</th>
+        <td class="fl"><span class="pill p-good">Strong</span><br>Rule check reads each source now and refuses <code>already-public</code>, <code>source-error</code> or policy breaks</td>
+        <td><span class="pill p-good">Curated</span><br>Only listed sports</td>
+        <td><span class="pill p-bad">Weak</span><br>None documented for the permissionless layer</td>
+        <td><span class="pill p-good">Fixed</span><br>Nothing to check; products are templates</td>
+        <td><span class="pill p-bad">Unknown</span><br>Not documented</td>
+        <td><span class="pill p-good">Strong</span><br>Staff review</td>
+        <td><span class="pill p-good">Strong</span><br>Legal and compliance review</td>
+        <td><span class="pill p-warn">Medium</span><br>AI validator</td>
+        <td><span class="pill p-bad">Weak</span><br>Optional "Verify" step</td>
+        <td><span class="pill p-warn">Medium</span><br>Public markets need a liquidity bootstrap</td></tr>
+      <tr><th scope="row">Topic range</th>
+        <td class="fl"><span class="pill p-warn">Medium</span><br>Any public JSON API, official statistics (CSV, SDMX, JSON-stat), official pages, any EVM chain. Not yet: logins, secret keys, JavaScript-only pages, PDFs, subjective questions</td>
+        <td><span class="pill p-bad">Sports</span></td>
+        <td><span class="pill p-warn">Crypto and social</span><br>Prices, milestones, mentions, rankings</td>
+        <td><span class="pill p-bad">Prices</span><br>BTC, ETH, SOL, big US tech stocks</td>
+        <td><span class="pill p-warn">Streams</span><br>Mostly games: PUBG, Rocket League, Valorant, Free Fire</td>
+        <td><span class="pill p-good">Wide</span></td>
+        <td><span class="pill p-good">Wide</span><br>Within CFTC limits</td>
+        <td><span class="pill p-good">Any</span></td>
+        <td><span class="pill p-good">Any</span></td>
+        <td><span class="pill p-warn">Sports-led</span></td></tr>
+
+      <tr class="group"><th>Liquidity &amp; pricing</th><td colspan="10"></td></tr>
+      <tr><th scope="row">Pricing mechanism</th>
+        <td class="fl">One LMSR cost function over all joint states of a pool</td>
+        <td>Odds from over a dozen sportsbooks turned into token prices; order book for live trading</td>
+        <td>Pot-split AMM: pari-mutuel pots with constant-product pricing and virtual liquidity</td>
+        <td>Predefined payouts per round</td>
+        <td>Not documented</td>
+        <td>Central limit order book</td>
+        <td>Central limit order book</td>
+        <td>Dynamic pari-mutuel</td>
+        <td>Swapr concentrated liquidity per outcome</td>
+        <td>Quote-based; not documented</td></tr>
+      <tr><th scope="row">Who takes the other side</th>
+        <td class="fl">The market maker, funded by an operator subsidy</td>
+        <td>A vault that LPs fund with stablecoins, in tranches per game</td>
+        <td>Other bettors; the protocol subsidises the NO pot</td>
+        <td>Not documented; predefined payouts imply a house</td>
+        <td>Not documented</td>
+        <td>Other traders and market makers</td>
+        <td>Other traders and market makers</td>
+        <td>The pool; creator seed first</td>
+        <td>LPs in each pool</td>
+        <td>Other bettors</td></tr>
+      <tr><th scope="row">Tradeable at launch</th>
+        <td class="fl"><span class="pill p-good">Always</span></td>
+        <td><span class="pill p-good">Yes</span><br>Vault quotes listed games</td>
+        <td><span class="pill p-good">Yes</span><br>Virtual liquidity</td>
+        <td><span class="pill p-good">Yes</span></td>
+        <td><span class="pill p-warn">Unknown</span></td>
+        <td><span class="pill p-warn">If quoted</span></td>
+        <td><span class="pill p-warn">If quoted</span></td>
+        <td><span class="pill p-good">Once seeded</span></td>
+        <td><span class="pill p-bad">Often not</span></td>
+        <td><span class="pill p-warn">After bootstrap</span></td></tr>
+      <tr><th scope="row">Liquidity provider's max loss</th>
+        <td class="fl"><span class="pill p-good">Fixed</span><br><code>b·ln(2ⁿ)</code>. Pre-test-v1: b = 25, 4 events, 69.3 test AUSD</td>
+        <td>Vault exposure per game, capped by tranches</td>
+        <td>The NO subsidy, paid by the protocol</td>
+        <td>House risk; not documented</td>
+        <td>Not documented</td>
+        <td>Market-maker inventory risk</td>
+        <td>Market-maker inventory risk</td>
+        <td>Part of the creator's seed</td>
+        <td>Impermanent loss</td>
+        <td>Not applicable</td></tr>
+      <tr><th scope="row">Combined bets or leverage</th>
+        <td class="fl"><span class="pill p-good">Native combos</span><br>1 to 3 events per claim, priced from one pool</td>
+        <td><span class="pill p-warn">Leverage</span><br>2x to 5x on one bet instead of parlays; liquidation if odds move</td>
+        <td><span class="pill p-bad">None</span></td>
+        <td><span class="pill p-bad">None</span></td>
+        <td><span class="pill p-bad">None known</span></td>
+        <td><span class="pill p-warn">Testing</span><br>Parlays on the US site</td>
+        <td><span class="pill p-warn">RFQ</span><br>Combos quoted by market makers</td>
+        <td><span class="pill p-bad">None</span></td>
+        <td><span class="pill p-warn">Conditional</span></td>
+        <td><span class="pill p-bad">Packs</span></td></tr>
+
+      <tr class="group"><th>Settlement</th><td colspan="10"></td></tr>
+      <tr><th scope="row">Who decides</th>
+        <td class="fl">A bot captures the source, extracts the value with the committed reader and asserts it; pre-test-v1 settled with no operator input</td>
+        <td>A results oracle; provider not documented</td>
+        <td>An AI model (Claude) reads an API response under a prompt; Reclaim zkTLS proves the call and the model run</td>
+        <td>Pyth price feeds</td>
+        <td>Not documented</td>
+        <td>UMA optimistic oracle, $750 bond</td>
+        <td>Kalshi</td>
+        <td>AI judge model in Gensyn's REE</td>
+        <td>Reality.eth bonded answers</td>
+        <td><code>duels.resolve</code></td></tr>
+      <tr><th scope="row">Disputes</th>
+        <td class="fl"><span class="pill p-warn">Trusted panel</span><br>1 AUSD bond; 2-of-3 panel, operator-controlled on testnet and disclosed</td>
+        <td><span class="pill p-warn">Not documented</span></td>
+        <td><span class="pill p-bad">Not documented</span></td>
+        <td><span class="pill p-good">Rarely needed</span><br>Oracle price is the answer</td>
+        <td><span class="pill p-bad">Not documented</span></td>
+        <td><span class="pill p-warn">Token vote</span></td>
+        <td><span class="pill p-warn">Company</span></td>
+        <td><span class="pill p-bad">None</span></td>
+        <td><span class="pill p-good">Jurors</span></td>
+        <td><span class="pill p-warn">Contest</span></td></tr>
+      <tr><th scope="row">Time to final</th>
+        <td class="fl"><span class="pill p-good">About 2h</span><br>Pre-test-v1: 1h assertion, 1h challenge, 1h vote windows (the pilot used 24h)</td>
+        <td><span class="pill p-good">Game end</span></td>
+        <td><span class="pill p-good">Hours</span></td>
+        <td><span class="pill p-good">Minutes</span></td>
+        <td><span class="pill p-good">About 60s</span></td>
+        <td><span class="pill p-good">About 2h</span><br>4–6 days if disputed</td>
+        <td><span class="pill p-good">Fast</span></td>
+        <td><span class="pill p-warn">Up to 48h</span></td>
+        <td><span class="pill p-bad">Days to weeks</span></td>
+        <td><span class="pill p-warn">Not documented</span></td></tr>
+      <tr><th scope="row">Can a user re-check it?</th>
+        <td class="fl"><span class="pill p-good">Yes</span><br>Every retained capture archived with its hash; block evidence checks parent hashes and timestamps</td>
+        <td><span class="pill p-bad">No</span><br>Oracle not named</td>
+        <td><span class="pill p-warn">Partly</span><br>zkTLS proves the API response; the AI's judgement is still a judgement</td>
+        <td><span class="pill p-good">Yes</span><br>Pyth prices are public</td>
+        <td><span class="pill p-bad">No</span></td>
+        <td><span class="pill p-warn">Partly</span></td>
+        <td><span class="pill p-warn">Trust</span></td>
+        <td><span class="pill p-warn">Partly</span></td>
+        <td><span class="pill p-good">Yes</span></td>
+        <td><span class="pill p-bad">No</span></td></tr>
+      <tr><th scope="row">Manipulation risk</th>
+        <td class="fl"><span class="pill p-good">Low</span><br>Public sources, trading closes before every observation window</td>
+        <td><span class="pill p-warn">Sports-level</span><br>Match fixing, like any sportsbook</td>
+        <td><span class="pill p-bad">By design</span><br>Bettors are meant to cause the outcome</td>
+        <td><span class="pill p-good">Low</span><br>Deep assets, oracle prices</td>
+        <td><span class="pill p-bad">High</span><br>Streamers control outcomes; press raised insider and fakery concerns</td>
+        <td><span class="pill p-warn">Medium</span></td>
+        <td><span class="pill p-good">Low</span></td>
+        <td><span class="pill p-warn">Medium</span></td>
+        <td><span class="pill p-warn">Medium</span></td>
+        <td><span class="pill p-warn">Medium</span></td></tr>
+
+      <tr class="group"><th>Money &amp; access</th><td colspan="10"></td></tr>
+      <tr><th scope="row">Creator reward</th>
+        <td class="fl">None yet</td>
+        <td>Not applicable</td>
+        <td>Not documented</td>
+        <td>Not applicable</td>
+        <td>Not documented</td>
+        <td>Not applicable</td>
+        <td>Not applicable</td>
+        <td>1.5% of volume</td>
+        <td>LP fees only</td>
+        <td>Not documented</td></tr>
+      <tr><th scope="row">Trader fees</th>
+        <td class="fl">0</td>
+        <td>"Hybrid" structure with lower vig than sportsbooks</td>
+        <td>Not documented</td>
+        <td>Built into predefined payouts</td>
+        <td>Not documented</td>
+        <td>Taker fee by category; makers get rebates</td>
+        <td>Price-scaled taker fee</td>
+        <td>Default 2%</td>
+        <td>Pool fees</td>
+        <td>Not documented</td></tr>
+      <tr><th scope="row">Collateral</th>
+        <td class="fl">Test AUSD</td>
+        <td>USDC</td>
+        <td>$HST, the project's own token</td>
+        <td>Not documented</td>
+        <td>Not documented</td>
+        <td>pUSD</td>
+        <td>US dollars</td>
+        <td>Not documented</td>
+        <td>sDAI</td>
+        <td>USDC or credits</td></tr>
+      <tr><th scope="row">Stage and traction</th>
+        <td class="fl">Testnet, invite-only preview next</td>
+        <td>500k+ wallets and 5M+ bets on testnet; $5.3M raised (Blockchain Capital, Maven 11)</td>
+        <td>$9.06M lifetime volume, 7 active markets, 3 resolved YES (site)</td>
+        <td>Mainnet; airdrop points; pre-seed (Sigma Capital, BlockTheory)</td>
+        <td>Mainnet; claims $10M volume in 45 days; $800K raised</td>
+        <td>Largest crypto venue</td>
+        <td>Largest US venue</td>
+        <td>Gensyn mainnet</td>
+        <td>Live</td>
+        <td>Live</td></tr>
+      <tr><th scope="row">Bots and agents</th>
+        <td class="fl"><span class="pill p-good">Strongest</span><br>SDKs in TypeScript, Python, Rust, C++</td>
+        <td>Not documented</td>
+        <td>Not documented</td>
+        <td>Not documented</td>
+        <td>Not documented</td>
+        <td>CLOB API</td>
+        <td>REST, FIX, RFQ APIs</td>
+        <td>Agent SDK</td>
+        <td>Contracts</td>
+        <td>TypeScript SDK</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="scores">
+  <div class="sec-head">
+    <span class="eyebrow">Part 1 · Scorecard</span>
+    <h2>Where each venue wins</h2>
+    <p class="prose">Scores from 0 to 5. Switch to "Flurbo with plan" to see the Part 2 targets; lime squares are the gains.</p>
+  </div>
+  <div class="score-tools">
+    <div class="seg" role="group" aria-label="Flurbo scenario">
+      <button type="button" id="sc-today" aria-pressed="true">Flurbo today</button>
+      <button type="button" id="sc-plan" aria-pressed="false">Flurbo with plan</button>
+    </div>
+  </div>
+  <div class="scroller" tabindex="0" role="region" aria-label="Scores table">
+    <table class="scores" id="scoreTable"></table>
+  </div>
+</section>
+
+<section id="proscons">
+  <div class="sec-head">
+    <span class="eyebrow">Part 1 · Pros and cons</span>
+    <h2>What each one gets right and wrong</h2>
+  </div>
+  <div class="pc-grid">
+    <article class="pc us mn">
+      <h3>Flurbo (today)</h3>
+      <div class="cols">
+        <div class="pro"><div class="lab">Pros</div><ul>
+          <li>Only venue pricing combined bets from one pool, so prices always agree</li>
+          <li>Four general readers settle most public-data questions with no new code</li>
+          <li>Pre-test-v1 settled four questions from four sources with no operator input</li>
+          <li>Evidence anyone can replay; trading closes before every observation window</li>
+          <li>Liquidity provider's loss fixed in advance</li>
+          <li>Best agent tooling; passkey sign-up and starter gas</li>
+        </ul></div>
+        <div class="con"><div class="lab">Cons</div><ul>
+          <li>Only the operator creates markets</li>
+          <li>Logins, secret keys, JavaScript-only pages, PDFs and subjective questions still need the operator</li>
+          <li>Disputes go to a panel the operator controls on testnet</li>
+          <li>Operator carries the whole subsidy</li>
+          <li>No fees, no creator reward, no brand yet</li>
+        </ul></div>
+      </div>
+      <p class="verdict">The most transparent engine on Monad, still with a closed front door.</p>
+    </article>
+    <article class="pc mn mcol">
+      <h3>Levr</h3>
+      <div class="cols">
+        <div class="pro"><div class="lab">Pros</div><ul>
+          <li>Leverage replaces parlays with one simple multiplier</li>
+          <li>Largest testnet user base on Monad</li>
+          <li>LP vault lets outsiders earn the house edge</li>
+          <li>Well funded</li>
+        </ul></div>
+        <div class="con"><div class="lab">Cons</div><ul>
+          <li>Sports only; closed listing</li>
+          <li>Prices copied from sportsbooks, so no new price discovery</li>
+          <li>Leverage means liquidations on normal odds swings</li>
+          <li>Results oracle and fees not publicly documented</li>
+        </ul></div>
+      </div>
+      <p class="verdict">A leveraged sportsbook more than a forecasting market.</p>
+    </article>
+    <article class="pc mn mcol">
+      <h3>Hyperstitions</h3>
+      <div class="cols">
+        <div class="pro"><div class="lab">Pros</div><ul>
+          <li>Genuinely new idea: markets that fund action</li>
+          <li>Permissionless creation</li>
+          <li>Virtual liquidity allows markets that last hours</li>
+          <li>zkTLS proof of the API response before settlement</li>
+        </ul></div>
+        <div class="con"><div class="lab">Cons</div><ul>
+          <li>Manipulation is the product, so prices are not forecasts</li>
+          <li>Collateral is its own volatile token</li>
+          <li>An AI prompt still decides the outcome</li>
+          <li>Thin documentation; docs were down during research</li>
+        </ul></div>
+      </div>
+      <p class="verdict">A coordination tool with a market attached.</p>
+    </article>
+    <article class="pc mn mcol">
+      <h3>Blinq</h3>
+      <div class="cols">
+        <div class="pro"><div class="lab">Pros</div><ul>
+          <li>Fully mechanical settlement from Pyth</li>
+          <li>Gasless smart accounts; very fast rounds</li>
+          <li>Simple products anyone understands</li>
+        </ul></div>
+        <div class="con"><div class="lab">Cons</div><ul>
+          <li>Price-direction games, not information markets</li>
+          <li>Predefined payouts imply a house edge</li>
+          <li>Volume boosted by airdrop points</li>
+          <li>No user-created markets</li>
+        </ul></div>
+      </div>
+      <p class="verdict">Closer to a trading game than a prediction market.</p>
+    </article>
+    <article class="pc mn mcol">
+      <h3>CRSHMARKET</h3>
+      <div class="cols">
+        <div class="pro"><div class="lab">Pros</div><ul>
+          <li>A market category nobody else has</li>
+          <li>About 60 second settlement suits live viewing</li>
+          <li>Strong consumer pull and early volume</li>
+        </ul></div>
+        <div class="con"><div class="lab">Cons</div><ul>
+          <li>Resolution process not documented</li>
+          <li>Streamers can control outcomes; insider and fakery concerns in the press</li>
+          <li>Regulatory exposure of betting on people's lives</li>
+          <li>No evidence a user can check</li>
+        </ul></div>
+      </div>
+      <p class="verdict">Entertainment first; trust is the open question.</p>
+    </article>
+    <article class="pc gcol">
+      <h3>Polymarket</h3>
+      <div class="cols">
+        <div class="pro"><div class="lab">Pros</div><ul>
+          <li>Deepest crypto liquidity and biggest audience</li>
+          <li>About 2h to resolve when undisputed</li>
+          <li>Careful rules text with on-chain clarifications</li>
+        </ul></div>
+        <div class="con"><div class="lab">Cons</div><ul>
+          <li>Users cannot create markets</li>
+          <li>Disputes decided by UMA token holders</li>
+          <li>Niche books are thin or empty</li>
+        </ul></div>
+      </div>
+      <p class="verdict">Wins popular questions on depth and brand.</p>
+    </article>
+    <article class="pc gcol">
+      <h3>Kalshi</h3>
+      <div class="cols">
+        <div class="pro"><div class="lab">Pros</div><ul>
+          <li>Regulated in the US; dollars in and out</li>
+          <li>Precise contract terms and named sources</li>
+          <li>Class certification: one template, many markets</li>
+        </ul></div>
+        <div class="con"><div class="lab">Cons</div><ul>
+          <li>Only Kalshi lists markets</li>
+          <li>Settlement is trust in the company</li>
+          <li>RFQ combos have been priced worse than sportsbooks for takers</li>
+        </ul></div>
+      </div>
+      <p class="verdict">The regulated benchmark for rules quality.</p>
+    </article>
+    <article class="pc gcol">
+      <h3>Delphi</h3>
+      <div class="cols">
+        <div class="pro"><div class="lab">Pros</div><ul>
+          <li>Anyone can create, with a guided wizard</li>
+          <li>AI validator catches vague questions</li>
+          <li>Creators earn 1.5% of volume</li>
+        </ul></div>
+        <div class="con"><div class="lab">Cons</div><ul>
+          <li>A model decides; no appeal documented</li>
+          <li>Receipts prove the model ran, not that it was right</li>
+          <li>Up to 48h to settle</li>
+        </ul></div>
+      </div>
+      <p class="verdict">Best creator experience, weakest settlement guarantee.</p>
+    </article>
+    <article class="pc gcol">
+      <h3>Seer</h3>
+      <div class="cols">
+        <div class="pro"><div class="lab">Pros</div><ul>
+          <li>Permissionless, any question</li>
+          <li>Reality.eth bonds plus Kleros jurors</li>
+          <li>Scalar, multi-scalar and futarchy markets</li>
+        </ul></div>
+        <div class="con"><div class="lab">Cons</div><ul>
+          <li>Days to weeks to settle</li>
+          <li>Thin, per-outcome liquidity</li>
+          <li>Loose wording ends as "Invalid"</li>
+        </ul></div>
+      </div>
+      <p class="verdict">Most neutral settlement, slowest and thinnest markets.</p>
+    </article>
+    <article class="pc gcol">
+      <h3>bento.fun</h3>
+      <div class="cols">
+        <div class="pro"><div class="lab">Pros</div><ul>
+          <li>Markets in seconds, public or invite-only</li>
+          <li>Built to spread through group chats</li>
+          <li>SDK for other apps</li>
+        </ul></div>
+        <div class="con"><div class="lab">Cons</div><ul>
+          <li>Resolution and pricing not documented</li>
+          <li>Mostly sports; small stakes by design</li>
+        </ul></div>
+      </div>
+      <p class="verdict">Best growth loop, least transparent settlement.</p>
+    </article>
+  </div>
+</section>
+
+<!-- ============ PART 2 ============ -->
+<div class="part-banner" id="shift">
+  <span class="n">PART 2</span>
+  <h2>Flurbo's shift to overall winner</h2>
+  <p>Keep what only Flurbo has, borrow one proven idea from each rival, and fix the two problems that matter most: every market settled mechanically, and small creator losses.</p>
+</div>
+
+<section style="padding-top:36px">
+  <div class="sec-head">
+    <span class="eyebrow">Part 2 · Best of all</span>
+    <h2>What to take from each</h2>
+  </div>
+  <div class="borrow">
+    <div class="take keep"><span class="from">Keep from Flurbo</span><h3>One pool, general readers, replayable evidence</h3><p>Joint-state LMSR, the four general readers, the rule check and hashed captures are the moat. Nothing below should weaken them.</p></div>
+    <div class="take"><span class="from">From Hyperstitions</span><h3>zkTLS for sources nobody else can fetch</h3><p>Reclaim-style proofs let a reader use logged-in or keyed APIs while anyone can still verify the response. Take the proof, leave out the AI judge.</p></div>
+    <div class="take"><span class="from">From Blinq and CRSHMARKET</span><h3>Short-horizon markets</h3><p>Minutes-long markets keep people coming back. Flurbo can do this mechanically with <code>evm-rpc.v1</code> on Monad blocks and on-chain price feeds.</p></div>
+    <div class="take"><span class="from">From Levr</span><h3>An LP vault for depth</h3><p>Outside LPs fund the market maker and share fees, tranched so no single market can drain it. Here it funds LMSR depth instead of leverage.</p></div>
+    <div class="take"><span class="from">From Kalshi</span><h3>Templates as a class</h3><p>Review a reader template once; every market made from it is pre-approved and only varies its parameters.</p></div>
+    <div class="take"><span class="from">From Delphi</span><h3>Guided creation and a creator cut</h3><p>A wizard with live validation and a fee share. Flurbo's validator is the real rule check, not a model's opinion.</p></div>
+    <div class="take"><span class="from">From Seer</span><h3>Reality.eth and Kleros as the fallback</h3><p>Questions no reader can check still get neutral settlement, labelled slow so traders price it in.</p></div>
+    <div class="take"><span class="from">From Polymarket</span><h3>Short bonded window, exact rules text</h3><p>A 1 to 2 hour window is enough when evidence is mechanical, and each template generates Kalshi-grade rules text.</p></div>
+    <div class="take"><span class="from">From bento.fun</span><h3>Private duels and share links</h3><p>Invite-only markets settled by a reader, so small stakes never depend on trusting the host.</p></div>
+  </div>
+</section>
+
+<section id="mechanical">
+  <div class="problem">
+    <div class="ph"><span class="n">PROBLEM 1</span><h2>Every type of market, settled mechanically</h2></div>
+    <p class="prose">Flurbo is past the hard part. The general readers already turn most public-data questions into rule settings with no new code, and pre-test-v1 proved it end to end. What remains is the list <code>SETTLEMENT_READERS.md</code> calls "not automatable, so the operator proposes": logins and secret keys, JavaScript-only pages, PDFs, and subjective questions. The plan removes the operator from each of those.</p>
+
+    <div>
+      <p class="sub" style="margin-bottom:10px">Coverage map: question types, today and after the plan</p>
+      <div class="cover">
+        <div class="cov"><h4>On-chain activity, any EVM chain</h4><p>Transactions, logs, balances, supply, contract reads</p><div class="row"><span class="status s-built">Built · evm-rpc.v1</span></div></div>
+        <div class="cov"><h4>Crypto prices</h4><p>On-chain price feed contract at the first block after a time</p><div class="row"><span class="status s-built">Built · evm-rpc.v1</span></div></div>
+        <div class="cov"><h4>Macro and official statistics</h4><p>FRED, ECB and other SDMX providers, Eurostat, central-bank FX</p><div class="row"><span class="status s-built">Built · stat-table.v1</span></div></div>
+        <div class="cov"><h4>Disasters and weather</h4><p>USGS, EMSC, GDACS, public weather APIs</p><div class="row"><span class="status s-built">Built · json-api.v1</span></div></div>
+        <div class="cov"><h4>Software and GitHub</h4><p>Releases, tags, public repository data</p><div class="row"><span class="status s-built">Built · json-api.v1</span></div></div>
+        <div class="cov"><h4>Official announcements</h4><p>A headline sentence on an official page</p><div class="row"><span class="status s-built">Built · html-text.v1</span></div></div>
+        <div class="cov"><h4>Sports and elections</h4><p>Free official APIs work now; paid feeds need a key</p><div class="row"><span class="status s-built">Some</span><span class="status s-next">Next · zkTLS</span></div></div>
+        <div class="cov"><h4>Logged-in or keyed APIs</h4><p>Sources nobody else can fetch without credentials</p><div class="row"><span class="status s-next">Next · zkTLS proof reader</span></div></div>
+        <div class="cov"><h4>JavaScript-only pages</h4><p>Pages that render their numbers in the browser</p><div class="row"><span class="status s-later">Later · headless capture + zkTLS</span></div></div>
+        <div class="cov"><h4>PDF releases</h4><p>Reports published only as PDF</p><div class="row"><span class="status s-later">Later · pdf-text reader</span></div></div>
+        <div class="cov"><h4>Short-horizon markets</h4><p>5 to 60 minute rounds on Monad blocks or price feeds</p><div class="row"><span class="status s-next">Next · evm-rpc.v1 templates</span></div></div>
+        <div class="cov"><h4>Subjective or prose-only</h4><p>"Will X be widely considered…", court rulings in prose</p><div class="row"><span class="status s-fallback">Fallback · Reality.eth + Kleros</span></div></div>
+      </div>
+    </div>
+
+    <p class="lesson"><b>Transparency lesson from pre-test-v1.</b> EMSC entered an M4.2 earthquake 92 minutes after it happened, five minutes after Flurbo captured the count. The market settled on 4 while the catalogue later showed 5. Flurbo was right by its committed rule, and the rule check now refuses any capture window less than 3 hours after an observed interval. Publishing this kind of detail is exactly what the other venues don't do.</p>
+
+    <div>
+      <p class="sub" style="margin-bottom:10px">Settlement path for every market</p>
+      <div class="diagram" role="img" aria-label="Pipeline: template, rule check, live trading, capture and hash, sources agree, deliver in about two hours. If sources fail or disagree, go to Reality.eth bonded answers, then Kleros if disputed. If the rule check fails, the market is not listed.">
+        <svg viewBox="0 0 1100 250" xmlns="http://www.w3.org/2000/svg">
+          <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#14271d"/></marker></defs>
+          <g font-size="13">
+            <rect x="10" y="30" width="140" height="64" rx="8" fill="#fbfaf5" stroke="#14271d"/>
+            <text x="80" y="57" text-anchor="middle" font-weight="600">Reader template</text><text x="80" y="76" text-anchor="middle" font-size="11" fill="#5f6a63">creator fills settings</text>
+            <rect x="185" y="30" width="140" height="64" rx="8" fill="#fbfaf5" stroke="#14271d"/>
+            <text x="255" y="57" text-anchor="middle" font-weight="600">Rule check</text><text x="255" y="76" text-anchor="middle" font-size="11" fill="#5f6a63">reads the source now</text>
+            <rect x="360" y="30" width="140" height="64" rx="8" fill="#fbfaf5" stroke="#14271d"/>
+            <text x="430" y="57" text-anchor="middle" font-weight="600">Live trading</text><text x="430" y="76" text-anchor="middle" font-size="11" fill="#5f6a63">rule hash on-chain</text>
+            <rect x="535" y="30" width="150" height="64" rx="8" fill="#fbfaf5" stroke="#14271d"/>
+            <text x="610" y="57" text-anchor="middle" font-weight="600">Capture + hash</text><text x="610" y="76" text-anchor="middle" font-size="11" fill="#5f6a63">or a zkTLS proof</text>
+            <rect x="720" y="30" width="150" height="64" rx="8" fill="#fbfaf5" stroke="#14271d"/>
+            <text x="795" y="57" text-anchor="middle" font-weight="600">Valid capture?</text><text x="795" y="76" text-anchor="middle" font-size="11" fill="#5f6a63">identity, value, time</text>
+            <rect x="905" y="30" width="185" height="64" rx="8" fill="#eef8c9" stroke="#2e7d55" stroke-width="2"/>
+            <text x="997" y="57" text-anchor="middle" font-weight="700">Deliver in ~2 hours</text><text x="997" y="76" text-anchor="middle" font-size="11" fill="#45524a">bonded window, evidence public</text>
+            <line x1="150" y1="62" x2="183" y2="62" stroke="#14271d" stroke-width="1.5" marker-end="url(#ar)"/>
+            <line x1="325" y1="62" x2="358" y2="62" stroke="#14271d" stroke-width="1.5" marker-end="url(#ar)"/>
+            <line x1="500" y1="62" x2="533" y2="62" stroke="#14271d" stroke-width="1.5" marker-end="url(#ar)"/>
+            <line x1="685" y1="62" x2="718" y2="62" stroke="#14271d" stroke-width="1.5" marker-end="url(#ar)"/>
+            <line x1="870" y1="62" x2="903" y2="62" stroke="#14271d" stroke-width="1.5" marker-end="url(#ar)"/>
+            <text x="886" y="52" text-anchor="middle" font-size="11" fill="#2e7d55" font-weight="700">yes</text>
+            <line x1="795" y1="94" x2="795" y2="158" stroke="#8a6414" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar)"/>
+            <text x="805" y="130" font-size="11" fill="#8a6414" font-weight="700">no valid capture, or subjective</text>
+            <line x1="255" y1="94" x2="255" y2="158" stroke="#9a3324" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar)"/>
+            <text x="265" y="130" font-size="11" fill="#9a3324" font-weight="700">already-public or source-error</text>
+            <rect x="160" y="160" width="190" height="56" rx="8" fill="#f6e3de" stroke="#9a3324"/>
+            <text x="255" y="185" text-anchor="middle" font-weight="600">Not listed</text><text x="255" y="203" text-anchor="middle" font-size="11" fill="#45524a">no "Invalid" markets later</text>
+            <rect x="700" y="160" width="190" height="56" rx="8" fill="#f4ead0" stroke="#8a6414"/>
+            <text x="795" y="185" text-anchor="middle" font-weight="600">Reality.eth</text><text x="795" y="203" text-anchor="middle" font-size="11" fill="#45524a">bonded answers, days</text>
+            <line x1="890" y1="188" x2="933" y2="188" stroke="#8a6414" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar)"/>
+            <text x="911" y="178" text-anchor="middle" font-size="11" fill="#8a6414">disputed</text>
+            <rect x="935" y="160" width="155" height="56" rx="8" fill="#f4ead0" stroke="#8a6414"/>
+            <text x="1012" y="185" text-anchor="middle" font-weight="600">Kleros jurors</text><text x="1012" y="203" text-anchor="middle" font-size="11" fill="#45524a">or panel until bridged</text>
+            <text x="10" y="242" font-size="11" fill="#5f6a63">Solid path: mechanical. Dashed amber: fallback, days, labelled on the market. Dashed red: refused before trading. Today the amber branch ends in VOID or an operator proposal.</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="two">
+      <div class="stack">
+        <p class="sub">A new reader is one more <code>adapter</code> value</p>
+        <p class="prose">The rule format already carries the reader and its settings inside the hashed rule. A zkTLS reader keeps the same shape: the proof replaces the raw capture as evidence, and the extraction settings stay identical to <code>json-api.v1</code>.</p>
+        <p class="prose">A creator never writes free text for settlement. They pick a template, fill its settings, and the page shows the generated rules text and the rule check result before they can publish.</p>
+      </div>
+<pre class="spec"><span class="c">// flurbo.settlement-rule.v1, proposed zkTLS reader</span>
+{
+  <span class="h">"source"</span>: {
+    "publisher": "Official league stats API",
+    "urls": ["https://api.example-league.com/match/8812"],
+    "adapter": <span class="h">"zktls-json.v1"</span>,
+    "reader": {
+      "select": "/result/winner",
+      "aggregate": "value",
+      "checks": [{ "path": "/status", "equals": "final" }]
+    },
+    "proof": { "provider": "reclaim", "verify": "on-chain" }
+  },
+  <span class="h">"decision"</span>: { "type": "category", "equals": "HOME" },
+  <span class="h">"onNoValidCapture"</span>: "reality-eth"
+}</pre>
+    </div>
+
+    <div>
+      <p class="sub" style="margin-bottom:10px">Three ways to bring in Seer, Reality.eth and Kleros</p>
+      <div class="opts">
+        <div class="opt">
+          <div class="top"><h4>A. Reality.eth on Monad</h4><span class="tag">Fast to ship</span></div>
+          <p>Deploy the open-source Reality.eth contracts on Monad. Flurbo's reviewer panel is the arbitrator at first.</p>
+          <ul><li>Bonded public answers from day one</li><li>Arbitration is still the panel</li></ul>
+        </div>
+        <div class="opt rec">
+          <div class="top"><h4>B. Read Seer's answers</h4><span class="tag" style="background:var(--good-soft);color:var(--good)">Recommended first</span></div>
+          <p>Mirror each fallback question to Reality.eth on Gnosis, where Seer and Kleros already run. Flurbo settles by reading the final answer with <code>evm-rpc.v1</code> (<code>metric: "call"</code>), which already exists.</p>
+          <ul><li>The fallback becomes just another mechanical source</li><li>Real Kleros jurors, no bridge, no new Flurbo contracts</li><li>Question bonds paid on Gnosis</li></ul>
+        </div>
+        <div class="opt">
+          <div class="top"><h4>C. Kleros cross-chain proxy</h4><span class="tag">Most native</span></div>
+          <p>Kleros already links Reality.eth on other chains through home and foreign proxies over a message bridge. Monad would need a bridge and an audit.</p>
+          <ul><li>Disputes start from Monad directly</li><li>Most engineering and review work</li></ul>
+        </div>
+      </div>
+    </div>
+    <p class="callout"><b>Result:</b> most questions settle mechanically in about two hours. The rest settle through bonds and jurors in days, labelled "slow settlement". The operator no longer proposes or decides any outcome.</p>
+  </div>
+</section>
+
+<section id="losses">
+  <div class="problem">
+    <div class="ph"><span class="n">PROBLEM 2</span><h2>Keeping creator losses small</h2></div>
+    <p class="prose">An LMSR market maker can lose at most <code>b·ln N</code>, where <code>b</code> is the depth and <code>N</code> the number of joint outcomes. Pre-test-v1 already cut depth to b = 25, so four linked questions cost 69.3 test AUSD at worst. The worst case only happens if the market ends at full certainty after traders moved the price all the way. Six levers shrink it, and fees can pay it back.</p>
+
+    <div class="calc">
+      <div class="stack">
+        <p class="sub">Loss calculator</p>
+        <div class="presets">
+          <button type="button" data-p="pretest">pre-test-v1</button>
+          <button type="button" data-p="pilot">Old pilot default</button>
+          <button type="button" data-p="casual">Casual creator</button>
+          <button type="button" data-p="pro">Serious creator</button>
+        </div>
+        <div class="field"><label for="c-events">Linked yes/no events <output id="o-events"></output></label><input id="c-events" type="range" min="1" max="4" step="1" value="4"></div>
+        <div class="field"><label for="c-b">Starting depth b <output id="o-b"></output></label><input id="c-b" type="range" min="5" max="500" step="5" value="25"></div>
+        <div class="field"><label for="c-fee">Trading fee <output id="o-fee"></output></label><input id="c-fee" type="range" min="0" max="4" step="0.25" value="0"></div>
+        <div class="field"><label for="c-vol">Expected volume (AUSD) <output id="o-vol"></output></label><input id="c-vol" type="range" min="0" max="20000" step="100" value="2000"></div>
+        <div class="field"><label for="c-mode">Depth over time</label>
+          <select id="c-mode"><option value="fixed">Fixed (today's LMSR)</option><option value="grow">Grows with volume (liquidity-sensitive)</option></select></div>
+      </div>
+      <div class="stack">
+        <div class="results">
+          <div class="stat" id="r-worst"><span class="l">Worst-case subsidy</span><span class="v" id="v-worst">–</span><span class="l" id="l-worst"></span></div>
+          <div class="stat" id="r-fees"><span class="l">Creator fee income</span><span class="v" id="v-fees">–</span><span class="l">fees repay the subsidy first</span></div>
+          <div class="stat" id="r-net"><span class="l">Net, worst case</span><span class="v" id="v-net">–</span><span class="l" id="l-net"></span></div>
+        </div>
+        <div class="chart" aria-label="Chart of net creator result against trading volume" role="img">
+          <svg id="chart" viewBox="0 0 640 240" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+        <p class="hint">Worst case assumes the market resolves at full certainty and the whole subsidy is paid out. With depth growth, b = b₀ + 0.05 × volume while worst-case loss stays capped at the starting depth, following Othman et al.'s liquidity-sensitive LMSR. Illustrative, not a quote.</p>
+      </div>
+    </div>
+
+    <div>
+      <p class="sub" style="margin-bottom:10px">The six levers, in the order to build them</p>
+      <div class="levers">
+        <div class="lever"><span class="i">1</span><div><h4>Start shallow, deepen with volume</h4><p>Liquidity-sensitive LMSR: b grows as money trades, so creators fund only a small starting b. Worst-case loss tends to zero as starting depth does.</p><p class="cut">Yes/no at b = 10: about 7 AUSD at risk</p></div></div>
+        <div class="lever"><span class="i">2</span><div><h4>Fees repay the subsidy first</h4><p>A 1 to 2% fee goes to the creator until the subsidy is covered, then splits with the protocol.</p><p class="cut">At 2%, pre-test-v1's 69.3 AUSD is repaid by about 3,470 AUSD of volume</p></div></div>
+        <div class="lever"><span class="i">3</span><div><h4>An LP vault shares the risk</h4><p>Levr-style: outside LPs fund depth for fees, tranched per market so no single market drains the vault.</p><p class="cut">Creator risk divided among backers</p></div></div>
+        <div class="lever"><span class="i">4</span><div><h4>Close before the answer is knowable</h4><p>Already in Flurbo: trading closes before every observation window and the rule check refuses already-public values. Add an early halt if a price passes 97%.</p><p class="cut">Removes the late-certainty tail of the worst case</p></div></div>
+        <div class="lever"><span class="i">5</span><div><h4>Return what is left</h4><p>After payouts the pool's remaining collateral returns to the creator. The creation screen shows worst-case and expected loss before publishing.</p><p class="cut">Creators see their exact maximum before they commit</p></div></div>
+        <div class="lever"><span class="i">6</span><div><h4>Protocol matching for new creators</h4><p>A treasury matches the first slice of subsidy for creators with a clean track record, to seed long-tail markets.</p><p class="cut">Turn on once fees exist</p></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="after">
+  <div class="sec-head">
+    <span class="eyebrow">Part 2 · After the shift</span>
+    <h2>Where Flurbo lands, and what it still gives up</h2>
+    <p class="prose">With the plan in place, Flurbo leads the Monad field on trust, niche liquidity, combined bets and bad-market protection, and leads the global field on transparency. Flip the <a href="#scores">scorecard</a> to "Flurbo with plan" to see it. These trade-offs remain:</p>
+  </div>
+  <div class="tradeoffs">
+    <div class="to"><h4>Topic range still trails free text</h4><p>Delphi, Seer and Hyperstitions accept any wording. Flurbo accepts any template. The fallback closes most of the gap at the cost of speed.</p></div>
+    <div class="to"><h4>Slower than Blinq and CRSHMARKET</h4><p>Their markets finish in a minute. Flurbo's bonded window takes about two hours, which is the cost of a result anyone can challenge.</p></div>
+    <div class="to"><h4>Creators still post capital</h4><p>Much less than today, but not zero like staff-listed venues.</p></div>
+    <div class="to"><h4>Sports depth stays with Levr, Polymarket and Kalshi</h4><p>Vaults and order books beat a subsidised pool on big games. Flurbo should not fight there.</p></div>
+    <div class="to"><h4>Readers need upkeep</h4><p>Sources change formats and add records late, as EMSC did. Adapters stay versioned, and a broken source drops to the fallback, never to a guess.</p></div>
+    <div class="to"><h4>zkTLS is young</h4><p>Proof providers differ in trust assumptions. Keep plain captures where a public source exists.</p></div>
+  </div>
+  <p class="callout" style="margin-top:20px"><b>Positioning on Monad:</b> Levr for sports, Blinq for quick price calls, CRSHMARKET for streams, Hyperstitions for coordination. Flurbo is the one where related questions price together and every result comes with evidence you can check yourself.</p>
+</section>
+
+<section id="roadmap">
+  <div class="sec-head">
+    <span class="eyebrow">Part 2 · Order of work</span>
+    <h2>Near-term roadmap</h2>
+  </div>
+  <div class="road">
+    <div class="phase now"><span class="w">Done · pre-test-v1</span><h4>General readers</h4><ul><li><code>json-api</code>, <code>stat-table</code>, <code>html-text</code>, <code>evm-rpc</code></li><li>Rule check</li><li>Unattended settlement, b = 25</li></ul></div>
+    <div class="phase now"><span class="w">Phase 1 · 3–4 wks</span><h4>Creator economics</h4><ul><li>Templates with generated rules text</li><li>Creator-funded subsidy</li><li>Fees repay subsidy first</li><li>Creation bond; loss preview</li></ul></div>
+    <div class="phase"><span class="w">Phase 2 · 3–5 wks</span><h4>Fallback</h4><ul><li>Mirror to Reality.eth on Gnosis (option B)</li><li>"Slow settlement" labels</li><li>Short-horizon <code>evm-rpc</code> templates</li></ul></div>
+    <div class="phase"><span class="w">Phase 3 · 4–8 wks</span><h4>Depth and reach</h4><ul><li>Liquidity-sensitive LMSR</li><li>LP vault with tranches</li><li>zkTLS reader</li><li>Private duel links</li></ul></div>
+    <div class="phase"><span class="w">Phase 4 · later</span><h4>Trust-minimised</h4><ul><li>Kleros proxy on Monad</li><li>PDF and JS-page readers</li><li>Community templates</li></ul></div>
+  </div>
+</section>
+
+<section id="sources">
+  <div class="sec-head">
+    <span class="eyebrow">References</span>
+    <h2>Sources</h2>
+  </div>
+  <div class="sources">
+    <h4>Flurbo (repository, main at 9b7c206)</h4>
+    <ul>
+      <li><code>docs/SETTLEMENT_READERS.md</code>: the four general readers, rule check, EMSC lesson</li>
+      <li><code>docs/DETERMINISTIC_SETTLEMENT.md</code>: evidence packets and conflict rules</li>
+      <li><code>workflows/cre/src/pre-test-v1.ts</code>: four sources, b = 25, 1h windows</li>
+      <li><code>contracts/src/PilotResolver.sol</code>, <code>config/pilot-testnet.json</code>: bonds and panel</li>
+      <li><code>docs/TECHNICAL_LITEPAPER.md</code>: joint-state LMSR and claims</li>
+    </ul>
+    <h4>Levr</h4>
+    <ul>
+      <li><a href="https://levr.bet/">levr.bet</a></li>
+      <li><a href="https://www.blockchaincapital.com/blog/perps-over-parlays-why-we-invested-in-levr-bet">Blockchain Capital: Perps over Parlays</a></li>
+      <li><a href="https://ffnews.com/newsarticle/funding/levr-bet-raises-3m-for-leveraged-sports-betting-on-monad-led-by-blockchain-capital-and-maven-11/">$3M round on Monad</a></li>
+      <li><a href="https://learn.backpack.exchange/articles/guide-to-levr-bet">Backpack guide to Levr</a></li>
+      <li><a href="https://dewhales.substack.com/p/levrbet-explained-onchain-betting">Levr explained: options and CLOB mechanics</a></li>
+      <li><a href="https://assets-global.website-files.com/65081f5d020d0150e714aa28/65aa9ea50296451c90aadcb3_LEVR_Whitepaper_v1.2.pdf">Levr whitepaper v1.2</a></li>
+    </ul>
+    <h4>Hyperstitions</h4>
+    <ul>
+      <li><a href="https://www.hyperstitions.com/">hyperstitions.com</a></li>
+      <li><a href="https://docs.hyperstitions.com/">Hyperstitions docs</a> (unavailable during research)</li>
+      <li><a href="https://github.com/reclaimprotocol/hyperstitions-arbitration">Reclaim: hyperstitions-arbitration</a></li>
+      <li><a href="https://github.com/DefiLlama/DefiLlama-Adapters/pull/17375">DefiLlama adapter PR (Monad)</a></li>
+    </ul>
+    <h4>Blinq</h4>
+    <ul>
+      <li><a href="https://predictions.blinq.fi/">predictions.blinq.fi</a></li>
+      <li><a href="https://x.com/blinqfi">@blinqfi</a></li>
+      <li><a href="https://airdropalert.com/airdrops/blinq-trading-terminal/">Airdrop Alert product overview</a></li>
+    </ul>
+    <h4>CRSHMARKET</h4>
+    <ul>
+      <li><a href="https://app.crshmarket.com/">app.crshmarket.com</a></li>
+      <li><a href="https://monad.xyz/blog/monad-ecosystem-highlights-august-2026">Monad ecosystem highlights, August 2026</a></li>
+      <li><a href="https://ncfacanada.org/crshmarket-launches-livestream-prediction-markets/">NCFA: CRSHMARKET turns livestreams into markets</a></li>
+      <li><a href="https://futurism.com/future-society/new-prediction-market-livestreams">Futurism on insider-trading concerns</a></li>
+      <li><a href="https://noah-news.com/crshmarkets-livestream-prediction-platform-sparks-debates-over-authenticity-and/">Noah News on authenticity and regulation</a></li>
+    </ul>
+    <h4>Polymarket</h4>
+    <ul>
+      <li><a href="https://docs.polymarket.com/concepts/resolution">Resolution</a></li>
+      <li><a href="https://docs.polymarket.com/trading/fees">Fees</a></li>
+      <li><a href="https://docs.polymarket.com/market-makers/maker-rebates">Maker rebates</a></li>
+    </ul>
+    <h4>Kalshi</h4>
+    <ul>
+      <li><a href="https://www.cftc.gov/filings/orgrules/rules09022622952.pdf">CFTC self-certification filing</a></li>
+      <li><a href="https://help.kalshi.com/en/articles/13823820-combos">Combos</a></li>
+      <li><a href="https://www.sportico.com/business/sports-betting/2025/kalshi-parlay-combo-rfq-explainer-1234877038/">Sportico on RFQ parlays</a></li>
+    </ul>
+    <h4>Delphi</h4>
+    <ul>
+      <li><a href="https://docs.delphi.fyi/create-a-market.md">Create a market</a></li>
+      <li><a href="https://docs.delphi.fyi/how-ai-settlement-works.md">How AI settlement works</a></li>
+      <li><a href="https://www.gensyn.ai/blog/building-delphi-pricing-settlement-and-agentic-trading">Building Delphi</a></li>
+    </ul>
+    <h4>Seer, Reality.eth, Kleros</h4>
+    <ul>
+      <li><a href="https://seer-3.gitbook.io/seer-documentation">Seer documentation</a></li>
+      <li><a href="https://docs.kleros.io/integrations/types-of-integrations/1.-dispute-resolution-integration-plan/channel-partners/how-to-use-reality.eth-+-kleros-as-an-oracle">Reality.eth + Kleros as an oracle</a></li>
+      <li><a href="https://github.com/kleros/cross-chain-realitio-proxy-polygon">Kleros cross-chain Reality.eth proxy</a></li>
+    </ul>
+    <h4>bento.fun</h4>
+    <ul>
+      <li><a href="https://docs.bento.fun/guides/create-market">Create a market (SDK)</a></li>
+      <li><a href="https://docs.bento.fun/guides/place-bet">Place a bet</a></li>
+    </ul>
+    <h4>Mechanism design and proofs</h4>
+    <ul>
+      <li><a href="https://www.cs.cmu.edu/~./theorylunch/pastSemesterIndices/20100922.html">Othman et al., liquidity-sensitive market maker</a></li>
+      <li><a href="https://crypto.stanford.edu/seclab/sem-24-25/karamchati.html">Reclaim Protocol: verifiable HTTPS with zkTLS</a></li>
+    </ul>
+  </div>
+</section>
+
+<footer>Flurbo research · 30 September 2026 · Flurbo runs on Monad testnet with test assets only. Competitor details are from public sources on this date; several Monad venues document little, and those gaps are marked rather than guessed.</footer>
+</div>
+
+<script>
+(function(){
+  /* ---------- venue groups and filter ---------- */
+  var groups=["m","m","m","m","m","g","g","g","g","g"]; // column order after the row header
+  var mt=document.getElementById("matrixTable");
+  Array.prototype.forEach.call(mt.rows,function(r){
+    if(r.classList.contains("group"))return;
+    for(var i=1;i<r.cells.length;i++){var g=groups[i-1];if(i===1)continue;r.cells[i].classList.add(g==="m"?"mcol":"gcol");}
+  });
+  var page=document.getElementById("page");
+  var filt="all";
+  var fbtns=document.querySelectorAll(".filter-row .seg button");
+  function applyFilter(f){filt=f;page.classList.remove("only-m","only-g");if(f!=="all")page.classList.add("only-"+f);
+    fbtns.forEach(function(b){b.setAttribute("aria-pressed",b.dataset.f===f);});
+    render();}
+  fbtns.forEach(function(b){b.addEventListener("click",function(){applyFilter(b.dataset.f);});});
+
+  /* ---------- scorecard ---------- */
+  var dims=["Trust in results","Settlement speed","Topic range","Liquidity, popular markets","Liquidity, niche markets","Combined bets","Protection from bad markets","Anyone can create","Reach and brand"];
+  var venues=["Flurbo","Levr","Hyperstitions","Blinq","CRSHMARKET","Polymarket","Kalshi","Delphi","Seer","bento.fun"];
+  var S={
+    Flurbo:[4,4,3,2,4,5,5,1,1],
+    Levr:[2,4,1,3,1,1,3,0,3],
+    Hyperstitions:[2,4,3,1,3,1,2,4,2],
+    Blinq:[4,5,1,2,1,1,4,0,2],
+    CRSHMARKET:[1,5,3,2,2,1,1,1,3],
+    Polymarket:[3,4,5,5,2,3,4,0,5],
+    Kalshi:[4,5,4,5,2,3,5,0,5],
+    Delphi:[2,3,5,2,3,1,3,5,2],
+    Seer:[4,1,5,1,1,3,2,4,1],
+    "bento.fun":[1,3,2,1,2,1,2,5,3]
+  };
+  var plan=[5,4,4,3,5,5,5,4,3];
+  var mode="today";
+  function pips(n,base){var h='<span class="pips" aria-hidden="true">';for(var i=0;i<5;i++){var cls=i<n?(base!=null&&i>=base?"on up":"on"):"";h+='<i class="'+cls+'"></i>';}return h+'</span><span class="num">'+n+'</span>';}
+  function cls(v,i){if(i===0)return ' class="fl"';return groups[i]==="m"?' class="mcol"':' class="gcol"';}
+  function render(){
+    var t=document.getElementById("scoreTable");
+    var head='<thead><tr><th scope="col">Dimension</th>'+venues.map(function(v,i){return '<th scope="col"'+cls(v,i)+'>'+(i===0?(mode==="plan"?"Flurbo (plan)":"Flurbo (today)"):v)+'</th>';}).join("")+'</tr></thead>';
+    var body='<tbody>';var tot={};venues.forEach(function(v){tot[v]=0;});
+    dims.forEach(function(d,di){
+      body+='<tr><th scope="row">'+d+'</th>';
+      venues.forEach(function(v,i){
+        var val=S[v][di],base=null;
+        if(i===0&&mode==="plan"){base=S.Flurbo[di];val=plan[di];}
+        tot[v]+=val;
+        body+='<td'+cls(v,i)+'>'+pips(val,base)+'</td>';
+      });
+      body+='</tr>';
+    });
+    body+='</tbody><tfoot><tr><th scope="row">Total of 45</th>'+venues.map(function(v,i){return '<td'+cls(v,i)+'><span class="num" style="margin:0;color:inherit">'+tot[v]+'</span></td>';}).join("")+'</tr></tfoot>';
+    t.innerHTML=head+body;
+  }
+  var bt=document.getElementById("sc-today"),bp=document.getElementById("sc-plan");
+  function setMode(m){mode=m;bt.setAttribute("aria-pressed",m==="today");bp.setAttribute("aria-pressed",m==="plan");render();}
+  bt.addEventListener("click",function(){setMode("today");});
+  bp.addEventListener("click",function(){setMode("plan");});
+  render();
+
+  /* ---------- loss calculator ---------- */
+  var el=function(id){return document.getElementById(id);};
+  var ev=el("c-events"),b=el("c-b"),fee=el("c-fee"),vol=el("c-vol"),md=el("c-mode");
+  var fmt=function(x){return Math.abs(x)>=1000?Math.round(x).toLocaleString("en-US"):(Math.round(x*10)/10).toLocaleString("en-US");};
+  var ALPHA=0.05;
+  function calc(){
+    var n=+ev.value,N=Math.pow(2,n),b0=+b.value,f=+fee.value/100,V=+vol.value,grow=md.value==="grow";
+    el("o-events").textContent=n+" ("+N+" joint outcomes)";
+    el("o-b").textContent=b0;
+    el("o-fee").textContent=(+fee.value).toFixed(2)+"%";
+    el("o-vol").textContent=fmt(V);
+    var L=b0*Math.log(N),F=f*V,net=F-L;
+    el("v-worst").textContent="−"+fmt(L);
+    el("l-worst").textContent="b·ln "+N+(grow?"; depth at close ≈ "+fmt(b0+ALPHA*V):"");
+    el("v-fees").textContent="+"+fmt(F);
+    el("v-net").textContent=(net>=0?"+":"−")+fmt(Math.abs(net));
+    el("r-net").className="stat "+(net>=0?"pos":"neg");
+    el("l-net").textContent=f>0?("break-even at "+fmt(L/f)+" AUSD volume"):"no fee, no way to repay";
+    draw(L,f,V);
+  }
+  function draw(L,f,V){
+    var svg=el("chart"),W=640,H=240,pl=56,pr=16,pt=16,pb=34;
+    var maxV=Math.max(20000,V);var minY=-Math.max(L,50),maxY=Math.max(f*maxV-L,50);
+    var x=function(v){return pl+(v/maxV)*(W-pl-pr);};
+    var y=function(v){return pt+(maxY-v)/(maxY-minY)*(H-pt-pb);};
+    var h='';
+    [0,5000,10000,15000,20000].forEach(function(t){h+='<line x1="'+x(t)+'" y1="'+pt+'" x2="'+x(t)+'" y2="'+(H-pb)+'" stroke="rgba(20,39,29,.08)"/>';h+='<text x="'+x(t)+'" y="'+(H-pb+16)+'" text-anchor="middle">'+(t>=1000?(t/1000)+"k":t)+'</text>';});
+    [minY,0,maxY].forEach(function(v){h+='<text x="'+(pl-8)+'" y="'+(y(v)+4)+'" text-anchor="end">'+(v>0?"+":v<0?"−":"")+fmt(Math.abs(v))+'</text>';});
+    h+='<line x1="'+pl+'" y1="'+y(0)+'" x2="'+(W-pr)+'" y2="'+y(0)+'" stroke="#14271d" stroke-width="1"/>';
+    var x0=x(0),x1=x(maxV),y0=y(-L),y1=y(f*maxV-L);
+    h+='<path d="M'+x0+' '+y(0)+' L'+x0+' '+y0+' L'+x1+' '+y1+' L'+x1+' '+y(0)+' Z" fill="rgba(217,247,109,.35)"/>';
+    h+='<line x1="'+x0+'" y1="'+y0+'" x2="'+x1+'" y2="'+y1+'" stroke="#2e7d55" stroke-width="2.5"/>';
+    if(f>0&&L/f<=maxV){var be=x(L/f);h+='<circle cx="'+be+'" cy="'+y(0)+'" r="5" fill="#fbfaf5" stroke="#14271d" stroke-width="2"/><text x="'+be+'" y="'+(y(0)+20)+'" text-anchor="middle" style="fill:#14271d;font-weight:600">break-even</text>';}
+    h+='<circle cx="'+x(Math.min(V,maxV))+'" cy="'+y(f*V-L)+'" r="6" fill="#14271d"/>';
+    h+='<text x="'+(W-pr)+'" y="'+(H-4)+'" text-anchor="end">trading volume, AUSD</text>';
+    h+='<text x="'+pl+'" y="'+(pt-4)+'">creator net, AUSD (worst case)</text>';
+    svg.innerHTML=h;
+  }
+  var presets={pretest:{e:4,b:25,f:0,v:2000,m:"fixed"},pilot:{e:3,b:250,f:0,v:2000,m:"fixed"},casual:{e:1,b:10,f:2,v:2000,m:"grow"},pro:{e:2,b:50,f:1.5,v:10000,m:"grow"}};
+  document.querySelectorAll(".presets button").forEach(function(btn){btn.addEventListener("click",function(){var p=presets[btn.dataset.p];ev.value=p.e;b.value=p.b;fee.value=p.f;vol.value=p.v;md.value=p.m;calc();});});
+  [ev,b,fee,vol,md].forEach(function(i){i.addEventListener("input",calc);});
+  calc();
+})();
+</script>
+</body>
+</html>

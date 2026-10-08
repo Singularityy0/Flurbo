@@ -85,3 +85,35 @@ test('proxy refuses arbitrary queries, out-of-range limits, and unsafe endpoints
   await envioProxy(request({}, 'GET'), wrongMethod, ENDPOINT);
   assert.equal(wrongMethod.result.status, 405);
 });
+
+const MARKET = '0xe92649cdd20425239695221191515e1e51631d2a';
+
+test('proxy sends a fixed, bounded Kuru fills query for one market', async () => {
+  const res = response();
+  let forwarded: any;
+  await envioProxy(request({ kind: 'kuru-fills', market: MARKET.toUpperCase().replace('0X', '0x'), limit: 20 }), res, ENDPOINT,
+    async (_url: URL, options: any) => {
+      forwarded = JSON.parse(options.body);
+      return new Response(JSON.stringify({ data: { KuruFill: [] } }), { status: 200 });
+    });
+  assert.equal(res.result.status, 200);
+  assert.match(forwarded.query, /KuruFill\(where: \{ market: \{ _eq: \$market \} \}/);
+  assert.deepEqual(forwarded.variables, { market: MARKET, limit: 20 });
+});
+
+test('proxy refuses malformed or oversized Kuru fill requests', async () => {
+  for (const body of [
+    { kind: 'kuru-fills', market: MARKET, limit: 21 },
+    { kind: 'kuru-fills', market: MARKET, limit: 0 },
+    { kind: 'kuru-fills', market: MARKET, limit: 1.5 },
+    { kind: 'kuru-fills', market: '0x1234', limit: 5 },
+    { kind: 'kuru-fills', limit: 5 },
+    { kind: 'kuru-fills', market: MARKET, limit: 5, query: '{ __schema { types { name } } }' },
+  ]) {
+    const res = response();
+    let called = false;
+    await envioProxy(request(body), res, ENDPOINT, async () => { called = true; return new Response('{}'); });
+    assert.equal(res.result.status, 400, JSON.stringify(body));
+    assert.equal(called, false);
+  }
+});

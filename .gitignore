@@ -1,2 +1,4 @@
 /target/
 /tmp
+/secrets/
+/apps/web/.env.local

@@ -16,6 +16,12 @@ export const marginAbi = parseAbi([
   'function withdraw(uint256 amount,address token)',
   'function getBalance(address owner,address token) view returns (uint256)',
 ]);
+export const conversionAbi = parseAbi([
+  'function wrapBase(uint8 eventIndex,bool outcome,uint128 quantity)',
+  'function unwrapBase(uint8 eventIndex,bool outcome,uint128 quantity)',
+  'event BaseWrapped(address indexed owner,uint32 indexed scope,uint8 indexed mask,uint128 quantity)',
+  'event BaseUnwrapped(address indexed owner,uint32 indexed scope,uint8 indexed mask,uint128 quantity)',
+]);
 export const tokenAbi = parseAbi([
   'function approve(address spender,uint256 amount) returns (bool)',
   'function allowance(address owner,address spender) view returns (uint256)',
@@ -33,12 +39,14 @@ export function kuruCall({ to, data, account, contracts }) {
   try {
     if (!addr(account) || !contracts || !['pool', 'cash', 'receipt', 'margin', 'market'].every(k => addr(contracts[k]))) return null;
     const asset = same(to, contracts.cash) ? 'cash' : same(to, contracts.receipt) ? 'receipt' : null;
-    const abi = asset ? tokenAbi : same(to, contracts.margin) ? marginAbi : same(to, contracts.market) ? kuruAbi : null;
+    const abi = asset ? tokenAbi : same(to, contracts.margin) ? marginAbi : same(to, contracts.market) ? kuruAbi
+      : same(to, contracts.pool) && Number.isInteger(contracts.eventIndex) && contracts.eventIndex >= 0 && contracts.eventIndex < 32 ? conversionAbi : null;
     if (!abi) return null;
     const { functionName: name, args } = decodeFunctionData({ abi, data });
     if (encodeFunctionData({ abi, functionName: name, args }).toLowerCase() !== data.toLowerCase()) return null;
     let valid = false;
     if (asset) valid = name === 'approve' && same(args[0], contracts.margin) && (amount(args[1]) || args[1] === 0n);
+    else if (same(to, contracts.pool)) valid = ['wrapBase','unwrapBase'].includes(name) && Number(args[0]) === contracts.eventIndex && args[1] === true && amount(args[2]);
     else if (same(to, contracts.margin)) valid = name === 'deposit'
       ? same(args[0], account) && [contracts.cash, contracts.receipt].some(a => same(a, args[1])) && amount(args[2])
       : name === 'withdraw' && amount(args[0]) && [contracts.cash, contracts.receipt].some(a => same(a, args[1]));

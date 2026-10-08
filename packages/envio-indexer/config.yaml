@@ -1,18 +1,28 @@
-# Generated from config/collections.json. Run npm run config after registry changes.
+# Generated from config/collections.json and config/kuru-listings.json. Run npm run config after registry or listing changes.
 name: flurbo-monad-indexer
-description: Flurbo pool trades and resolution events on Monad testnet
+description: Flurbo pool trades, receipt wrapping, Kuru order book fills and resolution events on Monad testnet
 address_format: lowercase
+field_selection:
+  transaction_fields:
+    - hash
 contracts:
   - name: PilotPool
     events:
       - event: "Traded(address indexed trader, uint32 indexed scope, uint256 indexed mask, bool isBuy, uint128 quantity, uint128 collateralAmount)"
       - event: "Redeemed(address indexed owner, uint32 indexed scope, uint256 indexed mask, uint128 quantity, uint128 collateralAmount)"
+      - event: "BaseWrapped(address indexed owner, uint32 indexed scope, uint8 indexed mask, uint128 quantity)"
+      - event: "BaseUnwrapped(address indexed owner, uint32 indexed scope, uint8 indexed mask, uint128 quantity)"
   - name: PilotResolver
     events:
       - event: "Asserted(uint8 indexed eventIndex, address indexed asserter, uint8 outcome, bytes32 evidenceHash, string evidenceURI, uint64 challengeUntil)"
       - event: "Disputed(uint8 indexed eventIndex, address indexed disputer, uint8 outcome, bytes32 evidenceHash, string evidenceURI, uint64 voteUntil)"
       - event: "Finalized(uint8 indexed eventIndex, uint8 outcome, bool timedOut)"
       - event: "Delivered(address indexed pool, uint32 yesMask, uint32 voidMask)"
+  - name: KuruMarket
+    events:
+      - event: "Trade(uint40 orderId, address makerAddress, bool isBuy, uint256 price, uint96 updatedSize, address takerAddress, address txOrigin, uint96 filledSize)"
+      - event: "OrderCreated(uint40 orderId, address owner, uint96 size, uint32 price, bool isBuy)"
+      - event: "OrderCanceled(uint40 orderId, address owner, uint32 price, uint96 size, bool isBuy)"
 chains:
   - id: 10143
     start_block: 0
@@ -22,7 +32,9 @@ chains:
           - "0x160647d16405f44989c56b83609a171247068dcc"
           - "0x939bd2bac6a163ed39a62152c759a0c2e7ccef57"
           - "0xb7b872e9372eaee17d8de9f4c82861f1aa673198"
+          - "0xc0f8d422a18fdf4fafd1fab07bfd68eb961cf7a6"
           - "0xc4409edbfb9e9d47167b028de22f0b0d6b630077"
+          - "0xca8750ed5b6bba513925034fdf506b970ecc4823"
           - "0xd8ed3137446d99372f82573e716b3340d3dba7b3"
           - "0xf8beba5827bfaaf6ace08a40cd9db740233ca9fe"
       - name: PilotResolver
@@ -32,4 +44,10 @@ chains:
           - "0x23f1ec448d34a3d6964e7f4408f303c692681a40"
           - "0x2b0e3204b74c1c8e542fc9f747c11204a3c779c1"
           - "0x37eff955633a76472f77b88629710432bccf1654"
+          - "0x3809e24d12761fc5939abd43849c7258ea528d97"
+          - "0x4f4cc5eec7b288b2cd8aaf89a556d76d67accd8c"
           - "0xe747a8d1d42317edf6e6a68a05ffaf3b27dd8d56"
+      - name: KuruMarket
+        address:
+          - "0xaf688e0f4ae836e9e51382a1216c80926f3ce99e"
+          - "0xd3710ca0786c7f62154a01641260283952206dfd"

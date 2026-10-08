@@ -38,3 +38,43 @@ type ResolutionEvent {
   blockNumber: Int!
   timestamp: Int!
 }
+
+# One Kuru order book for a pool question's YES receipt. lastPrice is the raw price Kuru emitted.
+type KuruMarket {
+  id: ID!
+  pool: String!
+  eventIndex: Int!
+  fillCount: Int!
+  baseVolumeAtoms: BigInt!
+  ordersCreated: Int!
+  ordersCanceled: Int!
+  lastPrice: BigInt
+}
+
+# A fill on a Kuru market. isBuy and price are exactly as Kuru's Trade event emitted them; sizeAtoms is the filled receipt amount.
+type KuruFill {
+  id: ID!
+  market: String!
+  maker: String!
+  taker: String!
+  isBuy: Boolean!
+  price: BigInt!
+  sizeAtoms: BigInt!
+  blockNumber: Int!
+  timestamp: Int!
+  txHash: String!
+}
+
+# A YES or NO claim wrapped into, or unwrapped from, a tradable receipt token.
+type ReceiptFlow {
+  id: ID!
+  pool: String!
+  owner: String!
+  kind: String!
+  scope: Int!
+  mask: Int!
+  quantityAtoms: BigInt!
+  blockNumber: Int!
+  timestamp: Int!
+  txHash: String!
+}

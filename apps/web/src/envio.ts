@@ -13,6 +13,16 @@ export type EnvioTrade = {
   timestamp: number;
 };
 
+export type EnvioKuruFill = {
+  id: string;
+  isBuy: boolean;
+  price: string;
+  sizeAtoms: string;
+  blockNumber: number;
+  timestamp: number;
+  txHash: string;
+};
+
 export type EnvioTraderPosition = {
   pool: string;
   trader: string;
@@ -55,6 +65,28 @@ export async function fetchRecentTrades(
   const data = await queryIndexer<{ Trade: EnvioTrade[] }>({ kind: 'trades', pool, limit }, endpoint, signal);
   if (!Array.isArray(data.Trade)) throw new Error('Indexed activity is unavailable.');
   return data.Trade;
+}
+
+export async function fetchKuruFills(
+  market: string,
+  limit = 5,
+  endpoint = DEFAULT_ENVIO_ENDPOINT,
+  signal?: AbortSignal
+): Promise<EnvioKuruFill[]> {
+  const data = await queryIndexer<{ KuruFill: EnvioKuruFill[] }>({ kind: 'kuru-fills', market, limit }, endpoint, signal);
+  if (!Array.isArray(data.KuruFill)) throw new Error('Indexed activity is unavailable.');
+  return data.KuruFill;
+}
+
+// Kuru emits prices either in its 1e6 price precision (0.46 is 460000) or in 1e18 fixed point. A probability-like price
+// of at most 1 test AUSD per receipt cannot be confused between the two, so anything else is shown as unavailable.
+export function kuruPriceAusd(raw: string): string | null {
+  let value: bigint;
+  try { value = BigInt(raw); } catch { return null; }
+  const scale = value > 0n && value <= 1_000_000n ? 1_000_000n : value > 1_000_000n && value <= 10n ** 18n ? 10n ** 18n : 0n;
+  if (!scale) return null;
+  const micro = (value * 1_000_000n) / scale;
+  return `${micro / 1_000_000n}.${String(micro % 1_000_000n).padStart(6, '0')}`;
 }
 
 export async function fetchTraderPosition(
