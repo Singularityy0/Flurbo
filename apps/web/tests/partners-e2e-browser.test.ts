@@ -52,7 +52,7 @@ test('partners in Chrome: Kimi on Thesis and What If, Envio activity and fills, 
       const path=url.pathname;
       const api=`/api/${poolNs}`;
 
-      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:poolNs,markets:[{namespace:poolNs,label:'Test pool',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
+      if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:poolNs,markets:[{namespace:poolNs,label:'Test pool',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt,kuru:[0]}]}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600_000}}});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:owner,wallets:[]}});
@@ -128,6 +128,18 @@ test('partners in Chrome: Kimi on Thesis and What If, Envio activity and fills, 
     await page.getByText('Kimi model hypothesis (kimi-test)').waitFor();
     assert.deepEqual(kimiRequests.at(-1),{a:0,b:1});
     await shot('partners-thesis');
+
+    // 2b. The Markets list links to the Kuru book of the question that has one, and can filter to those questions.
+    await page.goto('https://flurbo.singu.online/markets');
+    const kuruLink=page.getByRole('link',{name:/Trade the YES receipt on Kuru/});
+    await kuruLink.waitFor();
+    assert.equal(await kuruLink.count(),1,'only the question with a book is linked');
+    assert.ok((await kuruLink.getAttribute('href'))!.endsWith(`/markets/${poolNs}/0/kuru`));
+    const kuruFilter=page.getByRole('button',{name:'Kuru order books (1)'});
+    await kuruFilter.click();
+    assert.equal(await kuruFilter.getAttribute('aria-pressed'),'true');
+    assert.equal(await page.locator('.market-card').count(),1,'the filter keeps only questions with a Kuru book');
+    await shot('partners-markets');
 
     // 3. Market detail: Kuru and Chainlink CRE panels, then What If with Kimi and Envio.
     await page.goto(`https://flurbo.singu.online/markets/${poolNs}/0`);

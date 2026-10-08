@@ -129,3 +129,26 @@ test('authenticated route serves each configured pool from a multi-listing value
   assert.equal((await request(second.pool,0)).body.market,second.market);
   assert.equal((await request(pool,1)).status,404);
 });
+
+test('the market directory names the questions that have a Kuru order book',async()=>{
+  const previous=process.env.FLURBO_KURU_LISTING_JSON;
+  process.env.FLURBO_KURU_LISTING_JSON=JSON.stringify(combineKuruListings([listing,listingTwo]));
+  const three={...manifest,receipts:[receipt,receipt,receipt]};
+  let api;
+  try{
+    api=localApi({store:{read:async()=>({method:'passkey',address:wallet})},previewAccess:{allows:async()=>true},
+      practiceCollections:{catalog:{collections:[{namespace:`practice-${pool.slice(2)}`,label:'One',pool,closesAt:2000000000},
+        {namespace:`practice-${second.pool.slice(2)}`,label:'Two',pool:second.pool,closesAt:2000000000},
+        {namespace:`practice-${'ee'.repeat(20)}`,label:'Three',pool:'0x'+'ee'.repeat(20),closesAt:2000000000}]},
+        services:new Map([[`practice-${pool.slice(2)}`,{manifest:{...three,publication:{draft:{closesAt:2000000000,events:[{id:'a'},{id:'b'}]}}}}],
+          [`practice-${second.pool.slice(2)}`,{manifest:manifestTwo}],[`practice-${'ee'.repeat(20)}`,{manifest:{...manifest,pool:'0x'+'ee'.repeat(20)}}]])}});
+  }finally{if(previous===undefined)delete process.env.FLURBO_KURU_LISTING_JSON;else process.env.FLURBO_KURU_LISTING_JSON=previous;}
+  const req={url:'/api/market-directory',method:'GET',headers:{host:'localhost:18767'}};
+  let status=0,body:any;
+  const res={writeHead:(code:number)=>{status=code;},end:(value:string)=>{body=JSON.parse(value);},setHeader:()=>{}};
+  await api(req as any,res as any,()=>{});
+  assert.equal(status,200);
+  assert.equal(body.schema,'flurbo.market-directory.v1');
+  const byLabel=Object.fromEntries(body.markets.map((row:any)=>[row.label,row.kuru]));
+  assert.deepEqual(byLabel,{One:[0],Two:[0],Three:[]});
+});

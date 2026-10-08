@@ -53,7 +53,7 @@ const category=(value:MarketSnapshot)=>value.manifest.publication.mode==='rehear
 
 function MarketDirectory({groups}:{groups:MarketGroup[]}){
   const [data,setData]=useState<Record<string,MarketSnapshot>>({}),[failed,setFailed]=useState<string[]>([]),[loading,setLoading]=useState(true),[revision,setRevision]=useState(0);
-  const [query,setQuery]=useState(''),[filter,setFilter]=useState('Open'),[sort,setSort]=useState('closing'),[now,setNow]=useState(Date.now());
+  const [query,setQuery]=useState(''),[filter,setFilter]=useState('Open'),[sort,setSort]=useState('closing'),[kuruOnly,setKuruOnly]=useState(false),[now,setNow]=useState(Date.now());
   const [firstAt,setFirstAt]=useState<number|null>(null),[updatedAt,setUpdatedAt]=useState<number|null>(null);
   useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(t);},[]);
   useEffect(()=>{const timer=setInterval(()=>{if(!document.hidden&&!loading)setRevision(n=>n+1);},45000);return()=>clearInterval(timer);},[loading]);
@@ -70,8 +70,10 @@ function MarketDirectory({groups}:{groups:MarketGroup[]}){
   // The first visit waits under the loader until pools settle (or three seconds after the first
   // arrives), so late pools do not reorder a list the visitor has started reading.
   useLoadGate('directory-prices',{pending:loading&&!(firstAt!==null&&now-firstAt>3000),label:'Loading prices'});
+  const hasKuru=(row:Row)=>row.group.kuru?.includes(row.index)===true;
   const all:Row[]=groups.flatMap(group=>data[group.namespace]?data[group.namespace].manifest.publication.draft.events.map((event,index)=>({group,event,index,value:data[group.namespace]})):[]);
-  const rows=all.filter(r=>(filter==='All'||marketStatus(r.value,now/1000)===filter)&&marketQuestion(r.event).toLowerCase().includes(query.toLowerCase())).sort((a,b)=>{
+  const kuruCount=all.filter(hasKuru).length;
+  const rows=all.filter(r=>(filter==='All'||marketStatus(r.value,now/1000)===filter)&&(!kuruOnly||hasKuru(r))&&marketQuestion(r.event).toLowerCase().includes(query.toLowerCase())).sort((a,b)=>{
     const rank=(v:MarketSnapshot)=>marketStatus(v,now/1000)==='Open'?0:marketStatus(v,now/1000)==='Closed'?1:2;
     const difference=rank(a.value)-rank(b.value);if(difference)return difference;
     return sort==='name'?marketQuestion(a.event).localeCompare(marketQuestion(b.event)):a.group.closesAt-b.group.closesAt;
@@ -84,6 +86,7 @@ function MarketDirectory({groups}:{groups:MarketGroup[]}){
     <div className="market-toolbar" role="search">
       <label className="market-search"><Search aria-hidden="true" strokeWidth={1.75}/><span className="sr-only">Search markets</span><input placeholder="Find a market" value={query} onChange={e=>setQuery(e.target.value)}/></label>
       <div className="segmented directory-filters" role="group" aria-label="Market status">{['All','Open','Closed','Settled'].map(f=><button key={f} type="button" aria-pressed={f===filter} onClick={()=>setFilter(f)}>{f}</button>)}</div>
+      {kuruCount>0&&<div className="segmented directory-kuru" role="group" aria-label="Kuru order books"><button type="button" aria-pressed={kuruOnly} onClick={()=>setKuruOnly(x=>!x)}>Kuru order books ({kuruCount})</button></div>}
       <div className="segmented directory-sort" role="group" aria-label="Sort">{([['closing','Closing soon'],['name','Question name']] as const).map(([value,label])=><button key={value} type="button" aria-pressed={sort===value} onClick={()=>setSort(value)}>{label}</button>)}</div>
     </div>
     <div className="directory-summary">
@@ -105,7 +108,7 @@ function MarketDirectory({groups}:{groups:MarketGroup[]}){
         return <div className="market-row-wrap" key={group.namespace+event.id}>
           {showGroup&&<div className="market-group-head"><strong>{group.label}</strong><span>{category(value)}</span>{combinable&&<span>Questions in this pool can be combined on any of its market pages</span>}</div>}
           <article className="market-card">
-            <div className="market-question"><h2><Link href={marketHref(group.namespace,index)}>{marketQuestion(event)}</Link></h2>{!grouped&&<p className="directory-context">{group.label}</p>}</div>
+            <div className="market-question"><h2><Link href={marketHref(group.namespace,index)}>{marketQuestion(event)}</Link></h2>{!grouped&&<p className="directory-context">{group.label}</p>}{hasKuru(row)&&<p className="directory-context"><Link href={marketHref(group.namespace,index)+'/kuru'} className="text-link">Trade the YES receipt on Kuru <ArrowUpRight aria-hidden="true" size={14} strokeWidth={1.75}/></Link></p>}</div>
             <div className="market-status"><StatusBadge kind={kind}>{label}</StatusBadge></div>
             <p className="directory-deadline"><span className="sr-only">{status==='Open'?'Closes':'Trading closed'} </span><time dateTime={new Date(group.closesAt*1000).toISOString()} title={exactTime(group.closesAt)}>{relativeTime(group.closesAt,now/1000)}</time><small>{shortTime(group.closesAt)}</small></p>
             {status==='Open'?<div className="market-choices">{[true,false].map(yes=><Link key={String(yes)} aria-label={(yes?'Yes: ':'No: ')+marketQuestion(event)} href={marketHref(group.namespace,index,yes)} className={yes?'choice-yes':'choice-no'}><span>{yes?'Yes':'No'}</span><strong className="num">{price(yes?quotes?.yes:quotes?.no)??'View quote'}</strong></Link>)}</div>

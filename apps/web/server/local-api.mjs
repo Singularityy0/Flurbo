@@ -235,7 +235,13 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
         const entries=[...(practiceCollections?.catalog?.collections||[])];
         if(publishedPilot&&!entries.some(row=>row.pool===publishedPilot.manifest.pool))entries.push({namespace:'pilot',label:'Release milestones',pool:publishedPilot.manifest.pool,closesAt:publishedPilot.manifest.publication.draft.closesAt});
-        return send(res,200,{schema:'flurbo.market-directory.v1',markets:entries});
+        // Which questions have a verified Kuru order book, so the Markets list can link to it.
+        const kuruQuestions=row=>{
+          const manifest=row.namespace==='pilot'?publishedPilot?.manifest:practiceCollections?.services?.get?.(row.namespace)?.manifest;
+          const count=manifest?.publication?.draft?.events?.length||0;
+          return Array.from({length:count},(_,index)=>index).filter(index=>listingForCollection(kuruListings,manifest,index));
+        };
+        return send(res,200,{schema:'flurbo.market-directory.v1',markets:entries.map(row=>({...row,kuru:kuruQuestions(row)}))});
       }
       if (url.pathname === '/api/evidence-beta' || url.pathname.startsWith('/api/learning/') || ['/api/kuru','/api/kuru-scan'].includes(url.pathname)) {
         const login = await getLogin();
