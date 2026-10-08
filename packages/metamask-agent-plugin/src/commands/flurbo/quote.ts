@@ -1,13 +1,11 @@
-import { type CommandIO, InputFieldType, type InputSchema, PluginCommand, schemaToArgs, schemaToFlags } from '@metamask/agent-wallet/plugin';
-import { type Hex } from 'viem';
-import { FlurboAgentPlugin } from '../../index.js';
+import { type CommandIO, type InputSchema, PluginCommand, schemaToArgs, schemaToFlags } from '@metamask/agent-wallet/plugin';
+import { getQuote } from '../../index.js';
+import { claimInputs, parseClaim, parseUint, readClient, text } from '../../shared.js';
 
 const inputs = {
-  pool: { type: InputFieldType.Text, flag: 'pool', message: 'Pool address', required: true, prompt: false },
-  scope: { type: InputFieldType.Text, flag: 'scope', message: 'Claim scope', required: true, prompt: false },
-  mask: { type: InputFieldType.Text, flag: 'mask', message: 'Claim mask', required: true, prompt: false },
-  quantity: { type: InputFieldType.Text, flag: 'quantity', message: 'Quantity in share atoms', required: true, prompt: false },
-  side: { type: InputFieldType.Text, flag: 'side', message: 'buy or sell', required: true, prompt: false }
+  ...claimInputs,
+  quantity: text('quantity', 'Quantity in share atoms (1 share = 1000000, at most 10 shares)'),
+  side: text('side', 'buy or sell'),
 } satisfies InputSchema;
 
 export default class FlurboQuoteCommand extends PluginCommand<{ amountAtoms: string; amountAusd: string; side: string }> {
@@ -19,12 +17,9 @@ export default class FlurboQuoteCommand extends PluginCommand<{ amountAtoms: str
   protected readonly pluginCommandId = 'flurbo:quote';
 
   async execute(io: CommandIO) {
-    const { pool, scope, mask, quantity, side } = await io.resolveInputs(inputs);
-    if (!/^0x[0-9a-f]{40}$/i.test(pool) || !/^\d+$/.test(scope) || !/^\d+$/.test(mask) || !/^\d+$/.test(quantity) || !['buy', 'sell'].includes(side)) throw new Error('Invalid quote input');
-    const client = new FlurboAgentPlugin(process.env.FLURBO_MONAD_RPC_URL || 'https://testnet-rpc.monad.xyz');
-    const quote = await client.getQuote({ pool: pool as Hex, scope: Number(scope), mask: BigInt(mask), quantity: BigInt(quantity), side: side as 'buy' | 'sell' });
-    return side === 'buy'
-      ? { amountAtoms: quote.costAtoms!, amountAusd: quote.costAusd!, side }
-      : { amountAtoms: quote.proceedsAtoms!, amountAusd: quote.proceedsAusd!, side };
+    const input = await io.resolveInputs(inputs);
+    if (input.side !== 'buy' && input.side !== 'sell') throw new Error('Side must be buy or sell');
+    const quote = await getQuote(readClient(), { ...parseClaim(input), quantity: parseUint('quantity', input.quantity), side: input.side });
+    return { amountAtoms: quote.atoms.toString(), amountAusd: quote.ausd, side: input.side };
   }
 }

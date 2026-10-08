@@ -74,7 +74,7 @@ In the Render dashboard, select the `flurbo-testnet` web service, open **Environ
 
 ## 3. MetaMask Agent Wallet
 
-Install the `mm` CLI using the current instructions at https://docs.metamask.io/agent-wallet/ and complete wallet initialization yourself. The read-only Flurbo plugin does not need a private key in this repository.
+Install the `mm` CLI using the current instructions at https://docs.metamask.io/agent-wallet/ and complete wallet initialization yourself. The Flurbo plugin needs no private key in this repository: its read commands use a public RPC, and `trade` and `redeem` hand every transaction to the Agent Wallet.
 
 ```powershell
 cd C:\Users\anany\Flurbo\packages\metamask-agent-plugin
@@ -86,7 +86,7 @@ mm plugins install file:C:\Users\anany\Flurbo\packages\metamask-agent-plugin --a
 mm flurbo quote --pool 0x160647d16405f44989c56b83609a171247068dcc --scope 1 --mask 2 --quantity 1000000 --side buy
 ```
 
-The quote is a read-only contract call. This pool returned a 0.5005 test AUSD quote for one share on 3 October 2026. It can close later; if it reports `Closed`, choose an open pool and valid claim from `/markets`. The previous example pool `0xc4409edbfb9e9d47167b028de22f0b0d6b630077` is already closed. The plugin has no `mm flurbo trade` command yet; no Agent Wallet transaction was verified. The existing TypeScript helper can prepare a bounded trade for a supplied wallet executor, but it is not exposed to the CLI.
+The plugin has five commands: `markets`, `quote`, `holdings`, `trade` and `redeem` (see `packages/metamask-agent-plugin/README.md`). `quote` is a read-only contract call and reports `Closed` for a pool whose trading has ended; list open pools with `mm flurbo markets` and use one of those. `trade` and `redeem` are covered by unit tests with a fake wallet executor, and no live Agent Wallet transaction has been verified yet. Run it with a test-only wallet, 1 test MON and about 50 test AUSD, and record the hashes in `docs/METAMASK_AGENT_PLUGIN.md` before describing trading as working.
 
 ## 4. Perpl and Agora
 
