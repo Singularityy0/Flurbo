@@ -32,7 +32,9 @@ chains:
           - "0x160647d16405f44989c56b83609a171247068dcc"
           - "0x939bd2bac6a163ed39a62152c759a0c2e7ccef57"
           - "0xb7b872e9372eaee17d8de9f4c82861f1aa673198"
+          - "0xc0f8d422a18fdf4fafd1fab07bfd68eb961cf7a6"
           - "0xc4409edbfb9e9d47167b028de22f0b0d6b630077"
+          - "0xca8750ed5b6bba513925034fdf506b970ecc4823"
           - "0xd8ed3137446d99372f82573e716b3340d3dba7b3"
           - "0xf8beba5827bfaaf6ace08a40cd9db740233ca9fe"
       - name: PilotResolver
@@ -42,4 +44,6 @@ chains:
           - "0x23f1ec448d34a3d6964e7f4408f303c692681a40"
           - "0x2b0e3204b74c1c8e542fc9f747c11204a3c779c1"
           - "0x37eff955633a76472f77b88629710432bccf1654"
+          - "0x3809e24d12761fc5939abd43849c7258ea528d97"
+          - "0x4f4cc5eec7b288b2cd8aaf89a556d76d67accd8c"
           - "0xe747a8d1d42317edf6e6a68a05ffaf3b27dd8d56"
