@@ -7,27 +7,23 @@ import {thesisCandidates} from '../shared/thesis.mjs';
 import {certifiedPair} from '../server/pair-math.mjs';
 import {simulatePairPurchase} from '../server/pair-sensitivity.mjs';
 
-test('partners E2E in Chrome: Thesis Explorer and What-If display Chainlink CRE, Envio, Alchemy, and Kimi AI',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+// Partner features as a signed-in person sees them: Kimi hypotheses, indexed activity, the Kuru and Chainlink CRE panels.
+// The API is mocked; the production bundle in dist/ is the real one.
+test('partners in Chrome: Kimi on Thesis and What If, Envio activity and fills, and the Kuru and Chainlink CRE panels',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const now=Math.floor(Date.now()/1000);
-  const f=pilotFixture(now,4),errors:string[]=[],requests:any[]=[];
+  const f=pilotFixture(now,4),errors:string[]=[],kimiRequests:any[]=[],unexpected:string[]=[];
   f.manifest.publication.mode='deterministic-source-v1';
   const poolNs='practice-2222222222222222222222222222222222222222';
+  const evidence=JSON.parse(await readFile(new URL('../../../config/cre-evidence/0xf8beba5827bfaaf6ace08a40cd9db740233ca9fe.json',import.meta.url),'utf8'));
+  const market='0x'+'66'.repeat(20),txHash='0x'+'ab'.repeat(32);
+  let kimiConfigured=false;
 
-  const kimiResponse={
-    success:true,
-    a:0,
-    b:1,
-    forecast:{pA:65,pBgivenYes:80,pBgivenNo:20},
-    frechetBounds:{
-      minJoint:0.45,
-      maxJoint:0.65,
-      actualJoint:0.52,
-      valid:true
-    },
-    rationale:'Kimi AI joint analysis indicates strong correlation between official release milestones.'
-  };
+  const kimiResponse={schema:'flurbo.kimi-forecast.v1',source:'moonshot-api',model:'kimi-test',a:0,b:1,
+    forecast:{pA:65,pBgivenYes:80,pBgivenNo:20},derivedMarginalB:59,
+    rationale:'Both questions follow the same weekend price move, so a Yes on one makes the other more likely.',
+    frechetBounds:{minJoint:0.24,maxJoint:0.59,actualJoint:0.52,valid:true},generatedAt:new Date().toISOString()};
 
   const thesisResponse=(input:any)=>{
     const time=Math.floor(Date.now()/1000);
@@ -48,51 +44,58 @@ test('partners E2E in Chrome: Thesis Explorer and What-If display Chainlink CRE,
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
     page.on('pageerror',(e:Error)=>errors.push(e.message));
+    // Optional: FLURBO_TEST_SCREENSHOT=<directory> saves what each step looked like.
+    const shot=async(name:string)=>{if(process.env.FLURBO_TEST_SCREENSHOT)await page.screenshot({path:`${process.env.FLURBO_TEST_SCREENSHOT}/${name}.png`,fullPage:true});};
 
     await page.route('**/*',async(route:any)=>{
       const url=new URL(route.request().url());
       const path=url.pathname;
+      const api=`/api/${poolNs}`;
 
       if(path==='/api/market-directory')return route.fulfill({json:{schema:'flurbo.market-directory.v1',active:poolNs,markets:[{namespace:poolNs,label:'Test pool',pool:f.manifest.pool,closesAt:f.manifest.publication.draft.closesAt}]}});
       if(path==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(path==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600_000}}});
-      if(path===`/api/${poolNs}/status`)return route.fulfill({json:await f.service.status()});
       if(path==='/api/account/wallets')return route.fulfill({json:{account:owner,wallets:[]}});
       if(path==='/api/account/portfolio-sources')return route.fulfill({json:{account:owner,wallets:[],agentWallets:[]}});
-      if(path===`/api/${poolNs}/markets`)return route.fulfill({json:await f.service.markets()});
-      if(path===`/api/${poolNs}/thesis`)return route.fulfill({json:thesisResponse(route.request().postDataJSON())});
-      if(path===`/api/${poolNs}/kimi-forecast`)return route.fulfill({json:kimiResponse});
-      if(path===`/api/${poolNs}/analytics`){
+      if(path===`${api}/status`)return route.fulfill({json:await f.service.status()});
+      if(path===`${api}/markets`)return route.fulfill({json:await f.service.markets()});
+      if(path===`${api}/thesis`)return route.fulfill({json:thesisResponse(route.request().postDataJSON())});
+      if(path===`${api}/kimi-forecast`){
+        kimiRequests.push(route.request().postDataJSON());
+        return kimiConfigured?route.fulfill({json:kimiResponse}):route.fulfill({status:503,json:{error:'Kimi is not configured. Set MOONSHOT_API_KEY on the server.'}});
+      }
+      if(path===`${api}/analytics`){
         const curTime=Math.floor(Date.now()/1000);
         const input=route.request().postDataJSON();
         const state={events:4,a:input.a,b:input.b,liquidity:'10000000',order:[0,1,2,3],factors:[{scope:3,values:['0','0','0','10000000']}]};
         return route.fulfill({json:{
-          schema:'flurbo.pair-analytics.v1',
-          model:'factored-lmsr-pair-v1',
-          chainId:10143,
-          pool:f.manifest.pool,
-          rulesHash:f.manifest.rulesHash,
-          snapshot:{blockNumber:'100',blockHash:hash,timestamp:curTime},
-          expiresAt:curTime+60,
-          stateDigest:'a'.repeat(64),
-          a:input.a,
-          b:input.b,
-          unit:'tenths_of_percentage_point',
-          closed:false,
-          ...certifiedPair(state),
-          sensitivity:{
-            schema:'flurbo.pair-sensitivity.v1',
-            scenarios:['yes','no'].map(answer=>{
-              const sim=simulatePairPurchase(state,answer);
-              return {answer,status:'available',scope:sim.scope,mask:sim.mask,quantityAtoms:sim.quantity,costAtoms:'250001',...certifiedPair(sim.after)};
-            })
-          }
+          schema:'flurbo.pair-analytics.v1',model:'factored-lmsr-pair-v1',chainId:10143,pool:f.manifest.pool,rulesHash:f.manifest.rulesHash,
+          snapshot:{blockNumber:'100',blockHash:hash,timestamp:curTime},expiresAt:curTime+60,stateDigest:'a'.repeat(64),
+          a:input.a,b:input.b,unit:'tenths_of_percentage_point',closed:false,...certifiedPair(state),
+          sensitivity:{schema:'flurbo.pair-sensitivity.v1',scenarios:['yes','no'].map(answer=>{
+            const sim=simulatePairPurchase(state,answer);
+            return {answer,status:'available',scope:sim.scope,mask:sim.mask,quantityAtoms:sim.quantity,costAtoms:'250001',...certifiedPair(sim.after)};
+          })}
         }});
       }
+      // Kuru listing for question 0 only; Chainlink CRE evidence for the pool.
+      if(path===`${api}/kuru-listing`){
+        return url.searchParams.get('event')==='0'
+          ?route.fulfill({json:{eventIndex:0,pool:f.manifest.pool,receipt:'0x'+'44'.repeat(20),market,closesAt:f.manifest.publication.draft.closesAt,question:'Will the first question resolve Yes?'}})
+          :route.fulfill({status:404,json:{error:'No verified Kuru order book for this question.'}});
+      }
+      if(path===`${api}/cre-evidence`)return route.fulfill({json:evidence});
+      // Envio through the site's bounded proxy.
+      if(path==='/envio'){
+        const query=route.request().postDataJSON();
+        if(query.kind==='trades')return route.fulfill({json:{data:{Trade:[{id:'trade-1',side:'BUY',scope:1,mask:'2',quantityAtoms:'1000000',amountAtoms:'520000',blockNumber:123,timestamp:now}]}}});
+        if(query.kind==='kuru-fills'&&query.market===market)return route.fulfill({json:{data:{KuruFill:[
+          {id:'fill-1',isBuy:false,price:'480000',sizeAtoms:'2500000',blockNumber:456,timestamp:now,txHash}]}}});
+        return route.fulfill({status:400,json:{error:'Invalid indexer request'}});
+      }
       if(path==='/api/alchemy/activity')return route.fulfill({json:{network:'monad-testnet',chainId:10143,provider:'Alchemy',active:true,totalTracked:5,events:[]}});
-
-      if(['/api/network',`/api/${poolNs}/price-history`].includes(path))return route.fulfill({status:503,json:{error:'Offline'}});
-      if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unexpected API'}});
+      if(['/api/network',`${api}/price-history`].includes(path))return route.fulfill({status:503,json:{error:'Offline'}});
+      if(path.startsWith('/api/')){unexpected.push(path);return route.fulfill({status:503,json:{error:'Unexpected API'}});}
 
       const relative=path.startsWith('/assets/')?path.slice(1):'index.html';
       return route.fulfill({
@@ -101,54 +104,72 @@ test('partners E2E in Chrome: Thesis Explorer and What-If display Chainlink CRE,
       });
     });
 
-    // 1. Test Thesis Explorer in Desktop Chrome
+    // 1. Thesis: without a configured key Kimi shows an error and fills nothing.
     await page.goto(`https://flurbo.singu.online/markets/${poolNs}/0/thesis`);
-
-    // Verify Chainlink CRE, Envio, and Alchemy provenance badges
     const badge=page.locator('.thesis-provenance-badge');
     await badge.waitFor();
     const badgeText=await badge.innerText();
-    assert.ok(badgeText.includes('Chainlink CRE settlement'), 'Badge shows Chainlink CRE');
-    assert.ok(badgeText.includes('Envio HyperIndex active'), 'Badge shows Envio HyperIndex');
-    assert.ok(badgeText.includes('Alchemy Monad stream active'), 'Badge shows Alchemy Monad stream');
-
-    // Verify Kimi AI Forecaster button and execution
+    assert.ok(badgeText.includes('On-chain pool rules'),'rules provenance shown');
+    assert.ok(badgeText.includes('AI estimates are hypotheses'),'AI estimates are labelled as hypotheses');
     const kimiBtn=page.getByRole('button',{name:'Analyze with Kimi AI',exact:true});
     await kimiBtn.waitFor();
-    assert.equal(await kimiBtn.isEnabled(),true);
     await kimiBtn.click();
+    await page.getByText(/Kimi forecast failed: Kimi is not configured/).waitFor();
+    for(const i of [0,1,2])assert.equal(await page.locator(`#forecast-${i}`).inputValue(),'','no number appears without a key');
+    assert.equal(await page.locator('.thesis-kimi-card').count(),0);
 
-    // Verify Kimi rationale card appears
+    // 2. Thesis: with a key the three estimates fill and the rationale card is labelled.
+    kimiConfigured=true;
+    await kimiBtn.click();
     const kimiCard=page.locator('.thesis-kimi-card');
     await kimiCard.waitFor();
-    const cardText=await kimiCard.innerText();
-    assert.ok(cardText.includes('Kimi AI joint analysis indicates strong correlation'), 'Kimi rationale displayed');
+    assert.ok((await kimiCard.innerText()).includes('Both questions follow the same weekend price move'));
+    assert.deepEqual(await Promise.all([0,1,2].map(i=>page.locator(`#forecast-${i}`).inputValue())),['65.0','80.0','20.0']);
+    await page.getByText('Kimi model hypothesis (kimi-test)').waitFor();
+    assert.deepEqual(kimiRequests.at(-1),{a:0,b:1});
+    await shot('partners-thesis');
 
-    // 2. Test What-If in Chrome
+    // 3. Market detail: Kuru and Chainlink CRE panels, then What If with Kimi and Envio.
     await page.goto(`https://flurbo.singu.online/markets/${poolNs}/0`);
+    const kuruPanel=page.getByRole('heading',{name:'Trade YES receipts on Kuru',exact:true});
+    await kuruPanel.waitFor();
+    assert.ok((await page.getByRole('link',{name:'Open order book',exact:true}).getAttribute('href'))!.endsWith(`/markets/${poolNs}/0/kuru`));
+    const cre=page.locator('details[aria-label="Chainlink CRE check"]');
+    await cre.waitFor();
+    assert.match(await cre.locator('summary').innerText(),/Chainlink CRE check · Matches the on-chain result/);
+    await cre.locator('summary').click();
+    await cre.getByText('MON/USD (this question)').waitFor();
+    await cre.getByText(/ETH\/USD/).first().waitFor();
+    assert.equal(await cre.locator('a[href="https://monadscan.com/block/110317694"]').count(),1);
+    assert.ok((await cre.innerText()).includes('does not settle the pool'));
+    await shot('partners-market-detail');
+
     await page.getByText('Explore how these markets connect',{exact:true}).click();
     const panel=page.locator('.what-if');
     await panel.getByRole('button',{name:'Compare these questions'}).click();
     await panel.getByText('Both Yes, together',{exact:true}).waitFor();
-
-    // Verify partner state attribution in What-If
-    await panel.getByText(/Real-time Monad state indexed by Alchemy RPC and Envio HyperIndex/i).waitFor();
-
-    // Verify Kimi Joint Forecast button and execution in What-If
-    const whatIfKimiBtn=panel.getByRole('button',{name:'Kimi Joint Forecast',exact:true});
-    await whatIfKimiBtn.waitFor();
-    await whatIfKimiBtn.click();
-
-    // Verify Kimi Joint Hypothesis card rendered with Fréchet bounds valid
-    await panel.getByRole('heading',{name:'Kimi AI Joint Hypothesis',exact:true}).waitFor();
+    await panel.getByRole('button',{name:'Kimi Joint Forecast',exact:true}).click();
+    await panel.getByRole('heading',{name:'Kimi model hypothesis',exact:true}).waitFor();
     await panel.getByText(/Frechet valid: Yes/i).waitFor();
+    assert.deepEqual(kimiRequests.at(-1),{a:1,b:0},'What If sends the condition first');
+    await panel.getByText('Recent pool activity · Envio').click();
+    await panel.getByText(/Bought 1\.000000 shares/).waitFor();
 
-    // 3. Test Responsive Mobile Viewport (iPhone / Android width 390x844)
+    // 4. Kuru order book page: indexed fills from Envio, each with its transaction.
+    await page.goto(`https://flurbo.singu.online/markets/${poolNs}/0/kuru`);
+    await page.getByText('Recent fills · Envio').click();
+    await page.getByText(/2\.5 receipts at 0\.480000 test AUSD/).waitFor();
+    assert.equal(await page.locator(`a[href="https://testnet.monadscan.com/tx/${txHash}"]`).count(),1);
+    await shot('partners-kuru');
+
+    // 5. Narrow screens keep the Thesis page inside the viewport.
     await page.setViewportSize({width:390,height:844});
     await page.goto(`https://flurbo.singu.online/markets/${poolNs}/0/thesis`);
     await badge.waitFor();
-    assert.ok((await badge.innerText()).includes('Chainlink CRE settlement'));
+    assert.ok((await badge.innerText()).includes('On-chain pool rules'));
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'no horizontal scroll at 390px');
 
+    assert.deepEqual(unexpected.filter(path=>!path.endsWith('/kuru')),[],'no unexpected API calls');
     assert.deepEqual(errors,[],'No uncaught page errors in Chrome');
   }finally{
     await browser.close();

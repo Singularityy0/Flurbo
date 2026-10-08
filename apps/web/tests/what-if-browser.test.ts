@@ -36,6 +36,8 @@ test('What-if stays read-only, replaces pending pairs, expires snapshots and fit
       if(path==='/api/practice-2222222222222222222222222222222222222222/status')return route.fulfill({json:await f.service.status()});
       if(path==='/api/account/wallets'||path==='/api/account/portfolio-sources')return route.fulfill({json:{account:owner,wallets:[]}});
       if(path==='/api/network')return route.fulfill({status:503,json:{error:'Offline fixture'}});
+      // Optional panels: this market has no Kuru order book and no Chainlink CRE evidence.
+      if(['/kuru-listing','/cre-evidence'].some(name=>path==='/api/practice-2222222222222222222222222222222222222222'+name))return route.fulfill({status:404,json:{error:'Not published'}});
       if(path==='/api/practice-2222222222222222222222222222222222222222/price-history')return route.fulfill({status:503,json:{error:'Offline fixture'}});
       if(path==='/api/practice-2222222222222222222222222222222222222222/markets')return route.fulfill({json:await f.service.markets()});
       if(path==='/api/practice-2222222222222222222222222222222222222222/analytics'){
