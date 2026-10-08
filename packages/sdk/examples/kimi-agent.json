@@ -1,0 +1,82 @@
+{
+  "schema": "flurbo.agent-config.v1",
+  "api": {
+    "baseUrl": "https://flurbo.singu.online",
+    "credentialEnv": "FLURBO_AGENT_TOKEN"
+  },
+  "chain": {
+    "rpcUrl": "https://testnet-rpc.monad.xyz"
+  },
+  "signer": {
+    "kind": "local-key",
+    "keyEnv": "FLURBO_AGENT_PRIVATE_KEY"
+  },
+  "stateDir": ".flurbo-agent",
+  "mode": "paper",
+  "markets": [
+    "practice-<pool address without 0x>"
+  ],
+  "schedule": {
+    "intervalSeconds": 300,
+    "heartbeatSeconds": 30,
+    "waitSeconds": 90
+  },
+  "research": {
+    "retriever": {
+      "kind": "http",
+      "allowHosts": [
+        "rpc.monad.xyz",
+        "docs.chain.link"
+      ]
+    },
+    "provider": {
+      "kind": "openai-compatible",
+      "baseUrl": "https://api.moonshot.ai/v1",
+      "model": "REPLACE_WITH_MODEL_ID",
+      "apiKeyEnv": "MOONSHOT_API_KEY"
+    },
+    "perCycle": 1,
+    "perHour": 6,
+    "maxEvidenceAgeDays": 7
+  },
+  "strategy": {
+    "id": "joint-edge",
+    "quantityAtoms": "1000000",
+    "slippageBps": 50,
+    "minEdgeBps": 500,
+    "minEdgeAtoms": "10000",
+    "maxCostAtoms": "2000000",
+    "includeSingles": true,
+    "minEvidence": 1
+  },
+  "policy": {
+    "markets": [
+      "practice-<pool address without 0x>"
+    ],
+    "maxQuantityAtoms": "2000000",
+    "maxTradeCostAtoms": "2000000",
+    "maxSlippageBps": 50,
+    "spend": {
+      "totalAtoms": "20000000",
+      "windows": [
+        {
+          "seconds": 86400,
+          "atoms": "10000000"
+        }
+      ]
+    },
+    "maxPositionAtoms": "5000000",
+    "maxWorstCaseLossAtoms": "10000000",
+    "gas": {
+      "maxFeeWei": "100000000000000000",
+      "reserveWei": "200000000000000000"
+    },
+    "quoteMaxAgeSeconds": 30,
+    "minSecondsBeforeClose": 120,
+    "maxPending": 2,
+    "allowSell": false,
+    "allowRedeem": false
+  },
+  "policyMaxAgeSeconds": 120,
+  "paperBudgetAtoms": "50000000"
+}

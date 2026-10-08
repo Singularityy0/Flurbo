@@ -1,125 +1,58 @@
-# Chainlink Runtime Environment (CRE) Settlement Orchestration
+# Chainlink CRE: price-feed observation for Flurbo pools
 
-> Status: proposal and local evidence preparation. The current pilot has no verified CRE deployment or authenticated delivery to the live resolver. The CRE badge was removed from Thesis. Use `METROPOLIS_PARTNER_DESIGN.md` and `METROPOLIS_LOCAL_RUNBOOK.md` for the tested implementation state.
+Target bounty: Best workflow with CRE. Scope: Monad testnet (10143) for the pool, Monad mainnet (143) read only for the Chainlink feeds.
 
-Author: Flurbo Team
-Date: October 2026
-Competition: Monad Metropolis Hackathon
-Target Bounty: Best Workflow with CRE ($3,000 USD)
+## What it is, and what it is not
 
----
+A CRE workflow that independently re-reads a pool's committed settlement rules and reports whether it agrees with the pool. For a pool whose questions are Chainlink price-feed thresholds it:
 
-## 1. Overview and Problem Statement
+1. reads the pool's rules hash, close time, question count and resolution state on **Monad testnet**;
+2. finds the first Monad **mainnet** block at or after the pool's committed observation time;
+3. reads each question's Chainlink feed at that block (`latestAnswer()`, `latestRoundData()` and `decimals()`, which must agree);
+4. applies each committed threshold with exact decimal arithmetic, no floating point;
+5. produces the terminal yes mask, an observations hash and the seven-word report in the layout of `FactoredCreSettlementReceiver.SettlementReport`;
+6. compares the yes mask with the pool's on-chain result when the pool has resolved.
 
-Prediction markets depend fundamentally on trustworthy real-world event resolution. Traditional approaches suffer from critical flaws:
-1. **Centralized Admin Keys:** An operator wallet unilaterally signs the winning outcome, introducing rug-pull and censorship risks.
-2. **Slow Escalation Queues:** Optimistic assertion systems require days or weeks of dispute windows, locking user capital.
-3. **Ad-Hoc Oracles:** Unstandardized off-chain scrapers break during site redesigns or IP rate-limiting, causing disputes and voided markets.
+**CRE is evidence orchestration here, not settlement authority.** The bonded `PilotResolver` still settles. A pool cannot accept a CRE report: `PilotPool.resolve` is callable only by its own resolver, and no contract in this repository gives CRE that power for a listed pool. The evidence says "agrees" or "differs"; it never moves funds.
 
-Flurbo solves this by using the **Chainlink Runtime Environment (CRE)** as an automated, consensus-driven orchestration layer. CRE coordinates off-chain official API capture, identical multi-node aggregation, cryptographic rule commitment verification, and on-chain assertion delivery to the `PilotResolver` contract on Monad testnet (chain 10143).
+## Where it is
 
----
+| Part | File |
+|---|---|
+| Pure logic (decisions, multicall, block search, report, evidence) | `workflows/cre/src/price-feed.ts` |
+| Workflow entry point, HTTP and cron triggers | `workflows/cre/src/price-feed-main.ts` |
+| Config generator (from a verified pool manifest) | `workflows/cre/scripts/price-feed-config.ts` |
+| Targets | `workflows/cre/workflow.yaml`, `workflows/cre/project.yaml` (`crypto-weekend`, `crypto-saturday`, `crypto-judging`) |
+| Tests | `workflows/cre/test/price-feed.test.ts` |
+| Simulator output | `docs/cre-evidence/crypto-weekend-simulation.txt` |
+| Committed evidence shown in the app | `config/cre-evidence/<pool>.json`, `apps/web/shared/cre-evidence.mjs` |
 
-## 2. Architecture and Orchestration Flow
+The two workflow files import only `@chainlink/cre-sdk`, `viem`, `zod` and each other, and a test enforces that. Importing anything from `apps/web` makes the WASM build fail; that is why the older `pilot` target, which imports the web server's settlement readers, does not compile.
 
-```
-                      +------------------------------------------+
-                      |         MARKET CLOSING TRIGGER           |
-                      |   Scheduled Cron or Trigger at closesAt  |
-                      +------------------------------------------+
-                                           |
-                                           v
-                      +------------------------------------------+
-                      |           CHAINLINK CRE RUNNER           |
-                      |          workflows/cre/src/pilot-main.ts |
-                      +------------------------------------------+
-                                           |
-                    +----------------------+----------------------+
-                    |                      |                      |
-                    v                      v                      v
-            [Node 1 HTTP Fetch]    [Node 2 HTTP Fetch]    [Node 3 HTTP Fetch]
-            Official Source:       Official Source:       Official Source:
-            GitHub / BLS / Fed     GitHub / BLS / Fed     GitHub / BLS / Fed
-                    |                      |                      |
-                    +----------------------+----------------------+
-                                           |
-                                           v
-                      +------------------------------------------+
-                      |     CONSENSUS IDENTICAL AGGREGATION      |
-                      |    cre.capabilities.HTTPClient consensus |
-                      +------------------------------------------+
-                                           |
-                                           v
-                      +------------------------------------------+
-                      |     DETERMINISTIC OBSERVER & PARSER      |
-                      |        src/pilot-observer.ts             |
-                      |  - Canonical state bit evaluation        |
-                      |  - Keccak-256 evidenceHash generation    |
-                      |  - Verify matching rules commitment      |
-                      +------------------------------------------+
-                                           |
-                                           v
-                      +------------------------------------------+
-                      |           224-BYTE ABI PAYLOAD           |
-                      |  Terminal State, Evidence Hash, Timestamp|
-                      +------------------------------------------+
-                                           |
-                                           v
-                      +------------------------------------------+
-                      |        PILOT RESOLVER (Monad Testnet)    |
-                      |        Contract: Optimistic Assertion    |
-                      +------------------------------------------+
-```
+## How the observation block is chosen
 
----
+The pool's rules say "the first block at or after 00:00 UTC". Monad produces several blocks per second, so many blocks can share one timestamp. The workflow therefore looks for the first block whose timestamp is at or after the committed time and checks that the block before it is earlier. For the Crypto weekend pool, blocks 110317694 to 110317697 all have timestamp 1791072000, and the first is **110317694** (its predecessor, 110317693, is 1791071999).
 
-## 3. Implementation Details
+- **HTTP trigger** takes `{"observationBlock":"<decimal>"}`, reads that block and its predecessor, and refuses it unless it is exactly the first block at or after the time and is finalized.
+- **Cron trigger** (every ten minutes) returns `{"status":"waiting"}` until the observation time plus the rules' 60 second finality margin, then finds the block itself by interpolating block time between finalized headers.
 
-1. **Workflow Definition (`workflows/cre/workflow.yaml`)**:
-   Declares the CRE user workflow targets (`pilot` and `synthetic`), entry points, and environment configurations:
-   ```yaml
-   pilot:
-     user-workflow:
-       workflow-name: flurbo-pilot-official-evidence
-     workflow-artifacts:
-       workflow-path: ./src/pilot-main.ts
-       config-path: ../../target/deployments/pilot-cre.json
-       secrets-path: ""
-   ```
+Reads per execution are bounded to fit CRE's limit of 15 ChainRead calls: at most 12 headers, one Multicall3 call for all feeds and one for the pool.
 
-2. **Consensus HTTP Client (`workflows/cre/src/pilot-main.ts`)**:
-   Uses `@chainlink/cre-sdk` with `cre.capabilities.HTTPClient` and `consensusIdenticalAggregation<string>()` to ensure multiple decentralized execution nodes independently retrieve and agree upon raw source responses before parsing.
+## Simulation (done)
 
-3. **Deterministic Observer (`workflows/cre/src/pilot-observer.ts`)**:
-   - Maps raw source payloads to Boolean outcomes.
-   - Enforces observation windows strictly after `closesAt`.
-   - Computes canonical ABI-encoded evidence commitments:
-     $$\text{evidenceHash} = \text{keccak256}(\text{abi.encode}(\text{domain}, \text{rulesHash}, \text{observedAt}, \text{observations}))$$
-   - Fails closed on any ambiguity: missing fields, format changes, or unreachable sources are rejected rather than assumed to be No.
-
-4. **Integration with Flurbo Thesis and What-If**:
-   The web application displays the CRE settlement badge for every pool, giving traders transparency into the exact source URLs, observation rules, and consensus verification path.
-
----
-
-## 4. Verification and Reproduction
-
-The CRE workflow package is covered by 62 unit tests across 15 test suites validating all edge cases, terminal states, and commitment bindings.
-
-### Test Execution Commands
 ```bash
+bun workflows/cre/scripts/price-feed-config.ts --manifest target/deployments/wave2-f2-testnet.json --out target/deployments/wave2-f2-cre-price.json
 cd workflows/cre
-bun install --frozen-lockfile
-bun test
-bun run typecheck
+echo '{"observationBlock":"110317694"}' > ../../target/deployments/crypto-weekend-cre-trigger.json
+cre workflow simulate . --target crypto-weekend --non-interactive --trigger-index 0 --http-payload ../../target/deployments/crypto-weekend-cre-trigger.json
+cre workflow simulate . --target crypto-weekend --non-interactive --trigger-index 1
 ```
 
-### Verified Test Results
-```text
-bun test v1.4.2 (744846f84)
- 62 pass
- 0 fail
- 446 expect() calls
-Ran 62 tests across 15 files. [5.85s]
-tsc --noEmit: Completed with 0 errors.
-```
+Both runs, with CLI 1.33.0 against the settled Crypto weekend pool `0xf8BeBA5827bFaaf6ACe08A40CD9DB740233CA9FE`: the workflow compiles with no unsupported API, picks block 110317694, reads ETH/USD 2687.38175423 against a threshold of 2700 (No), reports yes mask 8 (only SOL Yes) and `onchain.matches: true`. The saved output is `docs/cre-evidence/crypto-weekend-simulation.txt`. The unit tests pin the same numbers (observations hash, report bytes) so the TypeScript and the simulator cannot drift apart.
+
+## Not done, and not claimed
+
+- **Live deployment.** `cre workflow deploy` needs a linked owner key and was not run. The submission says "simulated" unless a deployment id exists.
+- **Crypto Saturday.** The simulation against the new pool can only run after its observation time, 11 Oct 00:01 UTC, and after the pool is deployed.
+- **On-chain attestation.** An attestation contract that stores the CRE report (without any settlement power) is a stretch goal and is not built.
+- **Settlement by CRE.** Not implemented and not claimed.
