@@ -28,14 +28,16 @@ export default function ThesisExplorer({namespace,event}:{namespace:PilotNamespa
   const [state,setState]=useState<PilotState|null>(null),[loadError,setLoadError]=useState(''),[retry,setRetry]=useState(0);
   const [a,setA]=useState(event),[b,setB]=useState(event===0?1:0),[yesA,setYesA]=useState(true),[yesB,setYesB]=useState(true);
   const [forecast,setForecast]=useState(['','','']),[origin,setOrigin]=useState('Your estimates'),[note,setNote]=useState('');
+  const [kimiBusy,setKimiBusy]=useState(false),[kimiRationale,setKimiRationale]=useState('');
   const [quantity,setQuantity]=useState('1'),[data,setData]=useState<ThesisSnapshot|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const [selected,setSelected]=useState<ThesisRow['id']>('AND'),[now,setNow]=useState(Date.now()/1000);
   const controller=useRef<AbortController|null>(null),generation=useRef(0),baselineTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const kimiController=useRef<AbortController|null>(null);
   useEffect(()=>{const c=new AbortController();setLoadError('');void pilotRequest<PilotState>('status',undefined,namespace,c.signal).then(s=>{if(!c.signal.aborted)setState(s);}).catch(()=>{if(!c.signal.aborted)setLoadError('Market data could not be loaded. Try again.');});return()=>c.abort();},[namespace,retry]);
-  useEffect(()=>{const t=setInterval(()=>setNow(Date.now()/1000),1000);return()=>{clearInterval(t);controller.current?.abort();};},[]);
+  useEffect(()=>{const t=setInterval(()=>setNow(Date.now()/1000),1000);return()=>{clearInterval(t);controller.current?.abort();kimiController.current?.abort();};},[]);
   useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};if(forecast.some(Boolean)||note)window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[forecast,note]);
   function invalidate(){generation.current++;controller.current?.abort();setData(null);setError('');setBusy(false);}
-  function choosePair(first:number,second:number){invalidate();setA(first);setB(second);setForecast(['','','']);setOrigin('Your estimates');setNote('');}
+  function choosePair(first:number,second:number){invalidate();kimiController.current?.abort();kimiController.current=null;setKimiBusy(false);setA(first);setB(second);setForecast(['','','']);setOrigin('Your estimates');setNote('');setKimiRationale('');}
   const manifest=state?.manifest,events=manifest?.publication.draft.events;
   const q=(index:number)=>events?.[index]?marketQuestion(events[index]):'';
   const amount=thesisQuantity(quantity),bps=forecast.map(percentageBps);
@@ -57,9 +59,28 @@ export default function ThesisExplorer({namespace,event}:{namespace:PilotNamespa
   useEffect(()=>{if(!manifest)return;baselineTimer.current=setTimeout(()=>void compare(),400);return()=>{if(baselineTimer.current!==null)clearTimeout(baselineTimer.current);};},[manifest?.pool,a,b,yesA,yesB,quantity]);
   useLoadGate('thesis',{pending:!state&&!loadError,label:'Loading your thesis'});
   function usePool(){
+    kimiController.current?.abort();kimiController.current=null;setKimiBusy(false);
     const p=data?.pair?.values;
     if(!fresh||!p||p.b===null||p.givenYes===null||p.givenNo===null)return;
     setForecast([p.b,p.givenYes,p.givenNo].map(n=>(n/10).toFixed(1)));setOrigin('Started from rounded pool estimates');
+  }
+  async function useKimi(){
+    if(!manifest||a===b)return;
+    kimiController.current?.abort();const c=new AbortController();kimiController.current=c;
+    setKimiBusy(true);setError('');
+    try{
+      const res=await pilotRequest<{
+        schema:string;source:string;model:string;
+        forecast:{pA:number;pBgivenYes:number;pBgivenNo:number};
+        rationale:string;
+      }>('kimi-forecast',{a,b},namespace,c.signal);
+      if(!c.signal.aborted&&res?.source==='moonshot-api'&&res?.forecast){
+        setForecast([res.forecast.pA.toFixed(1),res.forecast.pBgivenYes.toFixed(1),res.forecast.pBgivenNo.toFixed(1)]);
+        setOrigin(`Kimi model hypothesis (${res.model})`);
+        setKimiRationale(res.rationale);
+      }
+    }catch(e){if(!c.signal.aborted)setError(e instanceof Error?`Kimi forecast failed: ${e.message}`:'Kimi forecast failed. Try again.');}
+    finally{if(kimiController.current===c){kimiController.current=null;setKimiBusy(false);}}
   }
   function review(){
     if(!manifest||!data||!row||!fresh||closed||cost===null||!distribution||!auth.address||amount===null)return;
@@ -85,14 +106,21 @@ export default function ThesisExplorer({namespace,event}:{namespace:PilotNamespa
             options={questionOptions.map(o=>({...o,disabled:Number(o.value)===(label==='A'?b:a)}))}
             onChange={value=>label==='A'?choosePair(Number(value),b):choosePair(a,Number(value))}/>)}</div>
           <p className="thesis-caption">A is your assumption. B is the prediction you want to explore. Changing questions clears your estimates.</p>
-          <div className="thesis-forecast-head"><h3>What changes your mind?</h3><button className="btn btn-secondary btn-sm" disabled={!fresh||!data?.pair||data.pair.values.givenYes===null||data.pair.values.givenNo===null} onClick={usePool}>Start from pool estimates</button></div>
+          <div className="thesis-forecast-head">
+            <h3>What changes your mind?</h3>
+            <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+              <button className="btn btn-secondary btn-sm" disabled={kimiBusy} onClick={()=>void useKimi()}>{kimiBusy?'Analyzing with Kimi...':'Analyze with Kimi AI'}</button>
+              <button className="btn btn-secondary btn-sm" disabled={!fresh||!data?.pair||data.pair.values.givenYes===null||data.pair.values.givenNo===null} onClick={usePool}>Start from pool estimates</button>
+            </div>
+          </div>
           <div className="thesis-forecasts">{['Chance A is Yes','Chance B is Yes, if A is Yes','Chance B is Yes, if A is No'].map((label,i)=>{const key=i===0?'b':i===1?'givenYes':'givenNo';return <div className="thesis-forecast" key={label}>
             <label htmlFor={`forecast-${i}`}>{label}</label><small className="thesis-question">{i===0?q(a):q(b)}</small>
-            <div className="thesis-forecast-row"><div className="thesis-percent-input"><input id={`forecast-${i}`} aria-label={label} inputMode="decimal" value={forecast[i]} placeholder="Your estimate" maxLength={6} aria-invalid={forecast[i]!==''&&bps[i]===null} onChange={e=>{setForecast(old=>old.map((v,j)=>j===i?e.target.value:v));setOrigin('Your estimates');}}/><span>%</span></div>
+            <div className="thesis-forecast-row"><div className="thesis-percent-input"><input id={`forecast-${i}`} aria-label={label} inputMode="decimal" value={forecast[i]} placeholder="Your estimate" maxLength={6} aria-invalid={forecast[i]!==''&&bps[i]===null} onChange={e=>{kimiController.current?.abort();kimiController.current=null;setKimiBusy(false);setForecast(old=>old.map((v,j)=>j===i?e.target.value:v));setOrigin('Your estimates');}}/><span>%</span></div>
               <span className="thesis-pool">{data?<>Pool {poolPercent(data.pair?.values[key])}{!fresh?' (expired)':''}</>:busy?<span className="skeleton skeleton-line" style={{width:64}}/>:'Pool not loaded'}</span></div>
             {fresh&&gap(bps[i],data?.pair?.values[key])&&<small className="thesis-gap">{gap(bps[i],data?.pair?.values[key])}</small>}
             {forecast[i]!==''&&bps[i]===null&&<small role="alert" className="field-error">Use 0 to 100, with up to two decimal places.</small>}
           </div>;})}</div>
+          {kimiRationale&&<div className="thesis-kimi-card"><p><strong>Kimi AI rationale:</strong> {kimiRationale}</p></div>}
           <p className="thesis-caption">{origin}. Enter all three to compare complete forecasts. Your view is not a prediction guarantee.</p>
           {!data&&<p className="thesis-caption">{error?'Pool estimates are unavailable. Retry Compare with pool below.':'Loading a pool baseline for these questions. You can enter your own estimates while it loads.'}</p>}
           {(bps[0]===0||bps[0]===10000)&&<p className="thesis-caption">Your forecast assigns zero weight to A being {bps[0]===0?'Yes':'No'}. The corresponding conditional estimate cannot affect the result.</p>}
@@ -100,6 +128,11 @@ export default function ThesisExplorer({namespace,event}:{namespace:PilotNamespa
             {['Neither is Yes','A Yes, B No','A No, B Yes','Both are Yes'].map((label,i)=><Fragment key={label}>{i%2===0&&<span className="thesis-axis thesis-axis-row" aria-hidden="true">{i===0?'B No':'B Yes'}</span>}<div className="thesis-cell"><span>{label}</span><strong>{beliefPercent(distribution[i])}</strong><small>Pool {poolPercent(data?.scenarios?.[i])}</small></div></Fragment>)}
           </div>}
           <details className="thesis-note disclosure"><summary>Add a reasoning note</summary><div className="field"><label htmlFor="thesis-note">Why do you expect this connection?</label><textarea id="thesis-note" maxLength={2000} rows={3} value={note} onChange={e=>setNote(e.target.value)} placeholder="What would support or invalidate your view?"/><p className="thesis-caption">Your note and estimates stay in this page's memory. They are not sent to the server or saved when you leave.</p></div></details>
+          <div className="thesis-provenance-badge">
+            <span className="chip">On-chain pool rules</span>
+            <small>Rules hash: {manifest?.rulesHash?.slice(0, 10)}...</small>
+            <small>AI estimates are hypotheses. The pool snapshot and resolution rules are separate.</small>
+          </div>
         </section>
         <div className="thesis-right">
           <section className="thesis-panel" aria-labelledby="thesis-compare-title"><div className="thesis-section-head"><h2 id="thesis-compare-title">Same view. Different payoffs.</h2></div>

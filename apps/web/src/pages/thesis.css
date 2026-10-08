@@ -63,3 +63,7 @@
 .thesis-review strong { font-size: 18px; font-variant-numeric: tabular-nums; }
 .thesis-formulas { max-width: 80ch; }
 .thesis-formulas p { color: var(--ink-2); font-size: 14px; padding-bottom: var(--s-3); }
+.thesis-kimi-card { padding: var(--s-3) var(--s-4); border-radius: var(--r-control); background: var(--surface-sunken); border-left: 3px solid var(--lime); color: var(--ink); font-size: 13px; line-height: 1.5; }
+.thesis-kimi-card p { margin: 0; }
+.thesis-provenance-badge { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid var(--rule); }
+.thesis-provenance-badge small { color: var(--ink-3); font-size: 12px; }

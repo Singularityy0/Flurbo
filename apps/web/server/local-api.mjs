@@ -18,6 +18,7 @@ import {ApplicationError} from './access-applications.mjs';
 import {settlementPacketHandler,SETTLEMENT_PACKET_PATH} from './settlement-persistence.mjs';
 import {userMetrics} from './user-metrics.mjs';
 import {memberNotices,noticeDelivery} from './member-notices.mjs';
+import {kimiForecast} from './kimi-forecaster.mjs';
 import {handleAlchemyWebhook, getAlchemyActivities} from './alchemy-webhook.mjs';
 import {listingForCollection, parseKuruListing, readKuruCollection} from './kuru-collection.mjs';
 
@@ -386,6 +387,12 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           catch{return send(res,400,{error:'Choose two questions and a supported share quantity.'});}
           try{if(!pilot.thesisAnalytics)throw Error('Unavailable');return send(res,200,await pilot.thesisAnalytics(input));}
           catch{return send(res,503,{error:'The pool comparison could not load. Your view is still available; retry shortly.'});}
+        }
+        if(req.method==='POST' && url.pathname==='/api/pilot/kimi-forecast') {
+          const input=await body(req);
+          if(!input||typeof input.a!=='number'||typeof input.b!=='number')return send(res,400,{error:'Choose two questions to analyze.'});
+          try{return send(res,200,await kimiForecast({manifest:pilot.manifest,a:input.a,b:input.b}));}
+          catch(e){return send(res,503,{error:e.message||'Kimi forecaster unavailable. Try again shortly.'});}
         }
         if(req.method==='POST' && url.pathname==='/api/pilot/prepare') {
           const input = await body(req);
