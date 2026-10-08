@@ -4,6 +4,7 @@ import {appFetch} from '../platform-fetch';
 import {marketHref} from '../market-detail';
 import type {PilotNamespace} from '../pilot';
 import Kuru from './Kuru';
+import KuruFills from '../components/KuruFills';
 import './markets.css';
 
 type Listing={eventIndex:number;pool:string;receipt:string;market:string;closesAt:number;question:string};
@@ -28,6 +29,6 @@ export default function CollectionKuru({namespace,event}:{namespace:PilotNamespa
     <nav className="detail-breadcrumb" aria-label="Breadcrumb"><Link href={back} className="link-back">Back to market</Link></nav>
     {error?<section className="state-block" role="alert"><h1>Order book unavailable</h1><p>{error}</p><Link href={back} className="btn btn-primary">Return to market</Link></section>
       :!listing?<p role="status">Checking the verified Kuru listing…</p>
-      :<><h1>YES order book</h1><p>{listing.question}</p><p>One Flurbo YES share wraps into one receipt. Wrap shares in your wallet, then approve and deposit receipts to sell on Kuru. To return to Flurbo, withdraw available receipts and unwrap them. Each step has its own wallet confirmation. Kuru trades the receipt against test AUSD; the shared Flurbo pool continues to price the underlying prediction.</p><Kuru endpoint={`/api/${namespace}/kuru?event=${event}`} receiptLabel={`Event ${event+1} YES`} primaryHref={back} onBusy={setBusy} onConvert={()=>{}}/>{busy&&<p className="sr-only" role="status">Wallet action in progress</p>}</>}
+      :<><h1>YES order book</h1><p>{listing.question}</p><p>One Flurbo YES share wraps into one receipt. Wrap shares in your wallet, then approve and deposit receipts to sell on Kuru. To return to Flurbo, withdraw available receipts and unwrap them. Each step has its own wallet confirmation. Kuru trades the receipt against test AUSD; the shared Flurbo pool continues to price the underlying prediction.</p><Kuru endpoint={`/api/${namespace}/kuru?event=${event}`} receiptLabel={`Event ${event+1} YES`} primaryHref={back} onBusy={setBusy} onConvert={()=>{}}/><KuruFills market={listing.market}/>{busy&&<p className="sr-only" role="status">Wallet action in progress</p>}</>}
   </main>;
 }

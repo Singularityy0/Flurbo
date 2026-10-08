@@ -1,18 +1,28 @@
-# Generated from config/collections.json. Run npm run config after registry changes.
+# Generated from config/collections.json and config/kuru-listings.json. Run npm run config after registry or listing changes.
 name: flurbo-monad-indexer
-description: Flurbo pool trades and resolution events on Monad testnet
+description: Flurbo pool trades, receipt wrapping, Kuru order book fills and resolution events on Monad testnet
 address_format: lowercase
+field_selection:
+  transaction_fields:
+    - hash
 contracts:
   - name: PilotPool
     events:
       - event: "Traded(address indexed trader, uint32 indexed scope, uint256 indexed mask, bool isBuy, uint128 quantity, uint128 collateralAmount)"
       - event: "Redeemed(address indexed owner, uint32 indexed scope, uint256 indexed mask, uint128 quantity, uint128 collateralAmount)"
+      - event: "BaseWrapped(address indexed owner, uint32 indexed scope, uint8 indexed mask, uint128 quantity)"
+      - event: "BaseUnwrapped(address indexed owner, uint32 indexed scope, uint8 indexed mask, uint128 quantity)"
   - name: PilotResolver
     events:
       - event: "Asserted(uint8 indexed eventIndex, address indexed asserter, uint8 outcome, bytes32 evidenceHash, string evidenceURI, uint64 challengeUntil)"
       - event: "Disputed(uint8 indexed eventIndex, address indexed disputer, uint8 outcome, bytes32 evidenceHash, string evidenceURI, uint64 voteUntil)"
       - event: "Finalized(uint8 indexed eventIndex, uint8 outcome, bool timedOut)"
       - event: "Delivered(address indexed pool, uint32 yesMask, uint32 voidMask)"
+  - name: KuruMarket
+    events:
+      - event: "Trade(uint40 orderId, address makerAddress, bool isBuy, uint256 price, uint96 updatedSize, address takerAddress, address txOrigin, uint96 filledSize)"
+      - event: "OrderCreated(uint40 orderId, address owner, uint96 size, uint32 price, bool isBuy)"
+      - event: "OrderCanceled(uint40 orderId, address owner, uint32 price, uint96 size, bool isBuy)"
 chains:
   - id: 10143
     start_block: 0
