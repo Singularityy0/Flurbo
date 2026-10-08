@@ -47,3 +47,7 @@ chains:
           - "0x3809e24d12761fc5939abd43849c7258ea528d97"
           - "0x4f4cc5eec7b288b2cd8aaf89a556d76d67accd8c"
           - "0xe747a8d1d42317edf6e6a68a05ffaf3b27dd8d56"
+      - name: KuruMarket
+        address:
+          - "0xaf688e0f4ae836e9e51382a1216c80926f3ce99e"
+          - "0xd3710ca0786c7f62154a01641260283952206dfd"
