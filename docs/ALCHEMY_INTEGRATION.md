@@ -1,15 +1,14 @@
 # Alchemy Monad Testnet Integration
 
-> Status on 3 October 2026: the local RPC setting still points to the public Monad endpoint, not Alchemy. A working Alchemy API endpoint has not been found in the checked local files. The webhook handler has signed payload tests, but no live Monad webhook delivery has been verified. Confirm webhook network support in the Alchemy dashboard. See `METROPOLIS_DEPLOYMENT_ENV.md`.
+> Status on 8 October 2026: the code already accepts an Alchemy Monad testnet endpoint, but the hosted site does not use one yet. Render's `FLURBO_ALCHEMY_TESTNET_RPC_URL` currently holds a QuickNode URL (the variable name is historical), so Alchemy is **not** serving the site's reads today. The webhook handler has signed payload tests, but no live Monad webhook delivery has been verified; confirm webhook network support in the Alchemy dashboard. Do not describe Alchemy as in use until the switch below is done and its dashboard shows requests. See `METROPOLIS_DEPLOYMENT_ENV.md`.
 
 Technical reference for Flurbo's Alchemy RPC and webhook infrastructure on Monad testnet (chain 10143).
 
 ## 1. Overview
 
-Flurbo integrates Alchemy to provide high-throughput RPC routing and real-time webhook event streaming on Monad testnet. Alchemy powers:
-- Read-only and transactional RPC routing across the web application, settlement worker, agent runtime, and starter funds.
-- Alchemy Notify address activity webhooks for instant detection of pool trading activity and resolver dispute submissions.
-- Reactive event telemetry feeding Thesis Explorer and What-If analysis.
+Flurbo reads Monad testnet through one configurable RPC endpoint. Once `FLURBO_ALCHEMY_TESTNET_RPC_URL` is an Alchemy endpoint (`https://monad-testnet.g.alchemy.com/v2/<key>`), Alchemy serves:
+- the web application's chain reads, the settlement bot's pool reads and the Python chain readers (`readerProvider()` and `hostedConfig()` in `apps/web/server/network.mjs` already accept the Alchemy host, and `scripts/check_monad_readiness.py` accepts `--provider alchemy`);
+- optionally, if the dashboard offers Monad testnet address-activity webhooks, signed notifications to `POST /api/alchemy/webhook`, readable at `GET /api/alchemy/activity`. This is not claimed unless a delivery is verified.
 
 ## 2. Environment Configuration
 
@@ -43,11 +42,15 @@ Incoming address activity events are parsed by `apps/web/server/alchemy-webhook.
 - Transactions interacting with `PilotPool` and `PilotResolver` contracts are categorized and recorded in an in-memory activity ring buffer.
 - Recent activities are made available via `GET /api/alchemy/activity` for application telemetry.
 
-## 4. Integration with Thesis and What-If
+## 4. Switching the hosted site to Alchemy (owner steps)
 
-The combinatorial pricing model relies on up-to-date on-chain state to compute accurate implied joint distributions:
-- **Thesis Explorer**: Displays the active Alchemy Monad stream indicator alongside Chainlink CRE and Envio HyperIndex provenance.
-- **What-If Hypothesis Engine**: Ingests fresh block state streamed through Alchemy to evaluate price sensitivity scenarios and Fréchet probability bounds.
+1. In the Alchemy dashboard create an app on the Monad Testnet network and copy the HTTP endpoint.
+2. Check it: `eth_chainId` must return `0x279f` (see `METROPOLIS_LOCAL_RUNBOOK.md`, section 1).
+3. Save the current QuickNode URL in your secret store for rollback, then set `FLURBO_ALCHEMY_TESTNET_RPC_URL` on the Render service `flurbo-testnet` to the Alchemy URL and let it redeploy.
+4. Verify: `/healthz` shows `settlement_bot.monitor: ok` and its `cycles` keep increasing for ten minutes; Render logs contain no `Unsupported public testnet RPC`; the Alchemy dashboard shows request volume.
+5. Roll back to the QuickNode URL immediately if the bot turns unhealthy.
+
+Submission text, once step 4 has passed: "Alchemy's Monad testnet RPC serves every site read, the settlement bot's pool reads and the Python chain readers." Include a dashboard screenshot of request counts. Nothing in the app displays an Alchemy indicator; Thesis and What If read the chain through the same endpoint like every other page.
 
 ## 5. Verification and Testing
 

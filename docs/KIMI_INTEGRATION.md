@@ -1,6 +1,6 @@
 # Powering Combinatorial Prediction Markets with Kimi (Moonshot AI)
 
-> Status: the server calls Kimi only when `MOONSHOT_API_KEY` is set and labels its output as a model hypothesis. It returns an error on API failure. Kimi has not been called with a real account key in this checkout. See `METROPOLIS_LOCAL_RUNBOOK.md`.
+> Status (8 Oct 2026): the web route and the paper-trading agent configuration are built and tested with mocked responses. **Kimi has not been called with a real account key yet**, so no real Kimi output is claimed anywhere. The server calls Kimi only when `MOONSHOT_API_KEY` is set, labels its output as a model hypothesis, and shows an error (and no numbers) when the key is missing or the call fails. See `METROPOLIS_LOCAL_RUNBOOK.md`.
 
 Author: Flurbo Team
 Date: October 2026
@@ -29,66 +29,35 @@ To solve the human estimation side, Flurbo integrates **Kimi (Moonshot AI)** as 
 
 Kimi is Moonshot AI's flagship foundation model, engineered for deep reasoning, long context comprehension, and structured agentic execution. In prediction markets, traditional LLM chatbots are typically bolted on as decorative chat interfaces that restate Wikipedia summaries.
 
-In Flurbo, Kimi is integrated directly into the mathematical trading engine:
+In Flurbo, Kimi supplies one thing: a labelled hypothesis about how two questions of a pool move together.
 
-1. **Unstructured Source Synthesis:** Kimi ingests official source specifications (Bureau of Labor Statistics release calendars, Federal Reserve FOMC statements, GitHub release commits, or on-chain event parameters) committed to the market.
-2. **Causal Regime Decomposition:** Rather than guessing a single number, Kimi analyzes the conditional dependence structure:
-   - What is the baseline likelihood of the assumption event $P(A)$?
-   - If Event A happens, what transmission mechanism changes the likelihood of Event B ($P(B \mid A = \text{Yes})$)?
-   - If Event A fails, how does the alternative regime affect Event B ($P(B \mid A = \text{No})$)?
-3. **Fréchet Bounds Enforcement:** Flurbo's verification layer ensures that Kimi's joint probabilities never violate mathematical bounds before they are presented to the trader.
-4. **Natural Language Rationale:** Kimi generates a concise economic explanation clarifying *why* the dependency exists, empowering traders to validate or challenge the hypothesis.
+1. **A conditional parameterisation.** People are poor at stating a joint probability directly, so the model is asked for three numbers: P(A), P(B given A is Yes) and P(B given A is No). Those always describe one coherent world, so the Fréchet bounds hold by construction.
+2. **A short rationale.** The model also returns a few sentences on why the dependence exists, shown beside the numbers so a person can challenge it.
+3. **No sources are fed in.** The prompt contains only the two question texts and tells the model to give a hypothetical forecast, not a fact or advice, and not to claim sources it was not given. The settlement rules, sources and thresholds that decide the questions are separate and fixed on-chain.
+
+Kimi never decides settlement, never sets a price and never places a trade.
 
 ---
 
-## 3. Architecture and Data Flow
+## 3. What the server does
 
-```
-+-------------------------------------------------------------+
-|                     FLURBO THESIS EXPLORER                  |
-|          Trader selects Event A (Assumption) & Event B      |
-+-------------------------------------------------------------+
-                              |
-                              | POST /api/pilot/kimi-forecast
-                              v
-+-------------------------------------------------------------+
-|                   KIMI JOINT FORECASTER                     |
-|  - Manifest Event Titles & Observation Rules                |
-|  - System Prompt: 0-100% P(A), P(B|Yes), P(B|No)            |
-|  - Model: moonshot-v1-8k                                    |
-+-------------------------------------------------------------+
-                              |
-                              | Structured JSON Output
-                              v
-+-------------------------------------------------------------+
-|                MATHEMATICAL VALIDATION LAYER                |
-|  - Calculate Joint: P(A AND B) = P(A) * P(B|A)              |
-|  - Calculate Marginal: P(B) = P(A)*P(B|A) + P(not A)*P(B|not A)|
-|  - Check Fréchet: max(0, P(A)+P(B)-1) <= P(A AND B) <= min   |
-+-------------------------------------------------------------+
-                              |
-                              | Validated Hypothesis
-                              v
-+-------------------------------------------------------------+
-|               INTERACTIVE WHAT-IF & TRADE TICKET            |
-|  - Populates 4-state joint outcome matrix                   |
-|  - Compares belief vs pool-implied LMSR pricing             |
-|  - Computes expected net value (EV) after fees and slippage |
-|  - Trader executes single or combinatorial order on Monad   |
-+-------------------------------------------------------------+
-```
+`POST /api/pilot/kimi-forecast` (`apps/web/server/kimi-forecaster.mjs`, routed from `local-api.mjs` for the pilot and every practice collection):
 
----
+- refuses without `MOONSHOT_API_KEY` (or `KIMI_API_KEY`), refuses a base URL other than `https://api.moonshot.ai/v1` or `https://api.moonshot.cn/v1`, and times out after 12 seconds;
+- sends the two question texts to `chat/completions` with the model in `MOONSHOT_MODEL` (the code default is `kimi-k3`; set the model id the account actually offers, and confirm it with the account's model list before relying on it);
+- requires parseable JSON with all three numbers between 0 and 100, rounds them to one decimal, and rejects anything else with an error and no numbers;
+- recomputes the joint P(A) x P(B | A), the marginal P(B) and the Fréchet bounds, and returns them next to the model's output with `source: "moonshot-api"`. A local heuristic is never labelled as Kimi.
 
-## 4. Live Verification and Production Readiness
+## 4. Where it appears
 
-The Kimi Forecaster is integrated into:
-- **Web Platform:**
-  - `apps/web/server/kimi-forecaster.mjs`: Server module interfacing with the Moonshot AI API. It returns an error when the API is unavailable; no local forecast is labelled as Kimi.
-  - `apps/web/server/local-api.mjs`: Endpoint `/api/pilot/kimi-forecast` supporting both pilot and practice collections.
-  - `apps/web/src/pages/ThesisExplorer.tsx`: One-click "Analyze with Kimi AI" button, displaying Kimi's rationale and updating the four-state outcome grid.
-  - `apps/web/src/pages/WhatIf.tsx`: "Kimi Joint Forecast" action comparing Kimi's hypothesis against the pool's market-implied odds and independence baseline.
-- **Automated Tests:**
-  - `apps/web/tests/kimi-forecast.test.ts`: Verifies Fréchet bounds validation, input clamping, and error handling.
+- **Thesis Explorer:** the "Analyze with Kimi AI" button fills the three estimate boxes (labelled "Kimi model hypothesis"), shows the rationale card, and the existing comparison against the pool then runs on those numbers.
+- **What If:** the "Kimi Joint Forecast" button shows a "Kimi model hypothesis" card beside the pool's own joint and the independence baseline. It computes no trade value.
+- **Agent:** the SDK runner drives any OpenAI-compatible provider, so a Kimi-driven paper-trading agent is configuration: `packages/sdk/examples/kimi-agent.json` (fill in the market and a model id). Its journal records the forecast source and model name next to each paper decision.
 
-By transforming Moonshot AI's reasoning capabilities into executable joint probability distributions, Flurbo and Kimi bridge the gap between complex macro events and on-chain prediction liquidity on Monad.
+## 5. Checked
+
+- `apps/web/tests/kimi-forecast.test.ts`: valid output, range checks, invalid JSON, the unconfigured case and that a heuristic is not labelled as Kimi.
+- `apps/web/tests/partners-e2e-browser.test.ts`: the buttons, the error without a key, the filled estimates and the labelled cards, against a mocked route.
+- `packages/sdk/test/kimi-agent-config.test.ts`: the agent configuration parses.
+
+Not checked: a real Kimi response, a real model id, the live site with a key set, and a paper-trading cycle against a real Kimi model. Those need an API key with balance; until then the Kimi bounty rests on this code and tests only.
