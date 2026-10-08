@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flurbo wallets and markets</title>
+<style>
+:root{--bg:#f6f5ef;--panel:#ffffff;--ink:#16241c;--muted:#5b6b61;--line:#d9ddd3;--accent:#1f6b4a;--accent-soft:#e3efe8;--warn:#8a5a00;--warn-soft:#fbf1dc;--bad:#9b2c2c;--bad-soft:#f8e3e3;--code:#eef0ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111714;--panel:#18211c;--ink:#e6ece8;--muted:#9fb0a5;--line:#2c3a32;--accent:#6fcf9f;--accent-soft:#1e3328;--warn:#e7b85a;--warn-soft:#33290f;--bad:#f09a9a;--bad-soft:#3a1d1d;--code:#202b25}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+nav{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:14px;font-size:14px;z-index:2}
+nav a{color:var(--accent);text-decoration:none}nav a[aria-current]{font-weight:700;color:var(--ink)}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:30px;margin:8px 0 4px}h2{font-size:22px;margin:40px 0 8px;border-top:1px solid var(--line);padding-top:24px}h3{font-size:17px;margin:24px 0 6px}
+p.lead{color:var(--muted);margin-top:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.note{background:var(--accent-soft);border-left:4px solid var(--accent);padding:10px 14px;border-radius:6px;margin:12px 0}
+.warn{background:var(--warn-soft);border-left:4px solid var(--warn);padding:10px 14px;border-radius:6px;margin:12px 0}
+.bad{background:var(--bad-soft);border-left:4px solid var(--bad);padding:10px 14px;border-radius:6px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:14px;background:var(--panel)}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--code)}
+.scroll{overflow-x:auto}
+code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;background:var(--code);border-radius:4px}
+code{padding:1px 4px;word-break:break-word}pre{padding:12px;overflow-x:auto;white-space:pre}
+.tag{display:inline-block;font-size:12px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+.secret{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}
+.public{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.private{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+svg{max-width:100%;height:auto}
+svg .box{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+svg .hot{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
+svg text{fill:var(--ink);font:13px system-ui,sans-serif}
+svg .small{font-size:11px;fill:var(--muted)}
+svg .arrow{stroke:var(--muted);stroke-width:1.4;fill:none;marker-end:url(#a)}
+</style>
+</head>
+<body>
+<nav>
+<a href="architecture.html">Architecture and environment</a>
+<a href="wallets-and-markets.html" aria-current="page">Wallets and listing markets</a>
+<a href="settlement.html">Settlement</a>
+<a href="gaps-and-limitations.html">Gaps and limitations</a>
+</nav>
+<main>
+<h1>Wallets, funding and listing markets</h1>
+<p class="lead">Monad testnet (chain 10143). Test AUSD is <code>0xa9012a055bd4e0edff8ce09f960291c09d5322dc</code> with 6 decimals, so 1 AUSD = <code>1000000</code> atoms. MON amounts use 18 decimals; <code>cast</code> accepts <code>10ether</code> for 10 MON.</p>
+
+<h2>Internal wallets</h2>
+<p>Nine addresses matter to operations: six funded wallets, the dispenser contract, the public faucet and one wallet that must never be funded. Member wallets and agent wallets belong to members and are not listed.</p>
+<div class="scroll"><table>
+<tr><th>Role</th><th>Address</th><th>Key held as</th><th>Needs</th><th>Rules</th></tr>
+<tr><td><strong>Deployer (owner)</strong></td><td><code>0xf1fea08ebba92ed342acc5639db312c3694bc391</code></td><td>Encrypted Foundry keystore <code>flurbo-testnet</code> on the owner's machine</td><td>Funds every pool (b x questions x ln 2 AUSD) and all other wallets. About 1.6 MON gas per pool.</td><td>Creator of every pool. Owns the AUSD dispenser. Funding source for everything.</td></tr>
+<tr><td><strong>Settlement signer</strong></td><td><code>0x6713e2324108d1f71ec8479415eb37c08638adea</code></td><td>Render secret <code>FLURBO_RESOLUTION_PRIVATE_KEY</code></td><td>1 AUSD bond per assertion (credited back in each resolver, collected only with <code>withdrawBond()</code>), MON for about 3 transactions per question and 1 per pool</td><td><strong>Must never trade.</strong> The bot refuses to assert in a pool where it holds shares.</td></tr>
+<tr><td><strong>Starter</strong></td><td><code>0x8C5bC1B512fa28720aF92c1695A95b26078d0d8d</code></td><td>Render secret <code>FLURBO_STARTER_PRIVATE_KEY</code></td><td>0.5 MON per new member wallet, 50 a day at most</td><td>Alert below 5 MON.</td></tr>
+<tr><td><strong>AUSD dispenser</strong> (contract)</td><td><code>0x5b76a22072E97F6AEeD4Bcb6A29488467ccD0277</code></td><td>No key; owned by the deployer</td><td>50 AUSD per claim, one claim a day per wallet</td><td>Refill with a plain AUSD transfer. Alert below 500 AUSD. Only the deployer can withdraw.</td></tr>
+<tr><td><strong>Reviewer 1</strong></td><td><code>0x1FC63B1f8e89473B7bEa3b44fC4936b8d9416201</code></td><td>Held by the owner</td><td>MON for a vote, only when an answer is disputed</td><td>Cannot assert or dispute. Operator-controlled (disclosed in every pool).</td></tr>
+<tr><td><strong>Reviewer 2</strong></td><td><code>0x41C28b86170B5eC7B261d954e0185fCa348b19a4</code></td><td>Held by the owner</td><td>Same</td><td>Same</td></tr>
+<tr><td><strong>Reviewer 3</strong></td><td><code>0x555D165001f60103C9429dBB15Bf764CAa8ae538</code></td><td>Held by the owner</td><td>Same</td><td>Quorum is 2 of 3 matching votes.</td></tr>
+<tr><td>Public AUSD faucet (external)</td><td><code>0xd236c18d274e54faccc3dd9dda4b27965a73ee6c</code></td><td>Not ours</td><td>Source of test AUSD for the deployer: 10,000 per claim, shared rate limit</td><td>Use when the deployer runs low.</td></tr>
+<tr><td><strong>Old signer</strong></td><td><code>0x632a158D5ecCc10F864aB94cEC99511E1Cc514f3</code></td><td>Key lost</td><td>Nothing</td><td class="bad"><strong>Never fund.</strong> Holds 1 reth YES share in Release milestones.</td></tr>
+</table></div>
+
+<h3>Balances and suggested levels (read 1 October 2026, 21:40 UTC)</h3>
+<div class="scroll"><table>
+<tr><th>Wallet</th><th>Read on 1 Oct</th><th>Keep at least</th><th>Top up when below</th></tr>
+<tr><td>Deployer</td><td>41,323.57 AUSD, 291.3 MON</td><td>Funding for the next batch plus 2,000 AUSD; 3 MON per pool to deploy</td><td>Use the public faucet for AUSD and the Monad faucet for MON</td></tr>
+<tr><td>Settlement signer</td><td>294 AUSD, 59.7 MON</td><td>50 AUSD, 20 MON</td><td>20 MON or 50 AUSD</td></tr>
+<tr><td>Starter</td><td>249.4 MON</td><td>25 MON</td><td>5 MON (alert)</td></tr>
+<tr><td>AUSD dispenser</td><td>35,650 AUSD</td><td>2,000 AUSD</td><td>500 AUSD (alert)</td></tr>
+<tr><td>Reviewers</td><td>5, 5, 20.3 MON</td><td>2 MON each</td><td>1 MON</td></tr>
+</table></div>
+
+<h2>Funding commands</h2>
+<p>Run in Git Bash on the machine that holds the <code>flurbo-testnet</code> keystore. Each command asks for the keystore password at a hidden prompt. Nothing here prints a key.</p>
+<h3>Check balances (read only)</h3>
+<pre>cast balance 0x6713e2324108d1f71ec8479415eb37c08638adea --ether --rpc-url https://testnet-rpc.monad.xyz
+cast call 0xa9012a055bd4e0edff8ce09f960291c09d5322dc "balanceOf(address)(uint256)" 0x6713e2324108d1f71ec8479415eb37c08638adea --rpc-url https://testnet-rpc.monad.xyz</pre>
+<p>Replace the address for any other wallet. The AUSD result is in atoms (divide by 1,000,000).</p>
+<h3>Send MON from the deployer</h3>
+<pre># settlement signer, 10 MON
+cast send 0x6713e2324108d1f71ec8479415eb37c08638adea --value 10ether --account flurbo-testnet --rpc-url https://testnet-rpc.monad.xyz
+# starter, 50 MON
+cast send 0x8C5bC1B512fa28720aF92c1695A95b26078d0d8d --value 50ether --account flurbo-testnet --rpc-url https://testnet-rpc.monad.xyz
+# reviewers, 3 MON each
+cast send 0x1FC63B1f8e89473B7bEa3b44fC4936b8d9416201 --value 3ether --account flurbo-testnet --rpc-url https://testnet-rpc.monad.xyz
+cast send 0x41C28b86170B5eC7B261d954e0185fCa348b19a4 --value 3ether --account flurbo-testnet --rpc-url https://testnet-rpc.monad.xyz
+cast send 0x555D165001f60103C9429dBB15Bf764CAa8ae538 --value 3ether --account flurbo-testnet --rpc-url https://testnet-rpc.monad.xyz</pre>
+<h3>Send test AUSD from the deployer</h3>
+<pre># AUSD dispenser, 2,000 AUSD (2000 x 1,000,000 atoms)
+cast send 0xa9012a055bd4e0edff8ce09f960291c09d5322dc "transfer(address,uint256)" 0x5b76a22072E97F6AEeD4Bcb6A29488467ccD0277 2000000000 --account flurbo-testnet --rpc-url https://testnet-rpc.monad.xyz
+# settlement signer, 50 AUSD for bonds
+cast send 0xa9012a055bd4e0edff8ce09f960291c09d5322dc "transfer(address,uint256)" 0x6713e2324108d1f71ec8479415eb37c08638adea 50000000 --account flurbo-testnet --rpc-url https://testnet-rpc.monad.xyz</pre>
+<h3>Get more test AUSD for the deployer</h3>
+<pre>cast send 0xd236c18d274e54faccc3dd9dda4b27965a73ee6c "requestFunds(address)" 0xf1fea08ebba92ed342acc5639db312c3694bc391 --account flurbo-testnet --rpc-url https://testnet-rpc.monad.xyz</pre>
+<p>10,000 AUSD per successful claim. A <code>MaxFrequencyExceeded</code> revert means the shared rate limit is active; try later. MON comes from the official Monad testnet faucet, claimed by hand in a browser.</p>
+<div class="bad">Never send anything to <code>0x632a158D5ecCc10F864aB94cEC99511E1Cc514f3</code>. Never send AUSD to a pool or resolver address by hand; pools are funded only by the deploy script.</div>
+
+<h2>Private keys: who holds them and how to get access</h2>
+<div class="warn">Private keys are never pasted into chat, email, tickets, files in the repository, screenshots or AI assistants. <code>secrets/</code> in the working copy is not covered by <code>.gitignore</code>; never add it to a commit.</div>
+<div class="scroll"><table>
+<tr><th>Key</th><th>Where it lives</th><th>How someone gets to use it</th></tr>
+<tr><td>Deployer</td><td>Foundry keystore <code>flurbo-testnet</code>, password known only to the owner</td><td>Ask the owner. The owner either runs the command themselves, or imports the key into the new operator's machine in person with <code>cast wallet import flurbo-testnet --interactive</code>, typing the key and a new password at hidden prompts. Prefer the owner running deploys.</td></tr>
+<tr><td>Settlement signer</td><td>Render secret only</td><td>Nobody needs the raw key day to day; the bot signs. To rotate: run <code>cast wallet new</code> locally, put the new key in <code>FLURBO_RESOLUTION_PRIVATE_KEY</code> and its address in <code>FLURBO_RESOLUTION_SIGNER_ADDRESS</code> on Render, fund it, then move the old wallet's AUSD back to the deployer. Rotate only when no assertion is pending.</td></tr>
+<tr><td>Starter</td><td>Render secret only</td><td>Same rotation as the signer, with <code>FLURBO_STARTER_PRIVATE_KEY</code>.</td></tr>
+<tr><td>Reviewers</td><td>Held by the owner</td><td>Needed only to vote on a dispute. The owner votes; ask the owner if a vote is required.</td></tr>
+<tr><td>Agent wallets</td><td>Members' own machines</td><td>Never held by Flurbo.</td></tr>
+</table></div>
+<p>To request access, message the owner directly and say which key, for what action and for how long. The owner decides and acts in person or by a hidden prompt.</p>
+
+<h2>Listing markets: the whole process</h2>
+<div class="note">Any number of pools can be listed in one batch. Each pool has 2 to 4 yes or no questions, one trading close, its own liquidity and its own payout. Combinations work only inside a pool. In registry mode no Render settings change per pool: the commit to <code>config/collections.json</code> is the listing.</div>
+<div class="scroll"><table>
+<tr><th>Step</th><th>Command</th><th>Who</th><th>Touches the chain</th></tr>
+<tr><td>1. Write the batch file</td><td>Create <code>config/markets/&lt;name&gt;.json</code> (template below)</td><td>Author</td><td>No</td></tr>
+<tr><td>2. Prepare</td><td><code>bun workflows/cre/scripts/batch.ts prepare --spec config/markets/&lt;name&gt;.json</code></td><td>Author</td><td>Reads sources</td></tr>
+<tr><td>3. Check</td><td><code>bun workflows/cre/scripts/batch.ts check --ids a,b</code></td><td>Author</td><td>Reads balances</td></tr>
+<tr><td>4. Simulate (optional)</td><td>Deploy command without <code>--account</code> and <code>--broadcast</code>, then delete the <code>&lt;id&gt;-unverified.json</code> files it writes</td><td>Author</td><td>Reads only</td></tr>
+<tr><td>5. Deploy</td><td>See below</td><td><strong>Owner</strong> (keystore password)</td><td><strong>Yes, spends gas and funds pools</strong></td></tr>
+<tr><td>6. Verify</td><td><code>bun workflows/cre/scripts/batch.ts verify --ids a,b</code></td><td>Author</td><td>Reads</td></tr>
+<tr><td>7. Register</td><td><code>bun workflows/cre/scripts/batch.ts register --ids a,b [--feature a]</code></td><td>Author</td><td>No</td></tr>
+<tr><td>8. Commit and merge</td><td>Commit <code>config/collections.json</code> and the batch file; open a PR; merge</td><td><strong>Owner</strong></td><td>No. Render redeploys; the site lists the pools and the bot settles them.</td></tr>
+</table></div>
+<h3>Deploy command (step 5)</h3>
+<pre>FOUNDRY_PROFILE=demo FLURBO_DEPLOYER=0xf1fea08ebba92ed342acc5639db312c3694bc391 FLURBO_DEPLOY_IDS=a,b forge script contracts/script/DeployPilotBatch.s.sol:DeployPilotBatch --use target/tools/solc-0.8.28.exe --rpc-url https://testnet-rpc.monad.xyz --account flurbo-testnet --sender 0xf1fea08ebba92ed342acc5639db312c3694bc391 --broadcast --slow</pre>
+<p>Timing rules: each pool's deploy transaction must land more than one hour before its trading close. Trading on the site opens when the registry commit is merged, so deploying early and merging later is fine. A pool whose answer is captured at time T must be merged before T, or the bot will not know about it.</p>
+<p>Other registry edits: <code>batch.ts set &lt;pool or label&gt; settlement=finish-only</code>, <code>status=retired</code>, or <code>featured</code>. The release pilot's mode is the top-level <code>pilotSettlement</code> field.</p>
+
+<h2>Batch file template</h2>
+<pre>{
+  "schema": "flurbo.market-batch.v1",
+  "defaults": { "bond": "1", "assertionPeriod": 43200, "challengePeriod": 43200, "votingPeriod": 43200, "settlement": "auto" },
+  "pools": [
+    {
+      "id": "jobs-friday",
+      "title": "F1 Jobs Friday",
+      "label": "Jobs Friday",
+      "closesAt": "2026-10-02T12:00:00Z",
+      "b": "100",
+      "rules": [
+        {
+          "eventId": "us-unemployment-sep",
+          "question": "Will the US unemployment rate for September 2026 be at least 4.2%, as published by the Bureau of Labor Statistics data API (series LNS14000000) and first captured between 12:35 and 16:30 UTC on 2 October 2026?",
+          "source": {
+            "id": "bls-lns14000000",
+            "publisher": "U.S. Bureau of Labor Statistics",
+            "urls": ["https://api.bls.gov/publicAPI/v1/timeseries/data/LNS14000000"],
+            "adapter": "json-api.v1",
+            "reader": {
+              "select": "/Results/series/0/data", "aggregate": "only", "field": "/value",
+              "filter": [{ "path": "/year", "op": "eq", "value": "2026" }, { "path": "/period", "op": "eq", "value": "M09" }],
+              "checks": [{ "path": "/status", "equals": "REQUEST_SUCCEEDED" }]
+            }
+          },
+          "observation": { "series": "LNS14000000", "period": "2026-09", "unit": "percent" },
+          "decision": { "type": "number", "operator": "gte", "value": "4.2" },
+          "window": { "opens": "2026-10-02T12:35:00Z", "closes": "2026-10-02T16:30:00Z" },
+          "expectPending": ["EXTRACTION_AMBIGUOUS_OR_MISSING"]
+        }
+      ]
+    }
+  ]
+}</pre>
+<div class="scroll"><table>
+<tr><th>Field</th><th>Meaning</th><th>Rules</th></tr>
+<tr><td><code>id</code></td><td>File name stem (<code>target/deployments/&lt;id&gt;-*.json</code>) and deploy id</td><td>Lowercase letters, digits, hyphens; 3 to 41 characters; unique</td></tr>
+<tr><td><code>title</code></td><td>Pool title stored on-chain in the draft</td><td>3 to 120 characters</td></tr>
+<tr><td><code>label</code></td><td>Name shown on the site</td><td>Letters, digits, spaces, hyphens, brackets; 3 to 60 characters; unique</td></tr>
+<tr><td><code>closesAt</code></td><td>Trading close (UTC)</td><td>Before every capture window. More than 1 hour after deployment, at most 30 days after.</td></tr>
+<tr><td><code>b</code></td><td>Liquidity depth in AUSD</td><td>10 to 1,000,000. Funding is b x questions x ln 2: 100 with 4 questions is 277.26; 250 with 4 is 693.15. b = 250 keeps a 10-share trade within about 1% of the quoted price.</td></tr>
+<tr><td><code>bond</code></td><td>Assertion and dispute bond in AUSD</td><td>Default 1. The bot refuses pools set to <code>auto</code> above 10.</td></tr>
+<tr><td><code>assertionPeriod</code></td><td>Seconds after each capture window closes during which an answer can be asserted</td><td>1 hour to 30 days. Longer only delays a VOID, never a normal payout. Use 48 hours where a manual answer is likely.</td></tr>
+<tr><td><code>challengePeriod</code>, <code>votingPeriod</code></td><td>Seconds to dispute an assertion; seconds for reviewers to vote</td><td>1 hour to 7 days each. The payout waits for the challenge period.</td></tr>
+<tr><td><code>settlement</code></td><td><code>auto</code>, <code>finish-only</code> or <code>off</code></td><td>Default <code>auto</code></td></tr>
+<tr><td><code>rules</code></td><td>The questions</td><td>2 to 4 per pool</td></tr>
+<tr><td><code>window</code></td><td>Capture window: the first valid reading inside it decides</td><td>Opens after the close and after the data exists. For data about a time interval, open at least 3 hours after the interval ends. Answers become final at <code>closes</code> plus the challenge period.</td></tr>
+<tr><td><code>expectPending</code></td><td>Rule check reasons that are normal before the release</td><td><code>SOURCE_FETCH_FAILED</code> (404), <code>SOURCE_EMPTY</code>, <code>EXTRACTION_AMBIGUOUS_OR_MISSING</code> (row not there yet), <code>OBSERVATION_IDENTITY_MISMATCH</code> (anchor not on the page yet)</td></tr>
+</table></div>
+
+<h2>Writing rules that settle cleanly</h2>
+<h3>Reader cheat sheet</h3>
+<div class="scroll"><table>
+<tr><th>Reader</th><th>Use for</th><th>Key settings</th><th>Example</th></tr>
+<tr><td><code>json-api.v1</code></td><td>Any public JSON API</td><td><code>select</code> (JSON Pointer), <code>aggregate</code>: <code>value</code>, <code>only</code>, <code>count</code>, <code>sum</code>, <code>max</code>, <code>min</code>; <code>field</code>; up to 8 <code>filter</code> (<code>eq</code>, <code>ne</code>, <code>gt</code>, <code>gte</code>, <code>lt</code>, <code>lte</code>); up to 8 <code>checks</code> (exact equality)</td><td>BLS API, NY Fed SOFR, USGS count, NWS observations, GFZ Kp, GitHub releases, TSE results</td></tr>
+<tr><td><code>stat-table.v1</code></td><td>Official statistics</td><td><code>format</code>: <code>csv</code> (<code>select</code> columns, <code>valueColumn</code>), <code>sdmx-json</code> (<code>select</code> dimensions, <code>period</code>), <code>json-stat</code></td><td>Treasury par yields CSV, ECB SDMX exchange rates</td></tr>
+<tr><td><code>html-text.v1</code></td><td>Official pages with no data version (last resort)</td><td><code>anchors</code> (all must appear), <code>pattern</code> with exactly one capture group that must match exactly once, <code>grouping</code></td><td>EIA gasoline and diesel table</td></tr>
+<tr><td><code>evm-rpc.v1</code></td><td>Any EVM chain</td><td><code>chainId</code>, <code>at</code>, <code>until</code>, <code>metric</code>: <code>call</code>, <code>balance</code>, <code>nonce</code>, <code>block-field</code>, <code>tx-count</code>, <code>log-count</code>; <code>finalitySeconds</code>; at most 1,000 calls</td><td>Chainlink feeds on Monad mainnet, token supply, transaction count</td></tr>
+</table></div>
+<h3>Checklist</h3>
+<ol>
+<li><strong>Official first-line source only.</strong> Publishers' own APIs or pages; no aggregators or news sites. No sources that need a login, a paid key, JavaScript to render, or a PDF.</li>
+<li><strong>The question names the exact source, measure and capture window.</strong> Anyone must be able to check the answer from the text alone.</li>
+<li><strong>Fail closed.</strong> Design the reader so a format change produces no reading rather than a wrong answer. Prefer reading one item's own field (<code>aggregate only</code> with a unique filter) over counting matches, because a renamed field silently counts 0. A missing value, 404 or <code>null</code> is never treated as No.</li>
+<li><strong>Prediction guard.</strong> Trading closes before every capture window. The rule check refuses a value that is already public.</li>
+<li><strong>Settle wait.</strong> For data about an interval (<code>observation.period</code> written as <code>start/end</code>), open the window at least 3 hours after the interval ends. Chain readers are exempt because they wait for finality.</li>
+<li><strong>Small responses.</strong> Keep each response well under 500 KB (the hard cap is 2 MB). Captures are stored in Redis on a free plan. Narrow queries with dates.</li>
+<li><strong>Exact URLs.</strong> Write URLs in normalized form (for example <code>https://rpc.monad.xyz/</code> with the trailing slash), with no API keys.</li>
+<li><strong>Chain state is short-lived.</strong> The public Monad RPC keeps contract state only a few days: capture price and supply reads within hours of <code>at</code>.</li>
+<li><strong>Thresholds near the current value</strong> so both answers are plausible; set prices at prepare time.</li>
+<li><strong>Shared rate limits.</strong> The BLS v1 API (about 25 requests a day per IP) and the GitHub API (60 an hour unauthenticated) are shared with other tenants of Render's IP addresses; prefer short windows and expect manual fallbacks.</li>
+<li><strong>Topics.</strong> No sports, pop culture or awards. Elections are allowed from official results only.</li>
+<li><strong>No em dashes or emojis</strong> in question text.</li>
+</ol>
+<h3>Run one rule by itself</h3>
+<pre>node apps/web/scripts/check-settlement-rule.mjs my-rules.json --closes-at 1791061200</pre>
+<p><code>ok</code> is fine. <code>source-error</code> is fine only for a reason listed above that is expected before the release. <code>invalid</code> and <code>already-public</code> block the pool. Reference: <code>docs/SETTLEMENT_READERS.md</code> and <code>docs/MULTI_POOL_OPERATIONS.md</code>.</p>
+</main>
+</body>
+</html>

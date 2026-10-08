@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flurbo gaps and limitations</title>
+<style>
+:root{--bg:#f6f5ef;--panel:#ffffff;--ink:#16241c;--muted:#5b6b61;--line:#d9ddd3;--accent:#1f6b4a;--accent-soft:#e3efe8;--warn:#8a5a00;--warn-soft:#fbf1dc;--bad:#9b2c2c;--bad-soft:#f8e3e3;--code:#eef0ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111714;--panel:#18211c;--ink:#e6ece8;--muted:#9fb0a5;--line:#2c3a32;--accent:#6fcf9f;--accent-soft:#1e3328;--warn:#e7b85a;--warn-soft:#33290f;--bad:#f09a9a;--bad-soft:#3a1d1d;--code:#202b25}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+nav{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:14px;font-size:14px;z-index:2}
+nav a{color:var(--accent);text-decoration:none}nav a[aria-current]{font-weight:700;color:var(--ink)}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:30px;margin:8px 0 4px}h2{font-size:22px;margin:40px 0 8px;border-top:1px solid var(--line);padding-top:24px}h3{font-size:17px;margin:24px 0 6px}
+p.lead{color:var(--muted);margin-top:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.note{background:var(--accent-soft);border-left:4px solid var(--accent);padding:10px 14px;border-radius:6px;margin:12px 0}
+.warn{background:var(--warn-soft);border-left:4px solid var(--warn);padding:10px 14px;border-radius:6px;margin:12px 0}
+.bad{background:var(--bad-soft);border-left:4px solid var(--bad);padding:10px 14px;border-radius:6px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:14px;background:var(--panel)}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--code)}
+.scroll{overflow-x:auto}
+code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;background:var(--code);border-radius:4px}
+code{padding:1px 4px;word-break:break-word}pre{padding:12px;overflow-x:auto;white-space:pre}
+.tag{display:inline-block;font-size:12px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+.secret{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}
+.public{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.private{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+svg{max-width:100%;height:auto}
+svg .box{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+svg .hot{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
+svg text{fill:var(--ink);font:13px system-ui,sans-serif}
+svg .small{font-size:11px;fill:var(--muted)}
+svg .arrow{stroke:var(--muted);stroke-width:1.4;fill:none;marker-end:url(#a)}
+</style>
+<style>.fixed{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}.open{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}.design{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}</style>
+</head>
+<body>
+<nav>
+<a href="architecture.html">Architecture and environment</a>
+<a href="wallets-and-markets.html">Wallets and listing markets</a>
+<a href="settlement.html">Settlement</a>
+<a href="gaps-and-limitations.html" aria-current="page">Gaps and limitations</a>
+</nav>
+<main>
+<h1>Known gaps and limitations</h1>
+<p class="lead">Compiled 1 October 2026 from this project's discussions and the local planning documents that are not in the repository (<code>docs/research/priorities-2026-09-29/*</code>, <code>docs/AGENT_BRIEF_PRODUCT_PRIORITIES.md</code>, <code>docs/PROPOSAL_PRODUCT_PRIORITIES_2026-09-28.md</code>, <code>docs/research/markets-2026-10/*</code>). Every item was checked against the code on <code>main</code> at the merge of PR #31.</p>
+<p><span class="tag open">open</span> needs work &nbsp; <span class="tag design">by design</span> accepted limit, disclosed &nbsp; <span class="tag fixed">fixed</span> verified in current code</p>
+
+<h2>Fix before the repository goes public (12 October)</h2>
+<div class="bad"><strong><code>secrets/</code> is not in <code>.gitignore</code>.</strong> It is untracked today, so one <code>git add .</code> would commit it. Add <code>/secrets/</code> to <code>.gitignore</code>, and review what else in the working copy is untracked before the repository becomes public (local research documents, <code>.superdesign/</code>, <code>.agents/</code>, <code>.claude/</code>, <code>resources/</code>).</div>
+
+<h2>Markets and pricing</h2>
+<div class="scroll"><table>
+<tr><th>Item</th><th>Status</th><th>Detail</th><th>Next step</th></tr>
+<tr><td>2 to 4 questions per pool</td><td><span class="tag open">open</span></td><td>Guard in <code>PilotPool</code> and <code>PilotResolver</code> constructors, <code>preparePilot</code>, the batch schema and the market page route (<code>/[0-3]</code>). The pricing engine itself supports up to 32. Settlement and VOID payout loop over every combination of answers (2^n).</td><td>Part 2 design: payout per claim over the claim's own questions, reserve per factor, raise the guard after gas benchmarks (likely 16), audit the UI and four SDKs.</td></tr>
+<tr><td>Each question combines with at most two others</td><td><span class="tag design">by design</span></td><td>Bounded-width pricing. Links are permanent and first come. Early traders can block the most interesting combination (for example Brazil runoff winner with runoff composition).</td><td>Optionally seed key combinations right after deployment; raise the width in a future engine.</td></tr>
+<tr><td>Combinations never span pools</td><td><span class="tag design">by design</span></td><td>Each pool is a separate contract; related pools (Crypto weekend and Crypto week) can drift apart.</td><td>Stretch goal: one shared pool of clusters (<code>docs/STRETCH_SHARED_POOL.md</code>).</td></tr>
+<tr><td>One trading close per pool; payout after the last question</td><td><span class="tag design">by design</span></td><td>No trading between observations. A late question (Brazil runoff on 25 October) holds the whole pool's payout until about 28 October.</td><td>Early redemption: let a claim redeem once its own questions are final.</td></tr>
+<tr><td>Leftover funding return and contract-level trader registry</td><td><span class="tag open">open</span></td><td>Pools are permissionless on-chain; the site refuses wallets not linked to an account. Deferred until after launch.</td><td>Ship together, as planned.</td></tr>
+<tr><td>Conditional preservation untested</td><td><span class="tag fixed">fixed</span></td><td><code>contracts/test/FactoredConditionalProperties.t.sol</code> covers unary, AND and exactly-one trades.</td><td></td></tr>
+<tr><td>Litepaper contradicted the deployment</td><td><span class="tag fixed">fixed</span></td><td>Version 0.3 states the deployed pool is factored and only settlement enumerates.</td><td></td></tr>
+<tr><td>Semantic purchase guard off</td><td><span class="tag design">by design</span></td><td><code>FLURBO_SEMANTIC_MODE</code> unset. Impossible combinations (Planet nested pairs) price near zero instead of being refused.</td><td>Enable only with reviewed rules.</td></tr>
+</table></div>
+
+<h2>Settlement</h2>
+<div class="scroll"><table>
+<tr><th>Item</th><th>Status</th><th>Detail</th><th>Next step</th></tr>
+<tr><td>Missing data is never No</td><td><span class="tag design">by design</span></td><td>An outage, rate limit, layout change or unpublished release leaves the question unanswered; a person asserts or it goes VOID.</td><td>Write rules so No is a positive reading (count 0 from a complete list).</td></tr>
+<tr><td>Legacy release rule proves only Yes</td><td><span class="tag open">open</span></td><td>Release milestones: reth v2.6.1 needs a manual No by 8 Oct 00:01 UTC. Older audit item N3 is fixed for the general readers.</td><td>Use counting rules for future release questions.</td></tr>
+<tr><td>Bot does not finalize other wallets' assertions</td><td><span class="tag open">open</span></td><td><code>nextResolutionAction</code> finalizes only its own assertions and timeouts. A manual assertion needs a manual <code>finalize</code>.</td><td>Let the bot finalize any unchallenged assertion after its challenge period.</td></tr>
+<tr><td>Bond credits are never withdrawn by the bot</td><td><span class="tag open">open</span></td><td><code>PilotResolver.finish</code> credits bonds; collecting needs <code>withdrawBond()</code> from the signer, whose key exists only on Render. About 1 test AUSD stays in each resolver per bot assertion.</td><td>Add a <code>withdrawBond</code> action to the worker after delivery.</td></tr>
+<tr><td>Answers wait for the capture window to close</td><td><span class="tag design">by design</span></td><td>The resolver accepts assertions only after the observation end (audit item N2). Payout comes at window close plus the challenge period.</td><td>Keep windows short where sources are reliable.</td></tr>
+<tr><td>Shared IP rate limits</td><td><span class="tag open">open</span></td><td>BLS API v1 (about 25 requests a day per IP; exhausted locally on 1 October by rule checks) and GitHub (60 an hour) are shared with other tenants of Render's addresses.</td><td>Short windows, manual fallback; consider a registered BLS key only if its evidence can stay public.</td></tr>
+<tr><td>Monad public RPC prunes state</td><td><span class="tag design">by design</span></td><td>Contract state older than a few days cannot be read, so price and supply readings must be captured within hours.</td><td></td></tr>
+<tr><td>TSE layout not verifiable before election night</td><td><span class="tag open">open</span></td><td>Brazil rules read candidate rows by ballot number and fail closed if fields are missing, but a changed status string (for example <code>2&#176; turno</code>) would read as No.</td><td>Compare the live file on 5 October 01:00 to 05:30 UTC; hold the pool if anything differs.</td></tr>
+<tr><td>Page reader is brittle</td><td><span class="tag design">by design</span></td><td><code>html-text.v1</code> breaks on layout changes (EIA).</td><td>Prefer data sources.</td></tr>
+<tr><td>Rule check cannot tell a quota refusal from a rule problem</td><td><span class="tag open">open</span></td><td>BLS quota refusals show as <code>OBSERVATION_IDENTITY_MISMATCH</code>; F1 was prepared with a temporary allowance.</td><td>Recognize known refusal messages, or rerun from another IP.</td></tr>
+<tr><td>Captures stored in Redis</td><td><span class="tag design">by design</span></td><td>2 MB cap per response; large responses cost Upstash bandwidth and commands on the free plan.</td><td>Keep responses under 500 KB.</td></tr>
+<tr><td>One signer, one pending transaction</td><td><span class="tag design">by design</span></td><td>Up to 12 transactions per cycle; a burst of 16 assertions takes 2 to 3 cycles.</td><td></td></tr>
+<tr><td>Operator-controlled reviewers, 1 AUSD bonds</td><td><span class="tag design">by design</span></td><td>No economic security; disputes are decided by wallets the operator controls. Disclosed in every pool.</td><td>Independent panel, or integration with Kleros, Reality.eth or Seer (not started).</td></tr>
+<tr><td>Settlement rule schema too thin for official statistics</td><td><span class="tag fixed">fixed</span></td><td><code>flurbo.settlement-rule.v1</code> has vintage, publication cutoff, correction cutoff and reader settings.</td><td></td></tr>
+</table></div>
+
+<h2>Agents and evidence</h2>
+<div class="scroll"><table>
+<tr><th>Item</th><th>Status</th><th>Detail</th><th>Next step</th></tr>
+<tr><td>Questions researched in pairs, not as one pool</td><td><span class="tag open">open</span></td><td><code>packages/sdk/src/node/runner.ts</code> still loops over every pair with one research call each (audit finding C, milestone M2). A 4-question pool makes 6 separate forecasts that can disagree.</td><td>One joint forecast per pool in all four SDKs.</td></tr>
+<tr><td>Undated or partial pages counted as fresh evidence</td><td><span class="tag fixed">fixed</span></td><td>Evidence v2 in all four SDKs: complete-document flag, separate publisher and HTTP times, 2 MB cap (findings A, B, N1).</td><td></td></tr>
+<tr><td>Re-quote before every signature</td><td><span class="tag open">open</span></td><td>Not re-verified since the 29 September audit, which found an explicit re-quote only after approvals; the on-chain maximum cost still bounds the price.</td><td>Check and add if still missing.</td></tr>
+<tr><td>Participant telemetry</td><td><span class="tag open">open</span></td><td>Operator funnel and bet metrics exist (<code>docs/USER_METRICS.md</code>); no per-participant session telemetry.</td><td>Only with an approved privacy notice.</td></tr>
+<tr><td>Exit visibility per holding</td><td><span class="tag open">open</span></td><td>Portfolio shows holdings, status labels and expected result times; no live sell quote per holding.</td><td>Milestone M4.</td></tr>
+</table></div>
+
+<h2>Operations and infrastructure</h2>
+<div class="scroll"><table>
+<tr><th>Item</th><th>Status</th><th>Detail</th><th>Next step</th></tr>
+<tr><td>Free Render instance</td><td><span class="tag design">by design</span></td><td>One instance; sleeps without the cron-job.org ping; a restart skips a cycle; the signer key lives in the web service.</td><td>Keep the ping and the Healthchecks.io watchdog.</td></tr>
+<tr><td>Free-tier quotas</td><td><span class="tag open">open</span></td><td>Upstash 500,000 commands a month, QuickNode credits, Resend 100 emails a day. Per-pool monitor cadence and idle skipping were added; real usage not yet measured with 7 pools.</td><td>Check dashboards weekly; set retired, settled pools to <code>off</code>.</td></tr>
+<tr><td>Browser tests need Docker</td><td><span class="tag open">open</span></td><td>The new 13-market directory test has not run yet.</td><td>Run in <code>mcr.microsoft.com/playwright:v1.56.1-noble</code>.</td></tr>
+<tr><td>Retired environment variables still on Render</td><td><span class="tag open">open</span></td><td>Ignored in registry mode; kept as rollback.</td><td>Delete after a day of clean registry operation.</td></tr>
+<tr><td>GitHub Actions fallback does not know the registry</td><td><span class="tag open">open</span></td><td><code>settlement-monitor.yml</code> and <code>resolution-worker.yml</code> run in environment mode with old bundles; <code>check-resolution-readiness.mjs</code> also reads the old bundle.</td><td>Set <code>FLURBO_COLLECTIONS_SOURCE=registry</code> in the workflows before using them as a fallback.</td></tr>
+<tr><td>Superseded wave 2 code</td><td><span class="tag open">open</span></td><td><code>workflows/cre/src/wave2.ts</code>, <code>prepare-wave2.ts</code>, <code>verify-wave2.ts</code>, <code>bundle-wave2.ts</code> and <code>DeployWave2.s.sol</code> (PR #29) were replaced by <code>config/markets/wave2-fast.json</code> and the batch tool. The deployed F2 and F3 use the batch file, not <code>wave2.ts</code>.</td><td>Remove or mark as superseded.</td></tr>
+<tr><td>Old signer key lost</td><td><span class="tag design">by design</span></td><td><code>0x632a…</code> holds 1 reth YES share in Release milestones.</td><td>Never fund it.</td></tr>
+<tr><td>Remaining wave 2 pools not deployed</td><td><span class="tag open">open</span></td><td>Fuel and the euro, Weather, Planet, Rates, Monad network, Crypto week (<code>docs/research/markets-2026-10/WAVE2_PLAN.md</code>). Planet's deploy deadline is the earliest: 5 October 23:00 UTC.</td><td>Write their batch file and deploy in one run.</td></tr>
+<tr><td>Stale planning text</td><td><span class="tag open">open</span></td><td><code>WAVE2.md</code> still says "no elections" and lists old closes; <code>WAVE2_PLAN.md</code> section 2 describes the single-proposer bot that the registry replaced.</td><td>Update when wave 2 finishes.</td></tr>
+</table></div>
+</main>
+</body>
+</html>

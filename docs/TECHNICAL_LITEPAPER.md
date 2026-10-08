@@ -1,3 +1,5 @@
+<div align="center">
+
 # Flurbo
 
 ## A Coherent Market for Related Events
@@ -9,6 +11,8 @@
 Flurbo Research and Engineering
 
 Monad public testnet. Test assets only.
+
+</div>
 
 ## Abstract
 
@@ -28,15 +32,15 @@ This paper specifies the economic model, claim encoding, pricing rule, collatera
 
 Let A and B be related binary events. A conventional interface may display a market for A and a separate market for B. A trader who has a view about the relationship between them must approximate that view using multiple trades, accept execution risk across legs, or avoid expressing it. More importantly, two separate markets do not determine P(A and B). Knowing P(A) and P(B) constrains the joint probability only through the Frechet bounds:
 
-```equation
-max(0, P(A) + P(B) - 1) <= P(A and B) <= min(P(A), P(B)).
-```
+$$
+\max(0, P(A) + P(B) - 1) \le P(A \text{ and } B) \le \min(P(A), P(B))
+$$
 
 Any value inside this interval can be consistent with the same marginals. Independence is only one possible assumption:
 
-```equation
-P(A and B) = P(A) P(B)  if and only if A and B are independent.
-```
+$$
+P(A \text{ and } B) = P(A) P(B) \quad \text{if and only if } A \text{ and } B \text{ are independent.}
+$$
 
 For example, suppose P(A) = 0.40 and P(B) = 0.30. Then P(A and B) may lie anywhere from 0 to 0.30. The independent baseline is 0.12. A joint market price of 0.22 therefore expresses positive association relative to that baseline, while remaining within the probability bounds. It does not establish that either event causes the other.
 
@@ -101,27 +105,27 @@ The public interface currently limits a composed claim to at most three events. 
 
 Let q_x denote the total outstanding payout liability in terminal state x. For liquidity parameter b > 0, the logarithmic market scoring rule cost function is
 
-```equation
-C(q) = b log( sum_(x in Omega) exp(q_x / b) ).
-```
+$$
+C(q) = b \log \left( \sum_{x \in \Omega} \exp(q_x / b) \right)
+$$
 
 The instantaneous state price is the gradient of the cost function:
 
-```equation
-p_x(q) = exp(q_x / b) / sum_(y in Omega) exp(q_y / b).
-```
+$$
+p_x(q) = \frac{\exp(q_x / b)}{\sum_{y \in \Omega} \exp(q_y / b)}
+$$
 
 The vector p(q) is nonnegative and sums to one. For any Boolean claim with winning set W, its marginal price before finite-size price impact is
 
-```equation
-p_W(q) = sum_(x in W) p_x(q).
-```
+$$
+p_W(q) = \sum_{x \in W} p_x(q)
+$$
 
 The quoted collateral for buying delta units of the claim is the cost difference
 
-```equation
-Q_buy = C(q + delta 1_W) - C(q),
-```
+$$
+Q_{\text{buy}} = C(q + \delta \mathbf{1}_W) - C(q)
+$$
 
 where 1_W is one in winning states and zero otherwise. A sale reverses liability and receives the corresponding decrease in C, subject to ownership and representational constraints.
 
@@ -131,9 +135,9 @@ Hanson introduced logarithmic market scoring rules as automated mechanisms for i
 
 For a Boolean claim whose current probability is p, the ideal fee-free cost of buying delta units is
 
-```equation
-Q_buy = b log(1 + p (exp(delta / b) - 1)).
-```
+$$
+Q_{\text{buy}} = b \log(1 + p (\exp(\delta / b) - 1))
+$$
 
 This expression is algebraically equal to the global cost difference. It also makes the role of b explicit. Larger b produces more depth and less price movement for a fixed quantity. Smaller b increases sensitivity and reduces the initial subsidy, but also produces larger slippage.
 
@@ -143,9 +147,9 @@ The deployed contracts use integer collateral atoms and conservative numerical b
 
 Because every claim price is derived from the same state-price vector, logical relations hold at each state snapshot. For example,
 
-```equation
-P(A OR B) = P(A) + P(B) - P(A AND B).
-```
+$$
+P(A \text{ OR } B) = P(A) + P(B) - P(A \text{ AND } B)
+$$
 
 The mechanism therefore does not maintain independent order books for A, B, and A AND B. A trade in one expression changes the relative liability of states and can move all overlapping expressions.
 
@@ -155,10 +159,12 @@ This numerical coherence should not be overstated. Prices are inventory-derived 
 
 A purchase of delta units of A adds delta to every terminal liability for which A is true. The weights of those states are multiplied by the same factor exp(delta / b). Normalization within that subset cancels the common multiplier. Consequently, both P(B given A) and P(B given not A) remain unchanged, including when A and B are dependent. A sale reverses the same update. This preserves existing conditional structure rather than replacing it with independence.
 
-```equation
-P_new(B given A) = P_old(B given A)
-P_new(B given not A) = P_old(B given not A).
-```
+$$
+\begin{aligned}
+P_{\text{new}}(B \mid A) &= P_{\text{old}}(B \mid A) \\
+P_{\text{new}}(B \mid \text{not } A) &= P_{\text{old}}(B \mid \text{not } A)
+\end{aligned}
+$$
 
 The marginal P(B) need not remain fixed because P(A) changes. By contrast, a purchase of A AND B changes the relative weights within the A subset, so P(B given A) increases for a nondegenerate distribution. These are properties of the inventory-derived LMSR distribution, not claims about real-world predictive accuracy. Regression tests compare exact integer liability differences that determine conditional odds, including correlated and independent fixtures, overlapping three-event factors, and buy/sell reversals. Separate high-precision quote fixtures test conservative rounding within the documented numerical enclosure; a one-atom discrepancy observed in some testnet quotes is not a universal error bound.
 
@@ -168,15 +174,15 @@ The marginal P(B) need not remain fixed because P(A) changes. By contrast, a pur
 
 Explicit enumeration requires 2^n state liabilities. This is practical for small clusters and unsuitable for large n. The factored engine represents total liability as a sum of local tables:
 
-```equation
-q(x) = sum_f q_f(x_scope(f)).
-```
+$$
+q(x) = \sum_f q_f(x_{\text{scope}(f)})
+$$
 
 The partition function is
 
-```equation
-Z = sum_x exp(q(x) / b),
-```
+$$
+Z = \sum_x \exp(q(x) / b)
+$$
 
 and C(q) = b log Z. The factor potentials exp(q_f / b) multiply into one global distribution. The factors are not separate market makers and do not create separate pools of collateral.
 
@@ -208,9 +214,9 @@ The general FactoredPool accepts a larger event domain under the limits in Secti
 
 With no outstanding claims and a uniform initial state, the LMSR cost is
 
-```equation
-C(0) = b log |Omega| = b n log 2.
-```
+$$
+C(0) = b \log |\Omega| = b n \log 2
+$$
 
 The pool is funded before trading with a conservative rounded amount derived from this initial cost. Funding supplies the market maker's bounded subsidy. The present contracts do not issue an LP token, provide a sponsor withdrawal right, or treat surplus as distributable profit.
 
@@ -218,9 +224,9 @@ The pool is funded before trading with a conservative rounded amount derived fro
 
 Let L(x) be the payout owed in terminal state x. Before resolution, required collateral is
 
-```equation
-R = max_(x in Omega) L(x).
-```
+$$
+R = \max_{x \in \Omega} L(x)
+$$
 
 The pool checks that its actual collateral balance covers R. After resolution, required collateral becomes the remaining payout in the realized state. Conservative quoting and outward rounding are designed to preserve coverage, but the contracts also check the balance directly.
 
@@ -267,9 +273,9 @@ Each question has its own observation window and result time, and the market pag
 
 For resolved YES or NO events, the corresponding bit is fixed. Each VOID event is averaged uniformly over its two possible binary answers. If V is the set of void events and K is the fixed partial assignment, the payout fraction of claim W is
 
-```equation
-phi(W | K,V) = |{x compatible with K : x in W}| / 2^|V|.
-```
+$$
+\phi(W \mid K,V) = \frac{|\{x \text{ compatible with } K : x \in W\}|}{2^{|V|}}
+$$
 
 Thus a unit of A AND B pays 0.5 when A is YES and B is VOID, 0 when A is NO and B is VOID, and 0.25 when both events are VOID. VOID is not equivalent to NO and does not refund the purchase price. Redemption converts this fraction into collateral atoms with conservative rounding.
 
@@ -287,12 +293,14 @@ Flurbo distinguishes market prices from a user's private forecast. An agent or u
 
 For two events, a user can provide P(A), P(B), and P(A and B). Inputs outside the Frechet bounds are rejected. The resulting four-state distribution is
 
-```equation
-P(0,0) = 1 - P(A) - P(B) + P(A and B)
-P(1,0) = P(A) - P(A and B)
-P(0,1) = P(B) - P(A and B)
-P(1,1) = P(A and B).
-```
+$$
+\begin{aligned}
+P(0,0) &= 1 - P(A) - P(B) + P(A \text{ and } B) \\
+P(1,0) &= P(A) - P(A \text{ and } B) \\
+P(0,1) &= P(B) - P(A \text{ and } B) \\
+P(1,1) &= P(A \text{ and } B)
+\end{aligned}
+$$
 
 The What-if and thesis interfaces compare such user estimates with pool-implied values and with an independence baseline. Conditional quantities describe association under a stated condition. They do not establish causal effects.
 
@@ -300,9 +308,9 @@ The What-if and thesis interfaces compare such user estimates with pool-implied 
 
 If a claim pays one collateral unit and a user assigns it probability pi, then the user's expected gross payout for quantity delta is delta pi. A quote cost Q implies the user's subjective expected net value
 
-```equation
-EV = delta pi - Q - gas - external fees.
-```
+$$
+\text{EV} = \delta \pi - Q - \text{gas} - \text{external fees}
+$$
 
 This expression is not a profit guarantee. The forecast may be wrong, the quote moves with size, execution may fail, and capital may remain locked until resolution. Flurbo displays executable quotes rather than treating displayed marginal probabilities as fixed purchase prices.
 
@@ -436,11 +444,13 @@ Suppose the pool-implied values before a finite trade are P(A) = 0.30, P(B) = 0.
 
 The independence baseline for both is 0.30 x 0.40 = 0.12. The market-implied joint value is 0.10 higher, but this difference is an association measure only. The derived claim probabilities are:
 
-```equation
-P(A AND B) = 0.22
-P(A OR B) = 0.30 + 0.40 - 0.22 = 0.48
-P(exactly one) = 0.08 + 0.18 = 0.26.
-```
+$$
+\begin{aligned}
+P(A \text{ AND } B) &= 0.22 \\
+P(A \text{ OR } B) &= 0.30 + 0.40 - 0.22 = 0.48 \\
+P(\text{exactly one}) &= 0.08 + 0.18 = 0.26
+\end{aligned}
+$$
 
 A trader who assigns P(A and B) = 0.28 may consider an AND purchase, but must compare that belief with the finite executable quote. A displayed 0.22 marginal does not imply that a large order costs 0.22 per unit. The cost curve increases as the order shifts liability toward the winning state.
 
