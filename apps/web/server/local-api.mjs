@@ -19,11 +19,13 @@ import {settlementPacketHandler,SETTLEMENT_PACKET_PATH} from './settlement-persi
 import {userMetrics} from './user-metrics.mjs';
 import {memberNotices,noticeDelivery} from './member-notices.mjs';
 import {handleAlchemyWebhook, getAlchemyActivities} from './alchemy-webhook.mjs';
+import {listingForCollection, parseKuruListing, readKuruCollection} from './kuru-collection.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(), sharedLimits = true,
-  publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
+  publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', networkMode = 'local_fork', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
   applications = null, previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {}, settlementPackets = null, starter = null, funding = null } = {}) {
   const hosted = publicOrigin !== null;
+  const kuruListing = parseKuruListing(process.env.FLURBO_KURU_LISTING_JSON);
   // Agent wallets cannot also be linked for manual MetaMask trading; with Redis the two claims exclude each other atomically.
   const links = walletLinks({command:store.command,isReserved:wallet=>agents?agents.isAgentWallet(wallet):false,reservedKey:store.command?agentWalletKey:null});
   // Operator addresses from every configured deployment, plus FLURBO_AGENT_RESERVED_WALLETS, can never be agent wallets.
@@ -224,7 +226,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         const result=await agents.handle({method:req.method,path:url.pathname,input:req.method==='POST'?await body(req):undefined,login,origin,sessionDigest:digest(sid||'')});
         return send(res,result.status,result.body);
       }
-      if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted ? {...TESTNET, faucet:testFaucet || TESTNET.faucet, flurboFaucet:!!testFaucet, starterMon:starter?.amountMon ?? null} : { environment: 'local_fork', chain_id: 10143 });
+      if (req.method === 'GET' && url.pathname === '/api/network') return send(res, 200, hosted || networkMode === 'public_testnet' ? {...TESTNET, faucet:testFaucet || TESTNET.faucet, flurboFaucet:!!testFaucet, starterMon:starter?.amountMon ?? null} : { environment: 'local_fork', chain_id: 10143 });
       if (req.method === 'GET' && url.pathname === '/api/alchemy/activity') return send(res, 200, getAlchemyActivities());
       if(url.pathname==='/api/market-directory'&&req.method==='GET'&&!url.search){
         const login=await getLogin();
@@ -330,6 +332,21 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         const login=await getLogin();
         if(!login || login.method!=='passkey') return send(res,401,{error:'Sign in with your Flurbo passkey'});
         if(!pilot) return send(res,archiveNamespace?404:503,{error:archiveNamespace?'That market collection is not available.':'The real-event pilot is not published yet. Reviewer identities, final event rules and a verified deployment are required.'});
+        if(req.method==='GET' && ['/api/pilot/kuru-listing','/api/pilot/kuru'].includes(url.pathname)) {
+          const eventText=url.searchParams.get('event');
+          const event=eventText!==null&&/^(0|[1-9][0-9]?)$/.test(eventText)?Number(eventText):-1;
+          const listing=listingForCollection(kuruListing,pilot.manifest,event);
+          if(!listing)return send(res,404,{error:'No verified Kuru order book for this question.'});
+          if(url.pathname==='/api/pilot/kuru-listing') {
+            if([...url.searchParams.keys()].some(k=>k!=='event'))return send(res,400,{error:'Invalid Kuru listing request.'});
+            return send(res,200,{eventIndex:event,pool:listing.pool,receipt:listing.receipt,market:listing.market,closesAt:listing.closesAt,question:pilot.manifest.publication.draft.events[event].question});
+          }
+          const wallet=url.searchParams.get('wallet'),beforeText=url.searchParams.get('before');
+          if([...url.searchParams.keys()].some(k=>!['event','wallet','before'].includes(k))||!wallet||!/^0x[0-9a-f]{40}$/i.test(wallet)||
+              beforeText!==null&&!/^[1-9][0-9]{0,12}$/.test(beforeText))return send(res,400,{error:'Invalid Kuru account request.'});
+          try{return send(res,200,await readKuruCollection({listing,manifest:pilot.manifest,wallet,before:beforeText?Number(beforeText):0,rpcUrl}));}
+          catch{return send(res,503,{error:'Kuru order book could not be verified at a fresh block. Retry shortly.'});}
+        }
         if(req.method==='GET' && ['/api/pilot/status','/api/pilot/account'].includes(url.pathname)) {
           if([...url.searchParams.keys()].some(k=>k!=='wallet') || url.searchParams.getAll('wallet').length>1) return send(res,400,{error:'Invalid pilot query'});
           if(url.pathname==='/api/pilot/account') return send(res,200,await pilot.account(url.searchParams.get('wallet')));

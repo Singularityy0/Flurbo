@@ -8,6 +8,7 @@ import {IERC20Metadata, KuruRouter, KuruMargin, KuruMarket} from "../fork/KuruOr
 interface PilotKuruVm {
     function envAddress(string calldata) external returns(address);
     function envUint(string calldata) external returns(uint256);
+    function envString(string calldata) external returns(string memory);
     function readFile(string calldata) external view returns(string memory);
     function parseJsonAddress(string calldata,string calldata) external pure returns(address);
     function parseJsonString(string calldata,string calldata) external pure returns(string memory);
@@ -19,6 +20,7 @@ interface PilotKuruVm {
     function serializeString(string calldata,string calldata,string calldata) external returns(string memory);
     function writeJson(string calldata,string calldata) external;
     function toString(uint256) external pure returns(string memory);
+    function toString(address) external pure returns(string memory);
 }
 
 /// @notice Opt-in testnet order book for one canonical pilot YES receipt. No synthetic pair reuse.
@@ -28,10 +30,12 @@ contract DeployPilotKuru {
     function run() external {
         require(block.chainid==10143,"Monad testnet only");
         address operator=vm.envAddress("FLURBO_DEPLOYER");
-        uint256 eventIndex=vm.envUint("FLURBO_PILOT_EVENT");
-        string memory manifest=vm.readFile("target/deployments/pilot-testnet.json");
+        uint256 eventIndex=vm.envUint("FLURBO_KURU_EVENT_INDEX");
+        string memory manifest=vm.readFile(vm.envString("FLURBO_KURU_MANIFEST"));
         require(keccak256(bytes(vm.parseJsonString(manifest,".status")))==keccak256("verified_pilot_snapshot"),"verify pilot first");
         PilotPool pool=PilotPool(vm.parseJsonAddress(manifest,".pool"));
+        require(address(pool)==vm.envAddress("FLURBO_KURU_POOL"),"wrong pool selection");
+        require(eventIndex<32,"invalid event bit");
         require(pool.funded()&&!pool.resolved()&&pool.closesAt()>block.timestamp+1 hours,"pilot is not open");
         require(pool.settlementRulesHash()==vm.parseJsonBytes32(manifest,".rulesHash"),"wrong rules");
         require(PilotResolver(pool.resolver()).creator()==operator&&eventIndex<pool.eventCount(),"invalid operator or event");
@@ -56,12 +60,18 @@ contract DeployPilotKuru {
         market.addBuyOrder(450000,2e6,true);market.addSellOrder(500000,2e6,true);
         require(cash.approve(address(margin),0)&&receipt.approve(address(margin),0),"reset deposit approvals");
         vm.stopBroadcast();
+        writeOutput(pool,receipt,cash,margin,market,operator,eventIndex);
+    }
+    function writeOutput(
+        PilotPool pool,FactoredBaseToken receipt,IERC20Metadata cash,KuruMargin margin,
+        KuruMarket market,address operator,uint256 eventIndex
+    ) private {
         string memory key="pilot-kuru";
         vm.serializeString(key,"status","unverified_pilot_kuru");
         vm.serializeAddress(key,"pool",address(pool));vm.serializeAddress(key,"receipt",address(receipt));
         vm.serializeAddress(key,"cash",address(cash));vm.serializeAddress(key,"margin",address(margin));
         vm.serializeAddress(key,"market",address(market));vm.serializeAddress(key,"operator",operator);
         string memory output=vm.serializeUint(key,"eventIndex",eventIndex);
-        vm.writeJson(output,string.concat("target/deployments/pilot-kuru-",vm.toString(eventIndex),"-unverified.json"));
+        vm.writeJson(output,string.concat("target/deployments/kuru-",vm.toString(address(pool)),"-event-",vm.toString(eventIndex),"-unverified.json"));
     }
 }

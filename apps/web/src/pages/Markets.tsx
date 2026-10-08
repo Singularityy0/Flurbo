@@ -9,6 +9,7 @@ import {marketHref} from '../market-detail';
 import {marketQuestion} from '../showcase-copy';
 import MarketDetail from './MarketDetail';
 import ThesisExplorer from './ThesisExplorer';
+import CollectionKuru from './CollectionKuru';
 import AccountPortfolio from './AccountPortfolio';
 import PageHeader from '../components/PageHeader';
 import StatusBadge,{type StatusKind} from '../components/ui/StatusBadge';
@@ -28,10 +29,12 @@ export default function Markets(){
     {error?<div className="state-block" role="alert"><h2>Markets could not load</h2><p>{error}</p><button className="btn btn-primary" onClick={()=>setAttempt(x=>x+1)}>Retry</button></div>
       :<>{!gate.covered&&<span className="progress-line" aria-hidden="true"/>}<p role="status" className={gate.covered?'sr-only':'busy-text'}>Loading markets...</p><MarketSkeleton/></>}
   </main>;
-  const detail=location.match(/^\/markets\/(pilot|practice-[0-9a-f]{40})\/([0-3])(\/thesis)?$/);
+  const detail=location.match(/^\/markets\/(pilot|practice-[0-9a-f]{40})\/([0-3])(?:\/(thesis|kuru))?$/);
   if(location.startsWith('/markets/')){
     if(!detail||!groups.some(g=>g.namespace===detail[1]))return <main id="main" tabIndex={-1} className="page page-task"><div className="state-block"><Inbox aria-hidden="true" strokeWidth={1.75}/><h1>Market not found</h1><p>This market is not in the current directory. It may belong to an earlier collection that is no longer listed.</p><Link href="/markets" className="btn btn-primary">All markets</Link></div></main>;
-    return detail[3]?<ThesisExplorer key={location} namespace={detail[1] as PilotNamespace} event={Number(detail[2])}/>:<MarketDetail key={location} namespace={detail[1] as PilotNamespace} event={Number(detail[2])}/>;
+    return detail[3]==='thesis'?<ThesisExplorer key={location} namespace={detail[1] as PilotNamespace} event={Number(detail[2])}/>
+      :detail[3]==='kuru'?<CollectionKuru key={location} namespace={detail[1] as PilotNamespace} event={Number(detail[2])}/>
+      :<MarketDetail key={location} namespace={detail[1] as PilotNamespace} event={Number(detail[2])}/>;
   }
   if(location==='/portfolio')return <main id="main" tabIndex={-1} className="page markets-page portfolio-page">
     <PageHeader title="Your portfolio." lead="All your linked wallet positions. Results and payouts in one place."/>

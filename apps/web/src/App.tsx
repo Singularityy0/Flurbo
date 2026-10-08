@@ -221,6 +221,7 @@ export default function App() {
       <Route path="/markets" component={AccountRoute} />
       <Route path="/markets/:collection/:event" component={AccountRoute} />
       <Route path="/markets/:collection/:event/thesis" component={AccountRoute} />
+      <Route path="/markets/:collection/:event/kuru" component={AccountRoute} />
       <Route path="/fund" component={AccountRoute} />
       <Route path="/access" component={AccountRoute} />
       <Route path="/account" component={AccountRoute} />

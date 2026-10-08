@@ -1,6 +1,6 @@
 import { decodeEventLog, decodeFunctionResult, encodeFunctionData, type Hex } from 'viem';
 import { appFetch as fetch } from './platform-fetch.ts';
-import { kuruAbi, marginAbi, tokenAbi, kuruCall, type Contracts } from '../shared/kuru.mjs';
+import { kuruAbi, marginAbi, tokenAbi, conversionAbi, kuruCall, type Contracts } from '../shared/kuru.mjs';
 
 export type Provider = { request(input: { method: string; params?: unknown[] }): Promise<unknown>; on?(name: string, fn: () => void): void; removeListener?(name: string, fn: () => void): void };
 export type State = { environment: string; chain_id: number; contracts: Contracts; trading_available: boolean;
@@ -8,10 +8,11 @@ export type State = { environment: string; chain_id: number; contracts: Contract
   wallet: Record<string, string>; kuru: { best_bid_wad: string | null; best_ask_wad: string | null };
   orders: { id: string; side: string; remaining_atoms: string; price_units: string }[];
   orders_page: { next_before: string | null; through_id: string }; activity: { from_block: number; to_block: number; logs: any[] } };
-export type Action = { kind: 'approve' | 'deposit' | 'withdraw' | 'limit-buy' | 'limit-sell' | 'market-buy' | 'market-sell' | 'cancel'; asset: 'cash' | 'receipt'; amount: string; price: string; minOut: string; order: string };
+export type Action = { kind: 'approve' | 'deposit' | 'withdraw' | 'wrap' | 'unwrap' | 'limit-buy' | 'limit-sell' | 'market-buy' | 'market-sell' | 'cancel'; asset: 'cash' | 'receipt'; amount: string; price: string; minOut: string; order: string };
 export type Review = { version: 1; owner: string; login: string; contracts: Contracts; action: Action; to: string; data: Hex; expires: number; gas: string; gasPrice: string; netOut: string | null };
 export type Pending = { review: Review; nonce: string; hash: string | null; started: number };
 export const pendingKey = 'flurbo.kuru.pending.v1';
+export const pendingKeyFor = (endpoint: string) => endpoint === '/api/kuru' ? pendingKey : pendingKey + ':' + endpoint;
 export const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const hex = (n: bigint) => '0x' + n.toString(16);
 export function rpcNumber(n: unknown): bigint {
@@ -30,19 +31,20 @@ export async function read(provider: Provider, method: string, params: unknown[]
   try { return await Promise.race([provider.request({ method, params }), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Wallet read timed out. No automatic retry.')), 20_000); })]); }
   finally { clearTimeout(timer!); }
 }
-export async function loadState(owner: string, before = ''): Promise<State> {
-  const response = await fetch('/api/kuru?' + new URLSearchParams({ wallet: owner, ...(before ? { before } : {}) }), { cache: 'no-store', signal: AbortSignal.timeout(35_000) });
+export async function loadState(owner: string, before = '', endpoint = '/api/kuru'): Promise<State> {
+  const response = await fetch(endpoint + (endpoint.includes('?') ? '&' : '?') + new URLSearchParams({ wallet: owner, ...(before ? { before } : {}) }), { cache: 'no-store', signal: AbortSignal.timeout(35_000) });
   const state = await response.json();
   if (!response.ok) throw new Error(state.error || 'Kuru reader unavailable.');
   if (state.chain_id !== 10143 || !['public_testnet', 'local_fork'].includes(state.environment) || !same(state.wallet?.address || '', owner) || state.snapshot?.stale) throw new Error('Kuru snapshot is unavailable or stale.');
   return state;
 }
 export function transaction(action: Action, owner: string, c: Contracts) {
-  if (!['approve', 'deposit', 'withdraw', 'limit-buy', 'limit-sell', 'market-buy', 'market-sell', 'cancel'].includes(action.kind) || !['cash', 'receipt'].includes(action.asset)) throw new Error('Unsupported Kuru action.');
+  if (!['approve', 'deposit', 'withdraw', 'wrap', 'unwrap', 'limit-buy', 'limit-sell', 'market-buy', 'market-sell', 'cancel'].includes(action.kind) || !['cash', 'receipt'].includes(action.asset)) throw new Error('Unsupported Kuru action.');
   let to = c.market, abi = kuruAbi, name: string, args: unknown[];
   const kind = action.kind;
   if (kind === 'approve') { to = c[action.asset]; abi = tokenAbi; name = 'approve'; args = [c.margin, atoms(action.amount)]; }
   else if (kind === 'deposit' || kind === 'withdraw') { to = c.margin; abi = marginAbi; name = kind; args = kind === 'deposit' ? [owner, c[action.asset], atoms(action.amount)] : [atoms(action.amount), c[action.asset]]; }
+  else if (kind === 'wrap' || kind === 'unwrap') { if(!Number.isInteger(c.eventIndex))throw Error('Receipt conversion is unavailable for this pair.');to=c.pool;abi=conversionAbi;name=kind==='wrap'?'wrapBase':'unwrapBase';args=[c.eventIndex,true,atoms(action.amount)]; }
   else if (kind === 'cancel') { if (!/^[1-9][0-9]{0,12}$/.test(action.order)) throw new Error('Choose a valid order ID.'); name = 'batchCancelOrders'; args = [[Number(action.order)]]; }
   else if (kind === 'limit-buy' || kind === 'limit-sell') { name = kind === 'limit-buy' ? 'addBuyOrder' : 'addSellOrder'; args = [Number(atoms(action.price)), atoms(action.amount), true]; }
   else { name = kind === 'market-buy' ? 'placeAndExecuteMarketBuy' : 'placeAndExecuteMarketSell'; args = [atoms(action.amount), atoms(action.minOut), true, true]; }
@@ -68,16 +70,18 @@ async function simulate(provider: Provider, tx: ReturnType<typeof transaction>, 
   if (action.kind !== 'approve' && raw !== '0x') throw new Error('Unexpected simulation response.');
   return null;
 }
-export async function prepare(provider: Provider, action: Action, owner: string, login: string): Promise<Review> {
-  const state = await loadState(owner); await identity(provider, owner, state);
+export async function prepare(provider: Provider, action: Action, owner: string, login: string, endpoint = '/api/kuru'): Promise<Review> {
+  const state = await loadState(owner, '', endpoint); await identity(provider, owner, state);
   if (action.kind !== 'cancel' && action.kind !== 'approve') {
     const quantity = atoms(action.amount), buy = action.kind.endsWith('-buy');
     const asset = ['deposit', 'withdraw'].includes(action.kind) ? action.asset : buy ? 'cash' : 'receipt';
     const required = action.kind === 'limit-buy' ? (quantity * atoms(action.price) + 999999n) / 1000000n : quantity;
-    const key = action.kind === 'deposit' ? asset === 'cash' ? 'ausd_atoms' : 'receipt_atoms'
+    const key = action.kind === 'wrap' ? 'pool_yes_atoms' : action.kind === 'unwrap' ? 'receipt_atoms'
+      : action.kind === 'deposit' ? asset === 'cash' ? 'ausd_atoms' : 'receipt_atoms'
       : asset === 'cash' ? 'margin_available_ausd_atoms' : 'margin_available_receipt_atoms';
-    if (BigInt(state.wallet[key]) < required) throw new Error(action.kind === 'deposit'
-      ? `Not enough ${asset === 'cash' ? 'AUSD' : 'H YES receipts'} in this wallet. Fund or convert receipts before depositing.`
+    if (state.wallet[key] === undefined || BigInt(state.wallet[key]) < required) throw new Error(action.kind === 'wrap' ? 'Not enough unwrapped YES shares in this wallet.'
+      : action.kind === 'unwrap' ? 'Not enough YES receipts in this wallet. Withdraw available receipts from Kuru first.' : action.kind === 'deposit'
+      ? `Not enough ${asset === 'cash' ? 'AUSD' : 'YES receipts'} in this wallet. Fund or convert receipts before depositing.`
       : `Not enough available Kuru ${asset === 'cash' ? 'AUSD' : 'receipts'}. Deposit first, or cancel an unfilled order to release its reserve.`);
   }
   // Approval is its own reviewed transaction, never an automatic prelude to a
@@ -97,13 +101,13 @@ export function validateReview(review: Review) {
   if (review.version !== 1 || !same(tx.to, review.to) || tx.data !== review.data || !Number.isFinite(review.expires) || rpcNumber(review.gas) <= 0n || rpcNumber(review.gas) > 5000000n || rpcNumber(review.gasPrice) <= 0n || rpcNumber(review.gasPrice) > 500000000000n) throw new Error('Invalid saved review.');
   return tx;
 }
-export async function submit(provider: Provider, review: Review, save: (p: Pending | null) => void, current: () => boolean) {
+export async function submit(provider: Provider, review: Review, save: (p: Pending | null) => void, current: () => boolean, endpoint = '/api/kuru') {
   const tx = validateReview(review);
   const response = await fetch('/api/auth/session', { cache: 'no-store' });
   const auth = await response.json();
   if (!response.ok || !same(auth.session?.address || '', review.login)) throw new Error('Sign in again before submitting.');
-  const state = await loadState(review.owner);
-  if (Object.keys(review.contracts).some(k => !same(state.contracts[k as keyof Contracts], review.contracts[k as keyof Contracts]))) throw new Error('Deployment changed. Review again.');
+  const state = await loadState(review.owner, '', endpoint);
+  if ((['pool','cash','receipt','margin','market'] as const).some(k => !same(state.contracts[k], review.contracts[k])) || state.contracts.eventIndex !== review.contracts.eventIndex) throw new Error('Deployment changed. Review again.');
   await identity(provider, review.owner, state);
   if ((review.action.kind.includes('buy') || review.action.kind.includes('sell')) && !state.trading_available) throw new Error('Trading is no longer available.');
   await simulate(provider, tx, review.action);
@@ -123,8 +127,8 @@ export async function submit(provider: Provider, review: Review, save: (p: Pendi
     throw new Error('Submission outcome is unknown. Attach the hash from wallet activity before doing anything else.');
   }
 }
-export function readPending(storage: Pick<Storage, 'getItem'>): Pending | null {
-  const raw = storage.getItem(pendingKey);
+export function readPending(storage: Pick<Storage, 'getItem'>, key = pendingKey): Pending | null {
+  const raw = storage.getItem(key);
   if (!raw) return null;
   if (raw.length > 20000) throw new Error('Saved Kuru tracking is invalid.');
   const p = JSON.parse(raw) as Pending; validateReview(p.review); rpcNumber(p.nonce);
@@ -149,7 +153,17 @@ export function matchReceipt(p: Pending, tx: any, receipt: any, canonical: any, 
   if (rpcNumber(head.number) < rpcNumber(receipt.blockNumber) + 1n) return 'confirming';
   if (rpcNumber(receipt.status) === 0n) return 'reverted';
   if (rpcNumber(receipt.status) !== 1n) throw new Error('Invalid receipt status.');
-  if (['approve', 'deposit', 'withdraw'].includes(kind)) {
+  if (kind === 'wrap' || kind === 'unwrap') {
+    const found = receipt.logs.some((log: any) => {
+      if (log.removed || !same(log.address, r.contracts.pool)) return false;
+      try {
+        const e = decodeEventLog({ abi: conversionAbi, ...log, strict: true }); const a = e.args as any;
+        return e.eventName === (kind === 'wrap' ? 'BaseWrapped' : 'BaseUnwrapped') && same(a.owner, r.owner)
+          && Number(a.scope) === 2 ** r.contracts.eventIndex! && Number(a.mask) === 2 && a.quantity === atoms(r.action.amount);
+      } catch { return false; }
+    });
+    if (!found) throw new Error('Expected receipt conversion event missing. Tracking remains open.');
+  } else if (['approve', 'deposit', 'withdraw'].includes(kind)) {
     const asset = r.contracts[r.action.asset];
     const found = receipt.logs.some((log: any) => {
       if (log.removed || !same(log.address, asset)) return false;
@@ -173,9 +187,9 @@ export function matchReceipt(p: Pending, tx: any, receipt: any, canonical: any, 
   }
   return 'confirmed';
 }
-export async function check(provider: Provider, p: Pending) {
+export async function check(provider: Provider, p: Pending, endpoint = '/api/kuru') {
   if (!p.hash) throw new Error('Attach your transaction hash first.');
-  await identity(provider, p.review.owner, await loadState(p.review.owner));
+  await identity(provider, p.review.owner, await loadState(p.review.owner, '', endpoint));
   const tx = await read(provider, 'eth_getTransactionByHash', [p.hash]);
   const receipt = await read(provider, 'eth_getTransactionReceipt', [p.hash]);
   if (!tx || !receipt) return 'pending';
