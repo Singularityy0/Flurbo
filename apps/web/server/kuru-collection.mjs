@@ -39,15 +39,41 @@ export function parseKuruListing(raw) {
   return listing;
 }
 
-export function listingForCollection(listing, manifest, eventIndex) {
+export const KURU_LISTINGS_SCHEMA = 'flurbo.kuru-listings.v1';
+export const MAX_KURU_LISTINGS = 8;
+
+/** Accepts null, one flurbo.kuru-listing.v1 object, or {schema:'flurbo.kuru-listings.v1', listings:[1..8]}. */
+export function parseKuruListings(raw) {
+  if (!raw) return [];
+  let value;
+  try { value = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { throw Error('Invalid Kuru listing configuration.'); }
+  if (!value) return [];
+  if (value?.schema !== KURU_LISTINGS_SCHEMA) return [parseKuruListing(value)];
+  if (!Array.isArray(value.listings) || value.listings.length < 1 || value.listings.length > MAX_KURU_LISTINGS)
+    throw Error('Invalid Kuru listing configuration.');
+  const listings = value.listings.map(parseKuruListing), seen = new Set();
+  for (const listing of listings) {
+    const key = listing.pool.toLowerCase() + ':' + listing.eventIndex;
+    if (seen.has(key)) throw Error('Invalid Kuru listing configuration.');
+    seen.add(key);
+  }
+  return listings;
+}
+
+const listingMatches = (listing, manifest, eventIndex) => {
   const receipts = manifest?.verification?.receipts || manifest?.receipts;
   return listing && manifest?.chainId === 10143 &&
     manifest?.status === 'verified_pilot_snapshot' &&
     Number(eventIndex) === listing.eventIndex && same(listing.pool, manifest.pool) &&
     same(listing.receipt, receipts?.[listing.eventIndex]) &&
     listing.rulesHash.toLowerCase() === manifest.rulesHash?.toLowerCase() &&
-    listing.closesAt === manifest.publication?.draft?.closesAt
-    ? listing : null;
+    listing.closesAt === manifest.publication?.draft?.closesAt;
+};
+
+// listings: one listing object, an array of them, or null.
+export function listingForCollection(listings, manifest, eventIndex) {
+  const list = Array.isArray(listings) ? listings : listings ? [listings] : [];
+  return list.find(listing => listingMatches(listing, manifest, eventIndex)) ?? null;
 }
 
 export async function readKuruCollection({ listing, manifest, wallet, before = 0, rpcUrl, client: suppliedClient, now = Date.now() }) {

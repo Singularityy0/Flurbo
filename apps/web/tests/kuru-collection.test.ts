@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {readKuruCollection,listingForCollection,parseKuruListing} from '../server/kuru-collection.mjs';
+import {readKuruCollection,listingForCollection,parseKuruListing,parseKuruListings} from '../server/kuru-collection.mjs';
+import {combineKuruListings} from '../scripts/combine-kuru-listings.mjs';
 import {verifyKuruListing} from '../scripts/verify-kuru-listing.mjs';
 import {localApi} from '../server/local-api.mjs';
 
@@ -66,4 +67,65 @@ test('authenticated collection route publishes only the configured event listing
   };
   const valid=await request(0);assert.equal(valid.status,200);assert.equal(valid.body.market,market);
   assert.equal((await request(1)).status,404);
+});
+
+const second={pool:'0x'+'aa'.repeat(20),receipt:'0x'+'bb'.repeat(20),market:'0x'+'cc'.repeat(20),rulesHash:'0x'+'dd'.repeat(32)};
+const listingTwo={...listing,...second};
+const manifestTwo={...manifest,pool:second.pool,rulesHash:second.rulesHash,receipts:[second.receipt]};
+const many=(count:number)=>({schema:'flurbo.kuru-listings.v1',listings:Array.from({length:count},(_,i)=>
+  ({...listing,pool:'0x'+(i+1).toString(16).padStart(40,'0')}))});
+
+test('a single legacy listing object still parses and resolves',()=>{
+  assert.deepEqual(parseKuruListings(JSON.stringify(listing)),[listing]);
+  assert.deepEqual(parseKuruListings(null),[]);
+  assert.deepEqual(parseKuruListings(undefined),[]);
+  assert.equal(listingForCollection(listing,manifest,0),listing);
+  assert.equal(listingForCollection(null,manifest,0),null);
+});
+
+test('two listings on different pools each resolve to their own collection',()=>{
+  const listings=parseKuruListings(JSON.stringify({schema:'flurbo.kuru-listings.v1',listings:[listing,listingTwo]}));
+  assert.equal(listings.length,2);
+  assert.equal(listingForCollection(listings,manifest,0)?.market,market);
+  assert.equal(listingForCollection(listings,manifestTwo,0)?.market,second.market);
+  assert.equal(listingForCollection(listings,manifestTwo,1),null);
+  assert.equal(listingForCollection(listings,{...manifest,pool:wallet},0),null);
+});
+
+test('a repeated pool and event, too many listings or an unknown schema are rejected',()=>{
+  assert.throws(()=>parseKuruListings({schema:'flurbo.kuru-listings.v1',listings:[listing,{...listing,market:second.market}]}),/Invalid Kuru listing configuration/);
+  assert.equal(parseKuruListings(many(8)).length,8);
+  assert.throws(()=>parseKuruListings(many(9)),/Invalid Kuru listing configuration/);
+  assert.throws(()=>parseKuruListings({schema:'flurbo.kuru-listings.v1',listings:[]}),/Invalid Kuru listing configuration/);
+  assert.throws(()=>parseKuruListings({schema:'flurbo.kuru-listings.v2',listings:[listing]}),/Invalid Kuru listing configuration/);
+  assert.throws(()=>parseKuruListings('{not json'),/Invalid Kuru listing configuration/);
+});
+
+test('combining listings requires verified snapshots and produces a parseable bundle',()=>{
+  const combined=combineKuruListings([listing,listingTwo]);
+  assert.equal(combined.schema,'flurbo.kuru-listings.v1');
+  assert.deepEqual(parseKuruListings(JSON.stringify(combined)),[listing,listingTwo]);
+  assert.throws(()=>combineKuruListings([listing,{...listingTwo,status:'unverified_pilot_kuru'}]),/verified_kuru_snapshot/);
+  assert.throws(()=>combineKuruListings([listing,listing]),/Invalid Kuru listing configuration/);
+  assert.throws(()=>combineKuruListings([]),/Invalid Kuru listing configuration/);
+});
+
+test('authenticated route serves each configured pool from a multi-listing value',async()=>{
+  const previous=process.env.FLURBO_KURU_LISTING_JSON;
+  process.env.FLURBO_KURU_LISTING_JSON=JSON.stringify(combineKuruListings([listing,listingTwo]));
+  let api;
+  try{
+    api=localApi({store:{read:async()=>({method:'passkey',address:wallet})},previewAccess:{allows:async()=>true},
+      practiceCollections:{catalog:{collections:[{namespace:`practice-${pool.slice(2)}`,label:'One',pool},{namespace:`practice-${second.pool.slice(2)}`,label:'Two',pool:second.pool}]},
+        services:new Map([[`practice-${pool.slice(2)}`,{manifest}],[`practice-${second.pool.slice(2)}`,{manifest:manifestTwo}]])}});
+  }finally{if(previous===undefined)delete process.env.FLURBO_KURU_LISTING_JSON;else process.env.FLURBO_KURU_LISTING_JSON=previous;}
+  const request=async(poolAddress:string,event:number)=>{
+    const req={url:`/api/practice-${poolAddress.slice(2)}/kuru-listing?event=${event}`,method:'GET',headers:{host:'localhost:18767'}};
+    let status=0,body:any;
+    const res={writeHead:(code:number)=>{status=code;},end:(value:string)=>{body=JSON.parse(value);},setHeader:()=>{}};
+    await api(req as any,res as any,()=>{});return {status,body};
+  };
+  assert.equal((await request(pool,0)).body.market,market);
+  assert.equal((await request(second.pool,0)).body.market,second.market);
+  assert.equal((await request(pool,1)).status,404);
 });

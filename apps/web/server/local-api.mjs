@@ -20,13 +20,13 @@ import {userMetrics} from './user-metrics.mjs';
 import {memberNotices,noticeDelivery} from './member-notices.mjs';
 import {kimiForecast} from './kimi-forecaster.mjs';
 import {handleAlchemyWebhook, getAlchemyActivities} from './alchemy-webhook.mjs';
-import {listingForCollection, parseKuruListing, readKuruCollection} from './kuru-collection.mjs';
+import {listingForCollection, parseKuruListings, readKuruCollection} from './kuru-collection.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(), sharedLimits = true,
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', networkMode = 'local_fork', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
   applications = null, previewAccess = null, testingOperatorAccount = DEFAULT_TESTING_OPERATOR, testFaucet = null, learningPool = null, learningOperatorAccount = null, learningDashboardUrl = null, pilot: publishedPilot = null, practiceCollections = null, evidence = null, evidenceOptions = {}, challengeOptions = {}, settlementPackets = null, starter = null, funding = null } = {}) {
   const hosted = publicOrigin !== null;
-  const kuruListing = parseKuruListing(process.env.FLURBO_KURU_LISTING_JSON);
+  const kuruListings = parseKuruListings(process.env.FLURBO_KURU_LISTING_JSON);
   // Agent wallets cannot also be linked for manual MetaMask trading; with Redis the two claims exclude each other atomically.
   const links = walletLinks({command:store.command,isReserved:wallet=>agents?agents.isAgentWallet(wallet):false,reservedKey:store.command?agentWalletKey:null});
   // Operator addresses from every configured deployment, plus FLURBO_AGENT_RESERVED_WALLETS, can never be agent wallets.
@@ -336,7 +336,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         if(req.method==='GET' && ['/api/pilot/kuru-listing','/api/pilot/kuru'].includes(url.pathname)) {
           const eventText=url.searchParams.get('event');
           const event=eventText!==null&&/^(0|[1-9][0-9]?)$/.test(eventText)?Number(eventText):-1;
-          const listing=listingForCollection(kuruListing,pilot.manifest,event);
+          const listing=listingForCollection(kuruListings,pilot.manifest,event);
           if(!listing)return send(res,404,{error:'No verified Kuru order book for this question.'});
           if(url.pathname==='/api/pilot/kuru-listing') {
             if([...url.searchParams.keys()].some(k=>k!=='event'))return send(res,400,{error:'Invalid Kuru listing request.'});
