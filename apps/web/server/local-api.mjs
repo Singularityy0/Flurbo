@@ -21,6 +21,7 @@ import {memberNotices,noticeDelivery} from './member-notices.mjs';
 import {kimiForecast} from './kimi-forecaster.mjs';
 import {handleAlchemyWebhook, getAlchemyActivities} from './alchemy-webhook.mjs';
 import {listingForCollection, parseKuruListings, readKuruCollection} from './kuru-collection.mjs';
+import {creEvidenceForManifest} from './cre-evidence.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(), sharedLimits = true,
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', networkMode = 'local_fork', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
@@ -347,6 +348,11 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
               beforeText!==null&&!/^[1-9][0-9]{0,12}$/.test(beforeText))return send(res,400,{error:'Invalid Kuru account request.'});
           try{return send(res,200,await readKuruCollection({listing,manifest:pilot.manifest,wallet,before:beforeText?Number(beforeText):0,rpcUrl}));}
           catch{return send(res,503,{error:'Kuru order book could not be verified at a fresh block. Retry shortly.'});}
+        }
+        if(req.method==='GET' && url.pathname==='/api/pilot/cre-evidence') {
+          if(url.search)return send(res,400,{error:'Invalid evidence request.'});
+          const evidence=creEvidenceForManifest(pilot.manifest);
+          return evidence?send(res,200,evidence):send(res,404,{error:'No Chainlink CRE check for this market.'});
         }
         if(req.method==='GET' && ['/api/pilot/status','/api/pilot/account'].includes(url.pathname)) {
           if([...url.searchParams.keys()].some(k=>k!=='wallet') || url.searchParams.getAll('wallet').length>1) return send(res,400,{error:'Invalid pilot query'});

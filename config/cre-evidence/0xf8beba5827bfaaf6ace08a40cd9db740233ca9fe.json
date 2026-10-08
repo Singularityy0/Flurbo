@@ -1,0 +1,70 @@
+{
+  "schema": "flurbo.cre-price-evidence.v1",
+  "pool": "0xf8BeBA5827bFaaf6ACe08A40CD9DB740233CA9FE",
+  "rulesHash": "0xe5a599dd8746121f4083239e034475878dbd7944ee735a67b946040b85a5078e",
+  "block": {
+    "number": "110317694",
+    "hash": "0x558cd759b36be21596d38480b6b00736586ff363845b394e2f38254b6f8a2e7c",
+    "timestamp": 1791072000
+  },
+  "previousBlock": {
+    "number": "110317693",
+    "hash": "0x4ae7eec124a0ba4b943e89494138183e4d18a853d2397b985d4a72cdf3c84a4f",
+    "timestamp": 1791071999
+  },
+  "observations": [
+    {
+      "eventIndex": 0,
+      "label": "MON/USD",
+      "feed": "0xBcD78f76005B7515837af6b50c7C52BCf73822fb",
+      "roundId": "18446744073710154457",
+      "answer": "3387594",
+      "decimals": 8,
+      "updatedAt": "1791071976",
+      "threshold": "0.0343",
+      "yes": false
+    },
+    {
+      "eventIndex": 1,
+      "label": "BTC/USD",
+      "feed": "0xc1d4C3331635184fA4C3c22fb92211B2Ac9E0546",
+      "roundId": "18446744073710222551",
+      "answer": "8473512000000",
+      "decimals": 8,
+      "updatedAt": "1791071947",
+      "threshold": "84750",
+      "yes": false
+    },
+    {
+      "eventIndex": 2,
+      "label": "ETH/USD",
+      "feed": "0x1B1414782B859871781bA3E4B0979b9ca57A0A04",
+      "roundId": "18446744073709997900",
+      "answer": "268738175423",
+      "decimals": 8,
+      "updatedAt": "1791069754",
+      "threshold": "2700",
+      "yes": false
+    },
+    {
+      "eventIndex": 3,
+      "label": "SOL/USD",
+      "feed": "0x16F8008c3e89f62e5e2b909Ce70999370D38F4F2",
+      "roundId": "18446744073710101108",
+      "answer": "11965640000",
+      "decimals": 8,
+      "updatedAt": "1791071655",
+      "threshold": "118",
+      "yes": true
+    }
+  ],
+  "yesMask": 8,
+  "observationsHash": "0xf36d25279c0dc4a94fccf59105edab30ba22561b23857714228b5d3b84f08fff",
+  "unsignedReport": "0x0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000279f000000000000000000000000f8beba5827bfaaf6ace08a40cd9db740233ca9fee5a599dd8746121f4083239e034475878dbd7944ee735a67b946040b85a5078e000000000000000000000000000000000000000000000000000000006ac19700f36d25279c0dc4a94fccf59105edab30ba22561b23857714228b5d3b84f08fff0000000000000000000000000000000000000000000000000000000000000008",
+  "onchain": {
+    "resolvedState": 8,
+    "voidMask": 0,
+    "matches": true
+  },
+  "notice": "CRE observation. Settlement authority remains the bonded PilotResolver."
+}
