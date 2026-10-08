@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { decodeAbiParameters, encodeFunctionResult, parseAbi, parseAbiParameters, type Address, type Hex } from 'viem';
 import {
-  MAX_HEADER_READS, MULTICALL3, PRICE_FEED_SCHEMA, buildEvidence, decideGte, decodeFeedMulticall, decodePoolMulticall,
+  MAX_HEADER_READS, MULTICALL3, PRICE_FEED_SCHEMA, shouldAttest, buildEvidence, decideGte, decodeFeedMulticall, decodePoolMulticall,
   encodeFeedMulticall, encodePoolMulticall, encodeReport, findObservationBlock, nextProbe, observationsHash, priceFeedConfigSchema,
   yesMaskFrom, type BlockRef, type FeedObservation, type PriceFeedConfig,
 } from '../src/price-feed';
@@ -261,5 +261,70 @@ describe('WASM safety', () => {
       for (const specifier of specifiers) expect(['@chainlink/cre-sdk', 'viem', 'zod', './price-feed', './settlement']).toContain(specifier);
       expect(source).not.toMatch(/node:|process\.env|fetch\(|setTimeout/);
     }
+  });
+});
+
+describe('attestation', () => {
+  const multicall = parseAbi(['function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)']);
+  const poolAbi = parseAbi([
+    'function settlementRulesHash() view returns (bytes32)', 'function closesAt() view returns (uint64)', 'function eventCount() view returns (uint8)',
+    'function resolved() view returns (bool)', 'function resolvedState() view returns (uint32)', 'function voidMask() view returns (uint32)',
+  ]);
+  const attestationAbi = parseAbi(['function attestations(address pool) view returns (uint32 yesMask, uint64 observedAt, bytes32 observationsHash, bytes32 reportHash)']);
+  const contract = '0x00000000000000000000000000000000000000aa' as Address;
+  const rows = (observedAt: bigint) => [
+    encodeFunctionResult({ abi: poolAbi, functionName: 'settlementRulesHash', result: config.rulesHash }),
+    encodeFunctionResult({ abi: poolAbi, functionName: 'closesAt', result: BigInt(config.closesAt) }),
+    encodeFunctionResult({ abi: poolAbi, functionName: 'eventCount', result: 4 }),
+    encodeFunctionResult({ abi: poolAbi, functionName: 'resolved', result: true }),
+    encodeFunctionResult({ abi: poolAbi, functionName: 'resolvedState', result: 8 }),
+    encodeFunctionResult({ abi: poolAbi, functionName: 'voidMask', result: 0 }),
+    encodeFunctionResult({ abi: attestationAbi, functionName: 'attestations', result: [observedAt ? 8 : 0, observedAt, observedAt ? ('0x' + '11'.repeat(32)) as Hex : ('0x' + '00'.repeat(32)) as Hex, ('0x' + '00'.repeat(32)) as Hex] }),
+  ];
+  const reply = (data: Hex[]) => encodeFunctionResult({ abi: multicall, functionName: 'aggregate3', result: data.map(returnData => ({ success: true, returnData })) });
+
+  test('the pool read gains one call for the attestation contract and stays one ChainRead', () => {
+    const plain = encodePoolMulticall(config.pool);
+    const withAttestation = encodePoolMulticall(config.pool, contract);
+    expect(withAttestation.length).toBeGreaterThan(plain.length);
+    expect(withAttestation.toLowerCase()).toContain(contract.slice(2).toLowerCase());
+    expect(plain.toLowerCase()).not.toContain(contract.slice(2).toLowerCase());
+  });
+
+  test('decodes whether the pool is already attested', () => {
+    const fresh = decodePoolMulticall(reply(rows(0n)), true);
+    expect(fresh.attested).toEqual({ yesMask: 0, observedAt: 0 });
+    const done = decodePoolMulticall(reply(rows(1791072000n)), true);
+    expect(done.attested).toEqual({ yesMask: 8, observedAt: 1791072000 });
+    expect(done.resolvedState).toBe(8);
+    expect(() => decodePoolMulticall(reply(rows(0n).slice(0, 6)), true)).toThrow();
+    expect(decodePoolMulticall(reply(rows(0n).slice(0, 6))).attested).toBeUndefined();
+  });
+
+  test('a report is written only when an attestation contract is configured and the pool is not attested yet', () => {
+    const withContract = { ...config, attestation: { contract } };
+    expect(priceFeedConfigSchema.safeParse(withContract).success).toBe(true);
+    expect(shouldAttest(withContract, decodePoolMulticall(reply(rows(0n)), true))).toBe(true);
+    expect(shouldAttest(withContract, decodePoolMulticall(reply(rows(1791072000n)), true))).toBe(false);
+    expect(shouldAttest(config, decodePoolMulticall(reply(rows(0n).slice(0, 6))))).toBe(false);
+    expect(shouldAttest(withContract, settledPool)).toBe(false);
+  });
+
+  test('the attestation setting is strict', () => {
+    const parse = (attestation: unknown) => priceFeedConfigSchema.safeParse({ ...config, attestation }).success;
+    expect(parse({ contract })).toBe(true);
+    expect(parse({ contract, extra: 1 })).toBe(false);
+    expect(parse({ contract: '0x1234' })).toBe(false);
+    expect(parse({ contract: '0x' + '0'.repeat(40) })).toBe(false);
+    expect(parse({})).toBe(false);
+  });
+});
+
+describe('attestation in the generated configuration', () => {
+  test('is added only when asked for and must be a real address', () => {
+    expect(priceFeedConfigFromManifest(weekend).attestation).toBeUndefined();
+    const withContract = priceFeedConfigFromManifest(weekend, '0x00000000000000000000000000000000000000aa');
+    expect(withContract.attestation?.contract).toBe('0x00000000000000000000000000000000000000AA');
+    expect(() => priceFeedConfigFromManifest(weekend, '0x1234')).toThrow();
   });
 });

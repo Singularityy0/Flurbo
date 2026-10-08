@@ -6,7 +6,7 @@ import { PRICE_FEED_SCHEMA, SOURCE_CHAIN_ID, TESTNET_CHAIN_ID, priceFeedConfigSc
 // Builds the Chainlink price-feed workflow configuration from a verified pool manifest (target/deployments/<id>-testnet.json
 // or a collection entry in config/collections.json). Nothing is typed by hand: feeds, thresholds, rules hash and the
 // observation time all come from the rules the pool committed at deployment.
-//   bun workflows/cre/scripts/price-feed-config.ts --manifest target/deployments/<id>-testnet.json --out target/deployments/<id>-cre-price.json
+//   bun workflows/cre/scripts/price-feed-config.ts --manifest target/deployments/<id>-testnet.json --out target/deployments/<id>-cre-price.json [--attestation <FlurboCreAttestation address>]
 const LATEST_ANSWER = '0x50d25bcd';
 
 function labelFor(rule: any): string {
@@ -14,7 +14,7 @@ function labelFor(rule: any): string {
   return match ? `${match[1].toUpperCase()}/USD` : String(rule.eventId).slice(0, 48);
 }
 
-export function priceFeedConfigFromManifest(manifest: any): PriceFeedConfig {
+export function priceFeedConfigFromManifest(manifest: any, attestation?: string): PriceFeedConfig {
   if (manifest?.status !== 'verified_pilot_snapshot' || manifest.chainId !== TESTNET_CHAIN_ID) throw Error('A verified Monad testnet pool manifest is required.');
   const rules: any[] = manifest.publication?.settlementRules;
   if (!Array.isArray(rules) || rules.length < 2 || rules.length > 4) throw Error('The manifest has no committed settlement rules.');
@@ -34,6 +34,7 @@ export function priceFeedConfigFromManifest(manifest: any): PriceFeedConfig {
   return priceFeedConfigSchema.parse({
     schema: PRICE_FEED_SCHEMA, chainId: TESTNET_CHAIN_ID, pool: getAddress(manifest.pool), rulesHash: manifest.rulesHash,
     closesAt: manifest.publication.draft.closesAt, observationAt: [...times][0], sourceChainId: SOURCE_CHAIN_ID, eventCount: rules.length, feeds,
+    ...(attestation ? { attestation: { contract: getAddress(attestation) } } : {}),
   });
 }
 
@@ -41,7 +42,7 @@ if (import.meta.main) {
   const flag = (name: string) => { const i = process.argv.indexOf(`--${name}`); return i >= 0 ? process.argv[i + 1] : undefined; };
   const manifestPath = flag('manifest'), out = flag('out');
   if (!manifestPath || !out) throw Error('Use --manifest <pool manifest.json> --out <config.json>');
-  const config = priceFeedConfigFromManifest(JSON.parse(await readFile(resolve(manifestPath), 'utf8')));
+  const config = priceFeedConfigFromManifest(JSON.parse(await readFile(resolve(manifestPath), 'utf8')), flag('attestation'));
   await mkdir(dirname(resolve(out)), { recursive: true });
   await writeFile(resolve(out), JSON.stringify(config, null, 2) + '\n');
   console.log(JSON.stringify({ status: 'written', out, pool: config.pool, observationAt: config.observationAt, feeds: config.feeds.map(f => `${f.label} >= ${f.threshold}`) }, null, 2));

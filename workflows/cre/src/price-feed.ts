@@ -33,6 +33,8 @@ export type FeedRule = { eventIndex: number; label: string; feed: Address; opera
 export type PriceFeedConfig = {
   schema: typeof PRICE_FEED_SCHEMA; chainId: 10143; pool: Address; rulesHash: Hex;
   closesAt: number; observationAt: number; sourceChainId: 143; eventCount: number; feeds: FeedRule[];
+  // Optional: a FlurboCreAttestation contract that records the report on Monad testnet. It has no settlement power.
+  attestation?: { contract: Address };
 };
 export const priceFeedConfigSchema = z.object({
   schema: z.literal(PRICE_FEED_SCHEMA),
@@ -44,6 +46,7 @@ export const priceFeedConfigSchema = z.object({
   sourceChainId: z.literal(SOURCE_CHAIN_ID),
   eventCount: z.number().int().min(2).max(4),
   feeds: z.array(feedRuleSchema).min(2).max(4),
+  attestation: z.object({ contract: address }).strict().optional(),
 }).strict().superRefine((config, ctx) => {
   const indexes = config.feeds.map(feed => feed.eventIndex);
   if (new Set(indexes).size !== indexes.length) ctx.addIssue({ code: 'custom', message: 'event indexes must be unique' });
@@ -54,7 +57,11 @@ export const priceFeedConfigSchema = z.object({
 }) as unknown as z.ZodType<PriceFeedConfig>;
 
 export type FeedObservation = { eventIndex: number; feed: Address; roundId: bigint; answer: bigint; updatedAt: bigint; decimals: number };
-export type PoolState = { rulesHash: Hex; closesAt: number; eventCount: number; resolved: boolean; resolvedState: number; voidMask: number };
+export type PoolState = {
+  rulesHash: Hex; closesAt: number; eventCount: number; resolved: boolean; resolvedState: number; voidMask: number;
+  // Present only when an attestation contract was read: observedAt is 0 until the pool has been attested.
+  attested?: { yesMask: number; observedAt: number };
+};
 export type BlockRef = { number: bigint; hash: Hex; timestamp: number };
 
 const multicallAbi = parseAbi([
@@ -72,6 +79,9 @@ const poolAbi = parseAbi([
   'function resolved() view returns (bool)',
   'function resolvedState() view returns (uint32)',
   'function voidMask() view returns (uint32)',
+]);
+const attestationAbi = parseAbi([
+  'function attestations(address pool) view returns (uint32 yesMask, uint64 observedAt, bytes32 observationsHash, bytes32 reportHash)',
 ]);
 const observationsAbi = parseAbiParameters(
   'uint256 blockNumber, bytes32 blockHash, uint64 blockTimestamp, (uint8 eventIndex, address feed, uint80 roundId, int256 answer, uint256 updatedAt, uint8 decimals)[] observations',
@@ -129,14 +139,22 @@ export function decodeFeedMulticall(data: Hex, feeds: FeedRule[]): FeedObservati
   });
 }
 
-export function encodePoolMulticall(pool: Address): Hex {
-  return aggregate((['settlementRulesHash', 'closesAt', 'eventCount', 'resolved', 'resolvedState', 'voidMask'] as const)
-    .map(functionName => call(pool, encodeFunctionData({ abi: poolAbi, functionName }))));
+/** The pool's own reads, plus attestations(pool) on the attestation contract when one is configured (one ChainRead either way). */
+export function encodePoolMulticall(pool: Address, attestation?: Address): Hex {
+  const calls = (['settlementRulesHash', 'closesAt', 'eventCount', 'resolved', 'resolvedState', 'voidMask'] as const)
+    .map(functionName => call(pool, encodeFunctionData({ abi: poolAbi, functionName })));
+  if (attestation) calls.push(call(attestation, encodeFunctionData({ abi: attestationAbi, functionName: 'attestations', args: [pool] })));
+  return aggregate(calls);
 }
 
-export function decodePoolMulticall(data: Hex): PoolState {
-  const rows = unpack(data, 6);
+export function decodePoolMulticall(data: Hex, withAttestation = false): PoolState {
+  const rows = unpack(data, withAttestation ? 7 : 6);
+  const attested = withAttestation ? (() => {
+    const [yesMask, observedAt] = decodeFunctionResult({ abi: attestationAbi, functionName: 'attestations', data: rows[6] });
+    return { yesMask: Number(yesMask), observedAt: Number(observedAt) };
+  })() : undefined;
   return {
+    ...(attested ? { attested } : {}),
     rulesHash: decodeFunctionResult({ abi: poolAbi, functionName: 'settlementRulesHash', data: rows[0] }),
     closesAt: Number(decodeFunctionResult({ abi: poolAbi, functionName: 'closesAt', data: rows[1] })),
     eventCount: Number(decodeFunctionResult({ abi: poolAbi, functionName: 'eventCount', data: rows[2] })),
@@ -203,6 +221,11 @@ export function observationsHash(obs: FeedObservation[], block: BlockRef): Hex {
 export function encodeReport(config: PriceFeedConfig, observedAt: number, obsHash: Hex, yesMask: number): Hex {
   return encodeAbiParameters(factoredReportAbi, [REPORT_VERSION, BigInt(config.chainId), config.pool, config.rulesHash,
     BigInt(observedAt), obsHash, yesMask]);
+}
+
+/** True when an attestation contract is configured and has not yet recorded this pool. */
+export function shouldAttest(config: PriceFeedConfig, pool: PoolState): boolean {
+  return config.attestation !== undefined && pool.attested !== undefined && pool.attested.observedAt === 0;
 }
 
 export type PriceFeedEvidence = {

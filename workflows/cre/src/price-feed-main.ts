@@ -1,12 +1,12 @@
 import {
-  blockNumber, bytesToHex, cre, decodeJson, encodeCallMsg, LAST_FINALIZED_BLOCK_NUMBER, protoBigIntToBigint, Runner,
+  blockNumber, bytesToHex, cre, decodeJson, encodeCallMsg, LAST_FINALIZED_BLOCK_NUMBER, prepareReportRequest, protoBigIntToBigint, Runner, TxStatus,
   type HTTPPayload, type Runtime,
 } from '@chainlink/cre-sdk';
 import { zeroAddress, type Hex } from 'viem';
 import { z } from 'zod';
 import {
   MULTICALL3, buildEvidence, decodeFeedMulticall, decodePoolMulticall, encodeFeedMulticall, encodePoolMulticall,
-  findObservationBlock, priceFeedConfigSchema, type BlockRef, type PriceFeedConfig,
+  findObservationBlock, priceFeedConfigSchema, shouldAttest, type BlockRef, type PriceFeedConfig, type PriceFeedEvidence,
 } from './price-feed';
 
 // Reads the committed Chainlink feeds on Monad mainnet at the first block at or after the pool's observation time,
@@ -31,13 +31,27 @@ function multicall(runtime: Runtime<PriceFeedConfig>, evm: Evm, data: Hex, at: b
   return bytesToHex(reply.data);
 }
 
+// Hands the seven-word report to the CRE forwarder, which delivers it to the attestation contract on Monad testnet.
+// The contract only records it: it cannot resolve a pool and holds no authority over a result.
+function attest(runtime: Runtime<PriceFeedConfig>, testnet: Evm, evidence: PriceFeedEvidence): Hex {
+  const report = runtime.report(prepareReportRequest(evidence.unsignedReport)).result();
+  const reply = testnet.writeReport(runtime, { receiver: runtime.config.attestation!.contract, report, gasConfig: { gasLimit: '500000' } }).result();
+  if (reply.txStatus !== TxStatus.SUCCESS) throw Error(`The attestation was not recorded: ${reply.errorMessage ?? TxStatus[reply.txStatus]}`);
+  return reply.txHash ? bytesToHex(reply.txHash) : '0x';
+}
+
 function observe(runtime: Runtime<PriceFeedConfig>, mainnet: Evm, testnet: Evm, block: BlockRef, prev: BlockRef): string {
   const { config } = runtime;
   const obs = decodeFeedMulticall(multicall(runtime, mainnet, encodeFeedMulticall(config.feeds), block.number), config.feeds);
-  const pool = decodePoolMulticall(multicall(runtime, testnet, encodePoolMulticall(config.pool), 'finalized'));
+  const pool = decodePoolMulticall(multicall(runtime, testnet, encodePoolMulticall(config.pool, config.attestation?.contract), 'finalized'), config.attestation !== undefined);
   const evidence = buildEvidence({ config, pool, block, prev, obs });
-  runtime.log(`Chainlink feed observation at Monad block ${block.number}: yes mask ${evidence.yesMask}; `
-    + `${evidence.onchain ? (evidence.onchain.matches ? 'matches' : 'differs from') + ' the pool result' : 'pool not resolved yet'}. No transaction submitted.`);
+  const outcome = evidence.onchain ? (evidence.onchain.matches ? 'matches' : 'differs from') + ' the pool result' : 'pool not resolved yet';
+  if (shouldAttest(config, pool)) {
+    const hash = attest(runtime, testnet, evidence);
+    runtime.log(`Chainlink feed observation at Monad block ${block.number}: yes mask ${evidence.yesMask}; ${outcome}. Attestation recorded in transaction ${hash}.`);
+  } else {
+    runtime.log(`Chainlink feed observation at Monad block ${block.number}: yes mask ${evidence.yesMask}; ${outcome}. ${config.attestation ? 'Already attested.' : 'No transaction submitted.'}`);
+  }
   return JSON.stringify(evidence);
 }
 

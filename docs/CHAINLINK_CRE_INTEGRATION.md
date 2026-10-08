@@ -54,5 +54,13 @@ Both runs, with CLI 1.33.0 against the settled Crypto weekend pool `0xf8BeBA5827
 
 - **Live deployment.** `cre workflow deploy` needs a linked owner key and was not run. The submission says "simulated" unless a deployment id exists.
 - **Crypto Saturday.** The simulation against the new pool can only run after its observation time, 11 Oct 00:01 UTC, and after the pool is deployed.
-- **On-chain attestation.** An attestation contract that stores the CRE report (without any settlement power) is a stretch goal and is not built.
+- **On-chain attestation: built and tested, not deployed.** See below. The submission may say "CRE writes a signed attestation on Monad testnet" only after a real transaction hash exists.
 - **Settlement by CRE.** Not implemented and not claimed.
+
+## On-chain attestation (optional)
+
+[`FlurboCreAttestation.sol`](../contracts/src/FlurboCreAttestation.sol) is a CRE report receiver that **records** the workflow's seven-word report and nothing else. It authenticates exactly like the settlement receiver (the Chainlink forwarder, then the workflow id, name and owner), checks the report's chain, pool, rules hash, question count and freshness, and stores one attestation per pool: the yes mask, the observation time, the observations hash and the report hash. It never calls `resolve`, moves no funds and gives CRE no authority over a result; anyone can compare an attestation with the pool's own resolved state.
+
+- Tested in [`FlurboCreAttestation.t.sol`](../contracts/test/FlurboCreAttestation.t.sol) (9 tests): wrong forwarder, wrong workflow identity, malformed or misdirected reports, stale or early observations, replay, and a real `PilotPool`.
+- The workflow writes the report only when its configuration names an attestation contract (`price-feed-config.ts --attestation <address>`) and the pool is not attested yet, which it reads in the same ChainRead as the pool state. Without that setting the workflow behaves exactly as simulated above.
+- **Not yet run on-chain.** It needs a deployment with the forwarder for the target (the simulator's mock forwarder `0xB9F79d863261869B234c481D1f9A7af84AeAd192`, or the production forwarder `0xF8344CFd5c43616a4366C34E3EEE75af79a74482`) and the workflow id, name and owner that forwarder will report, then `cre workflow simulate --broadcast` with a funded test key. If the first delivery reverts `UnauthorizedWorkflow`, redeploy with the identity values the delivery shows.
