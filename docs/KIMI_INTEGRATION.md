@@ -56,7 +56,7 @@ Kimi never decides settlement, never sets a price and never places a trade.
 
 ## 5. Checked
 
-- `apps/web/tests/kimi-forecast.test.ts`: valid output, range checks, invalid JSON, the unconfigured case and that a heuristic is not labelled as Kimi.
+- `apps/web/tests/kimi-forecast.test.ts`: valid output within the Fréchet bounds, the unconfigured case, HTTP 401 and 429 errors, invalid question pairs, and that a heuristic is not labelled as Kimi.
 - `apps/web/tests/partners-e2e-browser.test.ts`: the buttons, the error without a key, the filled estimates and the labelled cards, against a mocked route.
 - `packages/sdk/test/kimi-agent-config.test.ts`: the agent configuration parses.
 
