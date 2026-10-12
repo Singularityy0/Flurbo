@@ -9,6 +9,7 @@ import { useAuth } from "./auth/context";
 import {usePreviewAccess} from './auth/preview-access';
 import BrandLogo from './components/BrandLogo';
 import SiteFooter from './components/SiteFooter';
+import ShortcutHelp from './components/ShortcutHelp';
 import { useLoadGate } from './loading/gates';
 import { rememberReturnPath } from './return-path';
 import { preloadRoutes, useRoutePage, type RouteKey } from './routes';
@@ -102,13 +103,14 @@ function Header() {
   );
 }
 
-function AppShell({ children, compactFooter = false }: { children: React.ReactNode; compactFooter?: boolean }) {
+function AppShell({ children, compactFooter = false, footer = true }: { children: React.ReactNode; compactFooter?: boolean; footer?: boolean }) {
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">Skip to content</a>
       <Header />
       {children}
-      <SiteFooter compact={compactFooter} />
+      {footer && <SiteFooter compact={compactFooter} />}
+      <ShortcutHelp />
     </div>
   );
 }
@@ -168,7 +170,7 @@ function AccountRoute() {
   const waiting = checking || loadingPage;
   const Page = route.Page;
   const busyText = state.restoring ? 'Checking your session...' : checkingAccess ? 'Checking your access...' : 'Loading the page...';
-  return <AppShell compactFooter>{waiting
+  return <AppShell compactFooter footer={location !== '/markets'}>{waiting
     ? <main id="main" tabIndex={-1} className="page route-pending" aria-busy="true">
         {!gate.covered && <><span className="progress-line" aria-hidden="true" /><p role="status" className="busy-text">{busyText}</p></>}
         {gate.covered && <p role="status" className="sr-only">{busyText}</p>}

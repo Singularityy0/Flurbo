@@ -17,7 +17,7 @@ test('trade ticket blocks a reviewed outcome conflict until acknowledged, and re
   f.manifest.publication.draft.events.forEach((e: any, i: number) => e.question = ['Will the night market open?', 'Will the concert sell out?', 'Will it rain on Saturday?', 'Will the new cafe open?'][i]);
   f.manifest.publication.mode = 'rehearsal';
   f.options.allowance = 10n ** 12n; // skip the approval step; this test is about the purchase itself
-  let mode: 'collide' | 'changed' | 'fail' = 'collide', linked = false;
+  let mode: 'collide' | 'changed' | 'fail' = 'collide', linked = false, quotes = 0;
   const checks: { path: string; body: any }[] = [], errors: string[] = [];
   const rules = () => semanticRegistry(JSON.stringify({ schema: 'flurbo.semantic-rules.v1', markets: [{ pool: f.manifest.pool, rulesHash: f.manifest.rulesHash, predicates: [
     { event: 0, observation: 'test:close', operator: 'gte', value: '3000', sourceRule: mode === 'changed' ? 'Fixture closing observation, revised.' : 'Fixture closing observation.' },
@@ -66,6 +66,7 @@ test('trade ticket blocks a reviewed outcome conflict until acknowledged, and re
       if (path === '/api/' + namespace + '/prepare') {
         const input = route.request().postDataJSON(), review = await f.service.prepare(input);
         if (input.action === 'buy') review.semanticAssessment = assessSemantics(f.manifest, { scope: input.scope, mask: input.mask, quantityAtoms: input.quantity }, rules());
+        quotes++;
         return route.fulfill({ json: review });
       }
       if (path === '/api/' + namespace + '/position') return route.fulfill({ json: { quantity: '0', payoutAtoms: null } });
@@ -84,7 +85,15 @@ test('trade ticket blocks a reviewed outcome conflict until acknowledged, and re
     const ticket = page.locator('.consumer-ticket'), buy = ticket.getByRole('button', { name: /^Buy 1 share$/ });
     const conflict = ticket.getByRole('region', { name: 'Outcome conflict' }), field = conflict.getByLabel(semanticAcknowledgment, { exact: true });
     const until = async (ok: () => Promise<boolean>) => { for (let i = 0; i < 200 && !(await ok()); i++) await page.waitForTimeout(25); assert.ok(await ok()); };
-    await ticket.getByRole('button', { name: 'Refresh price', exact: true }).click();
+    // The ticket also quotes by itself shortly after any change, and the button is off while a quote loads. Wait for
+    // the quote this click requested, or the conflict on screen may be an older review that is about to be replaced.
+    const refresh = ticket.getByRole('button', { name: 'Refresh price', exact: true });
+    const refreshPrice = async () => {
+      await refresh.click();
+      const before = quotes;
+      await until(async () => quotes > before && await refresh.isEnabled());
+    };
+    await refreshPrice();
     await conflict.getByRole('heading', { name: 'These outcomes cannot win together', exact: true }).waitFor();
     assert.equal(await buy.isDisabled(), true, 'a conflict keeps the purchase off until acknowledged');
     await field.fill('i understand this has no ordinary winning outcome');
@@ -100,7 +109,7 @@ test('trade ticket blocks a reviewed outcome conflict until acknowledged, and re
     await page.setViewportSize({ width: 1440, height: 1000 });
 
     // A fresh price is a new review: the earlier acknowledgment does not carry over.
-    await ticket.getByRole('button', { name: 'Refresh price', exact: true }).click();
+    await refreshPrice();
     await until(async () => (await field.count()) === 1 && (await field.inputValue()) === '');
     assert.equal(await buy.isDisabled(), true);
 
@@ -114,7 +123,7 @@ test('trade ticket blocks a reviewed outcome conflict until acknowledged, and re
 
     // A failed check is never read as "no conflict" or "disabled".
     mode = 'fail';
-    await ticket.getByRole('button', { name: 'Refresh price', exact: true }).click();
+    await refreshPrice();
     await field.fill(semanticAcknowledgment);
     await buy.click();
     // The server's own 503 message is shown; the client never proceeds on it.
@@ -123,7 +132,7 @@ test('trade ticket blocks a reviewed outcome conflict until acknowledged, and re
 
     // Current review, current rules, exact acknowledgment: the purchase reaches the wallet once.
     mode = 'collide';
-    await ticket.getByRole('button', { name: 'Refresh price', exact: true }).click();
+    await refreshPrice();
     await field.fill(semanticAcknowledgment);
     await buy.click();
     await page.waitForFunction(() => sessionStorage.getItem('pilot.sends') === '1');
