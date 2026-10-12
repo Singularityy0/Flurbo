@@ -84,7 +84,7 @@ function Header() {
             <span className="nav-rule" aria-hidden="true" />
             <div className="nav-actions">
               {state.restoring ? null : signedIn ? <>
-                <span className="network-indicator"><i aria-hidden="true" /><span>Monad testnet<span className="network-detail">, test assets only</span></span></span>
+                <span className="network-indicator"><i aria-hidden="true" /><span>Monad testnet<span className="sr-only">, test assets only</span></span></span>
                 {isHome ? <Link href="/markets" className="btn btn-primary btn-sm nav-cta">Explore markets <ArrowUpRight size={15} strokeWidth={1.75} /></Link>
                   : <Link href="/" className="nav-login">About Flurbo</Link>}
               </> : <>
