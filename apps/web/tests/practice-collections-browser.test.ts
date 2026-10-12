@@ -73,8 +73,11 @@ test('the directory lists twelve collections and the release pilot (thirteen mar
       return route.fulfill({body:await readFile(new URL('../dist/'+relative,import.meta.url)),contentType:relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.woff2')?'font/woff2':'text/html'});
     });
     await page.goto('https://flurbo.singu.online/markets');
-    await page.waitForFunction(()=>document.querySelectorAll('.market-card').length>=52,null,{timeout:30000});
-    assert.equal(await page.locator('.market-card').count(),52,'four questions in each of thirteen markets');
+    // The board pages its tiles to fit the window, so count the loaded rows rather than the visible tiles.
+    await page.waitForFunction(()=>Number(document.querySelector('.board-region')?.getAttribute('data-market-count'))>=52,null,{timeout:30000});
+    assert.equal(await page.locator('.board-region').getAttribute('data-market-count'),'52','four questions in each of thirteen markets');
+    assert.match(await page.locator('.board-count').innerText(),/ of 52 markets$/);
+    assert.ok(await page.locator('.market-card').count()>0);
     assert.equal(await page.getByText('Market directory is unavailable.').count(),0);
     assert.equal(await page.getByRole('alert').count(),0);
     assert.deepEqual(errors,[]);

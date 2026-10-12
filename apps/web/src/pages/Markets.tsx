@@ -113,6 +113,10 @@ function MarketDirectory({groups:loaded,snapshot}:{groups:MarketGroup[]|null;sna
   const onQuery=useCallback((next:Partial<BoardQuery>)=>{setStableOrder(null);setQuery(old=>({...old,...next,page:next.page??1}));},[]);
   const onWatch=useCallback((key:string)=>{if(account)setWatchlist(toggleWatchlist(account,key));},[account]);
   const pendingPools=loading?groups.filter(g=>!data[g.namespace]&&!failed.includes(g.namespace)).length:0;
-  return <MarketBoard rows={rows} query={query} onQuery={onQuery} now={now/1000} watchlist={watchlist} onWatch={onWatch} deltas={deltas} stableOrder={stableOrder}
+  const [kuruOnly,setKuruOnly]=useState(false);
+  const kuruCount=useMemo(()=>rows.filter(r=>r.kuru).length,[rows]);
+  const shown=useMemo(()=>kuruOnly?rows.filter(r=>r.kuru):rows,[rows,kuruOnly]);
+  const toggleKuru=useCallback(()=>{setStableOrder(null);setKuruOnly(x=>!x);setQuery(old=>({...old,page:1}));},[]);
+  return <MarketBoard rows={shown} kuru={{count:kuruCount,only:kuruOnly,onToggle:toggleKuru}} query={query} onQuery={onQuery} now={now/1000} watchlist={watchlist} onWatch={onWatch} deltas={deltas} stableOrder={stableOrder}
     loading={loading} failed={failed.length>0} pendingPools={pendingPools} updatedAt={updatedAt} onRefresh={()=>setRevision(x=>x+1)} unavailable={!rows.length&&failed.length>0}/>;
 }

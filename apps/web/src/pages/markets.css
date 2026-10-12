@@ -122,6 +122,7 @@
   .board-search { min-width: 0; }
   .board-search kbd { display: none; }
   .board-status { grid-column: 1 / -1; grid-row: 2; display: grid; width: 100%; }
+  .board-kuru { grid-column: 1 / -1; grid-row: 3; display: grid; width: 100%; }
   .board-refresh { width: var(--control-md); padding: 0; }
   .board-refresh-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .board-legend { display: none; }

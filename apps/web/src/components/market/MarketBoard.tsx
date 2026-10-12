@@ -31,9 +31,10 @@ export type BoardProps = {
   rows: BoardRow[]; query: BoardQuery; onQuery(next: Partial<BoardQuery>): void; now: number;
   watchlist: ReadonlySet<string> | null; onWatch(key: string): void; deltas: ReadonlyMap<string, bigint>; stableOrder: readonly string[] | null;
   loading: boolean; failed: boolean; pendingPools: number; updatedAt: number | null; onRefresh(): void; unavailable: boolean;
+  kuru?: { count: number; only: boolean; onToggle(): void };
 };
 
-export default function MarketBoard({ rows, query, onQuery, now, watchlist, onWatch, deltas, stableOrder, loading, failed, pendingPools, updatedAt, onRefresh, unavailable }: BoardProps) {
+export default function MarketBoard({ rows, query, onQuery, now, watchlist, onWatch, deltas, stableOrder, loading, failed, pendingPools, updatedAt, onRefresh, unavailable, kuru }: BoardProps) {
   const [, navigate] = useLocation();
   const region = useRef<HTMLElement>(null), chromeRefs = useRef<(HTMLElement | null)[]>([]), search = useRef<HTMLInputElement>(null);
   const [capacity, setCapacity] = useState({ columns: 4, rows: 4, perPage: 16, fits: true, compact: false });
@@ -112,6 +113,9 @@ export default function MarketBoard({ rows, query, onQuery, now, watchlist, onWa
           <input ref={search} placeholder="Find a market" value={query.q} autoComplete="off" spellCheck={false} onChange={(event) => onQuery({ q: event.target.value })} /><kbd aria-hidden="true">/</kbd></label>
         <PressedGroup label="Market status" options={STATUSES} value={query.status} onChange={(status) => onQuery({ status })} disabled={category === 'watchlist'} className="board-status" />
         <PressedGroup label="Sort" options={SORTS} value={query.sort} onChange={(sort) => onQuery({ sort })} className="board-sort" />
+        {kuru && kuru.count > 0 && <div className="segmented board-kuru" role="group" aria-label="Kuru order books">
+          <button type="button" aria-pressed={kuru.only} onClick={kuru.onToggle}>{kuru.only && <m.span className="seg-ink" layoutId="kuru-ink" transition={SLIDE} aria-hidden="true" />}<span>Kuru order books ({kuru.count})</span></button>
+        </div>}
         <button type="button" className="btn btn-secondary btn-icon board-sort-toggle" aria-label={`Sort: ${query.sort === 'name' ? 'A to Z' : 'Closing soon'}`} onClick={() => onQuery({ sort: query.sort === 'name' ? 'closing' : 'name' })}><ArrowDownUp aria-hidden="true" strokeWidth={1.75} /></button>
         <span className="board-fresh">{loading ? <span role="status">{pendingPools > 0 ? `Loading ${pendingPools} more ${pendingPools === 1 ? 'collection' : 'collections'}` : 'Updating prices'}</span> : updatedAt ? <>Updated {compactRelative(Math.min(updatedAt / 1000, now), now)}</> : null}</span>
         <button type="button" className="btn btn-secondary board-refresh" disabled={loading} onClick={onRefresh}><RefreshCw aria-hidden="true" strokeWidth={1.75} /><span className="board-refresh-label">{loading ? 'Updating prices...' : 'Refresh prices'}</span></button>
