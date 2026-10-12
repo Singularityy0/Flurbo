@@ -45,7 +45,7 @@ export default function Docs() {
     : <Link href="/signup" className="btn btn-primary docs-explore">Get early access <ArrowUpRight size={16} strokeWidth={1.75} /></Link>;
   return <main id="main" tabIndex={-1} className="docs-page page">
     <header className="docs-hero">
-      <h1>Understand the <span className="serif-accent">market.</span></h1>
+      <h1>Understand the market.</h1>
       <p className="lead">A guide to accounts, predictions and payouts on Flurbo.</p>
       <a className="docs-litepaper" href={LITEPAPER.href} type="application/pdf"><FileText size={18} strokeWidth={1.75} /><span>{LITEPAPER.label}</span><small>{LITEPAPER.detail}</small></a>
     </header>
