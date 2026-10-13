@@ -5,7 +5,8 @@ export const CONTOUR_PATHS = [
   { d: 'M20 19c8-6 22-4 27 5 5 9-2 20-12 23-10 3-20-3-21-13-1-6 1-11 6-15Z', width: 4.5 },
   { d: 'M27 27c6-4 14 0 14 7-1 6-9 9-14 5-5-4-5-9 0-12Z', width: 5.5 },
 ] as const;
-export const LOCKUP = { markTransform: 'translate(18 18) scale(1.9)', dot: { cx: 98, cy: 146, r: 4 }, viewBox: '20 27 416 125' } as const;
+// The box includes the ring stroke. A tighter crop slices the top and left of the mark.
+export const LOCKUP = { markTransform: 'translate(18 18) scale(1.9)', dot: { cx: 98, cy: 146, r: 4 }, viewBox: '14 18 422 134' } as const;
 export const INK = '#14271d';
 export const IVORY = '#f5f4ec';
 export const LIME = '#d9f76d';

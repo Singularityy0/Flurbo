@@ -30,12 +30,8 @@ export function walletTransaction(value: unknown, owner: string) {
   return tx;
 }
 
-export function metamaskOpenUrl(uri?: string, userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent) {
-  const https = uri ? `https://metamask.app.link/wc?uri=${encodeURIComponent(uri)}` : 'https://metamask.app.link/';
-  // The Android shell's WebView does not hand a normal https link to the MetaMask app. An intent does.
-  if (/\bFlurboNative\b/.test(userAgent) && /Android/i.test(userAgent)) {
-    const path = uri ? `wc?uri=${encodeURIComponent(uri)}` : '';
-    return `intent://metamask.app.link/${path}#Intent;scheme=https;package=io.metamask;S.browser_fallback_url=${encodeURIComponent(https)};end`;
-  }
-  return https;
+export function metamaskOpenUrl(uri?: string, _userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent) {
+  // An intent:// link never leaves the Android WebView. The https app link does:
+  // the phone browser opens MetaMask, and the Flurbo app hands this host to the MetaMask app.
+  return uri ? `https://metamask.app.link/wc?uri=${encodeURIComponent(uri)}` : 'https://metamask.app.link/';
 }

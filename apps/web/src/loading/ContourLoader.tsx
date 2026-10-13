@@ -9,7 +9,8 @@ import { TIMING, type LoaderPhase } from './load-gate';
 const MARK_CENTER = { x: 30.91, y: 32.71 }; // path units, measured bounding-box centre
 const MARK_HEIGHT = 54; // path units including stroke
 const LOCKUP_MARK_CENTER = { x: 18 + 1.9 * MARK_CENTER.x, y: 18 + 1.9 * MARK_CENTER.y };
-const LOCKUP_CENTER = { x: 20 + 416 / 2, y: 27 + 125 / 2 };
+const [lockupX, lockupY, lockupW, lockupH] = LOCKUP.viewBox.split(' ').map(Number);
+const LOCKUP_CENTER = { x: lockupX + lockupW / 2, y: lockupY + lockupH / 2 };
 const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 const EASE_IN = [0.55, 0, 1, 0.45] as const;
 const EASE_IN_OUT = [0.65, 0, 0.35, 1] as const;
@@ -77,10 +78,10 @@ export default function ContourLoader({ phase, label, stage, stages, error, slow
   const t = (seconds: number, ease: Transition['ease'] = EASE_OUT, delay = 0): Transition => (instant ? { duration: 0 } : { duration: seconds, ease, delay });
 
   const side = (dir: -1 | 1) => {
-    const base = { rotate: dir < 0 ? -14 : 11, y: dir < 0 ? 16 : -16 };
-    const offscreen = { x: dir * (w / 2 + 1.6 * markPx), y: base.y, rotate: base.rotate, scaleX: 1.6, scaleY: 1.6, opacity: 0 };
-    const entered = { x: dir * w * (w < 640 ? 0.18 : 0.24), y: base.y, rotate: base.rotate, scaleX: 1.6, scaleY: 1.6, opacity: 0.9 };
-    const drifting = { x: dir * w * (w < 640 ? 0.1 : 0.12), y: base.y * 0.6, rotate: dir < 0 ? -8 : 6, scaleX: 1.56, scaleY: 1.46, opacity: 0.86 };
+    const base = { rotate: dir < 0 ? -14 : 11, y: 0 };
+    const offscreen = { x: dir * (w / 2 + 1.6 * markPx), y: 0, rotate: base.rotate, scaleX: 1.6, scaleY: 1.6, opacity: 0 };
+    const entered = { x: dir * w * (w < 640 ? 0.18 : 0.24), y: 0, rotate: base.rotate, scaleX: 1.6, scaleY: 1.6, opacity: 0.9 };
+    const drifting = { x: dir * w * (w < 640 ? 0.1 : 0.12), y: 0, rotate: dir < 0 ? -8 : 6, scaleX: 1.56, scaleY: 1.46, opacity: 0.86 };
     const merged = { x: 0, y: 0, rotate: 0, scaleX: 1, scaleY: 1, opacity: 1 };
     let target: Record<string, number> = offscreen;
     let transition: Transition = t(0);

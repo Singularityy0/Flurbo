@@ -203,6 +203,14 @@ export function emptyDesk(instanceId: number): PerplDesk {
   return { instanceId, accounts: [], head: 0, serial: 0, stale: false, order: null, earlyFills: [] };
 }
 
+// A reconnect must not forget an order that Perpl has already admitted. The fill can arrive on the next socket.
+export function resumeDesk(previous: PerplDesk | null, instanceId: number): PerplDesk {
+  const fresh = emptyDesk(instanceId);
+  const order = previous?.instanceId === instanceId ? previous.order : null;
+  if (!previous || !order || (order.phase !== 'sent' && order.phase !== 'admitted' && order.phase !== 'filled')) return fresh;
+  return { ...fresh, accounts: previous.accounts, serial: previous.serial, order, earlyFills: previous.earlyFills };
+}
+
 function accountFrom(value: unknown, instanceId: number): PerplAccount | null {
   const row = record(value);
   const id = whole(row?.id, 1);

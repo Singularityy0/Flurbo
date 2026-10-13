@@ -36,5 +36,5 @@ test('a trade must be a zero-value Monad transaction from the connected account'
 test('MetaMask opens on its own link, with the pairing URI when connecting', () => {
   assert.equal(metamaskOpenUrl(), 'https://metamask.app.link/');
   assert.equal(metamaskOpenUrl('wc:abc'), 'https://metamask.app.link/wc?uri=wc%3Aabc');
-  assert.equal(metamaskOpenUrl('wc:abc', 'Mozilla/5.0 (Linux; Android 14) FlurboNative'), 'intent://metamask.app.link/wc?uri=wc%3Aabc#Intent;scheme=https;package=io.metamask;S.browser_fallback_url=https%3A%2F%2Fmetamask.app.link%2Fwc%3Furi%3Dwc%253Aabc;end');
+  assert.equal(metamaskOpenUrl('wc:abc', 'Mozilla/5.0 (Linux; Android 14) FlurboNative'), 'https://metamask.app.link/wc?uri=wc%3Aabc');
 });
