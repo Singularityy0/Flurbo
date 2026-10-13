@@ -1,6 +1,8 @@
 import { defineConfig, loadEnv } from 'vite';
 import { localApi } from './server/local-api.mjs';
 import { envioProxy } from './server/envio-proxy.mjs';
+import { attachPerplRelay } from './server/perpl-relay.mjs';
+import { SessionStore } from './server/session.mjs';
 import { configurePracticeCollections } from './server/practice-collections.mjs';
 import { registryEnabled } from './server/collection-registry.mjs';
 import { TESTNET } from './server/network.mjs';
@@ -17,11 +19,20 @@ export default defineConfig(async ({ command, mode }) => {
   return {
     plugins: [{ name: 'flurbo-local-workspace', configureServer(server) {
       const port = server.config.server.port || 18767;
+      const hosts = [`localhost:${port}`, `127.0.0.1:${port}`];
+      const store = new SessionStore();
       server.middlewares.use('/envio', (req, res) => { void envioProxy(req, res, envioUrl); });
       server.middlewares.use(localApi({
-        hosts: [`localhost:${port}`, `127.0.0.1:${port}`],
+        hosts, store,
         ...(useRegistry ? { rpcUrl, practiceCollections, networkMode: 'public_testnet' } : {})
       }));
+      return () => {
+        if (!server.httpServer) return;
+        attachPerplRelay(server.httpServer, {
+          store, leaveForeignUpgrades: true,
+          resolveOrigin(req) { const host = req.headers.host || ''; return hosts.includes(host) ? `http://${host}` : null; },
+        });
+      };
     } }],
     // Signed-in pages load on demand; styles stay in one file so every page keeps
     // the shared rules it relies on, whichever page loads first.

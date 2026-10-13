@@ -1,3 +1,7 @@
+# Retired
+
+This Expo project is not the mobile app. The iOS and Android app that follows the website is [`apps/native`](../native/README.md).
+
 # Flurbo native mobile preview
 
 Expo / React Native, Android first. The Agora brief supplied by the project owner

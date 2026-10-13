@@ -10,7 +10,7 @@ import { legacyProvider, externalWallet, type WalletKind } from './wallet';
 import { operations } from './operations';
 import { Button, Card, Choice, Copy, External, Field, Heading, Notice, Title } from './ui';
 
-const actionLabels = { deposit: 'Deposit', withdraw: 'Withdraw', 'limit-buy': 'Limit buy', 'limit-sell': 'Limit sell', 'market-buy': 'Market buy', 'market-sell': 'Market sell', cancel: 'Cancel order', approve: 'Approve deposit' };
+const actionLabels: Record<kuru.Action['kind'], string> = { deposit: 'Deposit', withdraw: 'Withdraw', wrap: 'Wrap YES shares', unwrap: 'Unwrap YES receipts', 'limit-buy': 'Limit buy', 'limit-sell': 'Limit sell', 'market-buy': 'Market buy', 'market-sell': 'Market sell', cancel: 'Cancel order', approve: 'Approve deposit' };
 export function Kuru({ kind }: { kind: WalletKind }) {
   const login = useSyncExternalStore(auth.subscribe, auth.getSnapshot), wallet = useSyncExternalStore(externalWallet.subscribe, externalWallet.getSnapshot), operation = useSyncExternalStore(operations.subscribe, operations.getSnapshot);
   const owner = wallet.address;

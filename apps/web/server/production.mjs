@@ -16,20 +16,22 @@ import { runComparison } from './learning-comparison.mjs';
 import { learningService, learningRpc, loadLearningModel } from './learning-pool.mjs';
 import { pilotEvidence } from './pilot.mjs';
 import { configurePilot } from './pilot-config.mjs';
-import { androidAssetLinks } from './native-association.mjs';
+import { androidAssetLinks, iosAppSiteAssociation } from './native-association.mjs';
 import { configurePracticeCollections } from './practice-collections.mjs';
 import { loadSemanticConfig, semanticDiagnostics } from './semantic-validation.mjs';
 import { createSettlementStores } from './settlement-persistence.mjs';
 import { starterConfig, starterFunds } from './starter-funds.mjs';
 import { fundingAlerts } from './funding-alerts.mjs';
 import { envioProxy } from './envio-proxy.mjs';
+import { attachPerplRelay } from './perpl-relay.mjs';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
 const security = {
   'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin',
   'Strict-Transport-Security': 'max-age=31536000', 'X-Frame-Options': 'DENY',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
+  // The native app's MetaMask connection reads public Monad testnet and the WalletConnect relay from the page.
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://testnet-rpc.monad.xyz wss://relay.walletconnect.org https://relay.walletconnect.org wss://relay.walletconnect.com https://relay.walletconnect.com https://verify.walletconnect.org https://verify.walletconnect.com https://rpc.walletconnect.org https://pulse.walletconnect.org wss://pulse.walletconnect.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
 };
 
 export function productionServer(config, store, staticRoot = dist) {
@@ -38,7 +40,7 @@ export function productionServer(config, store, staticRoot = dist) {
     learningDashboardUrl: config.learningDashboardUrl, pilot: config.pilot, practiceCollections:config.practiceCollections, evidence: config.pilotEvidence, evidenceOptions: config.evidenceOptions, challengeOptions:config.challengeOptions, settlementPackets:config.settlementPackets, starter:config.starter, funding:config.fundingAlerts });
   config.metrics = api.metrics;
   config.notices = api.notices;
-  return createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
+  const server = createServer({ requestTimeout: 30_000, headersTimeout: 10_000, maxHeaderSize: 16_384 }, async (req, res) => {
     for (const [key, value] of Object.entries(security)) res.setHeader(key, value);
     // Liveness only. This deliberately does not claim contracts or RPC are ready.
     if (req.url === '/healthz' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ service: 'flurbo', chain_state: 'not_checked', learning_comparison: config.learningReport ? 'ready' : config.learningStatus || 'unavailable', learning_pool: config.learningPool ? 'configured' : 'unavailable', learning_model: config.learningModelStatus || 'unavailable', pilot_pool: config.pilot ? 'configured' : 'disabled', pilot_address: config.pilot?.manifest.pool || null, pilot_rules_hash: config.pilot?.manifest.rulesHash || null, settlement_bot: config.settlementBot ? config.settlementBot.status() : 'disabled', practice_collections: config.practiceCollections ? { active: config.practiceCollections.catalog.active, configured: [...config.practiceCollections.services].map(([namespace, service]) => ({ namespace, pool: service.manifest.pool, rulesHash: service.manifest.rulesHash, closesAt: service.manifest.publication.draft.closesAt })) } : null })); return; }
@@ -48,6 +50,11 @@ export function productionServer(config, store, staticRoot = dist) {
       const body = config.androidAssetLinks;
       res.writeHead(body ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(req.method === 'HEAD' ? undefined : JSON.stringify(body || { error: 'Android association is not configured' })); return;
+    }
+    if (req.url === '/.well-known/apple-app-site-association' && ['GET', 'HEAD'].includes(req.method)) {
+      const body = config.iosAppSiteAssociation;
+      res.writeHead(body ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(req.method === 'HEAD' ? undefined : JSON.stringify(body || { error: 'iOS association is not configured' })); return;
     }
     if(req.url==='/rehearsal-rules'&&req.method==='GET'){
       res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
@@ -77,7 +84,7 @@ export function productionServer(config, store, staticRoot = dist) {
         }
         // Serve agent deep links on direct visits too; API session and invite gates still protect data.
         const agentPage = /^\/agents(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$/.test(pathname);
-        const page = agentPage || /^\/markets\/(?:pilot|practice-[0-9a-f]{40})\/[0-3](?:\/(?:thesis|kuru))?$/.test(pathname) || ['/', '/docs', '/markets', '/fund', '/access', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/evidence', '/metrics'].includes(pathname);
+        const page = agentPage || /^\/markets\/(?:pilot|practice-[0-9a-f]{40})\/[0-3](?:\/(?:thesis|kuru))?$/.test(pathname) || ['/', '/docs', '/markets', '/fund', '/access', '/login', '/signup', '/account', '/portfolio', '/history', '/kuru', '/events', '/evidence', '/metrics', '/perpl'].includes(pathname);
         const labPage=['/privacy-lab','/privacy-lab/'].includes(pathname);
         const labAsset=/^\/privacy-lab\/(?:assets\/[a-zA-Z0-9_.-]+|semaphore-8\.(?:wasm|zkey))$/.test(pathname);
         if(labPage||labAsset)res.setHeader('Content-Security-Policy',security['Content-Security-Policy'].replace("script-src 'self'","script-src 'self' 'wasm-unsafe-eval'")+"; worker-src 'self' blob:");
@@ -93,6 +100,14 @@ export function productionServer(config, store, staticRoot = dist) {
       } catch { if (!res.headersSent) res.writeHead(404); res.end('Not found'); }
     });
   });
+  attachPerplRelay(server, {
+    store,
+    resolveOrigin(req) {
+      try { return req.headers.host === new URL(config.origin).host ? config.origin : null; }
+      catch { return null; }
+    },
+  });
+  return server;
 }
 
 async function main() {
@@ -100,6 +115,7 @@ async function main() {
   config.envioGraphqlUrl = process.env.FLURBO_ENVIO_GRAPHQL_URL || null;
   config.applications = configureApplications();
   config.androidAssetLinks = androidAssetLinks();
+  config.iosAppSiteAssociation = iosAppSiteAssociation();
   // With FLURBO_SUPABASE_KV=true, price history, the trade history and payout indexes and operator metrics live
   // in Supabase (migration 004) instead of Redis; every other key stays in Redis. Copy them first with
   // scripts/move-kv-to-supabase.mjs.

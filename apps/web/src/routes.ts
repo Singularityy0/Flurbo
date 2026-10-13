@@ -10,6 +10,7 @@ const loaders = {
   evidence: () => import('./pages/EvidenceReview'),
   metrics: () => import('./pages/Metrics'),
   workspace: () => import('./pages/Workspace'),
+  perpl: () => import('./pages/Perpl'),
 } satisfies Record<string, () => Promise<{ default: ComponentType<any> }>>;
 
 export type RouteKey = keyof typeof loaders;

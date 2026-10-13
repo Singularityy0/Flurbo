@@ -4,7 +4,7 @@ import { rememberReturnPath, safeReturnPath, takeReturnPath } from '../src/retur
 
 test('only same-origin Flurbo app paths are accepted as a return destination', () => {
   for (const path of ['/markets', '/markets/pilot/0', '/markets/practice-' + 'ab'.repeat(20) + '/1?answer=no',
-    '/markets/pilot/2?challenge=1', '/portfolio', '/fund', '/access', '/agents', '/agents/558b8e5f-b175-4759-850d-e1a9e5948cda']) {
+    '/markets/pilot/2?challenge=1', '/portfolio', '/fund', '/access', '/agents', '/perpl', '/agents/558b8e5f-b175-4759-850d-e1a9e5948cda']) {
     assert.equal(safeReturnPath(path), path, path);
   }
   for (const path of ['https://evil.example/markets', '//evil.example/markets', '/markets/pilot/9', '/markets/unknown/1', '/markets/rehearsal/3/thesis', '/login',

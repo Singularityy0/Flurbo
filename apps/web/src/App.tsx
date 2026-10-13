@@ -18,6 +18,7 @@ export const brand = "flurbo";
 
 const APP_LINKS = [
   { href: '/markets', label: 'Markets', match: (path: string) => path === '/markets' || path.startsWith('/markets/') },
+  { href: '/perpl', label: 'Perpl', match: (path: string) => path === '/perpl' },
   { href: '/agents', label: 'Agents', match: (path: string) => path === '/agents' || path.startsWith('/agents/') },
   { href: '/portfolio', label: 'Portfolio', match: (path: string) => path === '/portfolio' },
   { href: '/access', label: 'Your account', match: (path: string) => path === '/access' },
@@ -137,6 +138,7 @@ function AccountRoute() {
   const locationKey: RouteKey | null = location==='/access' ? 'access' : location==='/fund' ? 'fund'
     : operatorPath ? (checking || !testingAccess ? null : location==='/evidence' ? 'evidence' : location==='/metrics' ? 'metrics' : 'workspace')
     : location==='/agents'||location.startsWith('/agents/') ? 'agents'
+    : location === '/perpl' ? 'perpl'
     : location.startsWith('/markets/')||['/markets','/portfolio'].includes(location) ? 'markets' : 'workspace';
   const approved = !!preview.access?.approved;
   const key: RouteKey | null = !authenticated ? null : checking ? locationKey : !approved ? 'access' : locationKey;
@@ -192,6 +194,7 @@ function pageTitle(location: string) {
     : location === "/account" ? "Your account | flurbo"
     : location === "/portfolio" ? "Your portfolio | flurbo"
     : location.startsWith("/agents") ? "Agents | flurbo"
+    : location === "/perpl" ? "Perpl testnet | flurbo"
     : location === "/kuru" ? "Kuru order book | flurbo"
     : location === "/events" ? "Real events | flurbo"
     : location === "/evidence" ? "Evidence review | flurbo"
@@ -230,6 +233,7 @@ export default function App() {
       <Route path="/portfolio" component={AccountRoute} />
       <Route path="/agents" component={AccountRoute} />
       <Route path="/agents/:id" component={AccountRoute} />
+      <Route path="/perpl" component={AccountRoute} />
       <Route path="/history"><Redirect to="/portfolio" replace /></Route>
       <Route path="/kuru" component={AccountRoute} />
       <Route path="/events" component={AccountRoute} />
