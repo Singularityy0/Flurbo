@@ -184,7 +184,7 @@ export function makeConversionPlan(snapshot, kind, account, quantity) {
   const available = kind === 'wrap' ? w.positions.find(p => p.scope === 128 && p.mask === 2)?.quantity_atoms : w.receipt_atoms;
   if (available === undefined || BigInt(available) < qty) throw new WalletError(kind === 'wrap'
     ? 'Not enough internal H YES units. Buy H YES first; composed claims cannot be wrapped here.'
-    : 'Not enough H YES receipts in your wallet. Receipts deposited in Kuru must be withdrawn first.');
+    : 'Not enough H YES receipts in your wallet. Available receipts must be withdrawn first.');
   const pool = address(snapshot.contracts.pool), cash = address(snapshot.contracts.cash), receipt = address(snapshot.contracts.receipt);
   return { kind, account, pool, cash, receipt, scope: 128, mask: 2, quantity: qty.toString(), quoteExpiry: snapshot.snapshot.timestamp + REVIEW_SECONDS,
     tx: { from: account, to: pool, data: encode(SELECTORS[kind], 7, 1, qty), value: '0x0', chainId: CHAIN_ID } };
@@ -200,7 +200,7 @@ export function makeWithdrawalPlan(snapshot, account, recipient, quantity) {
   const pool = address(snapshot.contracts.pool), cash = address(snapshot.contracts.cash), qty = BigInt(quantity);
   if (['0x' + '0'.repeat(40), account, pool, cash].includes(recipient)) throw new WalletError('Choose a different receiving wallet, not a pool or token contract.');
   if (!snapshot.wallet || address(snapshot.wallet.address) !== account || qty <= 0n || qty > MAX128 || BigInt(snapshot.wallet.ausd_atoms) < qty) {
-    throw new WalletError('Withdraw only available AUSD in the selected wallet. Sell or redeem positions first; Kuru deposits are separate.');
+    throw new WalletError('Withdraw only available AUSD in the selected wallet. Sell or redeem positions first.');
   }
   return { kind: 'withdraw', account, recipient, pool, cash, quantity: qty.toString(), quoteExpiry: snapshot.snapshot.timestamp + REVIEW_SECONDS,
     tx: { from: account, to: cash, data: encode(SELECTORS.withdraw, recipient, qty), value: '0x0', chainId: CHAIN_ID } };

@@ -4,7 +4,7 @@ import { mountTrading } from './trading-ui.mjs';
 export function mountDashboard(root = document, options = {}) {
 const $ = id => root.querySelector('#' + id);
 let disposed = false;
-const text = (id, value) => { $(id).textContent = value; };
+const text = (id, value) => { const node = $(id); if (node) node.textContent = value; };
 function el(tag, value, className) {
   const node = document.createElement(tag);
   if (value !== undefined) node.textContent = value;
@@ -162,8 +162,10 @@ function renderState() {
   text('surplus', `${formatUnits(p.coverage_surplus_atoms)} AUSD surplus · not profit`);
   text('phase', p.phase[0].toUpperCase() + p.phase.slice(1));
   text('close', `Closes ${new Date(data.cluster.closes_at * 1000).toLocaleString()}`);
-  text('bid', data.kuru.best_bid_wad === null ? 'No bids' : formatUnits(data.kuru.best_bid_wad, 18));
-  text('ask', data.kuru.best_ask_wad === null ? 'No asks' : formatUnits(data.kuru.best_ask_wad, 18));
+  if (data.kuru) {
+    text('bid', data.kuru.best_bid_wad === null ? 'No bids' : formatUnits(data.kuru.best_bid_wad, 18));
+    text('ask', data.kuru.best_ask_wad === null ? 'No asks' : formatUnits(data.kuru.best_ask_wad, 18));
+  }
   text('receipt-backing', p.receipt_backed ? `${formatUnits(p.receipt_supply_atoms)} receipts · fully escrow-backed` : 'Receipt escrow mismatch Unavailable quoting disabled');
   text('network-name', `${data.environment === 'local_fork' ? 'Local Monad fork' : 'Monad testnet'} · ${data.chain_id}`);
   text('rules', data.cluster.rules);
@@ -182,9 +184,9 @@ function renderWallet() {
   const balances = el('div', undefined, 'balances');
   for (const [label, amount, decimals] of [
     ['AUSD balance', w.ausd_atoms, 6], ['Native MON', w.native_balance_wei, 18], ['Wrapped H YES receipts', w.receipt_atoms, 6],
-    ['Available Kuru AUSD', w.margin_available_ausd_atoms, 6], ['Available Kuru receipts', w.margin_available_receipt_atoms, 6], ['Pool allowance (AUSD)', w.pool_allowance_atoms, 6],
+    ['Pool allowance (AUSD)', w.pool_allowance_atoms, 6],
   ]) {
-    if (amount === null) continue; // This market has no receipt or Kuru integration.
+    if (amount === null) continue; // This market has no receipt integration.
     const cell = el('div'); cell.append(el('strong', formatUnits(amount, decimals)), el('span', label)); balances.append(cell);
   }
   const table = el('table', undefined, 'holdings');
@@ -194,7 +196,7 @@ function renderWallet() {
     const row = el('tr'); row.append(el('td', selectedLabels.get(`${p.scope}:${p.mask}`) || `Scope ${p.scope} · mask ${p.mask}`), el('td', formatUnits(p.quantity_atoms)), el('td', p.settlement), el('td', p.redeemable_atoms === null ? 'Pending' : formatUnits(p.redeemable_atoms))); body.append(row);
   }
   table.append(head, body);
-  $('wallet-result').append(balances, table, el('p', 'Only the eight base YES claims and your current composed claim are requested. This is not a complete portfolio.' + (marketId === 'learning' ? ' These holdings belong to the learning pool only.' : ' Kuru available balances exclude resting-order reserves; wrapped receipts are separate from internal pool holdings.'), 'caption'));
+  $('wallet-result').append(balances, table, el('p', 'Only the eight base YES claims and your current composed claim are requested. This is not a complete portfolio.' + (marketId === 'learning' ? ' These holdings belong to the learning pool only.' : ' Wrapped receipts are separate from internal pool holdings.'), 'caption'));
 }
 async function refresh() {
   if (disposed) return;

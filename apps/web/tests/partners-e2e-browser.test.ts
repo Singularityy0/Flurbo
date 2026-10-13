@@ -7,9 +7,9 @@ import {thesisCandidates} from '../shared/thesis.mjs';
 import {certifiedPair} from '../server/pair-math.mjs';
 import {simulatePairPurchase} from '../server/pair-sensitivity.mjs';
 
-// Partner features as a signed-in person sees them: Kimi hypotheses, indexed activity, and the Kuru panel.
+// Partner features as a signed-in person sees them: Kimi hypotheses and indexed pool activity.
 // The API is mocked; the production bundle in dist/ is the real one.
-test('partners in Chrome: Kimi on Thesis and What If, Envio activity and fills, and the Kuru panel',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+test('partners in Chrome: Kimi on Thesis and What If, and Envio pool activity',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const now=Math.floor(Date.now()/1000);
@@ -129,23 +129,18 @@ test('partners in Chrome: Kimi on Thesis and What If, Envio activity and fills, 
     assert.deepEqual(kimiRequests.at(-1),{a:0,b:1});
     await shot('partners-thesis');
 
-    // 2b. The Markets list links to the Kuru book of the question that has one, and can filter to those questions.
+    // 2b. The markets list no longer offers a Kuru order book.
     await page.goto('https://flurbo.singu.online/markets');
-    const kuruLink=page.getByRole('link',{name:/Trade the YES receipt on Kuru/});
-    await kuruLink.waitFor();
-    assert.equal(await kuruLink.count(),1,'only the question with a book is linked');
-    assert.ok((await kuruLink.getAttribute('href'))!.endsWith(`/markets/${poolNs}/0/kuru`));
-    const kuruFilter=page.getByRole('button',{name:'Kuru order books (1)'});
-    await kuruFilter.click();
-    assert.equal(await kuruFilter.getAttribute('aria-pressed'),'true');
-    assert.equal(await page.locator('.market-card').count(),1,'the filter keeps only questions with a Kuru book');
+    await page.locator('.market-card').first().waitFor();
+    assert.equal(await page.getByRole('link',{name:/Trade the YES receipt on Kuru/}).count(),0);
+    assert.equal(await page.getByRole('button',{name:/Kuru order books/}).count(),0);
     await shot('partners-markets');
 
-    // 3. Market detail: the Kuru panel, then What If with Kimi and Envio.
+    // 3. Market detail, then What If with Kimi and Envio.
     await page.goto(`https://flurbo.singu.online/markets/${poolNs}/0`);
-    const kuruPanel=page.getByRole('heading',{name:'Trade YES receipts on Kuru',exact:true});
-    await kuruPanel.waitFor();
-    assert.ok((await page.getByRole('link',{name:'Open order book',exact:true}).getAttribute('href'))!.endsWith(`/markets/${poolNs}/0/kuru`));
+    await page.getByRole('heading',{name:'Your position',exact:true}).waitFor();
+    assert.equal(await page.getByRole('heading',{name:'Trade YES receipts on Kuru',exact:true}).count(),0);
+    assert.equal(await page.getByRole('link',{name:'Open order book',exact:true}).count(),0);
     assert.equal(await page.locator('details[aria-label="Chainlink CRE check"]').count(),0);
     await shot('partners-market-detail');
 
@@ -160,21 +155,14 @@ test('partners in Chrome: Kimi on Thesis and What If, Envio activity and fills, 
     await panel.getByText('Recent pool activity · Envio').click();
     await panel.getByText(/Bought 1\.000000 shares/).waitFor();
 
-    // 4. Kuru order book page: indexed fills from Envio, each with its transaction.
-    await page.goto(`https://flurbo.singu.online/markets/${poolNs}/0/kuru`);
-    await page.getByText('Recent fills · Envio').click();
-    await page.getByText(/2\.5 receipts at 0\.480000 test AUSD/).waitFor();
-    assert.equal(await page.locator(`a[href="https://testnet.monadscan.com/tx/${txHash}"]`).count(),1);
-    await shot('partners-kuru');
-
-    // 5. Narrow screens keep the Thesis page inside the viewport.
+    // 4. Narrow screens keep the Thesis page inside the viewport.
     await page.setViewportSize({width:390,height:844});
     await page.goto(`https://flurbo.singu.online/markets/${poolNs}/0/thesis`);
     await badge.waitFor();
     assert.ok((await badge.innerText()).includes('On-chain pool rules'));
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'no horizontal scroll at 390px');
 
-    assert.deepEqual(unexpected.filter(path=>!path.endsWith('/kuru')),[],'no unexpected API calls');
+    assert.deepEqual(unexpected,[],'no unexpected API calls');
     assert.deepEqual(errors,[],'No uncaught page errors in Chrome');
   }finally{
     await browser.close();

@@ -74,8 +74,6 @@
 .tile-meta time { font-family: var(--font-num); }
 .tile-linked { display: inline-flex; align-items: center; gap: 3px; font-family: var(--font-num); }
 .tile-linked svg { width: 14px; height: 14px; }
-.tile-kuru { position: relative; z-index: 1; }
-.tile-kuru:hover { border-color: var(--ink); color: var(--ink); }
 .tile-prices { position: relative; z-index: 1; grid-column: 1 / -1; grid-row: 4; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .tile-star { position: relative; z-index: 1; }
 .px {
@@ -122,7 +120,6 @@
   .board-search { min-width: 0; }
   .board-search kbd { display: none; }
   .board-status { grid-column: 1 / -1; grid-row: 2; display: grid; width: 100%; }
-  .board-kuru { grid-column: 1 / -1; grid-row: 3; display: grid; width: 100%; }
   .board-refresh { width: var(--control-md); padding: 0; }
   .board-refresh-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .board-legend { display: none; }

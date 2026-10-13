@@ -11,7 +11,6 @@ import {rememberedTradingWallet} from '../portfolio';
 import {settlementView} from '../market-detail';
 import {settlementSources} from '../../shared/settlement-sources.mjs';
 import {marketHref} from '../market-detail';
-import {appFetch} from '../platform-fetch';
 import Pilot from './Pilot';
 import ShowcaseSource from './ShowcaseSource';
 import WhatIf from './WhatIf';
@@ -38,16 +37,10 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
   const {state:auth}=useAuth(),[state,setState]=useState<PilotState|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
   const [busy,setBusy]=useState(false),[positions,setPositions]=useState<{mask:string;quantity:string;payoutAtoms:string|null}[]|null>(null);
   const [positionError,setPositionError]=useState('');
-  const [kuruListed,setKuruListed]=useState(false);
   const [accountWallets,setAccountWallets]=useState<string[]>([]);
   const [challengeOpen,setChallengeOpen]=useState(()=>new URLSearchParams(window.location.search).get('challenge')==='1');
   const [now,setNow]=useState(()=>Date.now()/1000);
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()/1000),1000);return()=>clearInterval(timer);},[]);
-  useEffect(()=>{const controller=new AbortController();setKuruListed(false);
-    void appFetch(`/api/${namespace}/kuru-listing?event=${event}`,{cache:'no-store',signal:controller.signal})
-      .then(async response=>{if(!response.ok)return;const listing=await response.json();if(!controller.signal.aborted&&listing.eventIndex===event&&/^0x[0-9a-f]{40}$/i.test(listing.market))setKuruListed(true);})
-      .catch(()=>{});return()=>controller.abort();
-  },[namespace,event]);
   function toggleChallenge(open:boolean){setChallengeOpen(open);const url=new URL(window.location.href);if(open)url.searchParams.set('challenge','1');else url.searchParams.delete('challenge');window.history.replaceState(null,'',url);if(open)setTimeout(()=>document.getElementById('challenge-form')?.scrollIntoView({block:'start',behavior:'smooth'}),0);}
   const [quotes,setQuotes]=useState<{yes:string|null;no:string|null}|null>(null);
   const [owner,setOwner]=useState(()=>auth.address?rememberedTradingWallet(auth.address):'');
@@ -124,7 +117,6 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
             <p className="market-caption">View results and collect payouts in your portfolio.</p>
           </section>
           <section className="detail-panel detail-thesis"><h2>Build your thesis</h2><p>Express a view about two questions. Compare it with the pool and see what each possible outcome would pay.</p><Link className="btn btn-secondary" href={marketHref(namespace,event)+'/thesis'}>Explore your view</Link></section>
-          {kuruListed&&<section className="detail-panel"><h2>Trade YES receipts on Kuru</h2><p>Use a separate order book for this question’s YES receipt and test AUSD. Review the price, fees and available balance before trading.</p><Link className="btn btn-secondary" href={marketHref(namespace,event)+'/kuru'}>Open order book</Link></section>}
         </aside>
         <div className="detail-primary">
           {showcaseCopy(question)&&<ShowcaseSource state={state} event={event} namespace={namespace}/>}

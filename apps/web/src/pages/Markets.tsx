@@ -6,7 +6,6 @@ import {pilotRequest,type PilotNamespace} from '../pilot';
 import {loadMarketDirectory,type MarketGroup,type MarketSnapshot} from '../market-directory';
 import MarketDetail from './MarketDetail';
 import ThesisExplorer from './ThesisExplorer';
-import CollectionKuru from './CollectionKuru';
 import AccountPortfolio from './AccountPortfolio';
 import PageHeader from '../components/PageHeader';
 import MarketBoard from '../components/market/MarketBoard';
@@ -36,11 +35,10 @@ export default function Markets(){
     {error?<div className="state-block" role="alert"><h2>Markets could not load</h2><p>{error}</p><button className="btn btn-primary" onClick={()=>setAttempt(x=>x+1)}>Retry</button></div>
       :<>{!gate.covered&&<span className="progress-line" aria-hidden="true"/>}<p role="status" className={gate.covered?'sr-only':'busy-text'}>Loading markets...</p><MarketSkeleton/></>}
   </main>;
-  const detail=location.match(/^\/markets\/(pilot|practice-[0-9a-f]{40})\/([0-3])(?:\/(thesis|kuru))?$/);
+  const detail=location.match(/^\/markets\/(pilot|practice-[0-9a-f]{40})\/([0-3])(?:\/(thesis))?$/);
   if(location.startsWith('/markets/')){
     if(!detail||!groups.some(g=>g.namespace===detail[1]))return <main id="main" tabIndex={-1} className="page page-task"><div className="state-block"><Inbox aria-hidden="true" strokeWidth={1.75}/><h1>Market not found</h1><p>This market is not in the current directory. It may belong to an earlier collection that is no longer listed.</p><Link href="/markets" className="btn btn-primary">All markets</Link></div></main>;
     return detail[3]==='thesis'?<ThesisExplorer key={location} namespace={detail[1] as PilotNamespace} event={Number(detail[2])}/>
-      :detail[3]==='kuru'?<CollectionKuru key={location} namespace={detail[1] as PilotNamespace} event={Number(detail[2])}/>
       :<MarketDetail key={location} namespace={detail[1] as PilotNamespace} event={Number(detail[2])}/>;
   }
   if(location==='/portfolio')return <main id="main" tabIndex={-1} className="page markets-page portfolio-page">
@@ -113,10 +111,6 @@ function MarketDirectory({groups:loaded,snapshot}:{groups:MarketGroup[]|null;sna
   const onQuery=useCallback((next:Partial<BoardQuery>)=>{setStableOrder(null);setQuery(old=>({...old,...next,page:next.page??1}));},[]);
   const onWatch=useCallback((key:string)=>{if(account)setWatchlist(toggleWatchlist(account,key));},[account]);
   const pendingPools=loading?groups.filter(g=>!data[g.namespace]&&!failed.includes(g.namespace)).length:0;
-  const [kuruOnly,setKuruOnly]=useState(false);
-  const kuruCount=useMemo(()=>rows.filter(r=>r.kuru).length,[rows]);
-  const shown=useMemo(()=>kuruOnly?rows.filter(r=>r.kuru):rows,[rows,kuruOnly]);
-  const toggleKuru=useCallback(()=>{setStableOrder(null);setKuruOnly(x=>!x);setQuery(old=>({...old,page:1}));},[]);
-  return <MarketBoard rows={shown} kuru={{count:kuruCount,only:kuruOnly,onToggle:toggleKuru}} query={query} onQuery={onQuery} now={now/1000} watchlist={watchlist} onWatch={onWatch} deltas={deltas} stableOrder={stableOrder}
+  return <MarketBoard rows={rows} query={query} onQuery={onQuery} now={now/1000} watchlist={watchlist} onWatch={onWatch} deltas={deltas} stableOrder={stableOrder}
     loading={loading} failed={failed.length>0} pendingPools={pendingPools} updatedAt={updatedAt} onRefresh={()=>setRevision(x=>x+1)} unavailable={!rows.length&&failed.length>0}/>;
 }
