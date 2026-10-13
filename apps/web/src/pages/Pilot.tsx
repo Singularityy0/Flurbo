@@ -83,8 +83,11 @@ export default function Pilot({onBusy,namespace='pilot',consumer,tradingClosed=f
     return()=>{provider.destroy();setWallets(previous=>previous.filter(wallet=>wallet.provider!==provider));};
   },[auth.address,controller]);
   useEffect(()=>{
-    const p=wallets[Number(choice)]?.provider;
-    if(!p||!auth.address){setWalletStatus('disconnected');return;}
+    const selected=wallets[Number(choice)];
+    const p=selected?.provider;
+    // The passkey reports its login address before a trading session exists. Watching it would
+    // mark the wallet as checking and discard the market snapshot that is already loading.
+    if(!p||!auth.address||selected?.name===PASSKEY_WALLET_NAME){setWalletStatus('disconnected');return;}
     return watchTradingWallet({provider:p,account:auth.address,links:linkedWallets,publish:value=>{
       if(!live.current)return;
       setWalletStatus(value.status);
