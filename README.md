@@ -79,7 +79,7 @@ repeatable read-only probe. These checks do not constitute completed integration
 The [iOS and Android app](apps/native/README.md) is a native shell around the
 website, so sign-in, markets, portfolio and trading follow the site. Phone
 installation steps, including the debug APK and a USB install, are in that
-readme. The earlier Expo project in `apps/mobile` is retired.
+readme.
 
 ## Current phase
 

@@ -1,6 +1,6 @@
 # Flurbo for iOS and Android
 
-The installed app is the website. It loads [flurbo.singu.online](https://flurbo.singu.online) in a native shell, so sign-in, markets, portfolio, funding and trading are the same pages as the site. The Expo project in `apps/mobile` is retired.
+The installed app is the website. It loads [flurbo.singu.online](https://flurbo.singu.online) in a native shell, so sign-in, markets, portfolio, funding and trading are the same pages as the site.
 
 Passkeys stay on the website's relying party, `flurbo.singu.online`. Android turns on WebView passkeys for this app, which already shares credentials with the site through `/.well-known/assetlinks.json`. MetaMask is not a browser extension on a phone. Connect MetaMask opens the MetaMask app over WalletConnect and returns here, inside this shell and in the phone’s browser.
 
@@ -12,7 +12,7 @@ Passkeys stay on the website's relying party, `flurbo.singu.online`. Android tur
 
 ## Install on a phone
 
-The app that goes on a phone is this shell, not the retired Expo project in `apps/mobile`. It opens `https://flurbo.singu.online`. Perpl orders and the phone MetaMask connection live in the website, so a build made before that website is deployed still shows the older site.
+The app that goes on a phone is this shell. It opens `https://flurbo.singu.online`. Perpl orders and the phone MetaMask connection live in the website, so a build made before that website is deployed still shows the older site.
 
 Android, from this computer:
 
