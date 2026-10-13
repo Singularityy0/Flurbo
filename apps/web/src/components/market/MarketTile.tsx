@@ -30,7 +30,6 @@ function MarketTile({ row, now, delta, watched, onWatch, onFocusGroup }: {
         <span className={`tag tag-${kind}`}>{label}</span>
         <time dateTime={new Date(row.closesAt * 1000).toISOString()} title={exactTime(row.closesAt)}><span className="sr-only">{row.status === 'Open' ? 'Closes ' : 'Trading closed '}</span>{compactRelative(row.closesAt, now)}</time>
         {row.linkedCount > 1 && <span className="tile-linked" title={`${row.linkedCount} linked questions in ${row.groupLabel}`}><Link2 aria-hidden="true" strokeWidth={1.75} /><span className="sr-only">Linked questions: </span>{row.linkedCount}</span>}
-        {row.kuru && <Link className="tag tag-net tile-kuru" href={`${row.path}/kuru`} aria-label="Trade the YES receipt on Kuru" title="Trade the YES receipt on the Kuru order book">Kuru</Link>}
         {delta !== null && <PriceDelta atoms={delta} />}
       </div>
       {row.status === 'Open'

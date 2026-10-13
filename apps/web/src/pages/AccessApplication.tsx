@@ -38,6 +38,17 @@ export function AccessApplication({refresh,checking}:{refresh():Promise<void>;ch
       await refresh();
     }catch(e){setError(e instanceof Error?e.message:'Try again.');}finally{setBusy(false);}
   }
+  function submitApplication(event?: {preventDefault(): void}) {
+    event?.preventDefault();
+    if (!accepted) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError('Enter an email address.'); return; }
+    void act('submit', { email: email.trim(), noticeAccepted: true });
+  }
+  function submitCode(event?: {preventDefault(): void}) {
+    event?.preventDefault();
+    if (code.length !== 6) return;
+    void act('verify', { code });
+  }
   if(loading)return <div className="application-loading" aria-busy="true"><span className="skeleton skeleton-line" style={{width:'40%'}}/><span className="skeleton skeleton-line" style={{width:'70%'}}/><p role="status" className="sr-only">Loading your application…</p></div>;
   const state=application?.state;
   const canApply=!application||state==='withdrawn'||editing;
@@ -49,18 +60,18 @@ export function AccessApplication({refresh,checking}:{refresh():Promise<void>;ch
   ];
   return <section className="application-form" aria-label="Your access application" aria-busy={busy}>
     {loaded&&<Stepper steps={steps} label="Application progress" className="application-steps"/>}
-    {!loaded?<div><h2>Your application couldn’t be loaded.</h2><p>Retry to check your saved status before making another request.</p></div>:canApply?<form noValidate onSubmit={e=>{e.preventDefault();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())){setError('Enter an email address.');return;}void act('submit',{email:email.trim(),noticeAccepted:accepted});}}>
+    {!loaded?<div><h2>Your application couldn’t be loaded.</h2><p>Retry to check your saved status before making another request.</p></div>:canApply?<form noValidate onSubmit={submitApplication}>
       <h2>Request your invitation.</h2><p>Leave your email. We’ll let you know when your account is approved.</p>
       <label htmlFor="application-email">Email address</label>
-      <input id="application-email" type="email" autoComplete="email" maxLength={254} required value={email} onChange={e=>setEmail(e.target.value)} disabled={busy}/>
-      <label className="application-consent check-row"><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)} required disabled={busy}/><span>I understand Flurbo will use my email for application and access updates, and for notices about my own positions that I can turn off. <a href="/docs#application-data">How we use this data</a></span></label>
-      <div className="access-actions"><button className="button button-dark" disabled={busy||!accepted}>{busy?'Saving…':'Request access'}</button>
+      <input id="application-email" type="email" autoComplete="email" maxLength={254} value={email} onChange={e=>setEmail(e.target.value)} disabled={busy}/>
+      <label className="application-consent check-row"><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)} disabled={busy}/><span>I understand Flurbo will use my email for application and access updates, and for notices about my own positions that I can turn off. <a href="/docs#application-data">How we use this data</a></span></label>
+      <div className="access-actions"><button type="button" className="button button-dark" disabled={busy||!accepted} onClick={()=>submitApplication()}>{busy?'Saving…':'Request access'}</button>
       {editing&&<button type="button" className="text-link" onClick={()=>setEditing(false)}>Cancel</button>}</div>
-    </form>:state==='unverified'?<form noValidate onSubmit={e=>{e.preventDefault();void act('verify',{code});}}>
+    </form>:state==='unverified'?<form noValidate onSubmit={submitCode}>
       <h2>Check your email.</h2><p>Enter the code sent to <strong>{application.email}</strong>. It expires after 10 minutes.</p>
       <label htmlFor="application-code">Verification code</label>
-      <input id="application-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,''))} disabled={busy}/>
-      <div className="access-actions"><button className="button button-dark" disabled={busy||code.length!==6}>{busy?'Checking…':'Verify email'}</button><button type="button" className="text-link" disabled={busy} onClick={()=>void act('submit',{email:application.email,noticeAccepted:true})}>Send a new code</button><button type="button" className="text-link" disabled={busy} onClick={()=>setEditing(true)}>Change email</button></div>
+      <input id="application-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,''))} disabled={busy}/>
+      <div className="access-actions"><button type="button" className="button button-dark" disabled={busy||code.length!==6} onClick={()=>submitCode()}>{busy?'Checking…':'Verify email'}</button><button type="button" className="text-link" disabled={busy} onClick={()=>void act('submit',{email:application.email,noticeAccepted:true})}>Send a new code</button><button type="button" className="text-link" disabled={busy} onClick={()=>setEditing(true)}>Change email</button></div>
       <small className="field-help">Allow one minute between codes. Check your spam folder too. Verification does not grant access.</small>
     </form>:<div role="status"><h2>{state==='pending'?'Your request is received.':state==='approved'?'Your invitation is ready.':state==='revoked'?'Access is no longer active.':'Not selected for this round.'}</h2>
       <p>{state==='pending'?'Your email is verified. We’ll email you when your account is approved.':state==='approved'?'Select Check application status to open your approved account.':'Your application has been reviewed. You can return here to check its status.'}</p>

@@ -58,7 +58,7 @@
           <p id="execution-help" class="caption">Connect your test wallet, then get a pool quote.</p>
           <button id="review-trade" class="button primary wide" disabled>Get a quote to review</button>
           <h3>H YES receipts</h3>
-          <p class="caption">Wrap internal H YES units into ERC-20 receipts for the Kuru base market, or unwrap wallet receipts to sell or redeem through the pool. Conversion is 1:1 and costs gas. Kuru deposits and orders are a separate step.</p>
+          <p class="caption">Wrap internal H YES units into ERC-20 receipts, or unwrap wallet receipts to sell or redeem through the pool. Conversion is 1:1 and costs gas.</p>
           <p id="conversion-status" class="caption" role="status">Connect your wallet to view convertible H YES balances.</p>
           <label for="conversion-quantity">H YES units to convert</label><input id="conversion-quantity" inputmode="decimal" value="1" autocomplete="off">
           <div class="wallet-actions"><button id="review-wrap" class="button secondary" disabled>Review wrap</button><button id="review-unwrap" class="button secondary" disabled>Review unwrap</button></div>
@@ -82,8 +82,8 @@
           <div id="replacement-area" hidden><label for="replacement-hash">Wallet transaction / replacement hash</label><input id="replacement-hash" placeholder="0x…" maxlength="66" autocomplete="off" spellcheck="false"></div>
           <button id="check-execution" class="button secondary" hidden>Check submitted transaction</button>
           <button id="clear-tracking" class="button quiet" hidden>Clear tracking after wallet check</button>
+          <p id="receipt-backing" class="backing">Receipt backing: checking…</p>
         </section>
-        <section class="card book" aria-labelledby="book-title"><div class="section-heading"><h2 id="book-title">The base market</h2><span class="pill">KURU</span></div><p class="muted">Event H · YES receipt / AUSD</p><div class="book-prices"><div><span class="eyebrow">BEST BID</span><strong id="bid">Unavailable</strong></div><div><span class="eyebrow">BEST ASK</span><strong id="ask">Unavailable</strong></div></div><p class="caption">Indicative top of book. Depth, fees and gas are needed for an executable route. This local book uses synthetic operator liquidity.</p><p id="receipt-backing" class="backing">Receipt backing: checking…</p></section>
       </div>
     </div>
     <section class="card account" id="account" aria-labelledby="account-title"><div class="section-heading"><div><p class="eyebrow">03 / YOUR ACCOUNT</p><h2 id="account-title">Inspect a wallet.</h2></div><span class="pill">READ ONLY</span></div><p class="muted">Paste a public address to view balances. This does not connect or authenticate a wallet.</p><form id="wallet-form" class="input-action"><div class="grow"><label for="wallet">Public wallet address</label><input id="wallet" placeholder="0x…" autocomplete="off" spellcheck="false" maxlength="42"></div><button class="button secondary" type="submit">View balances</button><button class="button quiet" id="wallet-clear" type="button">Clear</button></form><p id="wallet-message" class="caption" role="status">No wallet selected.</p><div id="wallet-result"></div></section>

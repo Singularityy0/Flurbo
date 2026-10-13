@@ -11,9 +11,7 @@ import {rememberedTradingWallet} from '../portfolio';
 import {settlementView} from '../market-detail';
 import {settlementSources} from '../../shared/settlement-sources.mjs';
 import {marketHref} from '../market-detail';
-import {appFetch} from '../platform-fetch';
 import Pilot from './Pilot';
-import CreEvidence from '../components/CreEvidence';
 import ShowcaseSource from './ShowcaseSource';
 import WhatIf from './WhatIf';
 import PriceHistory from './PriceHistory';
@@ -39,16 +37,10 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
   const {state:auth}=useAuth(),[state,setState]=useState<PilotState|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
   const [busy,setBusy]=useState(false),[positions,setPositions]=useState<{mask:string;quantity:string;payoutAtoms:string|null}[]|null>(null);
   const [positionError,setPositionError]=useState('');
-  const [kuruListed,setKuruListed]=useState(false);
   const [accountWallets,setAccountWallets]=useState<string[]>([]);
   const [challengeOpen,setChallengeOpen]=useState(()=>new URLSearchParams(window.location.search).get('challenge')==='1');
   const [now,setNow]=useState(()=>Date.now()/1000);
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()/1000),1000);return()=>clearInterval(timer);},[]);
-  useEffect(()=>{const controller=new AbortController();setKuruListed(false);
-    void appFetch(`/api/${namespace}/kuru-listing?event=${event}`,{cache:'no-store',signal:controller.signal})
-      .then(async response=>{if(!response.ok)return;const listing=await response.json();if(!controller.signal.aborted&&listing.eventIndex===event&&/^0x[0-9a-f]{40}$/i.test(listing.market))setKuruListed(true);})
-      .catch(()=>{});return()=>controller.abort();
-  },[namespace,event]);
   function toggleChallenge(open:boolean){setChallengeOpen(open);const url=new URL(window.location.href);if(open)url.searchParams.set('challenge','1');else url.searchParams.delete('challenge');window.history.replaceState(null,'',url);if(open)setTimeout(()=>document.getElementById('challenge-form')?.scrollIntoView({block:'start',behavior:'smooth'}),0);}
   const [quotes,setQuotes]=useState<{yes:string|null;no:string|null}|null>(null);
   const [owner,setOwner]=useState(()=>auth.address?rememberedTradingWallet(auth.address):'');
@@ -125,7 +117,6 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
             <p className="market-caption">View results and collect payouts in your portfolio.</p>
           </section>
           <section className="detail-panel detail-thesis"><h2>Build your thesis</h2><p>Express a view about two questions. Compare it with the pool and see what each possible outcome would pay.</p><Link className="btn btn-secondary" href={marketHref(namespace,event)+'/thesis'}>Explore your view</Link></section>
-          {kuruListed&&<section className="detail-panel"><h2>Trade YES receipts on Kuru</h2><p>Use a separate order book for this question’s YES receipt and test AUSD. Review the price, fees and available balance before trading.</p><Link className="btn btn-secondary" href={marketHref(namespace,event)+'/kuru'}>Open order book</Link></section>}
         </aside>
         <div className="detail-primary">
           {showcaseCopy(question)&&<ShowcaseSource state={state} event={event} namespace={namespace}/>}
@@ -144,7 +135,6 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
             <div className="cluster"><button className="btn btn-secondary btn-sm" onClick={()=>setAttempt(n=>n+1)}>Refresh status</button></div>
           </section>
           <section className="detail-panel"><h2>What decides the answer?</h2><p>{state.manifest.publication.mode!=='rehearsal'?'The published source and the rules below determine the answer.':'This is a practice event with a scripted outcome, using test funds.'}</p>{!showcaseCopy(question)&&<a className="text-link" href={question.source.referenceUrl} target="_blank" rel="noreferrer">View source <ArrowUpRight aria-hidden="true" strokeWidth={1.75}/></a>}{checkedSource&&<div className="settlement-source"><h3>What settlement reads</h3><p>{checkedSource.request==='GET'?'Settlement reads exactly this record. You and your agents can open or fetch it too, before the result is decided.':'Settlement reads these Ethereum node endpoints. They answer JSON-RPC requests, so open them with an Ethereum client rather than a browser.'}</p><ul>{checkedSource.urls.map(url=><li key={url}><code>{url}</code></li>)}</ul><p className="field-help">Rule: {checkedSource.method}</p></div>}<details className="disclosure"><summary>Read the resolution rules</summary><p>Published question: {question.question}</p><h3>Yes</h3><p>{question.yesRule}</p><h3>No</h3><p>{question.noRule}</p><h3>If there is no clear result</h3><p>{state.manifest.publication.draft.exceptionPolicy}</p><p>{state.manifest.publication.draft.disputePolicy}</p><p>The current testnet dispute wallets are controlled by the Flurbo operator.</p></details></section>
-          <CreEvidence namespace={namespace} event={event} question={index=>marketQuestion(state.manifest.publication.draft.events[index])}/>
           <details className="detail-panel"><summary>Shared pool details</summary><dl className="facts"><dt>Pool balance</dt><dd>{cash(state.poolCash)} test AUSD</dd><dt>Required payouts</dt><dd>{cash(state.requiredCollateral)} test AUSD</dd></dl><p className="market-caption">These totals cover the shared pool, not just this question.</p><a className="text-link" href={`https://testnet.monadscan.com/address/${state.manifest.pool}`} target="_blank" rel="noreferrer">View pool <ArrowUpRight aria-hidden="true" strokeWidth={1.75}/></a></details>
         </div>
       </div>

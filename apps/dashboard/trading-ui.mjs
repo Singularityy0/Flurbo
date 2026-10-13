@@ -52,7 +52,7 @@ export function mountTrading(hooks) {
     $('recipient-wallet').disabled = locked;
     $('use-recipient-wallet').disabled = locked || !providers.some(item => item.external);
     $('review-withdraw').disabled = locked || !connectedWallet || !snapshotFresh(state.snapshot);
-    text('withdrawal-status', connectedWallet ? `From ${account}: ${formatUnits(connectedWallet.ausd_atoms)} AUSD available. MON is needed for gas. Positions and Kuru deposits are not included.` : 'Connect the wallet holding your AUSD. Your Flurbo login stays unchanged.');
+    text('withdrawal-status', connectedWallet ? `From ${account}: ${formatUnits(connectedWallet.ausd_atoms)} AUSD available. MON is needed for gas. Positions are not included.` : 'Connect the wallet holding your AUSD. Your Flurbo login stays unchanged.');
     const internalH = connectedWallet?.positions.find(p => p.scope === 128 && p.mask === 2)?.quantity_atoms;
     const canConvert = !locked && connectedWallet && state.conversion_available && snapshotFresh(state.snapshot) && conversionQty;
     $('review-wrap').disabled = !canConvert || internalH === undefined || BigInt(internalH) < BigInt(conversionQty);
@@ -60,7 +60,7 @@ export function mountTrading(hooks) {
     $('conversion-quantity').disabled = locked;
     text('conversion-status', !connectedWallet ? 'Connect your wallet to view convertible H YES balances.'
       : !conversionQty ? 'Enter a positive conversion quantity with up to six decimal places.'
-      : `H YES in pool: ${formatUnits(internalH)} · Receipts in wallet: ${formatUnits(connectedWallet.receipt_atoms)}. ${!state.conversion_available || !snapshotFresh(state.snapshot) ? 'Conversion unavailable; refresh and check receipt backing.' : 'Only wallet receipts can be unwrapped; Kuru margin is excluded.'}`);
+      : `H YES in pool: ${formatUnits(internalH)} · Receipts in wallet: ${formatUnits(connectedWallet.receipt_atoms)}. ${!state.conversion_available || !snapshotFresh(state.snapshot) ? 'Conversion unavailable; refresh and check receipt backing.' : 'Only wallet receipts can be unwrapped.'}`);
     const owned = state?.wallet?.address === account ? state.wallet.positions.find(p => p.scope === selection?.scope && p.mask === selection?.mask) : null;
     if (hooks.consumer && $('trade-wallet-balance')) text('trade-wallet-balance', !account ? 'Connect a trading wallet to see its available balance.'
       : !connectedWallet || !snapshotFresh(state.snapshot) ? 'Checking this trading wallet’s balance...'
@@ -230,7 +230,7 @@ export function mountTrading(hooks) {
       const amount = formatUnits(plan.quantity);
       const lines = [kind === 'wrap' ? `Wrap ${amount} internal H YES units into ${amount} wallet receipts.` : `Burn ${amount} wallet receipts to restore ${amount} internal H YES units.`,
         `From: ${plan.account}`, `Pool: ${plan.pool}`, `Canonical H YES receipt: ${plan.receipt}`,
-        'No AUSD is spent or paid. No token approval or Kuru order is submitted.',
+        'No AUSD is spent or paid. No token approval is submitted.',
         `Proposed gas budget: ${formatUnits(plan.gasBudget, 18)} MON. Review any wallet edits.`,
         'You have up to 5 minutes to review. The conversion contract has no transaction deadline.'];
       $('review-details').replaceChildren(...lines.map(line => { const p = document.createElement('p'); p.textContent = line; return p; }));

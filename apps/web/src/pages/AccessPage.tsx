@@ -5,7 +5,6 @@ import {useAuth} from '../auth/context';
 import type {Access} from '../auth/preview-access';
 import TradingWallets from './TradingWallets';
 import PasskeyAccount from './PasskeyAccount';
-import CreStatus from './CreStatus';
 import {AccessApplication,ApplicationReview} from './AccessApplication';
 import MetricsSummary from './MetricsSummary';
 import NoticeSettings from './NoticeSettings';
@@ -33,7 +32,6 @@ export default function AccessPage({access,error,checking,refresh}:{access:Acces
       {!approved&&access?.nativeApplications&&<p className="access-note">Approval is tied to this Mera account. MetaMask is connected later, for trading only. Never include a seed phrase, private key or passkey recovery details in an application.</p>}
     </section>
     {access?.approved&&state.address&&<PasskeyAccount key={'passkey-'+state.address}/>}
-    {access?.approved&&<CreStatus/>}
     {access?.approved&&state.address&&<TradingWallets key={state.address} account={state.address}/>}
     {access?.approved&&state.address&&<NoticeSettings key={'notices-'+state.address}/>}
     {access?.testingTools&&<MetricsSummary key={'metrics-'+state.address}/>}

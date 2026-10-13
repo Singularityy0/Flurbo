@@ -133,7 +133,7 @@ function AccountRoute() {
   const authenticated = !!state.address && state.expiresAt !== null && state.expiresAt > Date.now();
   const checkingAccess = authenticated && !preview.access && !preview.error;
   const checking = state.restoring || checkingAccess;
-  const operatorPath = ['/account','/kuru','/events','/evidence','/metrics'].includes(location);
+  const operatorPath = ['/account','/events','/evidence','/metrics'].includes(location);
   // Same page choice as before; the page for this address starts loading during the checks.
   const locationKey: RouteKey | null = location==='/access' ? 'access' : location==='/fund' ? 'fund'
     : operatorPath ? (checking || !testingAccess ? null : location==='/evidence' ? 'evidence' : location==='/metrics' ? 'metrics' : 'workspace')
@@ -195,7 +195,6 @@ function pageTitle(location: string) {
     : location === "/portfolio" ? "Your portfolio | flurbo"
     : location.startsWith("/agents") ? "Agents | flurbo"
     : location === "/perpl" ? "Perpl testnet | flurbo"
-    : location === "/kuru" ? "Kuru order book | flurbo"
     : location === "/events" ? "Real events | flurbo"
     : location === "/evidence" ? "Evidence review | flurbo"
     : location === "/metrics" ? "Metrics | flurbo"
@@ -226,7 +225,6 @@ export default function App() {
       <Route path="/markets" component={AccountRoute} />
       <Route path="/markets/:collection/:event" component={AccountRoute} />
       <Route path="/markets/:collection/:event/thesis" component={AccountRoute} />
-      <Route path="/markets/:collection/:event/kuru" component={AccountRoute} />
       <Route path="/fund" component={AccountRoute} />
       <Route path="/access" component={AccountRoute} />
       <Route path="/account" component={AccountRoute} />
@@ -235,7 +233,6 @@ export default function App() {
       <Route path="/agents/:id" component={AccountRoute} />
       <Route path="/perpl" component={AccountRoute} />
       <Route path="/history"><Redirect to="/portfolio" replace /></Route>
-      <Route path="/kuru" component={AccountRoute} />
       <Route path="/events" component={AccountRoute} />
       <Route path="/evidence" component={AccountRoute} />
       <Route path="/metrics" component={AccountRoute} />
