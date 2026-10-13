@@ -3,7 +3,7 @@ import test from 'node:test';
 import * as ed from '@noble/ed25519';
 import {
   PERPL_AUSD, PERPL_EXCHANGE, apiKeySignIn, applyFrame, beginOrder, collateralAmount, emptyDesk,
-  formatScaled, minimumLong, nextRequestId, orderOutcome, parseApiSecret, parseApiToken, parsePerplContext,
+  collateralText, formatScaled, minimumLong, nextRequestId, orderOutcome, orderRequest, parseApiSecret, parseApiToken, parsePerplContext, scaleUnits,
   tradeLeverage, wsSignInCanonical,
 } from '../src/perpl.ts';
 
@@ -54,7 +54,7 @@ test('signs the testnet trading socket with the documented canonical string', as
 });
 
 test('a gateway acknowledgement is not a fill; the fill record is', () => {
-  let desk = beginOrder(emptyDesk(12), { serial: 1, requestId: 8, marketId: 16, accountId: 3, phase: 'sent' });
+  let desk = beginOrder(emptyDesk(12), { serial: 1, requestId: 8, marketId: 16, accountId: 3, action: 1, phase: 'sent' });
   desk = applyFrame(desk, { mt: 3, cid: 1, status: { code: 0, error: '' } });
   assert.equal(desk.order?.phase, 'admitted');
   assert.equal(orderOutcome(desk.order, false)?.tone, 'wait');
@@ -70,7 +70,7 @@ test('a gateway acknowledgement is not a fill; the fill record is', () => {
 });
 
 test('a fill that arrives before the order id is confirmed when the order update names it', () => {
-  let desk = beginOrder(emptyDesk(12), { serial: 2, requestId: 9, marketId: 16, accountId: 3, phase: 'sent' });
+  let desk = beginOrder(emptyDesk(12), { serial: 2, requestId: 9, marketId: 16, accountId: 3, action: 1, phase: 'sent' });
   desk = applyFrame(desk, { mt: 25, d: [{ oid: 50, mkt: 16, acc: 3, s: 1, at: { txid: '0x' + 'cd'.repeat(32) } }] });
   assert.equal(desk.order?.phase, 'sent');
   desk = applyFrame(desk, { mt: 24, d: [{ rq: 9, oid: 50, st: 2, sr: 0 }] });
@@ -78,13 +78,33 @@ test('a fill that arrives before the order id is confirmed when the order update
 });
 
 test('forwarding disabled and a read-only key are failures, not fills', () => {
-  let desk = beginOrder(emptyDesk(12), { serial: 1, requestId: 4, marketId: 16, accountId: 3, phase: 'admitted', gateway: 'Accepted for forwarding.' });
+  let desk = beginOrder(emptyDesk(12), { serial: 1, requestId: 4, marketId: 16, accountId: 3, action: 1, phase: 'admitted', gateway: 'Accepted for forwarding.' });
   desk = applyFrame(desk, { mt: 24, d: [{ rq: 4, oid: 1, st: 7, sr: 34 }] });
   assert.equal(desk.order?.phase, 'failed');
   assert.match(orderOutcome(desk.order, false)?.text ?? '', /one-click trading/);
-  desk = beginOrder(emptyDesk(12), { serial: 2, requestId: 5, marketId: 16, accountId: 3, phase: 'sent' });
+  desk = beginOrder(emptyDesk(12), { serial: 2, requestId: 5, marketId: 16, accountId: 3, action: 1, phase: 'sent' });
   desk = applyFrame(desk, { mt: 3, cid: 2, status: { code: 403, error: 'api key lacks trade scope' } });
   assert.equal(orderOutcome(desk.order, false)?.text, 'api key lacks trade scope');
+});
+
+test('each Perpl action uses the documented order frame', () => {
+  const common = { marketId: 16, accountId: 3, requestId: 8, serial: 4, leverage: 100 };
+  assert.equal(orderRequest({ ...common, action: 2, size: 1, price: 0 }).t, 2);
+  assert.equal(orderRequest({ ...common, action: 3, size: scaleUnits('0.001', 3), price: scaleUnits('65000.0', 1) }).fl, 0);
+  assert.equal(orderRequest({ ...common, action: 4, size: 1, price: 0 }).fl, 4);
+  assert.deepEqual(orderRequest({ ...common, action: 5, orderId: 44 }), { mt: 22, sn: 4, rq: 8, mkt: 16, acc: 3, t: 5, oid: 44, s: 0, fl: 0, lv: 0, lb: 0 });
+  assert.equal(orderRequest({ ...common, action: 6, amount: collateralText('12.5') }).a, '12.5');
+  assert.equal(orderRequest({ ...common, action: 7, orderId: 44, size: 2, price: 10 }).t, 7);
+  assert.throws(() => orderRequest({ ...common, action: 5 }), /order id/);
+  assert.throws(() => orderRequest({ ...common, action: 7, orderId: 44, size: 2, price: 0 }), /limit price/);
+  assert.throws(() => collateralText('0'), /collateral/);
+  let desk = beginOrder(emptyDesk(12), { serial: 1, requestId: 8, marketId: 16, accountId: 3, action: 5, phase: 'sent' });
+  desk = applyFrame(desk, { mt: 24, d: [{ rq: 8, oid: 44, st: 5, sr: 0 }] });
+  assert.equal(desk.order?.phase, 'closed');
+  assert.equal(orderOutcome(desk.order, false)?.text, 'Perpl canceled that order. This is not a fill.');
+  desk = beginOrder(emptyDesk(12), { serial: 2, requestId: 9, marketId: 16, accountId: 3, action: 1, phase: 'sent' });
+  desk = applyFrame(desk, { mt: 24, d: [{ rq: 9, oid: 45, st: 5, sr: 0 }] });
+  assert.equal(desk.order?.phase, 'failed');
 });
 
 test('request ids advance past the account cursor and a skipped heartbeat is not final', () => {
