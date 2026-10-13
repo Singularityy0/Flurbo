@@ -246,18 +246,25 @@ export default function Perpl() {
       <li className={saved ? 'done' : ''}>
         <div className="perpl-step-head"><h2><span className="perpl-index">2</span> API key</h2>
           <a href={PERPL_DOCS_URL} target="_blank" rel="noreferrer">Enrollment and signing</a></div>
-        <p>A fill is a later <code>mt: 25</code> record, not the “accepted for forwarding” reply.</p>
+        <p>Create a trading key so Flurbo can submit the orders you confirm.</p>
         {saved ? <div className="perpl-actions"><p>A key is saved for this browser session.</p><button type="button" className="btn btn-secondary" onClick={forgetKey}>Remove key</button></div>
           : <>
             <ol className="perpl-substeps">
               <li className={openedPerpl ? 'done' : ''}>
-                <h3><span className="perpl-index">1</span> Connect this wallet on Perpl</h3>
-                <p>Open Perpl and use the same MetaMask account you will use for the key.</p>
+                <h3><span className="perpl-index">1</span> Set up your Perpl account</h3>
+                <p>Complete these steps on Perpl during your first visit:</p>
+                <ol className="perpl-setup-checklist">
+                  <li>Connect MetaMask with the same wallet you will use in Flurbo, on Monad testnet.</li>
+                  <li>Keep test MON in that wallet for transaction fees and test AUSD for your deposit. If needed, get test funds from <Link href="/fund">Get test funds</Link> before opening Perpl.</li>
+                  <li>Use Perpl’s deposit flow to fund your trading account with at least {context ? collateralAmount(context.minimumDeposit) : '100'} test AUSD. Approve the token allowance and confirm the deposit in MetaMask when requested. A wallet balance alone is not a deposit.</li>
+                  <li>Enable One-Click Trading on Perpl and approve any wallet confirmation it requests.</li>
+                  <li>Check that your Perpl trading account shows the deposit, then return to this Flurbo tab.</li>
+                </ol>
                 <div className="perpl-actions"><a className="btn btn-primary" href={PERPL_APP_URL} target="_blank" rel="noreferrer" onClick={() => { try { sessionStorage.setItem(OPENED, '1'); } catch { /* The visit still counts on this page. */ } setOpenedPerpl(true); }}>Open Perpl</a></div>
               </li>
               <li>
                 <h3><span className="perpl-index">2</span> Create the trade key</h3>
-                <p>Come back to this page and approve one signature in MetaMask.</p>
+                <p>Back in Flurbo, use the same MetaMask account and approve the key signature. Then select Connect below to load your trading balance.</p>
                 <div className="perpl-actions"><button type="button" className="btn btn-primary" disabled={enrolling} onClick={() => void enroll()}>{enrolling ? 'Confirm in MetaMask…' : 'Create a trade key with MetaMask'}</button></div>
               </li>
             </ol>
@@ -275,7 +282,7 @@ export default function Perpl() {
       </li>
       <li className={account ? 'done' : ''}>
         <div className="perpl-step-head"><h2><span className="perpl-index">3</span> Account</h2></div>
-        <p>Connecting a wallet on Perpl does not create an exchange account. The exchange account holds your test AUSD and must have one-click trading turned on. Deposit at least 100 AUSD on Perpl, turn on one-click trading, then connect here. <a href={PERPL_APP_URL} target="_blank" rel="noreferrer">Open Perpl</a></p>
+        <p>Select Connect to load your Perpl trading balance and One-Click Trading status. If you have already completed setup on Perpl, you do not need to repeat it. <a href={PERPL_APP_URL} target="_blank" rel="noreferrer">Open Perpl</a></p>
         <div className="perpl-actions">
           <button type="button" className="btn btn-primary" onClick={() => connect()} disabled={!saved || !context || link === 'connecting'}>{link === 'on' ? 'Reconnect' : link === 'connecting' ? 'Connecting…' : 'Connect'}</button>
         </div>
@@ -293,7 +300,7 @@ export default function Perpl() {
       </li>
       <li>
         <div className="perpl-step-head"><h2><span className="perpl-index">4</span> Order and fill</h2></div>
-        <p>Choose the action, then review it. A blank size uses the market minimum. A blank price is a market order (immediate-or-cancel) at 1x; a price is a limit that rests until it fills, expires, or you cancel it. “Accepted for forwarding” only means Perpl took the request. A trade counts when a fill arrives. Cancel and added collateral are not fills.</p>
+        <p>Choose an action and market, review the order, then confirm. Leave size blank to use the minimum and price blank for a market order at 1x. Enter a price for a limit order. Your trade is complete when Perpl reports a fill; an accepted request is still pending. Canceling an order or adding collateral does not execute a trade.</p>
         <div className="perpl-key">
           <label className="field">Action
             <select value={action} onChange={event => { setAction(Number(event.target.value) as PerplAction); setReview(false); }}>
