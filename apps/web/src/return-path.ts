@@ -8,6 +8,7 @@ const PATHS = [
   /^\/fund$/,
   /^\/access$/,
   /^\/agents$/,
+  /^\/perpl$/,
   /^\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
 ];
 const QUERIES = new Set(['', '?answer=no', '?answer=yes', '?challenge=1']);

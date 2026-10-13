@@ -22,6 +22,7 @@ import {kimiForecast} from './kimi-forecaster.mjs';
 import {handleAlchemyWebhook, getAlchemyActivities} from './alchemy-webhook.mjs';
 import {listingForCollection, parseKuruListings, readKuruCollection} from './kuru-collection.mjs';
 import {creEvidenceForManifest} from './cre-evidence.mjs';
+import {loadPublicPerplContext} from './perpl-relay.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(), sharedLimits = true,
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', networkMode = 'local_fork', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
@@ -153,6 +154,13 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         }
       }
       if (req.method === 'GET' && url.pathname === '/api/preview') return send(res,200,{inviteOnly:!!previewAllows,applicationUrl:applications?null:previewAccess?.applicationUrl||null,...(applications?{nativeApplications:true}:{})});
+      if (url.pathname === '/api/perpl/context') {
+        const login = await getLogin();
+        if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
+        if (req.method !== 'GET' || url.search) return send(res, 405, {error:'Method not allowed.'});
+        try { return send(res, 200, await loadPublicPerplContext()); }
+        catch { return send(res, 502, {error:'Perpl market data is unavailable. Try again shortly.'}); }
+      }
       if (url.pathname === '/api/semantic-status') {
         const login = await getLogin();
         if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});

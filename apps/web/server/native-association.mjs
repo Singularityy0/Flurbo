@@ -1,5 +1,5 @@
 // These public fingerprints identify installed Android builds. They are not keys.
-// Keep the package ID aligned with apps/mobile/app.json; changing it breaks login.
+// The native app (apps/native) uses this same package id. Changing it breaks passkey login.
 import association from '../../../config/mobile-passkeys.json' with { type: 'json' };
 export function androidAssetLinks(env = process.env) {
   const raw = env.FLURBO_ANDROID_CERT_SHA256 ?? association.certificateSha256.join(',');
@@ -13,4 +13,12 @@ export function androidAssetLinks(env = process.env) {
   return [{ relation: ['delegate_permission/common.handle_all_urls', 'delegate_permission/common.get_login_creds'], target: {
     namespace: 'android_app', package_name: association.androidPackage, sha256_cert_fingerprints: fingerprints,
   } }];
+}
+
+// iOS passkeys need the Apple team id in the site association. Absent until that id is known.
+export function iosAppSiteAssociation(env = process.env) {
+  const team = String(env.FLURBO_IOS_TEAM_ID || '').trim();
+  if (!/^[A-Z0-9]{10}$/.test(team)) return null;
+  const appId = `${team}.${association.androidPackage}`;
+  return { webcredentials: { apps: [appId] }, applinks: { apps: [], details: [{ appID: appId, paths: ['*'] }] } };
 }

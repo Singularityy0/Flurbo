@@ -76,9 +76,9 @@ Public Monad/AUSD/Kuru infrastructure checks and the Expo/Mera setup requirement
 are recorded in [integration readiness](docs/INTEGRATION_READINESS.md), with a
 repeatable read-only probe. These checks do not constitute completed integrations.
 
-The [Expo mobile preview](apps/mobile/README.md) now provides the native client
-foundation and a read-only testnet connection check. Account authentication,
-balances and trading are not connected; native-device validation remains pending.
+The [iOS and Android app](apps/native/README.md) is a native shell around the
+website, so sign-in, markets, portfolio and trading follow the site. The earlier
+Expo project in `apps/mobile` is retired.
 
 ## Current phase
 

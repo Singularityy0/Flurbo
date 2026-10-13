@@ -9,7 +9,7 @@ import { SessionStore } from '../server/session.mjs';
 import { RedisSessionStore, redisCommand } from '../server/redis-session.mjs';
 import { hostedConfig, TESTNET } from '../server/network.mjs';
 import { productionServer } from '../server/production.mjs';
-import { androidAssetLinks } from '../server/native-association.mjs';
+import { androidAssetLinks, iosAppSiteAssociation } from '../server/native-association.mjs';
 
 const signer = privateKeyToAccount(('0x' + '11'.repeat(32)) as `0x${string}`);
 const origin = 'https://flurbo.singu.online';
@@ -88,13 +88,24 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     config.androidAssetLinks = androidAssetLinks({FLURBO_ANDROID_CERT_SHA256:Array(32).fill('AB').join(':')});
     const association = await request('/.well-known/assetlinks.json',undefined,'','flurbo.singu.online','');
     assert.equal(association.status,200); assert.deepEqual(association.json(),config.androidAssetLinks);
+    assert.match(association.headers['content-security-policy'],/https:\/\/testnet-rpc\.monad\.xyz/);
+    assert.match(association.headers['content-security-policy'],/wss:\/\/relay\.walletconnect\.org/);
     assert.ok(association.json()[0].relation.includes('delegate_permission/common.handle_all_urls'));
     assert.ok(association.json()[0].relation.includes('delegate_permission/common.get_login_creds'));
     assert.equal(association.headers['content-type'],'application/json'); assert.equal(association.headers.location,undefined);
     assert.equal((await request('/.well-known/assetlinks.json',undefined,'','evil.example')).status,421);
     assert.equal((await request('/.well-known/assetlinks.json',{})).status,405);
+    assert.equal((await request('/.well-known/apple-app-site-association')).status,404);
+    config.iosAppSiteAssociation = iosAppSiteAssociation({ FLURBO_IOS_TEAM_ID: 'AB12CD34EF' });
+    const apple = await request('/.well-known/apple-app-site-association');
+    assert.equal(apple.status,200);
+    assert.deepEqual(apple.json().webcredentials.apps,['AB12CD34EF.dev.flurbo.preview']);
+    assert.equal(apple.headers['content-type'],'application/json');
+    assert.equal((await request('/.well-known/apple-app-site-association',{})).status,405);
     assert.equal((await request('/account')).status,404); // Client route waits for verified auth.
     assert.equal((await request('/portfolio')).status,200);
+    assert.equal((await request('/perpl')).status,200);
+    assert.equal((await request('/api/perpl/context')).status,401);
     assert.equal((await request('/history')).status,200);
     // Direct visits and refreshes must serve the same shell as client-side navigation.
     // Agent data remains protected by the API's passkey and invite checks.

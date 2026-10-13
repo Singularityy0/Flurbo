@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Flurbo</string>
+    <string name="title_activity_main">Flurbo</string>
+    <string name="package_name">dev.flurbo.preview</string>
+    <string name="custom_url_scheme">flurbo</string>
+    <string name="asset_statements" translatable="false">[{ \"relation\": [\"delegate_permission/common.get_login_creds\"], \"target\": { \"namespace\": \"web\", \"site\": \"https://flurbo.singu.online\" } }]</string>
+</resources>
