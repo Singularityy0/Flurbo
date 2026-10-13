@@ -4,6 +4,8 @@ import { Link } from 'wouter';
 import { formatUnits } from 'viem';
 import { useAuth } from '../auth/context';
 import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
+import { meraProvider } from '../auth/mera-provider';
+import { openPasskeyTradingSession, PASSKEY_WALLET_NAME } from '../auth/passkey-wallet';
 import { amount, walletKey, tradingWalletKey } from '../portfolio';
 import { check, events, loadState, pendingKeyFor, prepare, readPending, submit, atoms, type Action, type Pending, type Provider, type Review, type State } from '../kuru';
 import './portfolio.css';
@@ -29,6 +31,12 @@ export default function Kuru({ onBusy, onConvert, endpoint = '/api/kuru', receip
   const reviewRef = useRef(review); reviewRef.current = review;
   useEffect(() => { live.current = true; return () => { live.current = false; ++generation.current; cleanup.current(); }; }, []);
   useEffect(() => discoverWallets(w => setWallets(previous => previous.some(v => v.provider === w.provider) ? previous : [...previous, w])), []);
+  useEffect(() => {
+    if (!auth.address) return;
+    const provider = meraProvider(controller);
+    setWallets(previous => previous.some(wallet => wallet.name === PASSKEY_WALLET_NAME) ? previous : [...previous, { name: PASSKEY_WALLET_NAME, provider }]);
+    return () => { provider.destroy(); setWallets(previous => previous.filter(wallet => wallet.provider !== provider)); };
+  }, [auth.address, controller]);
   useEffect(() => { const restore = () => { try { setPending(readPending(localStorage, storageKey)); setStorageError(false); } catch (e) { setStorageError(true); setNotice(message(e)); } }; restore(); window.addEventListener('storage', restore); return () => window.removeEventListener('storage', restore); }, [storageKey]);
   useEffect(() => { onBusy(busy || !!review || !!pending || storageError); return () => onBusy(false); }, [busy, review, pending, storageError, onBusy]);
   function save(p: Pending | null) { if (p) localStorage.setItem(storageKey, JSON.stringify(p)); else localStorage.removeItem(storageKey); if (live.current) setPending(p); }
@@ -42,8 +50,10 @@ export default function Kuru({ onBusy, onConvert, endpoint = '/api/kuru', receip
   async function connect() {
     cleanup.current(); ++generation.current; setReview(null); setOwner(''); setState(null);
     const version = generation.current;
-    const p: Provider | undefined = wallets[Number(choice)]?.provider;
-    if (!p) throw new Error('Install or open MetaMask, then reconnect.');
+    const selected = wallets[Number(choice)];
+    const p: Provider | undefined = selected?.provider;
+    if (!p) throw new Error('Install or open MetaMask, or choose the passkey account, then reconnect.');
+    await openPasskeyTradingSession(controller, selected?.name);
     const changed = () => { ++generation.current; setReview(null); setOwner(''); setState(null); setNotice('Wallet changed. Reconnect. Any submitted transaction remains in tracking.'); };
     for (const name of ['accountsChanged', 'chainChanged', 'disconnect']) p.on?.(name, changed);
     cleanup.current = () => { for (const name of ['accountsChanged', 'chainChanged', 'disconnect']) p.removeListener?.(name, changed); };
@@ -67,6 +77,7 @@ export default function Kuru({ onBusy, onConvert, endpoint = '/api/kuru', receip
   async function confirm() {
     const r = review, p = provider.current, version = generation.current;
     if (!r || !p || pending || storageError) return;
+    await openPasskeyTradingSession(controller, wallets.find(wallet => wallet.provider === p)?.name);
     if (!navigator.locks) throw new Error('This browser needs Web Locks support to protect wallet submissions.');
     await navigator.locks.request('flurbo-kuru-submit', { ifAvailable: true }, async lock => {
       if (!lock || readPending(localStorage, storageKey)) throw new Error('A Kuru transaction is already being tracked.');
@@ -90,8 +101,8 @@ export default function Kuru({ onBusy, onConvert, endpoint = '/api/kuru', receip
   const disabled = busy || !!pending || storageError;
   const activity = state && owner ? events(state.activity.logs, state.contracts.market, owner).reverse() : [];
   return <div className="portfolio-view kuru-view">
-    <section className="kuru-intro"><span className="eyebrow">{receiptLabel} / AUSD · Kuru</span><h2>A place for your <em>single view.</em></h2><p>Trade {receiptLabel} receipts on the order book. Combined claims continue to trade with Flurbo’s shared pool.</p><p>Test assets and operator seed liquidity. <Link href={primaryHref} onClick={e => { if (disabled || review) e.preventDefault(); else onConvert(); }}>{endpoint==='/api/kuru'?'Convert H YES holdings to receipts in Explore & trade.':'Return to the primary Flurbo market.'}</Link></p></section>
-    <section className="portfolio-wallet"><div><label htmlFor="kuru-wallet">Trading wallet</label><select id="kuru-wallet" disabled={busy || !!review} value={choice} onChange={e => { setChoice(e.target.value); setOwner(''); setState(null); ++generation.current; cleanup.current(); provider.current = null; }}>{wallets.map((w, i) => <option value={i} key={i}>{w.name}</option>)}</select></div><button className="button button-dark" disabled={busy || !!review} onClick={() => void run(connect)}>Connect MetaMask</button>{owner && <p className="portfolio-address">Trading as {owner}. Your Mera login stays separate.</p>}</section>
+    <section className="kuru-intro"><span className="eyebrow">{receiptLabel} / AUSD · Kuru</span><h2>A place for your <em>single view.</em></h2><p>Trade {receiptLabel} receipts on the order book. Combined claims continue to trade with Flurbo’s shared pool.</p><p>These orders are Kuru contract calls. A fill is a successful receipt that contains the matching Kuru event. A simulation is not a fill. {state ? (state.trading_available ? 'This listing is open for new orders.' : 'This listing is not open for new orders. Deposits, withdrawals, and cancellation can still be reviewed.') : 'Connect a wallet to see whether this listing is open.'}</p><p>Test assets and operator seed liquidity. <Link href={primaryHref} onClick={e => { if (disabled || review) e.preventDefault(); else onConvert(); }}>{endpoint==='/api/kuru'?'Convert H YES holdings to receipts in Explore & trade.':'Return to the primary Flurbo market.'}</Link></p></section>
+    <section className="portfolio-wallet"><div><label htmlFor="kuru-wallet">Trading wallet</label><select id="kuru-wallet" disabled={busy || !!review} value={choice} onChange={e => { setChoice(e.target.value); setOwner(''); setState(null); ++generation.current; cleanup.current(); provider.current = null; }}>{wallets.map((w, i) => <option value={i} key={i}>{w.name}</option>)}</select></div><button className="button button-dark" disabled={busy || !!review} onClick={() => void run(connect)}>{wallets[Number(choice)]?.name === PASSKEY_WALLET_NAME ? 'Connect passkey account' : 'Connect MetaMask'}</button>{owner && <p className="portfolio-address">Trading as {owner}. {wallets[Number(choice)]?.name === PASSKEY_WALLET_NAME ? 'This passkey session signs the Kuru call.' : 'MetaMask signs the Kuru call.'}</p>}</section>
     <p role="status" className="kuru-notice">{notice}</p>
     {confirmedHash && <p className="portfolio-footnote"><a href={`https://testnet.monadscan.com/tx/${confirmedHash}`} target="_blank" rel="noreferrer">View the last checked transaction receipt</a></p>}
     {storageError && <section className="kuru-card"><h3>Saved tracking needs attention.</h3><p>Signing is blocked because the saved transaction record could not be read. Check wallet activity before removing it. This does not cancel a transaction.</p><label className="kuru-checkbox"><input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)}/>I checked wallet activity and understand the risk of submitting twice.</label><button className="button button-outline" disabled={busy || !ack} onClick={() => void run(async () => { save(null); setStorageError(false); setAck(false); })}>Remove unreadable tracking</button></section>}

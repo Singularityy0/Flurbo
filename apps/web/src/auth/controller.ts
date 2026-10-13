@@ -6,7 +6,7 @@ import {
 import { HDKey, HARDENED_OFFSET } from "@scure/bip32";
 import { entropyToMnemonic, mnemonicToSeedSync } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
-import { SESSION_MS, type AuthPolicy } from "./policy.ts";
+import { SESSION_MS, SIGNING_MS, type AuthPolicy } from "./policy.ts";
 import { hashMessage, hexToBytes, bytesToHex, serializeSignature, type Hex } from 'viem';
 import type { SessionTransport } from './server-session.ts';
 
@@ -84,6 +84,7 @@ export class AuthController {
   #key: string;
   #session?: Secp256k1SigningSession;
   #timer?: ReturnType<typeof setTimeout>;
+  #signingTimer?: ReturnType<typeof setTimeout>;
   #generation = 0;
   #inFlight = false;
   #signedOut = false;
@@ -116,10 +117,11 @@ export class AuthController {
     } catch { /* Missing or malformed metadata is not an authenticated account. */ }
     return undefined;
   }
-  #endSession() { clearTimeout(this.#timer); this.#session?.end(); this.#session = undefined; }
+  #clearSigning() { clearTimeout(this.#signingTimer); this.#session?.end(); this.#session = undefined; }
+  #endSession() { clearTimeout(this.#timer); this.#clearSigning(); }
   lockSigning = () => {
     this.#generation++;
-    this.#endSession();
+    this.#clearSigning();
     this.#update({ busy: false, signingExpiresAt: null });
   };
   restore = async () => {
@@ -139,9 +141,59 @@ export class AuthController {
     } catch { if (generation === this.#generation) this.#update({ notice: 'Account service is unavailable. Sign in again before continuing.' }); }
     finally { if (generation === this.#generation) this.#update({ restoring: false }); }
   };
-  async signDigest(_digest: Hex): Promise<Awaited<ReturnType<Secp256k1SigningSession['signDigest']>>> {
-    throw new Error('Mera is for account access only. Use MetaMask for transactions.');
+  async signDigest(digest: Hex): Promise<Awaited<ReturnType<Secp256k1SigningSession['signDigest']>>> {
+    this.checkExpiry();
+    const until = this.#snapshot.signingExpiresAt;
+    if (!this.#session || until === null || this.#now() >= until) throw new Error('Mera is for account access only. Use MetaMask for transactions.');
+    return this.#session.signDigest(hexToBytes(digest));
   }
+  // One more passkey prompt. The derived key stays only for SIGNING_MS, then it is wiped. Login itself never keeps it.
+  unlockSigning = async (): Promise<boolean> => {
+    if (this.#inFlight) return false;
+    if (!this.policy.rpId) { this.#update({ error: this.policy.reason }); return false; }
+    const login = this.#snapshot.address;
+    const known = this.#read();
+    if (!login || !known || known.address.toLowerCase() !== login.toLowerCase()) {
+      this.#update({ error: 'Sign in with the remembered passkey before opening a trading session.' });
+      return false;
+    }
+    this.#inFlight = true;
+    const generation = ++this.#generation;
+    this.#clearSigning();
+    this.#update({ busy: true, signingExpiresAt: null, error: null });
+    let result: { credentialId: string; prfOutput: Uint8Array } | undefined;
+    let derived: ReturnType<typeof deriveAccount> | undefined;
+    let keep = false;
+    try {
+      result = await getPasskeyPrfOutput({ rpId: this.policy.rpId, credential: { credentialId: known.credentialId }, timeout: 60_000, webAuthnClient: this.#client });
+      if (generation !== this.#generation) return false;
+      if (result.credentialId !== known.credentialId) {
+        this.#update({ error: 'A different passkey was returned. Sign in again before opening a trading session.' });
+        return false;
+      }
+      derived = deriveAccount(result.prfOutput);
+      if (derived.address.toLowerCase() !== login.toLowerCase()) {
+        this.#update({ error: 'This passkey returned a different account address. The trading session was not opened.' });
+        return false;
+      }
+      this.#session = derived.session;
+      derived = undefined;
+      keep = true;
+      if (generation !== this.#generation) { this.#clearSigning(); keep = false; return false; }
+      const signingExpiresAt = this.#now() + SIGNING_MS;
+      this.#signingTimer = setTimeout(() => { if (this.#now() >= signingExpiresAt) this.lockSigning(); }, SIGNING_MS);
+      this.#update({ signingExpiresAt, notice: null });
+      return true;
+    } catch (error) {
+      if (generation === this.#generation) this.#update({ error: this.#errorMessage(error, false) });
+      return false;
+    } finally {
+      result?.prfOutput.fill(0);
+      if (!keep) derived?.session.end();
+      this.#inFlight = false;
+      if (generation === this.#generation) this.#update({ busy: false });
+    }
+  };
   signOut = (notice: string | null = null) => {
     this.#signedOut = true;
     this.#generation++;

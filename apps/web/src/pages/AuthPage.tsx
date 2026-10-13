@@ -53,7 +53,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
         <div className="auth-address"><span className="field-label">Mera account address</span><code className="address">{state.address}</code>
           <button type="button" className="text-link auth-copy" onClick={() => void copyAddress()}><Copy size={15} strokeWidth={1.75} /> Copy address</button></div>
         <p className="field-help" role="status">{copyStatus}</p>
-        <p className="muted">Your login stays available for seven days. Connect MetaMask to trade; this account address is only for sign-in.</p>
+        <p className="muted">Your login stays available for seven days. On Your account, a trading session lets this passkey sign contract calls for ten minutes. MetaMask can still sign the same trades.</p>
         <button type="button" className="btn btn-secondary btn-lg btn-block" onClick={() => { controller.signOut("You are signed out. Your passkey stays in your password manager."); navigate("/login"); }}><LogOut size={16} strokeWidth={1.75} /> Sign out</button>
         <Link href="/#the-idea" className="text-link">Explore Flurbo <ArrowUpRight size={15} strokeWidth={1.75} /></Link>
       </section> : <section className="auth-body" aria-label={isLogin ? "Sign in with your passkey" : "Create a passkey account"}>
@@ -82,7 +82,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
         {state.error && <p className="callout callout-danger" role="alert">{state.error}</p>}
         <p className="auth-switch">{isLogin ? "New to Flurbo?" : "Already have a passkey?"} <Link href={isLogin ? "/signup" : "/login"} className="text-link">{isLogin ? "Create an account" : "Sign in"}</Link></p>
         <details className="disclosure auth-more"><summary>About passkeys</summary>
-          <p className="small muted">Your Mera passkey is your Flurbo login. Testnet access requires approval. Once approved, connect MetaMask to trade.</p>
+          <p className="small muted">Your Mera passkey is your Flurbo login. Testnet access requires approval. Once approved, open a trading session or connect MetaMask. Sign-in itself does not keep a signer.</p>
           <p className="small muted">Some devices ask you to confirm twice during setup. A compatible passkey provider is required. <a href="https://mera.category.xyz/authenticator-support/" target="_blank" rel="noreferrer">Check device support</a>.</p>
         </details>
       </section>}

@@ -4,6 +4,8 @@ import {CheckCircle2, Copy, Hourglass, LogOut} from 'lucide-react';
 import {useAuth} from '../auth/context';
 import type {Access} from '../auth/preview-access';
 import TradingWallets from './TradingWallets';
+import PasskeyAccount from './PasskeyAccount';
+import CreStatus from './CreStatus';
 import {AccessApplication,ApplicationReview} from './AccessApplication';
 import MetricsSummary from './MetricsSummary';
 import NoticeSettings from './NoticeSettings';
@@ -27,9 +29,11 @@ export default function AccessPage({access,error,checking,refresh}:{access:Acces
       {(!access?.nativeApplications||access.approved)&&<div className="access-actions">{access?.approved?<Link href="/markets" className="btn btn-primary">Explore markets</Link>:access?.applicationUrl?<a href={access.applicationUrl} target="_blank" rel="noreferrer" className="btn btn-primary">Request access</a>:null}<button className="btn btn-secondary" disabled={checking} onClick={()=>void refresh()}>{checking?'Checking…':access?.approved?'Refresh access':'Check access'}</button>{checking&&<span className="progress-line access-progress" aria-hidden="true"/>}</div>}
       {error&&<p role="alert" className="state-inline error">{error}</p>}
       {access&&!access.approved&&!access.applicationUrl&&!access.nativeApplications&&<div className="callout"><strong>Request access · Coming soon</strong><p>The application method is being prepared. Your account is saved; no application has been submitted.</p></div>}
-      {access?.approved?<p className="access-note">Your passkey signs you in. Your linked MetaMask wallets hold your trading funds. <Link href="/fund">Get test funds</Link> · <Link href="/portfolio">View portfolio</Link></p>:access&&!access.nativeApplications?<p className="access-note">Approval is for this Mera account. Once approved, link MetaMask to trade. Never include a seed phrase, private key or passkey recovery details in an application.</p>:null}
+      {access?.approved?<p className="access-note">Your passkey signs you in. Open a trading session below and that same passkey can sign Monad testnet contract calls for ten minutes. MetaMask still works. <Link href="/fund">Get test funds</Link> · <Link href="/portfolio">View portfolio</Link></p>:access&&!access.nativeApplications?<p className="access-note">Approval is for this Mera account. Once approved, open a passkey trading session or link MetaMask. Never include a seed phrase, private key or passkey recovery details in an application.</p>:null}
       {!approved&&access?.nativeApplications&&<p className="access-note">Approval is tied to this Mera account. MetaMask is connected later, for trading only. Never include a seed phrase, private key or passkey recovery details in an application.</p>}
     </section>
+    {access?.approved&&state.address&&<PasskeyAccount key={'passkey-'+state.address}/>}
+    {access?.approved&&<CreStatus/>}
     {access?.approved&&state.address&&<TradingWallets key={state.address} account={state.address}/>}
     {access?.approved&&state.address&&<NoticeSettings key={'notices-'+state.address}/>}
     {access?.testingTools&&<MetricsSummary key={'metrics-'+state.address}/>}

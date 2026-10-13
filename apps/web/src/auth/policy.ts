@@ -1,5 +1,7 @@
 export const PASSKEY_HOST = "flurbo.singu.online";
 export const SESSION_MS = 60 * 60 * 1000;
+// A trading session is a second passkey prompt. It can sign until this window ends, the tab closes, or the user locks it.
+export const SIGNING_MS = 10 * 60 * 1000;
 
 export type AuthPolicy = { rpId: string | null; local: boolean; reason: string | null; localUrl?: string };
 

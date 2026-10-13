@@ -4,7 +4,7 @@ import * as ed from '@noble/ed25519';
 import {
   PERPL_AUSD, PERPL_EXCHANGE, apiKeySignIn, applyFrame, beginOrder, collateralAmount, emptyDesk,
   collateralText, formatScaled, minimumLong, nextRequestId, orderOutcome, orderRequest, parseApiSecret, parseApiToken, parsePerplContext, scaleUnits,
-  tradeLeverage, wsSignInCanonical,
+  resumeDesk, tradeLeverage, wsSignInCanonical,
 } from '../src/perpl.ts';
 
 const context = () => ({ chain: { chain_id: 10143 }, instances: [{ id: 12, address: PERPL_EXCHANGE, collateral_token_id: 1, min_account_open_amount: '100000000' }],
@@ -116,4 +116,22 @@ test('request ids advance past the account cursor and a skipped heartbeat is not
   desk = applyFrame(desk, { mt: 100, sn: 6, h: 81 });
   assert.equal(desk.stale, true);
   assert.equal(desk.accounts[0].balance, '1000000');
+});
+
+test('a reconnect keeps an admitted order and drops the old heartbeat', () => {
+  const previous = {
+    ...emptyDesk(12), serial: 4, head: 9, stale: true, lastSequence: 40,
+    order: { serial: 4, requestId: 8, marketId: 16, accountId: 3, action: 1 as const, orderId: 77, phase: 'admitted' as const, gateway: 'Accepted for forwarding.' },
+    earlyFills: [{ oid: 77, marketId: 16, accountId: 3, price: 1, size: 1, txid: '0x' + 'ab'.repeat(32), block: 2 }],
+  };
+  const kept = resumeDesk(previous, 12);
+  assert.equal(kept.order?.orderId, 77);
+  assert.equal(kept.order?.phase, 'admitted');
+  assert.equal(kept.serial, 4);
+  assert.equal(kept.earlyFills.length, 1);
+  assert.equal(kept.lastSequence, undefined);
+  assert.equal(kept.head, 0);
+  assert.equal(kept.stale, false);
+  assert.equal(resumeDesk({ ...previous, order: { ...previous.order, phase: 'failed' } }, 12).order, null);
+  assert.equal(resumeDesk(previous, 99).order, null);
 });

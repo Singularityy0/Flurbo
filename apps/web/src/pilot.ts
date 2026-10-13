@@ -5,6 +5,7 @@ import { appFetch as fetch } from './platform-fetch.ts';
 import { takeEarly } from './prefetch.ts';
 import { pilotCall, type PilotManifest } from '../shared/pilot.mjs';
 import type { AuthController } from './auth/controller';
+import { passkeyAccountRequest } from './auth/passkey-trade.ts';
 import { semanticError } from '../../../packages/sdk/src/semantics.ts';
 export const semanticAcknowledgment = 'I understand this has no ordinary winning outcome';
 export type SemanticAssessment = { mode:'disabled'|'enforced'; configRevision:string; rulesDigest?:string; status?:string; coverage?:string; notice:string; ordinaryMaximumPayoutAtoms?:string; maximumVoidPayoutAtoms?:string };
@@ -97,6 +98,8 @@ export function pilotMera(controller:AuthController,namespace:PilotNamespace='pi
   return {async request({method,params=[]}) {
     const owner=controller.getSnapshot().address;
     if(['eth_accounts','eth_requestAccounts'].includes(method)) return owner?[owner]:[];
+    const signed = await passkeyAccountRequest(controller, method, params);
+    if (signed !== undefined) return signed;
     if (!['eth_chainId','eth_getBlockByNumber','eth_getCode','eth_call','eth_estimateGas','eth_gasPrice','eth_getBalance','eth_getTransactionReceipt','eth_getTransactionByHash','eth_getTransactionCount'].includes(method)) throw new Error('Mera is for account access only. Use MetaMask for transactions.');
     return rpc(method,params);
   }};

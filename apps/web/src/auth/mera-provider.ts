@@ -1,5 +1,6 @@
 import { appFetch as fetch } from '../platform-fetch.ts';
 import type { AuthController } from './controller';
+import { PASSKEY_SIGNING_ERROR, passkeyAccountRequest } from './passkey-trade.ts';
 import { WalletError } from '../../../dashboard/wallet.mjs';
 
 async function rpcRequest(method: string, params: unknown[] = [], market = 'original') {
@@ -26,7 +27,9 @@ export function meraProvider(controller: AuthController, market: 'original' | 'l
     async request({ method, params = [] }: { method: string; params?: unknown[] }) {
       const owner = controller.getSnapshot().address;
       if (['eth_accounts', 'eth_requestAccounts'].includes(method)) return owner ? [owner.toLowerCase()] : [];
-      if (['eth_sendTransaction','eth_sendRawTransaction','eth_sign','personal_sign','eth_signTypedData_v4'].includes(method)) throw new WalletError('Mera is for account access only. Use MetaMask for transactions.');
+      const signed = await passkeyAccountRequest(controller, method, params);
+      if (signed !== undefined) return signed;
+      if (['eth_sendTransaction','eth_sendRawTransaction','eth_sign','personal_sign','eth_signTypedData_v4'].includes(method)) throw new WalletError(PASSKEY_SIGNING_ERROR);
       if (!['eth_chainId', 'eth_getBlockByNumber', 'eth_call', 'eth_estimateGas', 'eth_gasPrice', 'eth_getBalance', 'eth_getTransactionReceipt', 'eth_getTransactionByHash', 'eth_getTransactionCount'].includes(method)) throw new Error('Unsupported wallet request');
       return rpc(method, params);
     },

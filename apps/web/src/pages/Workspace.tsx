@@ -39,10 +39,10 @@ function CoreMarket({ account, panel, market, onBusy }: { account: string | null
     tradingBalance.setAttribute('role', 'status');
     main.querySelector('#signer-status')!.after(tradingBalance);
     main.querySelector('#book-title')!.textContent = 'A market for the basics.';
-    main.querySelector('.account > .muted')!.textContent = 'Balances and positions belong to your selected trading wallet. Connecting MetaMask does not change your Mera login.';
+    main.querySelector('.account > .muted')!.textContent = 'Balances and positions belong to your selected trading wallet. A passkey trading session or MetaMask can sign. Neither changes your Mera login.';
     main.querySelector('.account .pill')!.textContent = 'On-chain balances';
-    main.querySelector('#setup-status')!.textContent = 'Fund your MetaMask account with test AUSD and MON. Mera is only for sign-in.';
-    main.querySelector('.wallet-help p:last-child')!.textContent = 'Connect MetaMask and confirm transactions in its wallet window.';
+    main.querySelector('#setup-status')!.textContent = 'Fund the wallet that will trade with test AUSD and MON. A passkey trading session signs for ten minutes. MetaMask remains available.';
+    main.querySelector('.wallet-help p:last-child')!.textContent = 'Choose the passkey account or MetaMask, then confirm each transaction.';
     main.querySelector('label[for="wallet-provider"]')!.textContent = 'Trading wallet';
     if (publicTestnet) {
       (main.querySelector('#setup-wallet') as HTMLElement).hidden = true;
@@ -50,10 +50,10 @@ function CoreMarket({ account, panel, market, onBusy }: { account: string | null
       main.querySelector('.quote-footer')!.textContent = 'Review your quote to approve AUSD or trade. Public Monad testnet assets only.';
       const bookHelp = main.querySelector('.book .caption');
       if (bookHelp) bookHelp.textContent = 'Indicative depth only. Execution requires a reviewed quote. Synthetic operator liquidity.';
-      main.querySelector('#setup-status')!.textContent = 'Use your connected MetaMask balance. The funding panel above funds MetaMask; Mera is for account access only.';
+      main.querySelector('#setup-status')!.textContent = 'Use the connected wallet balance. Get test funds sends starter assets to MetaMask. A passkey trading session signs contract calls for its own address.';
       main.querySelector('.wallet-help')!.innerHTML = '<summary>Monad testnet network</summary><p>Chain ID 10143. RPC https://testnet-rpc.monad.xyz. Use public test assets only.</p>';
     }
-    main.querySelector('.trading > .caption')!.textContent = 'Confirm every approval, trade and redemption in MetaMask.';
+    main.querySelector('.trading > .caption')!.textContent = 'Confirm every approval, trade and redemption in the wallet you connected.';
     // Progressive disclosure keeps conversion and settlement available without
     // making the first trade compete with every advanced action.
     for (const heading of Array.from(main.querySelectorAll('.trading h3'))) {

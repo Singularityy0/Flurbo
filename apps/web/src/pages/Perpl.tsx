@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import {
   PERPL_ACTIONS, PERPL_APP_URL, PERPL_DOCS_URL, PERPL_KEYS_URL, apiKeySignIn, applyFrame, beginOrder, collateralAmount,
-  emptyDesk, formatScaled, nextRequestId, orderOutcome, orderRequest, parseApiSecret, parseApiToken,
+  emptyDesk, formatScaled, nextRequestId, orderOutcome, orderRequest, parseApiSecret, parseApiToken, resumeDesk,
   parsePerplContext, scaleUnits, tradeLeverage, type PerplAction, type PerplContext, type PerplDesk,
 } from '../perpl';
 import './perpl.css';
@@ -43,6 +43,8 @@ export default function Perpl() {
   const [confirmed, setConfirmed] = useState<{ text: string; txid?: string } | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const deskRef = useRef<PerplDesk | null>(null);
+  const reviewed = useRef<{ action: PerplAction; sizeText: string; priceText: string } | null>(null);
+  const reconnects = useRef(0);
   deskRef.current = desk;
   const account = desk?.accounts[0];
   const market = context?.markets.find(item => item.id === marketId) ?? null;
@@ -95,13 +97,14 @@ export default function Perpl() {
     setSaved(null); setLink('off'); setReview(false); setStreamError(''); setConfirmed(null);
     if (context) setDesk(emptyDesk(context.instanceId));
   }
-  function connect() {
+  function connect(preserve = false) {
     if (!saved || !context) return;
     const previous = socketRef.current;
     socketRef.current = null;
     previous?.close();
     setStreamError(''); setReview(false); setLink('connecting');
-    const next = emptyDesk(context.instanceId);
+    if (!preserve) reconnects.current = 0;
+    const next = preserve ? resumeDesk(deskRef.current, context.instanceId) : emptyDesk(context.instanceId);
     setDesk(next);
     const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/perpl/trade`);
     socketRef.current = socket;
@@ -118,38 +121,55 @@ export default function Perpl() {
     };
     socket.onclose = event => {
       if (socketRef.current !== socket) return;
+      const phase = deskRef.current?.order?.phase;
+      if (phase === 'filled') { setLink('off'); return; }
+      if ((phase === 'sent' || phase === 'admitted') && reconnects.current < 1) {
+        reconnects.current += 1;
+        connect(true);
+        return;
+      }
       setLink('off');
-      if (deskRef.current?.order?.phase === 'filled') return;
       if (event.code === 3401) setStreamError('Perpl rejected this key. Create a trade-scoped key and paste it again.');
       else if (event.code !== 1000) setStreamError('The Perpl connection closed before a fill.');
     };
   }
-  function draft() {
+  function draft(overrides?: { action?: PerplAction; sizeText?: string; priceText?: string }) {
     if (!desk || !account || !market) throw new Error('Connect before placing an order.');
+    const nextAction = overrides?.action ?? action;
+    const nextSize = overrides?.sizeText ?? sizeText;
+    const nextPrice = overrides?.priceText ?? priceText;
     const leverage = tradeLeverage(market.initialMargin);
     const requestId = nextRequestId(account.lastRequest, 0);
     const serial = desk.serial + 1;
-    const sized = action !== 5 && action !== 6;
-    const size = sized ? scaleUnits(sizeText.trim() || formatScaled(1, market.sizeDecimals), market.sizeDecimals) : undefined;
-    const price = sized && priceText.trim() ? scaleUnits(priceText, market.priceDecimals) : 0;
-    const orderId = action === 5 || action === 7 ? Number(orderIdText) : undefined;
+    const sized = nextAction !== 5 && nextAction !== 6;
+    const size = sized ? scaleUnits(nextSize.trim() || formatScaled(1, market.sizeDecimals), market.sizeDecimals) : undefined;
+    const price = sized && nextPrice.trim() ? scaleUnits(nextPrice, market.priceDecimals) : 0;
+    const orderId = nextAction === 5 || nextAction === 7 ? Number(orderIdText) : undefined;
     const frame = orderRequest({
-      action, marketId: market.id, accountId: account.id, requestId, serial, leverage,
-      size, price: sized ? price : undefined, orderId, amount: action === 6 ? amountText : undefined,
+      action: nextAction, marketId: market.id, accountId: account.id, requestId, serial, leverage,
+      size, price: sized ? price : undefined, orderId, amount: nextAction === 6 ? amountText : undefined,
     });
     return { frame, requestId, serial };
   }
   function reviewOrder() {
-    try { draft(); setStreamError(''); setReview(true); }
-    catch (error) { setReview(false); setStreamError(error instanceof Error ? error.message : 'Check the order.'); }
+    try { draft(); reviewed.current = { action, sizeText, priceText }; setStreamError(''); setReview(true); }
+    catch (error) { reviewed.current = null; setReview(false); setStreamError(error instanceof Error ? error.message : 'Check the order.'); }
+  }
+  function reviewFill() {
+    const marketOrder = { action: 1 as PerplAction, sizeText: '', priceText: '' };
+    setAction(1); setSizeText(''); setPriceText(''); setOrderIdText(''); setAmountText('');
+    try { draft(marketOrder); reviewed.current = marketOrder; setStreamError(''); setReview(true); }
+    catch (error) { reviewed.current = null; setReview(false); setStreamError(error instanceof Error ? error.message : 'Check the order.'); }
   }
   function place() {
     const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN || !desk || !account || !market?.open || account.frozen || !account.forwarding || desk.stale || inFlight) return;
+    const chosen = reviewed.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !desk || !account || !market?.open || account.frozen || !account.forwarding || desk.stale || inFlight || !chosen) return;
     try {
-      const { frame, requestId, serial } = draft();
-      setDesk(beginOrder(desk, { serial, requestId, marketId: market.id, accountId: account.id, action, phase: 'sent' }));
+      const { frame, requestId, serial } = draft(chosen);
+      setDesk(beginOrder(desk, { serial, requestId, marketId: market.id, accountId: account.id, action: chosen.action, phase: 'sent' }));
       socket.send(JSON.stringify(frame));
+      reviewed.current = null;
       setReview(false);
     } catch (error) { setStreamError(error instanceof Error ? error.message : 'The order could not be sent.'); }
   }
@@ -188,7 +208,7 @@ export default function Perpl() {
         <div className="perpl-step-head"><h2><span className="perpl-index">3</span> Account</h2></div>
         <p>An enrolled key is not an exchange account. Open one on Perpl with at least {context ? collateralAmount(context.minimumDeposit) : '…'} AUSD, and turn on one-click trading so orders can be forwarded. <a href={PERPL_APP_URL} target="_blank" rel="noreferrer">Open the Perpl testnet app</a></p>
         <div className="perpl-actions">
-          <button type="button" className="btn btn-primary" onClick={connect} disabled={!saved || !context || link === 'connecting'}>{link === 'on' ? 'Reconnect' : link === 'connecting' ? 'Connecting…' : 'Connect'}</button>
+          <button type="button" className="btn btn-primary" onClick={() => connect()} disabled={!saved || !context || link === 'connecting'}>{link === 'on' ? 'Reconnect' : link === 'connecting' ? 'Connecting…' : 'Connect'}</button>
         </div>
         {streamError && <p role="alert">{streamError}</p>}
         {link === 'on' && !account && <p role="status">Connected. Waiting for the account snapshot.</p>}
@@ -229,7 +249,10 @@ export default function Perpl() {
         </div>
         {desk?.order?.orderId ? <p>Last order id in this session: {desk.order.orderId}. Use it to cancel or change that order.</p> : null}
         <div className="perpl-actions">
-          {!review ? <button type="button" className="btn btn-primary" disabled={!market || link !== 'on' || !account || account.frozen || !account.forwarding || desk?.stale || inFlight} onClick={reviewOrder}>Review {actionLabel.toLowerCase()}</button>
+          {!review ? <>
+            <button type="button" className="btn btn-primary" disabled={!market || link !== 'on' || !account || account.frozen || !account.forwarding || desk?.stale || inFlight} onClick={reviewFill}>Review the market fill</button>
+            <button type="button" className="btn btn-secondary" disabled={!market || link !== 'on' || !account || account.frozen || !account.forwarding || desk?.stale || inFlight} onClick={reviewOrder}>Review {actionLabel.toLowerCase()}</button>
+          </>
             : <>
               <button type="button" className="btn btn-primary" disabled={link !== 'on' || !account || account.frozen || !account.forwarding || !!desk?.stale || inFlight} onClick={place}>Confirm testnet order</button>
               <button type="button" className="btn btn-secondary" onClick={() => setReview(false)}>Back</button>
