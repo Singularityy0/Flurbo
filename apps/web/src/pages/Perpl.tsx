@@ -2,9 +2,11 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'wouter';
 import { ArrowLeft } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
+import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
+import { TESTNET } from '../../server/network.mjs';
 import {
   PERPL_ACTIONS, PERPL_APP_URL, PERPL_DOCS_URL, PERPL_KEYS_URL, apiKeySignIn, applyFrame, beginOrder, collateralAmount,
-  emptyDesk, formatScaled, nextRequestId, orderOutcome, orderRequest, parseApiSecret, parseApiToken, resumeDesk,
+  emptyDesk, enrollApiKey, formatScaled, nextRequestId, orderOutcome, orderRequest, parseApiSecret, parseApiToken, resumeDesk,
   parsePerplContext, scaleUnits, tradeLeverage, type PerplAction, type PerplContext, type PerplDesk,
 } from '../perpl';
 import './perpl.css';
@@ -28,6 +30,8 @@ export default function Perpl() {
   const [tokenInput, setTokenInput] = useState('');
   const [secretInput, setSecretInput] = useState('');
   const [keyError, setKeyError] = useState('');
+  const [enrolling, setEnrolling] = useState(false);
+  const [wallets, setWallets] = useState<BrowserWallet[]>([]);
   const [saved, setSaved] = useState<Saved | null>(null);
   const [marketId, setMarketId] = useState(0);
   const [desk, setDesk] = useState<PerplDesk | null>(null);
@@ -52,6 +56,7 @@ export default function Perpl() {
   const inFlight = desk?.order?.phase === 'sent' || desk?.order?.phase === 'admitted';
 
   useEffect(() => { setSaved(readSaved()); }, []);
+  useEffect(() => discoverWallets(wallet => setWallets(current => current.some(item => item.provider === wallet.provider) ? current : [...current, wallet])), []);
   useEffect(() => {
     const controller = new AbortController();
     fetch('/api/perpl/context', { credentials: 'same-origin', signal: controller.signal })
@@ -88,6 +93,42 @@ export default function Perpl() {
       sessionStorage.setItem(STORAGE, JSON.stringify({ token, secret: secretInput.trim() }));
       setSaved(next); setTokenInput(''); setSecretInput(''); setKeyError('');
     } catch (error) { setKeyError(error instanceof Error ? error.message : 'That key could not be saved.'); }
+  }
+  function keyErrorText(error: unknown) {
+    const code = (error as { code?: number })?.code;
+    if (code === 4001) return 'Enrollment cancelled in MetaMask.';
+    return error instanceof Error ? error.message : 'That key could not be created.';
+  }
+  async function enroll() {
+    if (enrolling) return;
+    setEnrolling(true); setKeyError('');
+    try {
+      const provider = wallets[0]?.provider;
+      if (!provider) throw new Error('Open Flurbo in MetaMask or install its extension.');
+      await provider.request({ method: 'eth_requestAccounts' });
+      if (await provider.request({ method: 'eth_chainId' }) !== '0x279f') {
+        try { await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x279f' }] }); }
+        catch (error) {
+          if ((error as { code?: number })?.code !== 4902) throw error;
+          await provider.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x279f', chainName: 'Monad Testnet', nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 }, rpcUrls: [TESTNET.rpc], blockExplorerUrls: [TESTNET.explorer] }] });
+        }
+      }
+      const accounts = await provider.request({ method: 'eth_accounts' });
+      const address = Array.isArray(accounts) ? String(accounts[0] ?? '') : '';
+      if (!/^0x[0-9a-fA-F]{40}$/.test(address)) throw new Error('Select a MetaMask account.');
+      if (await provider.request({ method: 'eth_chainId' }) !== '0x279f') throw new Error('Select Monad testnet in MetaMask and try again.');
+      const enrolled = await enrollApiKey({
+        address,
+        signTypedData: async typedData => {
+          const signature = await provider.request({ method: 'eth_signTypedData_v4', params: [address, JSON.stringify(typedData)] });
+          if (typeof signature !== 'string') throw new Error('MetaMask did not return an enrollment signature.');
+          return signature;
+        },
+      });
+      sessionStorage.setItem(STORAGE, JSON.stringify({ token: enrolled.token, secret: enrolled.secretHex }));
+      setSaved({ token: enrolled.token, secret: enrolled.secret }); setTokenInput(''); setSecretInput('');
+    } catch (error) { setKeyError(keyErrorText(error)); }
+    finally { setEnrolling(false); }
   }
   function forgetKey() {
     const previous = socketRef.current;
@@ -129,7 +170,7 @@ export default function Perpl() {
         return;
       }
       setLink('off');
-      if (event.code === 3401) setStreamError('Perpl rejected this key. Create a trade-scoped key and paste it again.');
+      if (event.code === 3401) setStreamError('Perpl rejected this key. Create a trade-scoped key and try again.');
       else if (event.code !== 1000) setStreamError('The Perpl connection closed before a fill.');
     };
   }
@@ -182,7 +223,7 @@ export default function Perpl() {
   return <main id="main" className="page page-task perpl-page" tabIndex={-1}>
     <PageHeader back={<Link href="/markets" className="link-back"><ArrowLeft size={16} strokeWidth={1.75} /> Back to markets</Link>}
       title="Perpl testnet" lead="Open, close, cancel, or change a Monad testnet perpetual and wait for Perpl’s record. A Flurbo pool trade does not confirm it." />
-    <p className="callout">Perpl has not approved key enrollment from this site. Create the key on Perpl, then paste it here. The private key stays in this browser session. This server only relays messages that are already signed.</p>
+    <p className="callout">This site can enroll a Perpl trade key with one MetaMask signature. The private key stays in this browser session. This server only relays messages that are already signed.</p>
     <ol className="perpl-steps">
       <li className={context ? 'done' : ''}>
         <div className="perpl-step-head"><h2><span className="perpl-index">1</span> Markets</h2></div>
@@ -194,15 +235,24 @@ export default function Perpl() {
       </li>
       <li className={saved ? 'done' : ''}>
         <div className="perpl-step-head"><h2><span className="perpl-index">2</span> API key</h2>
-          <a href={PERPL_KEYS_URL} target="_blank" rel="noreferrer">Create a testnet key</a></div>
-        <p>On Perpl, create a key with trade scope for Monad testnet (chain 10143). Paste the token and the Ed25519 private key below. <a href={PERPL_DOCS_URL} target="_blank" rel="noreferrer">Perpl’s authentication guide</a> describes this paste path, and the order and fill rules.</p>
+          <a href={PERPL_DOCS_URL} target="_blank" rel="noreferrer">Enrollment and signing</a></div>
+        <p>Approve a trade-scoped key for Monad testnet (chain 10143) in MetaMask. A fill is a later <code>mt: 25</code> record, not the “accepted for forwarding” reply. <a href={PERPL_APP_URL} target="_blank" rel="noreferrer">Open the Perpl testnet app</a> if this wallet still needs an exchange account.</p>
         {saved ? <div className="perpl-actions"><p>A key is saved for this browser session.</p><button type="button" className="btn btn-secondary" onClick={forgetKey}>Remove key</button></div>
-          : <form className="perpl-key" onSubmit={saveKey}>
-            <label className="field">API token<input value={tokenInput} onChange={event => setTokenInput(event.target.value)} autoComplete="off" spellCheck={false} required /></label>
-            <label className="field">Private key<input value={secretInput} onChange={event => setSecretInput(event.target.value)} type="password" autoComplete="off" spellCheck={false} required /></label>
+          : <>
+            <div className="perpl-actions">
+              <button type="button" className="btn btn-primary" disabled={enrolling} onClick={() => void enroll()}>{enrolling ? 'Confirm in MetaMask…' : 'Create a trade key with MetaMask'}</button>
+            </div>
             {keyError && <p className="field-error" role="alert">{keyError}</p>}
-            <button type="submit" className="btn btn-primary">Save key in this session</button>
-          </form>}
+            <details className="perpl-existing">
+              <summary>Use an existing key</summary>
+              <p>Paste a token and Ed25519 private key from <a href={PERPL_KEYS_URL} target="_blank" rel="noreferrer">Perpl’s key page</a> if you already created one there.</p>
+              <form className="perpl-key" onSubmit={saveKey}>
+                <label className="field">API token<input value={tokenInput} onChange={event => setTokenInput(event.target.value)} autoComplete="off" spellCheck={false} required /></label>
+                <label className="field">Private key<input value={secretInput} onChange={event => setSecretInput(event.target.value)} type="password" autoComplete="off" spellCheck={false} required /></label>
+                <button type="submit" className="btn btn-secondary">Save key in this session</button>
+              </form>
+            </details>
+          </>}
       </li>
       <li className={account ? 'done' : ''}>
         <div className="perpl-step-head"><h2><span className="perpl-index">3</span> Account</h2></div>
@@ -259,8 +309,8 @@ export default function Perpl() {
             </>}
         </div>
         {review && market && <p>Confirm: {summary} This uses test AUSD on Monad testnet.</p>}
-        {outcome && <p className={`perpl-outcome callout ${outcome.tone === 'ok' ? 'callout-attention' : outcome.tone === 'bad' ? 'callout-danger' : ''}`} role="status">{outcome.text}{outcome.tone === 'ok' && outcome.txid && <> <a href={`https://testnet.monadscan.com/tx/${outcome.txid}`} target="_blank" rel="noreferrer">View transaction</a></>}</p>}
-        {!outcome && confirmed && <p className="perpl-outcome callout callout-attention" role="status">{confirmed.text}{confirmed.txid && <> <a href={`https://testnet.monadscan.com/tx/${confirmed.txid}`} target="_blank" rel="noreferrer">View transaction</a></>}</p>}
+        {outcome && <p className={`perpl-outcome callout ${outcome.tone === 'ok' ? 'callout-attention' : outcome.tone === 'bad' ? 'callout-danger' : ''}`} role="status">{outcome.text}{outcome.tone === 'ok' && outcome.txid && <> <a className="perpl-tx" href={`https://testnet.monadscan.com/tx/${outcome.txid}`} target="_blank" rel="noreferrer">{outcome.txid}</a></>}</p>}
+        {!outcome && confirmed && <p className="perpl-outcome callout callout-attention" role="status">{confirmed.text}{confirmed.txid && <> <a className="perpl-tx" href={`https://testnet.monadscan.com/tx/${confirmed.txid}`} target="_blank" rel="noreferrer">{confirmed.txid}</a></>}</p>}
         {waited && inFlight && <p role="status">No fill has arrived yet. This is not a confirmed trade.</p>}
       </li>
     </ol>

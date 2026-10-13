@@ -106,6 +106,8 @@ test('hosted HTTP serves guarded SPA routes, secure login and MetaMask-only subm
     assert.equal((await request('/portfolio')).status,200);
     assert.equal((await request('/perpl')).status,200);
     assert.equal((await request('/api/perpl/context')).status,401);
+    assert.equal((await request('/api/perpl/api-key/payload',{chain_id:10143})).status,401);
+    assert.equal((await request('/api/perpl/api-key/enroll',{chain_id:10143})).status,401);
     assert.equal((await request('/history')).status,200);
     // Direct visits and refreshes must serve the same shell as client-side navigation.
     // Agent data remains protected by the API's passkey and invite checks.

@@ -7,7 +7,6 @@ import FirstBotGuide from './FirstBotGuide';
 import DocsShot from './DocsShot';
 import { SHOT_SIZE } from './docs-media/sizes';
 import signupShot from './docs-media/signup.png';
-import approvedShot from './docs-media/account-approved.png';
 import fundsShot from './docs-media/test-funds.png';
 import marketsShot from './docs-media/markets.png';
 import ticketShot from './docs-media/ticket-buy.png';
@@ -42,14 +41,14 @@ export default function Docs() {
   }, []);
   const explore = state.address
     ? <Link href="/markets" className="btn btn-primary docs-explore">Explore markets <ArrowUpRight size={16} strokeWidth={1.75} /></Link>
-    : <Link href="/signup" className="btn btn-primary docs-explore">Get early access <ArrowUpRight size={16} strokeWidth={1.75} /></Link>;
+    : <Link href="/signup" className="btn btn-primary docs-explore">Create account <ArrowUpRight size={16} strokeWidth={1.75} /></Link>;
   return <main id="main" tabIndex={-1} className="docs-page page">
     <header className="docs-hero">
       <h1>Understand the market.</h1>
       <p className="lead">A guide to accounts, predictions and payouts on Flurbo.</p>
-      <a className="docs-litepaper" href={LITEPAPER.href} type="application/pdf"><FileText size={18} strokeWidth={1.75} /><span>{LITEPAPER.label}</span><small>{LITEPAPER.detail}</small></a>
+      <a className="docs-litepaper" href={LITEPAPER.href} type="application/pdf"><FileText size={18} strokeWidth={1.75} /><span>{LITEPAPER.label}</span></a>
     </header>
-    <nav className="docs-quickstart" aria-label="Choose a guide"><a href="#getting-started"><strong>Make your first prediction</strong><small>Account, invitation, test funds and MetaMask.</small></a><a href="#combinations"><strong>Combine your ideas</strong><small>Understand when AND, OR and other choices pay.</small></a><a href="#agents"><strong>Build an agent</strong><small>Developer setup in TypeScript, Python, Rust or C++.</small></a></nav>
+    <nav className="docs-quickstart" aria-label="Choose a guide"><a href="#getting-started"><strong>Make your first prediction</strong><small>Account, test funds and MetaMask.</small></a><a href="#combinations"><strong>Combine your ideas</strong><small>Understand when AND, OR and other choices pay.</small></a><a href="#agents"><strong>Build an agent</strong><small>Developer setup in TypeScript, Python, Rust or C++.</small></a></nav>
     <div className="docs-layout">
       <aside className="docs-sidebar">
         <nav aria-label="Documentation contents">
@@ -69,14 +68,14 @@ export default function Docs() {
           <h2 id="getting-started-title">Getting started</h2>
           <ol className="docs-steps">
             <li><strong>Create your account.</strong> Use a Mera passkey to sign in to Flurbo. Keep that passkey safe: if you lose it, you lose this Flurbo account, and Flurbo cannot recover it.<DocsShot src={signupShot} {...SHOT_SIZE['signup']} alt="The Create your Flurbo account page with a passkey name field and a Create a passkey button" caption="Sign-up: name the passkey, then create it with your device or password manager."/></li>
-            <li><strong>Request access.</strong> Open Your account, enter your email and verify the six-digit code sent to it. The form uses your signed-in Mera account automatically. The team reviews requests manually and emails you when your account is approved. Verifying your email is not approval and cannot be used to sign in.<DocsShot src={approvedShot} {...SHOT_SIZE['account-approved']} alt="Your account page showing Access approved" caption="Your account page once the team approves your request."/></li>
+            <li><strong>Open markets.</strong> A signed-in passkey can open markets, funding, and portfolio. Connect MetaMask when you are ready to trade.</li>
             <li><strong>Link MetaMask once.</strong> Choose the wallet you want to trade with and sign the account-linking message. Its shares, trades and collected payouts stay in your Mera account's portfolio across devices, even when MetaMask is disconnected. Funds remain in the trading wallet. New to MetaMask? See <a href="#metamask">Install MetaMask</a>.</li>
             <li><strong>Return or switch wallets.</strong> Flurbo restores an already linked wallet when MetaMask still authorizes this site. Manage wallets from Your account, or switch on a trade. A new wallet needs its own linking signature. Unlocking MetaMask or reconnecting after permission is revoked can still require your approval.</li>
             <li><strong>Get test funds.</strong> When you link your first MetaMask wallet, Flurbo sends it a one-time amount of test MON for network fees. Then open <Link href="/fund">Get test funds</Link> to claim 50 test AUSD, once every 24 hours per wallet. For more test MON, use the Monad faucet linked there. The exact amounts are listed under <a href="#limits">Limits and allowances</a>.<DocsShot src={fundsShot} {...SHOT_SIZE['test-funds']} alt="Get test funds page with the trading wallet balances, a Get test MON step and a Get test AUSD step" caption="Get test funds: your wallet's balances, then one step for test MON and one for test AUSD."/></li>
             <li><strong>Choose a market.</strong> Check the question, close time and resolution rules. Select your answer and number of shares.<DocsShot src={marketsShot} {...SHOT_SIZE['markets']} alt="Markets list with three example questions, their status, close time and Yes and No prices" caption="Markets: each row shows the question, its status, close time and the cost of one Yes or No share. Example questions."/></li>
             <li><strong>Review and confirm.</strong> Check the quoted cost and confirm in MetaMask. A purchase usually asks for two confirmations: first an approval for the exact amount of test AUSD, then the purchase itself.<DocsShot src={ticketShot} {...SHOT_SIZE['ticket-buy']} alt="Trade ticket at step 1 of 2, showing the amount to allow, payout if correct, possible loss and an Allow payment button" caption="The trade ticket at its first step: allow the exact amount, then buy."/></li>
           </ol>
-          <p>The landing page and docs are public. Markets, funding and portfolio require a signed-in, approved Mera account. Creating a passkey does not submit an application. Your account page shows whether applications are available, pending or approved.</p>
+          <p>The landing page and docs are public. Markets, funding, and portfolio open after you sign in with your passkey.</p>
         </section>
         <section id="metamask" aria-labelledby="metamask-title">
           <h2 id="metamask-title">Install MetaMask</h2>
@@ -84,7 +83,7 @@ export default function Docs() {
           <ol className="docs-steps">
             <li><strong>Install it from the official site.</strong> Go to <a href="https://metamask.io" target="_blank" rel="noreferrer">metamask.io</a> and install the extension for your browser, or the mobile app. Other sites and store listings that copy its name can steal funds.</li>
             <li><strong>Create a wallet and save the recovery phrase offline.</strong> MetaMask shows 12 words once. Write them on paper and keep them somewhere safe. Anyone with these words controls the wallet, and nobody can recover them for you. Flurbo will never ask for them.</li>
-            <li><strong>Link the wallet on Get test funds.</strong> Signed in and approved, open <Link href="/fund">Get test funds</Link> and connect MetaMask. If Monad testnet is not in your wallet yet, Flurbo asks MetaMask to add it and switch to it: approve both. Then sign the account-linking message.</li>
+            <li><strong>Link the wallet on Get test funds.</strong> While signed in, open <Link href="/fund">Get test funds</Link> and connect MetaMask. If Monad testnet is not in your wallet yet, Flurbo asks MetaMask to add it and switch to it: approve both. Then sign the account-linking message.</li>
             <li><strong>Claim your test funds.</strong> Your first linked wallet receives starter test MON for network fees, and you can claim test AUSD on the same page.</li>
           </ol>
           <h3>Adding the network yourself</h3>
@@ -229,7 +228,7 @@ export default function Docs() {
         </section>
         <section id="help" aria-labelledby="help-title">
           <h2 id="help-title">Common questions</h2>
-          <details><summary>I created an account. Why can't I enter the markets?</summary><p>Creating an account and being approved are separate. Request access from Your account and verify your email; the team reviews requests manually and emails you when you are approved. Your account page always shows the current status.</p></details>
+          <details><summary>I created an account. Why can't I enter the markets?</summary><p>Sign in with the same passkey. Markets open for that account. Connect MetaMask before you place a trade.</p></details>
           <details><summary>Why did MetaMask ask me twice for one purchase?</summary><p>The first confirmation approves the exact amount of test AUSD the purchase may spend. The second is the purchase. Only the second one buys shares.</p></details>
           <details><summary>I approved a payment. Where are my shares?</summary><p>Token approval grants spending permission. A separate purchase transaction buys the shares. Follow the ticket's next step and wait for confirmation. If a transaction is already pending, check it instead of submitting again.</p></details>
           <details><summary>Trading closed. Can I collect a payout?</summary><p>A closed market may still be settling. Once results are delivered, Portfolio shows eligible payouts and the collect action. Collection sends funds to the wallet that owns the shares. Agent wallets collect through their runtime.</p></details>

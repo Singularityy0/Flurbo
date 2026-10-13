@@ -3,8 +3,6 @@ import {useEffect,useRef,useState} from 'react';
 import {Link} from 'wouter';
 import {useAuth} from '../auth/context';
 import './home.css';
-import VisitorStatus from './VisitorStatus';
-import {usePreviewAccess} from '../auth/preview-access';
 import {LITEPAPER} from '../components/SiteFooter';
 import {INK} from '../components/BrandLogo';
 import {drawHalftone} from '../halftone';
@@ -55,7 +53,7 @@ const FINALITY=[
 ];
 const SNIPPET=['# Node 24 or later, in your copy of the Flurbo SDK source','cd packages/sdk && npm ci','node bin/flurbo-agent.ts init --config flurbo-agent.json --markets <your markets>','# Keep "mode": "paper" until ready.','export FLURBO_AGENT_TOKEN=...','node bin/flurbo-agent.ts start --config flurbo-agent.json'].join('\n');
 const FAQ=[
-  ['How do I get access?','Create a Mera passkey account. When applications are open, use Request access on your account page. The native form captures your account automatically; enter and verify your email. Approval is manual; signing up does not automatically grant access.'],
+  ['How do I start?','Create a passkey account, connect MetaMask, and trade with test AUSD on Monad testnet.'],
   ['Which assets does this preview use?','Test AUSD and test MON on Monad testnet only. Questions can concern real events or clearly labelled scripted practice scenarios. Check the source and rules on each market.'],
   ['What does a winning share pay?','A winning share pays 1 test AUSD; a losing share pays 0. VOID outcomes follow the published fractional-payout rule, not a refund of your purchase. Payout is not profit: subtract your cost and network fees.'],
   ['Who decides the result?','Each market commits its source rules and deadlines before trading. Answers are proposed with a bond and can be challenged. Current testnet disputes use reviewer wallets controlled by the Flurbo operator. Finalization and delivery must complete before you can collect payouts.'],
@@ -66,12 +64,9 @@ const FAQ=[
 
 export default function Home(){
   const {state}=useAuth();
-  const {access,checking}=usePreviewAccess();
-  const destination=access?.approved?'/markets':state.address?'/access':'/signup';
-  const action=access?.approved?'Explore markets':state.address?'Your access':'Get early access';
-  // Signed-in visitors wait for the access check, so the main action never changes label after it appears.
-  const resolving=!!state.address&&checking&&!access;
-  const primary=(className='')=>resolving?<span className={`btn btn-primary btn-lg home-action-placeholder ${className}`} aria-hidden="true">Explore markets</span>:<Link href={destination} className={`btn btn-primary btn-lg ${className}`}>{action}<ArrowUpRight size={18} strokeWidth={1.75}/></Link>;
+  const destination=state.address?'/markets':'/signup';
+  const action=state.address?'Explore markets':'Create account';
+  const primary=(className='')=><Link href={destination} className={`btn btn-primary btn-lg ${className}`}>{action}<ArrowUpRight size={18} strokeWidth={1.75}/></Link>;
   const [proof,setProof]=useState(false),[view,setView]=useState<View>('individual');
   const cells=jointCells(),shown=VIEWS[view];
   return <main id="main" tabIndex={-1} className="home-current">
@@ -137,14 +132,14 @@ export default function Home(){
     </section>
 
     <section className="home-start home-band" id="how-it-works" aria-labelledby="start-title">
-      <h2 id="start-title">From invitation to prediction.</h2>
+      <h2 id="start-title">From account to prediction.</h2>
       <ol className="home-steps">
-        <li><span className="home-step-index">1</span><div><h3>Create your account</h3><p>Create a Mera passkey account and request access when applications open. Approval belongs to your account.</p></div></li>
-        <li><span className="home-step-index">2</span><div><h3>Connect and fund MetaMask</h3><p>Once approved, connect MetaMask and get test AUSD and test MON. Your trading wallet signs every transaction.</p></div></li>
+        <li><span className="home-step-index">1</span><div><h3>Create your account</h3><p>Create a passkey account on this device. It is the account you return to.</p></div></li>
+        <li><span className="home-step-index">2</span><div><h3>Connect and fund MetaMask</h3><p>Connect MetaMask and get test AUSD and test MON. Your trading wallet signs every transaction.</p></div></li>
         <li><span className="home-step-index">3</span><div><h3>Pick your prediction</h3><p>Choose an answer, review the cost and confirm in MetaMask. Follow your shares in Portfolio.</p></div></li>
       </ol>
-      <div className="home-start-foot"><VisitorStatus access={access}/>
-        <a className="home-litepaper" href={LITEPAPER.href} type="application/pdf"><FileText size={20} strokeWidth={1.75}/><span><strong>{LITEPAPER.label}</strong><small>How pricing, combinations and settlement work. {LITEPAPER.detail}.</small></span><ArrowUpRight size={16} strokeWidth={1.75}/></a>
+      <div className="home-start-foot">
+        <a className="home-litepaper" href={LITEPAPER.href} type="application/pdf"><FileText size={20} strokeWidth={1.75}/><span><strong>{LITEPAPER.label}</strong><small>How pricing, combinations and settlement work.</small></span><ArrowUpRight size={16} strokeWidth={1.75}/></a>
       </div>
     </section>
 

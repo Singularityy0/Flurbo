@@ -2,10 +2,30 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
-import { attachPerplRelay, loadPublicPerplContext } from '../server/perpl-relay.mjs';
+import { attachPerplRelay, enrollmentEnrollBody, enrollmentPayloadBody, forwardPerplEnrollment, loadPublicPerplContext, PERPL_ENROLL_ORIGIN } from '../server/perpl-relay.mjs';
 
 const origin = 'https://flurbo.singu.online';
 const store = { read: (id: string, expected: string) => id === 'good' && expected === origin ? { method: 'passkey' } : null };
+
+test('enrollment forwarding only sends a testnet payload with the whitelisted origin', async () => {
+  const address = '0x' + '11'.repeat(20);
+  const publicKey = '0x' + '22'.repeat(32);
+  assert.equal(enrollmentPayloadBody({ chain_id: 143, address, public_key: publicKey, scope_mask: 3, label: 'Flurbo' }), null);
+  assert.deepEqual(enrollmentPayloadBody({ chain_id: 10143, address, public_key: publicKey, scope_mask: 3, label: 'Flurbo', extra: 'no' }), {
+    chain_id: 10143, address, public_key: publicKey, scope_mask: 3, label: 'Flurbo',
+  });
+  assert.equal(enrollmentEnrollBody({ chain_id: 10143, address, mac: '0x' + 'ab'.repeat(32), signature: '0x' + 'cd'.repeat(65), pop_signature: '0x' + 'ef'.repeat(32), typed_data: [] }), null);
+  let seen: { url?: string; origin?: string; body?: any } = {};
+  const result = await forwardPerplEnrollment('payload', { chain_id: 10143, address, public_key: publicKey, scope_mask: 3, label: 'Flurbo' }, async (url, options) => {
+    seen = { url: String(url), origin: (options as RequestInit).headers && (options as any).headers.Origin, body: JSON.parse(String((options as RequestInit).body)) };
+    return Response.json({ typed_data: { primaryType: 'PerplRegisterApiKey' }, mac: '0x' + 'ab'.repeat(32) });
+  });
+  assert.equal(seen.origin, PERPL_ENROLL_ORIGIN);
+  assert.match(seen.url ?? '', /\/v1\/api-key\/payload$/);
+  assert.equal(seen.body.scope_mask, 3);
+  assert.equal(result.status, 200);
+  assert.equal((await forwardPerplEnrollment('other', { chain_id: 10143, address, public_key: publicKey, scope_mask: 3, label: 'Flurbo' })).status, 400);
+});
 
 test('the context proxy only returns Monad testnet', async () => {
   const value = await loadPublicPerplContext(async () => Response.json({ chain: { chain_id: 10143 } }));

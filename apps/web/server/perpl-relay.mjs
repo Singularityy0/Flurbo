@@ -3,6 +3,49 @@ import { cookieValue } from './session.mjs';
 
 export const PERPL_CONTEXT_URL = 'https://testnet.perpl.xyz/api/v1/pub/context';
 export const PERPL_TRADE_SOCKET = 'wss://testnet.perpl.xyz/ws/v1/trading';
+export const PERPL_API_URL = 'https://testnet.perpl.xyz/api';
+export const PERPL_ENROLL_ORIGIN = 'https://flurbo.singu.online';
+
+function addressOf(value) {
+  return typeof value === 'string' && /^0x[0-9a-fA-F]{40}$/.test(value) ? value : null;
+}
+
+export function enrollmentPayloadBody(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const address = addressOf(value.address);
+  if (value.chain_id !== 10143 || !address) return null;
+  if (typeof value.public_key !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(value.public_key)) return null;
+  if (value.scope_mask !== 3 || typeof value.label !== 'string' || !value.label || value.label.length > 64) return null;
+  return { chain_id: 10143, address, public_key: value.public_key, scope_mask: 3, label: value.label };
+}
+
+export function enrollmentEnrollBody(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const address = addressOf(value.address);
+  if (value.chain_id !== 10143 || !address) return null;
+  if (typeof value.mac !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(value.mac)) return null;
+  if (typeof value.signature !== 'string' || !/^0x[0-9a-fA-F]{128,144}$/.test(value.signature)) return null;
+  if (typeof value.pop_signature !== 'string' || !/^0x[0-9a-fA-F]{128}$/.test(value.pop_signature)) return null;
+  if (!value.typed_data || typeof value.typed_data !== 'object' || Array.isArray(value.typed_data)) return null;
+  return { chain_id: 10143, address, typed_data: value.typed_data, mac: value.mac, signature: value.signature, pop_signature: value.pop_signature };
+}
+
+export async function forwardPerplEnrollment(path, body, fetcher = fetch) {
+  const url = path === 'payload' ? `${PERPL_API_URL}/v1/api-key/payload` : path === 'enroll' ? `${PERPL_API_URL}/v1/api-key/enroll` : null;
+  const payload = path === 'payload' ? enrollmentPayloadBody(body) : path === 'enroll' ? enrollmentEnrollBody(body) : null;
+  if (!url || !payload) return { status: 400, value: { error: 'Invalid enrollment request.' } };
+  const response = await fetcher(url, {
+    method: 'POST',
+    redirect: 'error',
+    signal: AbortSignal.timeout(15_000),
+    headers: { 'Content-Type': 'application/json', Origin: PERPL_ENROLL_ORIGIN },
+    body: JSON.stringify(payload),
+  });
+  const text = await response.text();
+  if (text.length > 32_000) throw new Error('Perpl enrollment unavailable');
+  try { return { status: response.status, value: JSON.parse(text) }; }
+  catch { throw new Error('Perpl enrollment unavailable'); }
+}
 
 // A browser on flurbo.singu.online is rejected by Perpl's edge (HTTP 403) before
 // the trading socket opens. A server client that does not send an Origin is

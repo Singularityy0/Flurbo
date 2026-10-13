@@ -1,7 +1,7 @@
 import { Link } from 'wouter';
 import BrandLogo from './BrandLogo';
 
-export const LITEPAPER = { href: '/technical_litepaper.pdf', label: 'Technical litepaper', detail: 'PDF, 99 KB' } as const;
+export const LITEPAPER = { href: '/technical_litepaper.pdf', label: 'Technical litepaper' } as const;
 
 export default function SiteFooter({ compact = false }: { compact?: boolean }) {
   return (
@@ -12,7 +12,7 @@ export default function SiteFooter({ compact = false }: { compact?: boolean }) {
         </div>
         <nav className="footer-links" aria-label="Footer">
           <Link href="/docs">Docs</Link>
-          <a href={LITEPAPER.href} type="application/pdf">{LITEPAPER.label} <span className="muted">({LITEPAPER.detail})</span></a>
+          <a href={LITEPAPER.href} type="application/pdf">{LITEPAPER.label}</a>
           <a href="/#how-it-works">How it works</a>
         </nav>
         <p className="footer-note">Monad testnet preview. Test assets only.</p>

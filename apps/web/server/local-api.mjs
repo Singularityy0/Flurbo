@@ -22,7 +22,7 @@ import {kimiForecast} from './kimi-forecaster.mjs';
 import {handleAlchemyWebhook, getAlchemyActivities} from './alchemy-webhook.mjs';
 import {listingForCollection, parseKuruListings, readKuruCollection} from './kuru-collection.mjs';
 import {creEvidenceForManifest} from './cre-evidence.mjs';
-import {loadPublicPerplContext} from './perpl-relay.mjs';
+import {forwardPerplEnrollment,loadPublicPerplContext} from './perpl-relay.mjs';
 
 export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store = new SessionStore(), sharedLimits = true,
   publicOrigin = null, rpcUrl = 'http://127.0.0.1:18545', networkMode = 'local_fork', dashboardUrl = 'http://127.0.0.1:18765', getLearningReport = () => null,
@@ -37,16 +37,11 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
     const m=svc.manifest;
     for(const a of [m.pool,m.resolver,m.publication?.creator,m.challengePolicy?.authority,...(m.publication?.reviewers||[]).map(r=>r.address)])if(typeof a==='string')reservedWallets.add(a.toLowerCase());
   }
-  const previewAllows=previewAccess||applications?async account=>{
-    const session={method:'passkey',address:account};
-    if(isTestingOperator(session,testingOperatorAccount))return true;
-    const legacy=previewAccess?await previewAccess.allows(session):false;
-    return applications?applications.allows(account,legacy):legacy;
-  }:null;
+  const signInRequired=hosted||!!(previewAccess||applications);
   const authorizeHolder=holderAuthorizer(challengeOptions);
   const priceArchives=new WeakMap();
   // Agents: account-isolated profiles, paper trading and user-approved proposals. Never a signer.
-  const agents=(()=>{try{return agentApi({command:store.command||null,hosted,links,localCounters:!sharedLimits,rpc:agentRpc(rpcUrl,{hosted}),previewAllows,reservedWallets,
+  const agents=(()=>{try{return agentApi({command:store.command||null,hosted,links,localCounters:!sharedLimits,rpc:agentRpc(rpcUrl,{hosted}),previewAllows:null,reservedWallets,
     serviceFor:namespace=>namespace==='pilot'?publishedPilot:practiceCollections?.services.get(namespace)||null});}catch{return null;}})();
   // Operator-only growth metrics. Needs durable storage; members never see these numbers.
   const listedPools=()=>[
@@ -54,7 +49,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
     ...[...(practiceCollections?.services||[])].map(([namespace,service])=>({namespace,label:practiceCollections.catalog.collections.find(c=>c.namespace===namespace)?.label||namespace,service}))]
     .filter(p=>p.service.index);
   const metrics=userMetrics({command:store.command||null,origin:publicOrigin||`http://${hosts[0]}`,links,applications,operatorAccount:testingOperatorAccount,funding,
-    openAccess:!previewAllows,reservedWallets,rpcUrl,pools:listedPools});
+    openAccess:true,reservedWallets,rpcUrl,pools:listedPools});
   // Email notices to members about their own positions (payout ready, answer proposed, trading closing).
   const notices=memberNotices({command:store.command||null,pools:listedPools,applications,links,origin:publicOrigin||`http://${hosts[0]}`,
     send:applications?.noticeEmail?noticeDelivery(applications.noticeEmail):null});
@@ -153,13 +148,24 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
           }
         }
       }
-      if (req.method === 'GET' && url.pathname === '/api/preview') return send(res,200,{inviteOnly:!!previewAllows,applicationUrl:applications?null:previewAccess?.applicationUrl||null,...(applications?{nativeApplications:true}:{})});
+      if (req.method === 'GET' && url.pathname === '/api/preview') return send(res,200,{inviteOnly:false,applicationUrl:null,...(applications?{nativeApplications:true}:{})});
       if (url.pathname === '/api/perpl/context') {
         const login = await getLogin();
         if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
         if (req.method !== 'GET' || url.search) return send(res, 405, {error:'Method not allowed.'});
         try { return send(res, 200, await loadPublicPerplContext()); }
         catch { return send(res, 502, {error:'Perpl market data is unavailable. Try again shortly.'}); }
+      }
+      if (url.pathname === '/api/perpl/api-key/payload' || url.pathname === '/api/perpl/api-key/enroll') {
+        const login = await getLogin();
+        if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
+        if (req.method !== 'POST' || url.search) return send(res, 405, {error:'Method not allowed.'});
+        try {
+          const forwarded = await forwardPerplEnrollment(url.pathname.endsWith('/payload') ? 'payload' : 'enroll', await body(req));
+          return send(res, forwarded.status, forwarded.value);
+        } catch {
+          return send(res, 502, {error:'Perpl enrollment is unavailable. Try again shortly.'});
+        }
       }
       if (url.pathname === '/api/semantic-status') {
         const login = await getLogin();
@@ -189,7 +195,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
         const login = await getLogin();
         if (!login || login.method !== 'passkey') return send(res, 401, {error:'Sign in first.'});
         res.setHeader('Set-Cookie', toolsCookie(login, sid));
-        return send(res, 200, {testingTools:isTestingOperator(login, testingOperatorAccount),approved:!previewAllows||await previewAllows(login.address),applicationUrl:applications?null:previewAccess?.applicationUrl||null,...(applications?{nativeApplications:true}:{})});
+        return send(res, 200, {testingTools:isTestingOperator(login, testingOperatorAccount),approved:true,applicationUrl:null,...(applications?{nativeApplications:true}:{})});
       }
       if(url.pathname==='/api/account/notifications'){
         const login=await getLogin();
@@ -222,12 +228,11 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
       // Guard every app data/action route, including legacy namespaces and RPC.
       // Published evidence stays readable by counterparties during settlement.
       const publicEvidence=req.method==='GET'&&!url.search&&/^\/api\/(pilot|practice-[0-9a-f]{40})\/evidence\/0x[0-9a-f]{64}$/.test(url.pathname);
-      if(previewAllows&&!url.pathname.startsWith('/api/auth/')&&!publicEvidence){
+      if(signInRequired&&!url.pathname.startsWith('/api/auth/')&&!publicEvidence){
         const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
-        if(!await previewAllows(login.address))return send(res,403,{code:'INVITE_REQUIRED',error:'Testnet access has not been approved for this Mera account.'});
       }
-      // Agent routes sit behind the same session and invite checks as every application route.
+      // Agent routes use the same passkey session as the rest of the app.
       if(url.pathname==='/api/agents'||url.pathname.startsWith('/api/agents/')){
         const login=await getLogin();
         if(!login||login.method!=='passkey')return send(res,401,{error:'Sign in with your Flurbo passkey.'});
