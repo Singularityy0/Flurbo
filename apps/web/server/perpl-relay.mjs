@@ -44,7 +44,10 @@ export async function forwardPerplEnrollment(path, body, fetcher = fetch) {
   const text = await response.text();
   if (text.length > 32_000) throw new Error('Perpl enrollment unavailable');
   try { return { status: response.status, value: JSON.parse(text) }; }
-  catch { throw new Error('Perpl enrollment unavailable'); }
+  catch {
+    const message = text.replace(/[^\x20-\x7E]/g, ' ').trim().slice(0, 160);
+    return { status: response.status, value: { error: message || 'Perpl enrollment is unavailable. Try again shortly.' } };
+  }
 }
 
 // A browser on flurbo.singu.online is rejected by Perpl's edge (HTTP 403) before
