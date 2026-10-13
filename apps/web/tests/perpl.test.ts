@@ -197,6 +197,8 @@ test('each Perpl action uses the documented order frame', () => {
 test('request ids advance past the account cursor and a skipped heartbeat is not final', () => {
   const order = minimumLong({ marketId: 16, accountId: 3, requestId: nextRequestId(7, 7), serial: 1, leverage: 100 });
   assert.deepEqual(order, { mt: 22, sn: 1, rq: 8, mkt: 16, acc: 3, t: 1, p: 0, s: 1, fl: 4, lv: 100, lb: 0 });
+  assert.equal(applyFrame(emptyDesk(12), { mt: 19, sn: 1, as: [] }).listed, true);
+  assert.equal(applyFrame(emptyDesk(12), { mt: 19, sn: 1, as: [] }).accounts.length, 0);
   let desk = applyFrame(emptyDesk(12), { mt: 19, sn: 3, as: [{ id: 3, in: 12, fw: true, fr: false, lfr: 7, b: '1000000' }] });
   desk = applyFrame(desk, { mt: 100, sn: 4, h: 80 });
   assert.equal(desk.stale, false);
