@@ -7,9 +7,9 @@ import {thesisCandidates} from '../shared/thesis.mjs';
 import {certifiedPair} from '../server/pair-math.mjs';
 import {simulatePairPurchase} from '../server/pair-sensitivity.mjs';
 
-// Partner features as a signed-in person sees them: Kimi hypotheses, indexed activity, the Kuru and Chainlink CRE panels.
+// Partner features as a signed-in person sees them: Kimi hypotheses, indexed activity, and the Kuru panel.
 // The API is mocked; the production bundle in dist/ is the real one.
-test('partners in Chrome: Kimi on Thesis and What If, Envio activity and fills, and the Kuru and Chainlink CRE panels',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
+test('partners in Chrome: Kimi on Thesis and What If, Envio activity and fills, and the Kuru panel',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
   const now=Math.floor(Date.now()/1000);
@@ -141,19 +141,12 @@ test('partners in Chrome: Kimi on Thesis and What If, Envio activity and fills, 
     assert.equal(await page.locator('.market-card').count(),1,'the filter keeps only questions with a Kuru book');
     await shot('partners-markets');
 
-    // 3. Market detail: Kuru and Chainlink CRE panels, then What If with Kimi and Envio.
+    // 3. Market detail: the Kuru panel, then What If with Kimi and Envio.
     await page.goto(`https://flurbo.singu.online/markets/${poolNs}/0`);
     const kuruPanel=page.getByRole('heading',{name:'Trade YES receipts on Kuru',exact:true});
     await kuruPanel.waitFor();
     assert.ok((await page.getByRole('link',{name:'Open order book',exact:true}).getAttribute('href'))!.endsWith(`/markets/${poolNs}/0/kuru`));
-    const cre=page.locator('details[aria-label="Chainlink CRE check"]');
-    await cre.waitFor();
-    assert.match(await cre.locator('summary').innerText(),/Chainlink CRE check · Matches the on-chain result/);
-    await cre.locator('summary').click();
-    await cre.getByText('MON/USD (this question)').waitFor();
-    await cre.getByText(/ETH\/USD/).first().waitFor();
-    assert.equal(await cre.locator('a[href="https://monadscan.com/block/110317694"]').count(),1);
-    assert.ok((await cre.innerText()).includes('does not settle the pool'));
+    assert.equal(await page.locator('details[aria-label="Chainlink CRE check"]').count(),0);
     await shot('partners-market-detail');
 
     await page.getByText('Explore how these markets connect',{exact:true}).click();

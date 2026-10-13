@@ -13,7 +13,6 @@ import {settlementSources} from '../../shared/settlement-sources.mjs';
 import {marketHref} from '../market-detail';
 import {appFetch} from '../platform-fetch';
 import Pilot from './Pilot';
-import CreEvidence from '../components/CreEvidence';
 import ShowcaseSource from './ShowcaseSource';
 import WhatIf from './WhatIf';
 import PriceHistory from './PriceHistory';
@@ -144,7 +143,6 @@ export default function MarketDetail({namespace,event}:{namespace:PilotNamespace
             <div className="cluster"><button className="btn btn-secondary btn-sm" onClick={()=>setAttempt(n=>n+1)}>Refresh status</button></div>
           </section>
           <section className="detail-panel"><h2>What decides the answer?</h2><p>{state.manifest.publication.mode!=='rehearsal'?'The published source and the rules below determine the answer.':'This is a practice event with a scripted outcome, using test funds.'}</p>{!showcaseCopy(question)&&<a className="text-link" href={question.source.referenceUrl} target="_blank" rel="noreferrer">View source <ArrowUpRight aria-hidden="true" strokeWidth={1.75}/></a>}{checkedSource&&<div className="settlement-source"><h3>What settlement reads</h3><p>{checkedSource.request==='GET'?'Settlement reads exactly this record. You and your agents can open or fetch it too, before the result is decided.':'Settlement reads these Ethereum node endpoints. They answer JSON-RPC requests, so open them with an Ethereum client rather than a browser.'}</p><ul>{checkedSource.urls.map(url=><li key={url}><code>{url}</code></li>)}</ul><p className="field-help">Rule: {checkedSource.method}</p></div>}<details className="disclosure"><summary>Read the resolution rules</summary><p>Published question: {question.question}</p><h3>Yes</h3><p>{question.yesRule}</p><h3>No</h3><p>{question.noRule}</p><h3>If there is no clear result</h3><p>{state.manifest.publication.draft.exceptionPolicy}</p><p>{state.manifest.publication.draft.disputePolicy}</p><p>The current testnet dispute wallets are controlled by the Flurbo operator.</p></details></section>
-          <CreEvidence namespace={namespace} event={event} question={index=>marketQuestion(state.manifest.publication.draft.events[index])}/>
           <details className="detail-panel"><summary>Shared pool details</summary><dl className="facts"><dt>Pool balance</dt><dd>{cash(state.poolCash)} test AUSD</dd><dt>Required payouts</dt><dd>{cash(state.requiredCollateral)} test AUSD</dd></dl><p className="market-caption">These totals cover the shared pool, not just this question.</p><a className="text-link" href={`https://testnet.monadscan.com/address/${state.manifest.pool}`} target="_blank" rel="noreferrer">View pool <ArrowUpRight aria-hidden="true" strokeWidth={1.75}/></a></details>
         </div>
       </div>
