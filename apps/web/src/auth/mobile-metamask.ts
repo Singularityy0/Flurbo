@@ -1,5 +1,5 @@
 import SignClient from '@walletconnect/sign-client';
-import { MONAD_CHAIN_ID, MONAD_TESTNET_RPC, READ_METHODS, WALLETCONNECT_PROJECT_ID, metamaskOpenUrl, metamaskSessionAddress, walletTransaction } from './mobile-wallet';
+import { MONAD_CHAIN_ID, MONAD_TESTNET_RPC, READ_METHODS, WALLETCONNECT_PROJECT_ID, metamaskOpenUrl, metamaskSessionAddress, walletTransaction } from './mobile-wallet.ts';
 
 type Listener = () => void;
 type Session = Parameters<typeof metamaskSessionAddress>[0] & { topic: string };
