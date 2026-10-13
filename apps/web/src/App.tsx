@@ -91,7 +91,7 @@ function Header() {
                   : <Link href="/" className="nav-login">About Flurbo</Link>}
               </> : <>
                 {location !== '/login' && <Link href="/login" className="nav-login">Sign in</Link>}
-                {location !== '/signup' && <Link href="/signup" className="btn btn-primary btn-sm nav-cta">Get early access <ArrowUpRight size={15} strokeWidth={1.75} /></Link>}
+                {location !== '/signup' && <Link href="/signup" className="btn btn-primary btn-sm nav-cta">Create account <ArrowUpRight size={15} strokeWidth={1.75} /></Link>}
               </>}
             </div>
           </nav>
@@ -140,8 +140,8 @@ function AccountRoute() {
     : location==='/agents'||location.startsWith('/agents/') ? 'agents'
     : location === '/perpl' ? 'perpl'
     : location.startsWith('/markets/')||['/markets','/portfolio'].includes(location) ? 'markets' : 'workspace';
-  const approved = !!preview.access?.approved;
-  const key: RouteKey | null = !authenticated ? null : checking ? locationKey : !approved ? 'access' : locationKey;
+  const approved = authenticated;
+  const key: RouteKey | null = !authenticated ? null : locationKey;
   const route = useRoutePage(key);
   const loadingPage = authenticated && !checking && key !== null && !route.Page && !route.error;
   const gate = useLoadGate('app', {

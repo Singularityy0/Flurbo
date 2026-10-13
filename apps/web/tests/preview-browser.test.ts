@@ -32,8 +32,8 @@ test('invite flow denies pending accounts, approved directory filters real sched
     await mkdir(new URL('../../../target/preview-ui/',import.meta.url),{recursive:true});
     for(const width of [1440,390]){
       await page.setViewportSize({width,height:900});await page.goto('https://flurbo.singu.online/');
-      await page.getByText('Invite-based testnet preview',{exact:true}).waitFor();
-      assert.match(await page.locator('.home-visitor-status').innerText(),/Applications are not open/);
+      await page.getByRole('heading',{name:'From account to prediction.',exact:true}).waitFor();
+      assert.equal(await page.locator('.home-visitor-status').count(),0);
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
       await page.screenshot({path:fileURLToPath(new URL(`../../../target/preview-ui/home-${width}.png`,import.meta.url)),fullPage:true});
       await page.goto('https://flurbo.singu.online/docs');await page.getByRole('heading',{name:'Getting started',exact:true}).waitFor();
@@ -41,16 +41,10 @@ test('invite flow denies pending accounts, approved directory filters real sched
     }
     await page.goto('https://flurbo.singu.online/markets');await page.waitForURL('**/login');assert.equal(reads,0);
     signedIn=true;
-    for(const path of ['/markets','/portfolio','/fund','/markets/practice-2222222222222222222222222222222222222222/0']){
-      await page.goto('https://flurbo.singu.online'+path);await page.getByRole('heading',{name:'Your account is ready',exact:true}).waitFor();assert.equal(reads,0);
-    }
-    assert.equal(await page.getByRole('link',{name:'Request access',exact:true}).count(),0);
-    applicationUrl='https://docs.google.com/forms/d/e/example/viewform';await page.getByRole('button',{name:'Check access',exact:true}).click();
-    await page.getByRole('link',{name:'Request access',exact:true}).waitFor();
-    assert.equal(await page.getByRole('link',{name:'Request access',exact:true}).getAttribute('href'),applicationUrl);
+    await page.goto('https://flurbo.singu.online/access');
     assert.equal(await page.locator('.access-identity code').innerText(),owner);
     await page.screenshot({path:fileURLToPath(new URL('../../../target/preview-ui/access-mobile.png',import.meta.url)),fullPage:true});
-    approved=true;await page.goto('https://flurbo.singu.online/markets');
+    await page.goto('https://flurbo.singu.online/markets');
     await page.locator('.market-card').nth(3).waitFor();
     assert.equal(await page.getByRole('button',{name:'Open',exact:true}).getAttribute('aria-pressed'),'true');
     await page.getByRole('button',{name:'All',exact:true}).click();
@@ -67,7 +61,7 @@ test('invite flow denies pending accounts, approved directory filters real sched
     }
     outage=true;await page.getByRole('button',{name:'Refresh prices',exact:true}).click();
     await page.getByText('Some markets could not be refreshed.',{exact:false}).waitFor();assert.equal(await page.locator('.market-card').count(),4);
-    approved=false;await page.reload();await page.getByRole('heading',{name:'Your account is ready',exact:true}).waitFor();
-    assert.equal(await page.locator('.market-card').count(),0);assert.deepEqual(errors,[]);
+    approved=false;await page.reload();await page.locator('.market-card').first().waitFor();
+    assert.ok(await page.locator('.market-card').count()>0);assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });

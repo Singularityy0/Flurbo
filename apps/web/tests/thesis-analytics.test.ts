@@ -67,15 +67,15 @@ test('identical concurrent reads coalesce, different comparisons are bounded unt
   assert.equal(s.calls.filter(([m])=>m==='eth_getBlockByNumber').length,1);
   assert.equal((await s.run({...input,b:2})).input.b,2);
 });
-test('thesis API keeps authentication, invite and origin gates and refuses arbitrary payloads',async()=>{
-  let logged=false,approved=false,calls=0,fail=false;
-  const api=localApi({previewAccess:{allows:()=>approved},store:{read:async()=>logged?{method:'passkey',address:'0x'+'99'.repeat(20)}:null},pilot:{manifest:pilotFixture().manifest,thesisAnalytics:async()=>{calls++;if(fail)throw Error('sensitive provider detail');return {ok:true};}}});
+test('thesis API keeps authentication and origin gates and refuses arbitrary payloads',async()=>{
+  let logged=false,calls=0,fail=false;
+  const api=localApi({previewAccess:{allows:()=>false},store:{read:async()=>logged?{method:'passkey',address:'0x'+'99'.repeat(20)}:null},pilot:{manifest:pilotFixture().manifest,thesisAnalytics:async()=>{calls++;if(fail)throw Error('sensitive provider detail');return {ok:true};}}});
   async function request(body:any,origin='http://localhost:18767'){
     const req:any={url:'/api/pilot/thesis',method:'POST',headers:{host:'localhost:18767',origin,'content-type':'application/json'},async *[Symbol.asyncIterator](){yield JSON.stringify(body);}};
     let status=0,json:any;const res:any={writeHead:(v:number)=>{status=v;},end:(v:string)=>{json=JSON.parse(v);},setHeader:()=>{}};
     await api(req,res,()=>{});return {status,json};
   }
-  assert.equal((await request(input)).status,401);logged=true;assert.equal((await request(input)).status,403);approved=true;
+  assert.equal((await request(input)).status,401);logged=true;
   assert.equal((await request(input,'https://other.example')).status,403);
   for(const bad of [null,[],{...input,note:'personal'},{...input,a:input.b},{...input,quantity:'0'}])assert.equal((await request(bad)).status,400);
   assert.equal(calls,0);assert.equal((await request(input)).status,200);fail=true;const failed=await request(input);assert.equal(failed.status,503);assert.ok(!JSON.stringify(failed).includes('sensitive'));

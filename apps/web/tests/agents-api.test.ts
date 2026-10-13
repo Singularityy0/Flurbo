@@ -182,7 +182,7 @@ test('a mismatched or reverted transaction fails the proposal; rejection and exp
   assert.equal(moved.status,409);assert.equal(moved.body.code,'PRICE_MOVED');
 });
 
-test('hosted agent routes enforce sign-in and invite approval before any agent code runs',async()=>{
+test('hosted agent routes require a passkey sign-in and do not wait for an invitation',async()=>{
   const fixture=pilotFixture(),redis=fakeRedis();
   const policy=previewAccess({FLURBO_TESTNET_APPROVED_ACCOUNTS:alice});
   const store={command:redis.command,read:async(id:string)=>id==='approved'?{address:alice,method:'passkey'}:id==='pending'?{address:bob,method:'passkey'}:id==='wallet'?{address:alice,method:'wallet'}:null};
@@ -198,7 +198,7 @@ test('hosted agent routes enforce sign-in and invite approval before any agent c
       assert.equal((await request(path,'',body)).status,401,path);
       assert.equal((await request(path,'wallet',body)).status,401,path);
       const pending=await request(path,'pending',body);
-      assert.equal(pending.status,403,path);assert.equal(pending.data.code,'INVITE_REQUIRED');
+      assert.notEqual(pending.status,403,path);assert.notEqual(pending.data?.code,'INVITE_REQUIRED');
     }
     const listed=await request('/api/agents','approved');
     assert.equal(listed.status,200);assert.equal(listed.data.durable,true);

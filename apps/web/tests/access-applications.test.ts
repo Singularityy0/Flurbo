@@ -51,7 +51,7 @@ test('notification failure cannot roll back approval and retry uses the same del
   await service.handle({action:'admin/notify',account:DEFAULT_TESTING_OPERATOR,operator:true,input:{account}});
   assert.equal(delivered,true);assert.deepEqual(sends,['same-event','same-event']);
 });
-test('native routes allow pending applicants, isolate accounts and keep approval gates closed until the shared decision allows access',async()=>{
+test('native routes allow any signed-in passkey, isolate accounts, and do not close markets on an application decision',async()=>{
   let decision:string|null=null,down=false;const calls:any[]=[];
   const applications={allows:async(_a:string,legacy:boolean)=>{if(down)throw Error('database down');return decision===null?legacy:decision==='approved';},handle:async(input:any)=>{calls.push(input);return {application:null};}};
   const store={read:async(id:string)=>id==='applicant'?{address:account,method:'passkey'}:id==='other'?{address:other,method:'passkey'}:id==='operator'?{address:DEFAULT_TESTING_OPERATOR,method:'passkey'}:null};
@@ -69,11 +69,11 @@ test('native routes allow pending applicants, isolate accounts and keep approval
     assert.equal((await request('/api/account/application/admin/list','applicant',{})).status,403);
     assert.equal((await request('/api/account/application/admin/list','operator',{})).status,200);
     assert.equal((await request('/api/account/application/submit','applicant',{},'https://evil.example')).status,403);
-    assert.equal((await request('/api/network','applicant')).status,403);
+    assert.equal((await request('/api/network','applicant')).status,200);
     assert.equal((await request('/api/network','other')).status,200);
     decision='approved';assert.equal((await request('/api/network','applicant')).status,200);
-    decision='revoked';assert.equal((await request('/api/network','other')).status,403,'Recorded revocation overrides legacy allowlist');
-    down=true;assert.equal((await request('/api/account/access','applicant')).status,503);
+    decision='revoked';assert.equal((await request('/api/network','other')).status,200);
+    down=true;assert.equal((await request('/api/account/access','applicant')).data.approved,true);
     assert.equal((await request('/api/account/access','operator')).data.approved,true);
   }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
 });

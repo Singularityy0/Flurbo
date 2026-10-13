@@ -19,7 +19,7 @@ export default function AccessPage({access,error,checking,refresh}:{access:Acces
   return <main id="main" tabIndex={-1} className="page page-task access-page">
     <PageHeader title={approved?'Your account.':'Your place in the preview.'} lead="A Monad testnet experience for individual and combined predictions. Test assets only."/>
     <section className="panel access-card" aria-label="Your access status">
-      <span className={`status ${approved?'':'status-muted'} market-badge-plain`}>{approved?<CheckCircle2 aria-hidden="true" strokeWidth={1.75}/>:<Hourglass aria-hidden="true" strokeWidth={1.75}/>}{approved?'Access approved':'Invite-based testnet'}</span>
+      <span className={`status ${approved?'':'status-muted'} market-badge-plain`}>{approved?<CheckCircle2 aria-hidden="true" strokeWidth={1.75}/>:<Hourglass aria-hidden="true" strokeWidth={1.75}/>}{approved?'Access approved':'Testnet account'}</span>
       {(!access?.nativeApplications||access.approved)&&<><h2>{error?'Let’s check again':!access?'Checking your access':access.approved?'You’re ready to explore':'Your account is ready'}</h2>
       <p>{!access?(error?'Your application status is temporarily unavailable. Retry to load your saved status.':'Verifying access for your Mera account.'):access?.approved?'Browse questions, explore connections and follow your predictions in Portfolio.':access?.applicationUrl?'Request access using the account address below. Creating an account does not submit an application or approve access.':'Applications are not open yet. Keep this passkey to return to the same account when access becomes available.'}</p></>}
       {access?.nativeApplications&&!access.approved&&<AccessApplication key={state.address} refresh={refresh} checking={checking}/>}

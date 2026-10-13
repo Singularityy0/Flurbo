@@ -24,19 +24,19 @@ test('runtime routes over HTTP: bearer only, no cookies, no query strings, no br
   const browser={origin,cookie:'flurbo_session=approved'};
   try{
     assert.equal((await request('/api/account/portfolio-sources')).status,401);
-    assert.equal((await request('/api/account/portfolio-sources',{headers:{origin,cookie:'flurbo_session=pending'}})).status,403);
+    assert.equal((await request('/api/account/portfolio-sources',{headers:{origin,cookie:'flurbo_session=pending'}})).data.account,bob);
     assert.deepEqual((await request('/api/account/portfolio-sources',{headers:browser})).data,{account:alice,wallets:[],agentWallets:[],agentExecutions:[]});
     assert.equal((await request('/api/account/portfolio-sources?account='+bob,{headers:browser})).status,400);
-    // Issuing needs the signed-in, approved browser session like every account route.
+    // Issuing needs the passkey that owns the agent. Another signed-in account cannot mint its credential.
     const agent=(await request('/api/agents',{headers:browser,body:{kind:'runtime',name:'Hosted runtime',markets:['pilot']}})).data;
     assert.ok(agent.id,JSON.stringify(agent));
-    assert.equal((await request(`/api/agents/${agent.id}/credentials`,{headers:{origin,cookie:'flurbo_session=pending'},body:{scopes:['runtime:report']}})).status,403,'invite required');
+    assert.equal((await request(`/api/agents/${agent.id}/credentials`,{headers:{origin,cookie:'flurbo_session=pending'},body:{scopes:['runtime:report']}})).status,404);
     const issued=(await request(`/api/agents/${agent.id}/credentials`,{headers:browser,body:{scopes:['markets:read','runtime:report']}})).data;
     assert.match(issued.token,/^fla1_/);
     const bearer={authorization:'Bearer '+issued.token,'flurbo-agent-protocol':'1'};
     const claim={scope:3,mask:'8',quantityAtoms:'1000000'};
     assert.equal((await request('/api/pilot/validate-trade',{body:claim,headers:{origin}})).status,401);
-    assert.equal((await request('/api/pilot/validate-trade',{body:claim,headers:{origin,cookie:'flurbo_session=pending'}})).status,403);
+    assert.equal((await request('/api/pilot/validate-trade',{body:claim,headers:{origin,cookie:'flurbo_session=pending'}})).status,200);
     assert.equal((await request('/api/pilot/validate-trade',{body:claim,headers:{cookie:'flurbo_session=approved'}})).status,403);
     // Off by default: both routes answer with a claim-bound "disabled" assessment.
     const off=await request('/api/pilot/validate-trade',{body:claim,headers:browser});

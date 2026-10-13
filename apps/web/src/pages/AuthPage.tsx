@@ -36,9 +36,6 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
   return (
     <main id="main" tabIndex={-1} className="page page-form auth-page">
       <Link href="/" className="link-back auth-back"><ArrowLeft size={16} strokeWidth={1.75} /> Back to flurbo</Link>
-      {!isLogin && !active && <ol className="auth-steps" aria-label="Preview access steps">
-        <li aria-current="step"><span>1</span>Create account</li><li><span>2</span>Request access</li><li><span>3</span>Approval</li>
-      </ol>}
       <svg className="auth-mark" viewBox="4 3 54 54" aria-hidden="true" focusable="false"><ContourMark /></svg>
       <header className="auth-heading">
         <h1>{active ? "A familiar way in." : isLogin ? "Your view. Your account." : "Create your Flurbo account."}</h1>
@@ -82,7 +79,7 @@ export default function AuthPage({ mode }: { mode: AuthMode }) {
         {state.error && <p className="callout callout-danger" role="alert">{state.error}</p>}
         <p className="auth-switch">{isLogin ? "New to Flurbo?" : "Already have a passkey?"} <Link href={isLogin ? "/signup" : "/login"} className="text-link">{isLogin ? "Create an account" : "Sign in"}</Link></p>
         <details className="disclosure auth-more"><summary>About passkeys</summary>
-          <p className="small muted">Your Mera passkey is your Flurbo login. Testnet access requires approval. Once approved, open a trading session or connect MetaMask. Sign-in itself does not keep a signer.</p>
+          <p className="small muted">Your Mera passkey is your Flurbo login. After you sign in, open markets or connect MetaMask. Sign-in itself does not keep a signer.</p>
           <p className="small muted">Some devices ask you to confirm twice during setup. A compatible passkey provider is required. <a href="https://mera.category.xyz/authenticator-support/" target="_blank" rel="noreferrer">Check device support</a>.</p>
         </details>
       </section>}

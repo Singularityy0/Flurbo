@@ -68,7 +68,7 @@ async function connect(forceNew: boolean) {
     await created.disconnect({ topic: previous, reason: { code: 6000, message: 'Switch wallet' } }).catch(() => undefined);
   }
   const { uri, approval } = await created.connect({
-    requiredNamespaces: { eip155: { chains: [CHAIN], methods: ['eth_sendTransaction', 'personal_sign'], events: ['chainChanged', 'accountsChanged'] } },
+    requiredNamespaces: { eip155: { chains: [CHAIN], methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData_v4'], events: ['chainChanged', 'accountsChanged'] } },
   });
   const approved = approval();
   void approved.catch(() => undefined);
@@ -113,10 +113,17 @@ async function request(args: { method: string; params?: unknown[] }) {
   if (args.method === 'eth_requestAccounts' || args.method === 'wallet_requestPermissions') {
     return [await connect(args.method === 'wallet_requestPermissions')];
   }
-  const session = await currentSession();
+  let session = await currentSession();
+  if (args.method === 'eth_signTypedData_v4' && session && !session.namespaces.eip155?.methods.includes('eth_signTypedData_v4')) {
+    await connect(true);
+    session = await currentSession();
+  }
   const owner = session ? metamaskSessionAddress(session) : await connect(false);
   if (args.method === 'personal_sign') {
     const signer = String(params[1] || '').toLowerCase();
+    if (signer !== owner) throw new Error('Wallet changed. Reconnect MetaMask.');
+  } else if (args.method === 'eth_signTypedData_v4') {
+    const signer = String(params[0] || '').toLowerCase();
     if (signer !== owner) throw new Error('Wallet changed. Reconnect MetaMask.');
   } else if (args.method === 'eth_sendTransaction') {
     walletTransaction(params[0], owner);

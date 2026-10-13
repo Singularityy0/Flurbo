@@ -32,32 +32,35 @@ test('hosted invite checks cover every app route, preserve evidence and auth, an
     const req=httpRequest({hostname:'127.0.0.1',port:(server.address() as any).port,path,method:body?'POST':'GET',headers:{host:'flurbo.singu.online',origin,'content-type':'application/json',cookie:'flurbo_session='+id}},res=>{let text='';res.on('data',c=>text+=c);res.on('end',()=>resolve({status:res.statusCode,data:JSON.parse(text)}));});req.on('error',reject);req.end(body?JSON.stringify(body):undefined);
   });
   try{
-    assert.deepEqual((await request('/api/preview')).data,{inviteOnly:true,applicationUrl:null});
+    assert.deepEqual((await request('/api/preview')).data,{inviteOnly:false,applicationUrl:null});
     assert.equal((await request('/api/auth/session','pending')).status,200);
-    assert.equal((await request('/api/account/access','pending')).data.approved,false);
+    assert.equal((await request('/api/account/access','pending')).data.approved,true);
     assert.equal((await request('/api/account/access','approved')).data.approved,true);
     assert.equal((await request('/api/account/access','operator')).data.approved,true);
     for(const route of ['/api/market-directory','/api/practice-collections','/api/account/wallets','/api/network','/api/state','/api/quote','/api/portfolio','/api/markets/learning/state']){
       assert.equal((await request(route)).status,401,route);
-      assert.equal((await request(route,'pending')).status,403,route);
+      assert.notEqual((await request(route,'pending')).status,403,route);
       assert.equal((await request(route,account)).status,401,route);
     }
     for(const namespace of ['pilot',ns]){
-      for(const endpoint of ['markets','status','price-history'])assert.equal((await request('/api/'+namespace+'/'+endpoint,'pending')).status,403);
-      for(const endpoint of ['prepare','positions','analytics','history','collected-payouts','challenge-eligibility','rpc','evidence'])assert.equal((await request('/api/'+namespace+'/'+endpoint,'pending',{owner:account,approved:true})).status,403);
+      for(const endpoint of ['markets','status','price-history'])assert.notEqual((await request('/api/'+namespace+'/'+endpoint,'pending')).status,403);
+      for(const endpoint of ['prepare','positions','analytics','history','collected-payouts','challenge-eligibility','rpc','evidence']){
+        const response = await request('/api/'+namespace+'/'+endpoint,'pending',{owner:account,approved:true});
+        assert.notEqual(response.data?.code,'INVITE_REQUIRED',endpoint);
+      }
       assert.equal((await request('/api/'+namespace+'/markets','approved')).status,200);
       assert.equal((await request('/api/'+namespace+'/collected-payouts','approved',{})).status,200);
       assert.equal((await request('/api/'+namespace+'/collected-payouts','',{})).status,401);
       assert.equal((await request('/api/'+namespace+'/markets','wallet')).status,401);
       assert.equal((await request('/api/'+namespace+'/evidence/0x'+'ab'.repeat(32))).status,200);
     }
-    assert.equal((await request('/api/account/wallets/verify','pending',{wallet:account})).status,403);
-    assert.equal((await request('/api/rpc','pending',{method:'eth_call',params:[]})).status,403);
+    assert.notEqual((await request('/api/account/wallets/verify','pending',{wallet:account})).status,403);
+    assert.notEqual((await request('/api/rpc','pending',{method:'eth_call',params:[]})).status,403);
     const directory=(await request('/api/market-directory','approved')).data;
     assert.equal(directory.schema,'flurbo.market-directory.v1');assert.equal(directory.markets.length,1,'Same pool must not appear twice');
-    // Reconfiguring approval rejects an existing cookie; session lifetime is not an invitation.
+    // An emptied allowlist does not close markets. Sign-in is the gate.
     policy=previewAccess();
-    assert.equal((await request('/api/account/access','approved')).data.approved,false);
-    assert.equal((await request('/api/pilot/markets','approved')).status,403);
+    assert.equal((await request('/api/account/access','approved')).data.approved,true);
+    assert.equal((await request('/api/pilot/markets','approved')).status,200);
   }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
 });

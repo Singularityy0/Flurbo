@@ -33,10 +33,10 @@ test('landing example and unified directory work on desktop and mobile without l
     for(const width of [1440,390]){
       await page.setViewportSize({width,height:950});await page.goto('https://flurbo.singu.online/');
       await page.getByRole('button',{name:'Goes live',exact:true}).click();assert.match(await page.locator('.home-example-result').innerText(),/73.3/);
-      await page.getByText('Invite-based testnet preview',{exact:true}).waitFor();
+      await page.getByRole('heading',{name:'From account to prediction.',exact:true}).waitFor();
       assert.equal(await page.getByText('Public trading is not available here yet.',{exact:false}).count(),0);
       await page.getByRole('button',{name:'Doesn’t go live',exact:true}).click();assert.match(await page.locator('.home-example-result').innerText(),/25.7/);
-      assert.equal(await page.getByRole('link',{name:'Get early access',exact:true}).first().getAttribute('href'),'/signup');
+      assert.equal(await page.getByRole('link',{name:'Create account',exact:true}).first().getAttribute('href'),'/signup');
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
       await page.screenshot({path:new URL(`../../../target/showcase-ui/home-${width}.png`,import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),fullPage:true});
     }

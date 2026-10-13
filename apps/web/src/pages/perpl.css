@@ -13,3 +13,6 @@
 .perpl-markets dt { color: var(--ink-2); }
 .perpl-markets dd { margin: 0; font: 500 15px/1.3 var(--font-num); font-variant-numeric: tabular-nums; }
 .perpl-outcome { margin: 0; }
+.perpl-tx { word-break: break-all; }
+.perpl-existing { display: grid; gap: var(--s-3); }
+.perpl-existing summary { cursor: pointer; color: var(--ink-2); }

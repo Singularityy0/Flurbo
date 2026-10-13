@@ -1,9 +1,9 @@
 import * as ed from '@noble/ed25519';
+import { bytesToHex, hashTypedData, hexToBytes, type Hex } from 'viem';
 
-// Programmatic enrollment (POST /api/v1/api-key/payload and /enroll) only accepts
-// an origin Perpl has whitelisted. flurbo.singu.online is not on that list.
-// A key created at https://testnet.perpl.xyz/apikeys already is. Trading then
-// uses that key; the private key stays in the browser and signs each frame.
+// Enrollment is wallet-signed (POST /api/v1/api-key/payload then /enroll) from
+// the origin Perpl whitelisted: https://flurbo.singu.online. The Ed25519 secret
+// stays in the browser and signs each later trading frame.
 ed.etc.sha512Async = async (...messages: Uint8Array[]) => {
   const data = ed.etc.concatBytes(...messages);
   const bytes = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
@@ -16,6 +16,8 @@ export const PERPL_AUSD = '0xa9012a055bd4e0edff8ce09f960291c09d5322dc';
 export const PERPL_KEYS_URL = 'https://testnet.perpl.xyz/apikeys';
 export const PERPL_APP_URL = 'https://testnet.perpl.xyz';
 export const PERPL_DOCS_URL = 'https://docs.perpl.xyz/resources/for-developers/api/authentication';
+export const PERPL_SCOPE_TRADE = 3;
+export const PERPL_KEY_LABEL = 'Flurbo';
 
 export type PerplMarket = {
   id: number;
@@ -53,6 +55,8 @@ export type PerplOrder = {
   gateway?: string;
   status?: number;
   reason?: number;
+  txid?: string;
+  block?: number;
   fill?: PerplFill;
 };
 type EarlyFill = PerplFill & { oid: number; marketId: number; accountId: number };
@@ -124,6 +128,112 @@ export function parseApiSecret(value: string) {
   const hex = value.trim().replace(/^0x/i, '').toLowerCase();
   if (!/^[0-9a-f]{64}$/.test(hex)) throw new Error('The private key should be 64 hex characters (32 bytes).');
   return ed.etc.hexToBytes(hex);
+}
+
+export function parseWalletAddress(value: string) {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(value)) throw new Error('Select a MetaMask account.');
+  return value;
+}
+
+export type EnrollmentTypedData = {
+  types: Record<string, { name: string; type: string }[]>;
+  primaryType: string;
+  domain: Record<string, unknown>;
+  message: Record<string, unknown>;
+};
+
+function hexOf(value: unknown, bytes: number) {
+  return typeof value === 'string' && new RegExp(`^0x[0-9a-fA-F]{${bytes * 2}}$`).test(value);
+}
+
+export async function createApiKeypair() {
+  const secret = ed.utils.randomPrivateKey();
+  return { secret, publicKeyHex: bytesToHex(await ed.getPublicKeyAsync(secret)), secretHex: bytesToHex(secret) };
+}
+
+export function parseEnrollmentPayload(value: unknown): { typedData: EnrollmentTypedData; raw: Record<string, unknown>; mac: string } {
+  const body = record(value);
+  const typed = record(body?.typed_data);
+  const types = record(typed?.types);
+  const domain = record(typed?.domain);
+  const message = record(typed?.message);
+  const primaryType = typeof typed?.primaryType === 'string' ? typed.primaryType : '';
+  if (!typed || !types || !domain || !message || !/^[A-Za-z][A-Za-z0-9]{0,63}$/.test(primaryType) || !Array.isArray(types[primaryType]) || !types[primaryType].length) {
+    throw new Error('Perpl sent an enrollment payload this page could not sign.');
+  }
+  if (!hexOf(body?.mac, 32)) throw new Error('Perpl sent an enrollment payload this page could not sign.');
+  const fields: EnrollmentTypedData['types'] = {};
+  for (const [name, entries] of Object.entries(types)) {
+    if (!/^[A-Za-z][A-Za-z0-9]{0,63}$/.test(name) || !Array.isArray(entries) || entries.length > 32) throw new Error('Perpl sent an enrollment payload this page could not sign.');
+    fields[name] = entries.map(entry => {
+      const row = record(entry);
+      if (!row || typeof row.name !== 'string' || typeof row.type !== 'string' || !/^[A-Za-z][A-Za-z0-9]{0,63}$/.test(row.name) || !/^[A-Za-z0-9\[\]]{1,64}$/.test(row.type)) {
+        throw new Error('Perpl sent an enrollment payload this page could not sign.');
+      }
+      return { name: row.name, type: row.type };
+    });
+  }
+  return { typedData: { types: fields, primaryType, domain, message }, raw: typed, mac: String(body!.mac) };
+}
+
+export function enrollmentDigest(typedData: EnrollmentTypedData): Hex {
+  const { EIP712Domain: _ignored, ...types } = typedData.types;
+  if (!types[typedData.primaryType]?.length) throw new Error('Perpl sent an enrollment payload this page could not sign.');
+  const domain = { ...typedData.domain };
+  if (typeof domain.chainId === 'string') domain.chainId = BigInt(domain.chainId);
+  return hashTypedData({
+    domain: domain as Parameters<typeof hashTypedData>[0]['domain'],
+    types,
+    primaryType: typedData.primaryType,
+    message: typedData.message,
+  });
+}
+
+export async function proofOfPossession(secret: Uint8Array, typedData: EnrollmentTypedData) {
+  return bytesToHex(await ed.signAsync(hexToBytes(enrollmentDigest(typedData)), secret));
+}
+
+export function parseEnrolledToken(value: unknown) {
+  const body = record(value);
+  const nested = record(body?.api_key);
+  return parseApiToken(typeof nested?.api_key === 'string' ? nested.api_key : typeof body?.api_key === 'string' ? body.api_key : '');
+}
+
+export function enrollmentFailure(status: number, value: unknown) {
+  if (status === 401) return 'Sign in again to enroll a Perpl key.';
+  if (status === 409) return 'This public key is already registered on Perpl. Try again to create a new key.';
+  if (status === 423) return 'This wallet already has 16 Perpl keys. Revoke one at Perpl, then try again.';
+  if (status === 404) return 'Perpl has no profile for this wallet. Open the Perpl testnet app first.';
+  if (status === 403) return 'Perpl has not approved enrollment from this site.';
+  const message = typeof record(value)?.error === 'string' ? String(record(value)!.error).replace(/[^\x20-\x7E]/g, '').slice(0, 160) : '';
+  return message || 'Perpl enrollment is unavailable. Try again shortly.';
+}
+
+export async function enrollApiKey(input: {
+  address: string;
+  signTypedData: (typedData: Record<string, unknown>) => Promise<string>;
+  fetch?: typeof fetch;
+  label?: string;
+}) {
+  const address = parseWalletAddress(input.address);
+  const fetcher = input.fetch ?? fetch;
+  const pair = await createApiKeypair();
+  const payloadResponse = await fetcher('/api/perpl/api-key/payload', {
+    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chain_id: PERPL_CHAIN_ID, address, public_key: pair.publicKeyHex, scope_mask: PERPL_SCOPE_TRADE, label: input.label ?? PERPL_KEY_LABEL }),
+  });
+  const payloadBody = await payloadResponse.json().catch(() => null);
+  if (!payloadResponse.ok) throw new Error(enrollmentFailure(payloadResponse.status, payloadBody));
+  const { typedData, raw, mac } = parseEnrollmentPayload(payloadBody);
+  const signature = await input.signTypedData(raw);
+  if (typeof signature !== 'string' || !/^0x[0-9a-fA-F]{128,144}$/.test(signature)) throw new Error('MetaMask did not return an enrollment signature.');
+  const enrollResponse = await fetcher('/api/perpl/api-key/enroll', {
+    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chain_id: PERPL_CHAIN_ID, address, typed_data: raw, mac, signature, pop_signature: await proofOfPossession(pair.secret, typedData) }),
+  });
+  const enrollBody = await enrollResponse.json().catch(() => null);
+  if (!enrollResponse.ok) throw new Error(enrollmentFailure(enrollResponse.status, enrollBody));
+  return { token: parseEnrolledToken(enrollBody), secret: pair.secret, secretHex: pair.secretHex };
 }
 
 export function tradeLeverage(initialMargin: number) {
@@ -225,10 +335,21 @@ function keepProgress(previous: PerplAccount | undefined, next: PerplAccount): P
   return previous ? { ...next, lastRequest: Math.max(previous.lastRequest, next.lastRequest) } : next;
 }
 
-function txidOf(value: unknown) {
-  const at = record(value);
-  const txid = typeof at?.txid === 'string' && /^0x[0-9a-fA-F]{64}$/.test(at.txid) ? at.txid : undefined;
-  const block = whole(at?.b, 0) ?? undefined;
+function txHash(value: unknown) {
+  if (typeof value !== 'string') return undefined;
+  const body = value.trim().replace(/^0x/i, '');
+  return /^[0-9a-fA-F]{64}$/.test(body) ? `0x${body.toLowerCase()}` : undefined;
+}
+
+function txidOf(...values: unknown[]) {
+  let txid: string | undefined;
+  let block: number | undefined;
+  for (const value of values) {
+    const at = record(value);
+    if (!at) continue;
+    txid ??= txHash(at.txid);
+    block ??= whole(at.b, 0) ?? undefined;
+  }
   return { txid, block };
 }
 
@@ -268,7 +389,8 @@ export function applyFrame(desk: PerplDesk, value: unknown): PerplDesk {
     const stale = desk.lastSequence !== undefined && sequence !== null && sequence !== desk.lastSequence + 1;
     return { ...desk, head: head ?? desk.head, stale: desk.stale || stale, lastSequence: !stale && sequence !== null ? sequence : desk.lastSequence };
   }
-  if (!desk.order || desk.order.phase === 'filled' || desk.order.phase === 'failed' || desk.order.phase === 'closed') return desk;
+  if (!desk.order || desk.order.phase === 'failed' || desk.order.phase === 'closed') return desk;
+  if (desk.order.phase === 'filled' && (desk.order.fill?.txid || (kind !== 24 && kind !== 25))) return desk;
   if (kind === 3) {
     if (whole(frame.cid, 1) !== desk.order.serial) return desk;
     const status = record(frame.status);
@@ -286,15 +408,24 @@ export function applyFrame(desk: PerplDesk, value: unknown): PerplDesk {
       const orderId = whole(row?.oid, 1) ?? undefined;
       const status = whole(row?.st, 0) ?? undefined;
       const reason = whole(row?.sr, 0) ?? undefined;
+      const stamp = txidOf(row?.at, row?.c);
+      const txid = stamp.txid || next.order.txid || next.order.fill?.txid;
+      const block = stamp.block ?? next.order.block ?? next.order.fill?.block;
+      if (next.order.phase === 'filled') {
+        if (orderId === next.order.orderId && txid && txid !== next.order.fill?.txid) {
+          next = { ...next, order: { ...next.order, txid, block, fill: { ...next.order.fill!, txid, block } } };
+        }
+        continue;
+      }
       const cancelDone = next.order.action === 5 && status === 5;
       const failed = !cancelDone && (status === 5 || status === 6 || status === 7);
-      const order = cancelDone ? { ...next.order, orderId, status, reason, phase: 'closed' as const }
-        : failed ? fail({ ...next.order, orderId, status, reason }, reason) : { ...next.order, orderId, status, reason };
+      const order = cancelDone ? { ...next.order, orderId, status, reason, phase: 'closed' as const, txid, block }
+        : failed ? fail({ ...next.order, orderId, status, reason, txid, block }, reason) : { ...next.order, orderId, status, reason, txid, block };
       const early = orderId ? next.earlyFills.find(fill => fill.oid === orderId) : undefined;
       next = {
         ...next,
         earlyFills: early ? next.earlyFills.filter(fill => fill !== early) : next.earlyFills,
-        order: early && order.phase !== 'failed' ? { ...order, phase: 'filled', fill: { price: early.price, size: early.size, txid: early.txid, block: early.block } } : order,
+        order: early && order.phase !== 'failed' ? { ...order, phase: 'filled', fill: { price: early.price, size: early.size, txid: early.txid || txid, block: early.block ?? block } } : order,
       };
     }
     return next;
@@ -309,10 +440,18 @@ export function applyFrame(desk: PerplDesk, value: unknown): PerplDesk {
       const size = whole(row?.s, 0);
       if (!next.order || oid === null || marketId === null || accountId === null || size === null) continue;
       if (marketId !== next.order.marketId || accountId !== next.order.accountId) continue;
-      const { txid, block } = txidOf(row?.at);
+      const stamp = txidOf(row?.at, frame?.at);
+      const txid = stamp.txid || next.order.txid;
+      const block = stamp.block ?? next.order.block;
       const fill: EarlyFill = { oid, marketId, accountId, size, price: whole(row?.p, 0) ?? undefined, txid, block };
+      if (next.order.phase === 'filled') {
+        if (next.order.orderId === oid && txid && txid !== next.order.fill?.txid) {
+          next = { ...next, order: { ...next.order, txid, block, fill: { price: next.order.fill?.price ?? fill.price, size: next.order.fill?.size ?? size, txid, block: next.order.fill?.block ?? block } } };
+        }
+        continue;
+      }
       if (!next.order.orderId) next = { ...next, earlyFills: [...next.earlyFills, fill].slice(-8) };
-      else if (next.order.orderId === oid) next = { ...next, order: { ...next.order, phase: 'filled', fill: { price: fill.price, size, txid, block } } };
+      else if (next.order.orderId === oid) next = { ...next, order: { ...next.order, phase: 'filled', txid, block, fill: { price: fill.price, size, txid, block } } };
     }
     return next;
   }
@@ -322,8 +461,8 @@ export function applyFrame(desk: PerplDesk, value: unknown): PerplDesk {
 export function orderOutcome(order: PerplOrder | null, stale: boolean) {
   if (!order) return null;
   if (order.phase === 'filled' && order.fill) {
-    const where = order.fill.txid ? ` Transaction ${order.fill.txid}.` : ' The fill did not include a transaction hash.';
-    return { tone: 'ok' as const, text: `Filled on Perpl.${where}`, txid: order.fill.txid };
+    const txid = order.fill.txid || order.txid;
+    return { tone: 'ok' as const, text: txid ? 'Filled on Perpl.' : 'Filled on Perpl. The transaction hash has not arrived yet.', txid };
   }
   if (order.phase === 'closed') return { tone: 'done' as const, text: 'Perpl canceled that order. This is not a fill.' };
   if (order.phase === 'failed') {

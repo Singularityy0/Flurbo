@@ -3,7 +3,7 @@ import test from 'node:test';
 import * as ed from '@noble/ed25519';
 import {
   PERPL_AUSD, PERPL_EXCHANGE, apiKeySignIn, applyFrame, beginOrder, collateralAmount, emptyDesk,
-  collateralText, formatScaled, minimumLong, nextRequestId, orderOutcome, orderRequest, parseApiSecret, parseApiToken, parsePerplContext, scaleUnits,
+  collateralText, createApiKeypair, enrollApiKey, enrollmentDigest, enrollmentFailure, formatScaled, minimumLong, nextRequestId, orderOutcome, orderRequest, parseApiSecret, parseApiToken, parseEnrollmentPayload, parseEnrolledToken, parsePerplContext, proofOfPossession, scaleUnits,
   resumeDesk, tradeLeverage, wsSignInCanonical,
 } from '../src/perpl.ts';
 
@@ -40,6 +40,75 @@ test('keeps the API token and the 32-byte secret in separate fields', () => {
   assert.throws(() => parseApiSecret('zz'));
 });
 
+const enrollmentTyped = {
+  types: {
+    EIP712Domain: [
+      { name: 'name', type: 'string' }, { name: 'version', type: 'string' }, { name: 'chainId', type: 'uint256' },
+      { name: 'verifyingContract', type: 'address' }, { name: 'salt', type: 'bytes32' },
+    ],
+    PerplRegisterApiKey: [
+      { name: 'signer', type: 'address' }, { name: 'statement', type: 'string' }, { name: 'publicKey', type: 'string' },
+      { name: 'scope', type: 'string' }, { name: 'label', type: 'string' }, { name: 'expiresAt', type: 'string' },
+      { name: 'ipCidrs', type: 'string' }, { name: 'origin', type: 'string' }, { name: 'builderId', type: 'string' },
+      { name: 'maxBuilderFeePer100K', type: 'string' }, { name: 'time', type: 'uint64' },
+    ],
+  },
+  primaryType: 'PerplRegisterApiKey',
+  domain: {
+    name: 'perpl.xyz', version: '1', chainId: '0x279f',
+    verifyingContract: '0x0000000000000000000000000000000000000000',
+    salt: '0x00000000000000000000000000000000000000006acea033def173c38d4949d4',
+  },
+  message: {
+    builderId: '0', expiresAt: '0', ipCidrs: '', label: 'Flurbo', maxBuilderFeePer100K: '0',
+    origin: 'https://flurbo.singu.online', publicKey: 'PsL2pFi77WLxd8ie8gI76cF2SSKKhBWcw_D2NpTrGo4', scope: '3',
+    signer: '0x0000000000000000000000000000000000000001',
+    statement: 'I authorize the creation of Perpl API key with the specified scope and parameters',
+    time: '0x1a13721c8d9',
+  },
+};
+
+test('hashes the enrollment typed data and proves possession of the Ed25519 secret', async () => {
+  const parsed = parseEnrollmentPayload({ typed_data: enrollmentTyped, mac: '0x' + 'ab'.repeat(32) });
+  assert.equal(parsed.typedData.primaryType, 'PerplRegisterApiKey');
+  const digest = enrollmentDigest(parsed.typedData);
+  assert.match(digest, /^0x[0-9a-f]{64}$/);
+  const pair = await createApiKeypair();
+  const pop = await proofOfPossession(pair.secret, parsed.typedData);
+  assert.match(pop, /^0x[0-9a-f]{128}$/);
+  assert.equal(await ed.verifyAsync(ed.etc.hexToBytes(pop.slice(2)), ed.etc.hexToBytes(digest.slice(2)), ed.etc.hexToBytes(pair.publicKeyHex.slice(2))), true);
+  assert.equal(parseEnrolledToken({ api_key: { api_key: 'a'.repeat(20) } }), 'a'.repeat(20));
+  assert.match(enrollmentFailure(409, {}), /already registered/);
+  assert.throws(() => parseEnrollmentPayload({ typed_data: { ...enrollmentTyped, primaryType: 'Other' }, mac: '0x' + 'ab'.repeat(32) }));
+});
+
+test('enrolls a trade key after the wallet signs the payload Perpl returned', async () => {
+  const calls: { url: string; body: any }[] = [];
+  const result = await enrollApiKey({
+    address: '0x' + '11'.repeat(20),
+    signTypedData: async typed => {
+      assert.equal(typed.primaryType, 'PerplRegisterApiKey');
+      return '0x' + '22'.repeat(65);
+    },
+    fetch: (async (url: string, options: RequestInit) => {
+      const body = JSON.parse(String(options.body));
+      calls.push({ url: String(url), body });
+      if (String(url).endsWith('/payload')) return Response.json({ typed_data: enrollmentTyped, mac: '0x' + 'ab'.repeat(32) });
+      if (String(url).endsWith('/enroll')) {
+        assert.match(body.pop_signature, /^0x[0-9a-f]{128}$/);
+        assert.equal(body.signature, '0x' + '22'.repeat(65));
+        assert.equal(body.typed_data.primaryType, 'PerplRegisterApiKey');
+        return Response.json({ api_key: { api_key: 'z'.repeat(24) } });
+      }
+      throw new Error(String(url));
+    }) as typeof fetch,
+  });
+  assert.equal(result.token, 'z'.repeat(24));
+  assert.equal(result.secret.length, 32);
+  assert.equal(calls[0].body.scope_mask, 3);
+  assert.equal(calls[0].body.chain_id, 10143);
+});
+
 test('signs the testnet trading socket with the documented canonical string', async () => {
   const secret = parseApiSecret('11'.repeat(32));
   const canonical = wsSignInCanonical('1751932800000', '9Nq0Yp3kZ2c1aVb7');
@@ -67,6 +136,18 @@ test('a gateway acknowledgement is not a fill; the fill record is', () => {
   assert.equal(desk.order?.phase, 'filled');
   assert.equal(orderOutcome(desk.order, false)?.tone, 'ok');
   assert.equal(orderOutcome(desk.order, true)?.txid, txid);
+});
+
+test('a fill without a hash keeps the transaction hash from a later order update', () => {
+  let desk = beginOrder(emptyDesk(12), { serial: 1, requestId: 8, marketId: 16, accountId: 3, action: 1, phase: 'sent' });
+  desk = applyFrame(desk, { mt: 24, d: [{ rq: 8, oid: 44, st: 2, sr: 0 }] });
+  desk = applyFrame(desk, { mt: 25, d: [{ oid: 44, mkt: 16, acc: 3, s: 1, p: 1 }] });
+  assert.equal(desk.order?.phase, 'filled');
+  assert.match(orderOutcome(desk.order, false)?.text ?? '', /has not arrived/);
+  const txid = '0x' + 'EF'.repeat(32);
+  desk = applyFrame(desk, { mt: 24, d: [{ rq: 8, oid: 44, st: 4, sr: 0, at: { b: 80, txid } }] });
+  assert.equal(orderOutcome(desk.order, false)?.txid, txid.toLowerCase());
+  assert.equal(orderOutcome(desk.order, false)?.text, 'Filled on Perpl.');
 });
 
 test('a fill that arrives before the order id is confirmed when the order update names it', () => {

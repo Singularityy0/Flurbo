@@ -32,16 +32,15 @@ test('claim analysis rejects wrong bindings, settled state, stale/reorg data and
   const s=setup();s.stale();await assert.rejects(s.run({scope:3,mask:'14'}));
   const chain=setup();chain.f.options.chain=1n;await assert.rejects(chain.run({scope:3,mask:'14'}));
 });
-test('claim API preserves login, invite and origin gates, rejects ambiguous input and hides upstream errors',async()=>{
-  let logged=false,approved=false,calls=0,fail=false;
-  const api=localApi({previewAccess:{allows:()=>approved},store:{read:async()=>logged?{method:'passkey',address:'0x'+'99'.repeat(20)}:null},pilot:{manifest:pilotFixture().manifest,claimAnalytics:async()=>{calls++;if(fail)throw Error('sensitive provider detail');return {ok:true};}}});
+test('claim API preserves login and origin gates, rejects ambiguous input and hides upstream errors',async()=>{
+  let logged=false,calls=0,fail=false;
+  const api=localApi({previewAccess:{allows:()=>false},store:{read:async()=>logged?{method:'passkey',address:'0x'+'99'.repeat(20)}:null},pilot:{manifest:pilotFixture().manifest,claimAnalytics:async()=>{calls++;if(fail)throw Error('sensitive provider detail');return {ok:true};}}});
   async function request(input:any,origin='http://localhost:18767'){
     const req:any={url:'/api/pilot/claim-analytics',method:'POST',headers:{host:'localhost:18767',origin,'content-type':'application/json'},async *[Symbol.asyncIterator](){yield JSON.stringify(input);}};
     let status=0,body:any;const res:any={writeHead:(v:number)=>{status=v;},end:(v:string)=>{body=JSON.parse(v);},setHeader:()=>{}};
     await api(req,res,()=>{});return {status,body};
   }
   assert.equal((await request({scope:3,mask:'14'})).status,401);logged=true;
-  assert.equal((await request({scope:3,mask:'14'})).status,403);approved=true;
   assert.equal((await request({scope:3,mask:'14'},'https://other.example')).status,403);
   for(const bad of [null,[],{scope:3,mask:'15'},{scope:4,mask:'1'},{scope:3,mask:'14',to:'wallet'}])assert.equal((await request(bad)).status,400);
   assert.equal(calls,0);assert.equal((await request({scope:3,mask:'14'})).status,200);
