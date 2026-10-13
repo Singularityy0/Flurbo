@@ -18,6 +18,7 @@ test('rejects mainnet, different sender and native transfers', () => {
 test('rejects foreign and unidentified WalletConnect sessions, including on restore', () => {
   const session = {expiry: 100, namespaces: {eip155: {accounts: [`eip155:10143:${owner}`], methods:['eth_sendTransaction'], events:[]}}};
   assert.throws(() => sessionAddress(session, 1), /Only MetaMask/);
+  assert.equal(sessionAddress({...session, peer:{metadata:{name:'MetaMask Wallet',url:'https://metamask.io/'}}}, 1), owner);
   assert.throws(() => sessionAddress({...session, peer:{metadata:{name:'Rabby',url:'https://rabby.io'}}}, 1), /Only MetaMask/);
   assert.throws(() => sessionAddress({...session, peer:{metadata:{name:'MetaMask',url:'https://metamask.io.evil.test'}}}, 1), /Only MetaMask/);
 });

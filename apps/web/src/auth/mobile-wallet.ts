@@ -12,7 +12,8 @@ type WalletSession = {
 };
 
 export function metamaskSessionAddress(session: WalletSession, now = Date.now()) {
-  if (!/^MetaMask(?:: Web3 Wallet| Mobile)?$/i.test(session.peer?.metadata?.name ?? '') || !/^https:\/\/(?:[a-z0-9-]+\.)?metamask\.io(?:\/|$)/i.test(session.peer?.metadata?.url ?? '')) throw new Error('Only MetaMask is supported for trading. Reconnect MetaMask.');
+  // MetaMask Mobile's WalletConnect peer is named "MetaMask Wallet" at https://metamask.io/.
+  if (!/^MetaMask(?: Wallet|: Web3 Wallet| Mobile)?$/i.test(session.peer?.metadata?.name ?? '') || !/^https:\/\/(?:[a-z0-9-]+\.)?metamask\.io(?:\/|$)/i.test(session.peer?.metadata?.url ?? '')) throw new Error('Only MetaMask is supported for trading. Reconnect MetaMask.');
   const ns = session.namespaces.eip155;
   if (session.expiry * 1000 <= now || !ns?.methods.includes('eth_sendTransaction')) throw new Error('Reconnect MetaMask on Monad testnet.');
   const accounts = ns.accounts.filter(account => /^eip155:10143:0x[0-9a-f]{40}$/i.test(account));

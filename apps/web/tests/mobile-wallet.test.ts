@@ -20,6 +20,7 @@ test('the shell and a phone browser open the MetaMask app; a desktop browser doe
 
 test('a MetaMask Monad session yields its one account, and other wallets do not', () => {
   assert.equal(metamaskSessionAddress(session), '0x' + 'ab'.repeat(20));
+  assert.equal(metamaskSessionAddress({ ...session, peer: { metadata: { name: 'MetaMask Wallet', url: 'https://metamask.io/' } } }), '0x' + 'ab'.repeat(20));
   assert.throws(() => metamaskSessionAddress({ ...session, peer: { metadata: { name: 'Other', url: 'https://example.com' } } }), /Only MetaMask/);
   assert.throws(() => metamaskSessionAddress({ ...session, namespaces: { eip155: { ...session.namespaces.eip155, accounts: ['eip155:1:0x' + 'ab'.repeat(20)] } } }), /Monad testnet/);
 });
