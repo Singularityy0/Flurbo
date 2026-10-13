@@ -25,6 +25,10 @@ test('enrollment forwarding only sends a testnet payload with the whitelisted or
   assert.equal(seen.body.scope_mask, 3);
   assert.equal(result.status, 200);
   assert.equal((await forwardPerplEnrollment('other', { chain_id: 10143, address, public_key: publicKey, scope_mask: 3, label: 'Flurbo' })).status, 400);
+  const enroll = { chain_id: 10143, address, typed_data: { primaryType: 'PerplRegisterApiKey' }, mac: '0x' + 'ab'.repeat(32), signature: '0x' + 'cd'.repeat(65), pop_signature: '0x' + 'ef'.repeat(64) };
+  const missing = await forwardPerplEnrollment('enroll', enroll, async () => new Response('Not Found', { status: 404, headers: { 'content-type': 'text/plain' } }));
+  assert.equal(missing.status, 404);
+  assert.equal(missing.value.error, 'Not Found');
 });
 
 test('the context proxy only returns Monad testnet', async () => {
