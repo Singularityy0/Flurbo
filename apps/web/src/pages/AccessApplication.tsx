@@ -49,14 +49,14 @@ export function AccessApplication({refresh,checking}:{refresh():Promise<void>;ch
   ];
   return <section className="application-form" aria-label="Your access application" aria-busy={busy}>
     {loaded&&<Stepper steps={steps} label="Application progress" className="application-steps"/>}
-    {!loaded?<div><h2>Your application couldn’t be loaded.</h2><p>Retry to check your saved status before making another request.</p></div>:canApply?<form onSubmit={e=>{e.preventDefault();void act('submit',{email,noticeAccepted:accepted});}}>
+    {!loaded?<div><h2>Your application couldn’t be loaded.</h2><p>Retry to check your saved status before making another request.</p></div>:canApply?<form noValidate onSubmit={e=>{e.preventDefault();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())){setError('Enter an email address.');return;}void act('submit',{email:email.trim(),noticeAccepted:accepted});}}>
       <h2>Request your invitation.</h2><p>Leave your email. We’ll let you know when your account is approved.</p>
       <label htmlFor="application-email">Email address</label>
       <input id="application-email" type="email" autoComplete="email" maxLength={254} required value={email} onChange={e=>setEmail(e.target.value)} disabled={busy}/>
       <label className="application-consent check-row"><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)} required disabled={busy}/><span>I understand Flurbo will use my email for application and access updates, and for notices about my own positions that I can turn off. <a href="/docs#application-data">How we use this data</a></span></label>
       <div className="access-actions"><button className="button button-dark" disabled={busy||!accepted}>{busy?'Saving…':'Request access'}</button>
       {editing&&<button type="button" className="text-link" onClick={()=>setEditing(false)}>Cancel</button>}</div>
-    </form>:state==='unverified'?<form onSubmit={e=>{e.preventDefault();void act('verify',{code});}}>
+    </form>:state==='unverified'?<form noValidate onSubmit={e=>{e.preventDefault();void act('verify',{code});}}>
       <h2>Check your email.</h2><p>Enter the code sent to <strong>{application.email}</strong>. It expires after 10 minutes.</p>
       <label htmlFor="application-code">Verification code</label>
       <input id="application-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,''))} disabled={busy}/>

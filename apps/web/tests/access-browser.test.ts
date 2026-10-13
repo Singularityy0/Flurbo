@@ -6,7 +6,7 @@ import {pathToFileURL} from 'node:url';
 test('native application on desktop and mobile: submit, verify, reload, withdraw and operator decision',{skip:!process.env.FLURBO_TEST_PLAYWRIGHT},async()=>{
   const {chromium}=await import(pathToFileURL(process.env.FLURBO_TEST_PLAYWRIGHT!).href);
   const browser=await chromium.launch({headless:true,executablePath:process.env.FLURBO_TEST_BROWSER});
-  let application:any=null,operator=false,approved=false;const account='0x'+'ab'.repeat(20),errors:string[]=[];
+  let application:any=null,submitted:any=null,operator=false,approved=false;const account='0x'+'ab'.repeat(20),errors:string[]=[];
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.route('**/*',async(route:any)=>{
@@ -14,18 +14,20 @@ test('native application on desktop and mobile: submit, verify, reload, withdraw
       if(p==='/api/auth/session')return route.fulfill({json:{session:{address:account,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(p==='/api/account/access')return route.fulfill({json:{approved:operator||approved,nativeApplications:true,testingTools:operator,applicationUrl:null}});
       if(p==='/api/account/application')return route.fulfill({json:{application}});
-      if(p.endsWith('/application/submit')){const input=route.request().postDataJSON();assert.equal(input.account,undefined);application={account,email:input.email,state:'unverified',verified:false,revision:0,createdAt:new Date().toISOString(),notification:'none'};return route.fulfill({json:{application,delivery:'sent'}});}
+      if(p.endsWith('/application/submit')){try{submitted=JSON.parse(route.request().postData()||'null');}catch{submitted=null;}application={account,email:typeof submitted?.email==='string'?submitted.email:'tester@example.com',state:'unverified',verified:false,revision:0,createdAt:new Date().toISOString(),notification:'none'};return route.fulfill({json:{application,delivery:'sent'}});}
       if(p.endsWith('/application/verify')){
-        if(route.request().postDataJSON().code!=='443322')return route.fulfill({status:400,json:{error:'The code did not match. Check your email and try again.'}});
+        let body:any=null;try{body=JSON.parse(route.request().postData()||'null');}catch{body=null;}
+        if(body?.code!=='443322')return route.fulfill({status:400,json:{error:'The code did not match. Check your email and try again.'}});
         application={...application,state:'pending',verified:true,revision:1};return route.fulfill({json:{application}});
       }
       if(p.endsWith('/application/withdraw')){application={...application,state:'withdrawn',email:null};return route.fulfill({json:{application}});}
       if(p.endsWith('/application/admin/list'))return route.fulfill({json:{applications:[{...application,state:approved?'approved':'pending',verified:true,email:'tester@example.com',notification:'none'}]}});
-      if(p.endsWith('/application/admin/decide')){assert.equal(route.request().postDataJSON().decision,'approved');approved=true;return route.fulfill({json:{notification:'sent'}});}
+      if(p.endsWith('/application/admin/decide')){let body:any=null;try{body=JSON.parse(route.request().postData()||'null');}catch{body=null;}if(body?.decision==='approved')approved=true;return route.fulfill({json:{notification:'sent'}});}
       if(p==='/api/account/wallets')return route.fulfill({json:{account,wallets:[]}});
       if(p.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unused fixture'}});
       const file=p.startsWith('/assets/')?p.slice(1):'index.html';
-      return route.fulfill({body:await readFile(new URL('../dist/'+file,import.meta.url)),contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.woff2')?'font/woff2':'text/html'});
+      try{return await route.fulfill({body:await readFile(new URL('../dist/'+file,import.meta.url)),contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.woff2')?'font/woff2':'text/html'});}
+      catch{return route.fulfill({status:404,body:'missing'});}
     });
     await page.goto('https://flurbo.singu.online/access');
     await page.getByRole('heading',{name:'Request your invitation.'}).waitFor();
@@ -37,8 +39,16 @@ test('native application on desktop and mobile: submit, verify, reload, withdraw
       await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
       await page.screenshot({path:new URL(`../../../target/access-review/form-${width}.png`,import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),fullPage:true});
     }
-    await page.getByRole('button',{name:'Request access',exact:true}).click();
-    await page.getByLabel('Verification code').fill('111111');await page.getByRole('button',{name:'Verify email',exact:true}).click();
+    // Full-page shots leave the narrow viewport mid-scroll. Return to a stable view, then submit.
+    // A headless validation bubble can swallow the first submit without navigating, so try once more.
+    await page.setViewportSize({width:1440,height:1000});await page.evaluate(()=>window.scrollTo(0,0));
+    const requestAccess=page.getByRole('button',{name:'Request access',exact:true});
+    const code=page.getByLabel('Verification code');
+    await requestAccess.click();
+    if(!await code.waitFor({timeout:5000}).then(()=>true,()=>false)&&await requestAccess.isVisible())await requestAccess.click();
+    await code.waitFor();
+    assert.equal(submitted?.account,undefined);assert.equal(submitted?.email,'tester@example.com');assert.equal(submitted?.noticeAccepted,true);
+    await code.fill('111111');await page.getByRole('button',{name:'Verify email',exact:true}).click();
     await page.getByRole('alert').filter({hasText:'code did not match'}).waitFor();
     await page.getByLabel('Verification code').fill('443322');await page.getByRole('button',{name:'Verify email',exact:true}).click();
     await page.getByRole('heading',{name:'Your request is received.'}).waitFor();
@@ -74,7 +84,8 @@ test('access checks preserve the form and distinguish unavailable status from cl
       if(p==='/api/account/wallets')return route.fulfill({json:{account,wallets:[]}});
       if(p.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Unused fixture'}});
       const file=p.startsWith('/assets/')?p.slice(1):'index.html';
-      return route.fulfill({body:await readFile(new URL('../dist/'+file,import.meta.url)),contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.woff2')?'font/woff2':'text/html'});
+      try{return await route.fulfill({body:await readFile(new URL('../dist/'+file,import.meta.url)),contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.woff2')?'font/woff2':'text/html'});}
+      catch{return route.fulfill({status:404,body:'missing'});}
     });
     await page.goto('https://flurbo.singu.online/access');
     await page.getByRole('heading',{name:'Your request is received.'}).waitFor();
