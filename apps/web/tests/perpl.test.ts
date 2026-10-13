@@ -3,7 +3,7 @@ import test from 'node:test';
 import * as ed from '@noble/ed25519';
 import {
   PERPL_AUSD, PERPL_EXCHANGE, apiKeySignIn, applyFrame, beginOrder, collateralAmount, emptyDesk,
-  collateralText, createApiKeypair, enrollApiKey, enrollmentDigest, enrollmentFailure, formatScaled, minimumLong, nextRequestId, orderOutcome, orderRequest, parseApiSecret, parseApiToken, parseEnrollmentPayload, parseEnrolledToken, parsePerplContext, proofOfPossession, scaleUnits,
+  collateralText, createApiKeypair, enrollApiKey, enrollmentDigest, enrollmentEndpoint, enrollmentFailure, formatScaled, minimumLong, nextRequestId, orderOutcome, orderRequest, parseApiSecret, parseApiToken, parseEnrollmentPayload, parseEnrolledToken, parsePerplContext, proofOfPossession, scaleUnits,
   resumeDesk, tradeLeverage, wsSignInCanonical,
 } from '../src/perpl.ts';
 
@@ -80,6 +80,12 @@ test('hashes the enrollment typed data and proves possession of the Ed25519 secr
   assert.equal(parseEnrolledToken({ api_key: { api_key: 'a'.repeat(20) } }), 'a'.repeat(20));
   assert.match(enrollmentFailure(409, {}), /already registered/);
   assert.throws(() => parseEnrollmentPayload({ typed_data: { ...enrollmentTyped, primaryType: 'Other' }, mac: '0x' + 'ab'.repeat(32) }));
+});
+
+test('the live site enrolls directly with Perpl, and localhost keeps the relay', () => {
+  assert.equal(enrollmentEndpoint('payload', 'https://flurbo.singu.online'), 'https://testnet.perpl.xyz/api/v1/api-key/payload');
+  assert.equal(enrollmentEndpoint('enroll', 'http://localhost:18767'), '/api/perpl/api-key/enroll');
+  assert.match(enrollmentFailure(451, { error: 'Unavailable For Legal Reasons' }), /MetaMask connection/);
 });
 
 test('enrolls a trade key after the wallet signs the payload Perpl returned', async () => {

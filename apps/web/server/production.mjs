@@ -31,7 +31,7 @@ const security = {
   'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin',
   'Strict-Transport-Security': 'max-age=31536000', 'X-Frame-Options': 'DENY',
   // The native app's MetaMask connection reads public Monad testnet and the WalletConnect relay from the page.
-  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://testnet-rpc.monad.xyz wss://relay.walletconnect.org https://relay.walletconnect.org wss://relay.walletconnect.com https://relay.walletconnect.com https://verify.walletconnect.org https://verify.walletconnect.com https://rpc.walletconnect.org https://pulse.walletconnect.org wss://pulse.walletconnect.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://testnet.perpl.xyz https://testnet-rpc.monad.xyz wss://relay.walletconnect.org https://relay.walletconnect.org wss://relay.walletconnect.com https://relay.walletconnect.com https://verify.walletconnect.org https://verify.walletconnect.com https://rpc.walletconnect.org https://pulse.walletconnect.org wss://pulse.walletconnect.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
 };
 
 export function productionServer(config, store, staticRoot = dist) {

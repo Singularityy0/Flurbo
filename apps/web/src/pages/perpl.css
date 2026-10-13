@@ -7,6 +7,9 @@
 .perpl-steps .done .perpl-index { background: var(--ink); color: var(--lime); }
 .perpl-steps p { margin: 0; color: var(--ink-2); }
 .perpl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.perpl-substeps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-5); }
+.perpl-substeps > li { display: grid; gap: var(--s-3); }
+.perpl-substeps h3 { display: flex; align-items: center; gap: var(--s-3); margin: 0; font-size: 16px; }
 .perpl-key { display: grid; gap: var(--s-3); }
 .perpl-markets { display: grid; gap: 0; margin: 0; }
 .perpl-markets div { display: flex; justify-content: space-between; gap: var(--s-4); padding: var(--s-3) 0; border-bottom: 1px solid var(--rule); }
