@@ -5,11 +5,12 @@ import PageHeader from '../components/PageHeader';
 import { discoverWallets, type BrowserWallet } from '../auth/wallet-choice';
 import { TESTNET } from '../../server/network.mjs';
 import {
-  PERPL_ACTIONS, PERPL_APP_URL, PERPL_DOCS_URL, PERPL_KEYS_URL, apiKeySignIn, applyFrame, beginOrder, collateralAmount,
+  PERPL_ACTIONS, PERPL_APP_URL, PERPL_DOCS_URL, PERPL_KEYS_URL, applyFrame, beginOrder, collateralAmount,
   emptyDesk, enrollApiKey, formatScaled, nextRequestId, orderOutcome, orderRequest, parseApiSecret, parseApiToken, resumeDesk,
   parsePerplContext, scaleUnits, tradeLeverage, type PerplAction, type PerplContext, type PerplDesk,
 } from '../perpl';
 import './perpl.css';
+import { tradingSocketUrl, wireTradingSocket } from '../perpl-connection';
 
 const STORAGE = 'flurbo.perpl.testnet.v1';
 const OPENED = 'flurbo.perpl.opened';
@@ -52,6 +53,7 @@ export default function Perpl() {
   const deskRef = useRef<PerplDesk | null>(null);
   const reviewed = useRef<{ action: PerplAction; sizeText: string; priceText: string } | null>(null);
   const reconnects = useRef(0);
+  const stopConnection = useRef<() => void>(() => {});
   deskRef.current = desk;
   const account = desk?.accounts[0];
   const accountHasBalance = !!account && /^\d+$/.test(account.balance) && BigInt(account.balance) > 0n;
@@ -89,6 +91,7 @@ export default function Perpl() {
   }, [inFlight, desk?.order?.requestId]);
 
   useEffect(() => () => {
+    stopConnection.current();
     const previous = socketRef.current;
     socketRef.current = null;
     previous?.close();
@@ -140,6 +143,7 @@ export default function Perpl() {
     finally { setEnrolling(false); }
   }
   function forgetKey() {
+    stopConnection.current();
     const previous = socketRef.current;
     socketRef.current = null;
     previous?.close();
@@ -149,6 +153,7 @@ export default function Perpl() {
   }
   function connect(preserve = false) {
     if (!saved || !context) return;
+    stopConnection.current();
     const previous = socketRef.current;
     socketRef.current = null;
     previous?.close();
@@ -156,21 +161,17 @@ export default function Perpl() {
     if (!preserve) reconnects.current = 0;
     const next = preserve ? resumeDesk(deskRef.current, context.instanceId) : emptyDesk(context.instanceId);
     setDesk(next);
-    const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/perpl/trade`);
+    const socket = new WebSocket(tradingSocketUrl(location));
     socketRef.current = socket;
     const key = saved;
-    socket.onopen = () => {
-      setLink('on');
-      void apiKeySignIn(key.secret, key.token).then(frame => {
-        if (socketRef.current === socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(frame));
-      }).catch(() => setStreamError('This key could not be signed.'));
-    };
-    socket.onmessage = event => {
-      if (typeof event.data !== 'string') return;
-      try { setDesk(current => current ? applyFrame(current, JSON.parse(event.data)) : current); } catch { setStreamError('Perpl sent a market update this page could not read.'); }
-    };
+    stopConnection.current = wireTradingSocket(socket, key, {
+      ready: () => { if (socketRef.current === socket) setLink('on'); },
+      frame: frame => { if (socketRef.current === socket) setDesk(current => current ? applyFrame(current, frame) : current); },
+      error: message => { if (socketRef.current === socket) { setStreamError(message); setLink('off'); } },
+    });
     socket.onclose = event => {
       if (socketRef.current !== socket) return;
+      stopConnection.current();
       const phase = deskRef.current?.order?.phase;
       if (phase === 'filled') { setLink('off'); return; }
       if ((phase === 'sent' || phase === 'admitted') && reconnects.current < 1) {
