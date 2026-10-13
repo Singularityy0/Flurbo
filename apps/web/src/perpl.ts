@@ -13,6 +13,7 @@ ed.etc.sha512Async = async (...messages: Uint8Array[]) => {
 export const PERPL_CHAIN_ID = 10143;
 export const PERPL_EXCHANGE = '0x1964c32f0be608e7d29302aff5e61268e72080cc';
 export const PERPL_AUSD = '0xa9012a055bd4e0edff8ce09f960291c09d5322dc';
+export const PERPL_API_URL = 'https://testnet.perpl.xyz/api';
 export const PERPL_KEYS_URL = 'https://testnet.perpl.xyz/apikeys';
 export const PERPL_APP_URL = 'https://testnet.perpl.xyz';
 export const PERPL_DOCS_URL = 'https://docs.perpl.xyz/resources/for-developers/api/authentication';
@@ -205,8 +206,15 @@ export function enrollmentFailure(status: number, value: unknown) {
   if (status === 423) return 'This wallet already has 16 Perpl keys. Revoke one at Perpl, then try again.';
   if (status === 404) return 'Perpl has no profile for this wallet. Open the Perpl testnet app first.';
   if (status === 403) return 'Perpl has not approved enrollment from this site.';
+  if (status === 451) return 'Perpl blocked the key request for regional or legal reasons. Your MetaMask connection on Perpl is separate from that block.';
   const message = typeof record(value)?.error === 'string' ? String(record(value)!.error).replace(/[^\x20-\x7E]/g, '').slice(0, 160) : '';
   return message || 'Perpl enrollment is unavailable. Try again shortly.';
+}
+
+export function enrollmentEndpoint(path: 'payload' | 'enroll', pageOrigin = typeof location === 'undefined' ? '' : location.origin) {
+  // The live page calls Perpl directly so the request uses the visitor's own network.
+  // A server relay is what Perpl answers with HTTP 451, "Unavailable For Legal Reasons".
+  return pageOrigin === 'https://flurbo.singu.online' ? `${PERPL_API_URL}/v1/api-key/${path}` : `/api/perpl/api-key/${path}`;
 }
 
 export async function enrollApiKey(input: {
@@ -218,7 +226,7 @@ export async function enrollApiKey(input: {
   const address = parseWalletAddress(input.address);
   const fetcher = input.fetch ?? fetch;
   const pair = await createApiKeypair();
-  const payloadResponse = await fetcher('/api/perpl/api-key/payload', {
+  const payloadResponse = await fetcher(enrollmentEndpoint('payload'), {
     method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chain_id: PERPL_CHAIN_ID, address, public_key: pair.publicKeyHex, scope_mask: PERPL_SCOPE_TRADE, label: input.label ?? PERPL_KEY_LABEL }),
   });
@@ -227,7 +235,7 @@ export async function enrollApiKey(input: {
   const { typedData, raw, mac } = parseEnrollmentPayload(payloadBody);
   const signature = await input.signTypedData(raw);
   if (typeof signature !== 'string' || !/^0x[0-9a-fA-F]{128,144}$/.test(signature)) throw new Error('MetaMask did not return an enrollment signature.');
-  const enrollResponse = await fetcher('/api/perpl/api-key/enroll', {
+  const enrollResponse = await fetcher(enrollmentEndpoint('enroll'), {
     method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chain_id: PERPL_CHAIN_ID, address, typed_data: raw, mac, signature, pop_signature: await proofOfPossession(pair.secret, typedData) }),
   });

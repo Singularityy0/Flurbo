@@ -225,7 +225,7 @@ export default function Perpl() {
   return <main id="main" className="page page-task perpl-page" tabIndex={-1}>
     <PageHeader back={<Link href="/markets" className="link-back"><ArrowLeft size={16} strokeWidth={1.75} /> Back to markets</Link>}
       title="Perpl testnet" lead="Open, close, cancel, or change a Monad testnet perpetual and wait for Perpl’s record. A Flurbo pool trade does not confirm it." />
-    <p className="callout">Connect the same MetaMask wallet on Perpl before creating a key. Perpl has no profile for a wallet it has never seen, so the key button comes second. The private key then stays in this browser session.</p>
+    <p className="callout">Connect the MetaMask wallet on Perpl, then create the trade key here. Those are two separate steps. The private key stays in this browser session.</p>
     <ol className="perpl-steps">
       <li className={context ? 'done' : ''}>
         <div className="perpl-step-head"><h2><span className="perpl-index">1</span> Markets</h2></div>
@@ -238,14 +238,21 @@ export default function Perpl() {
       <li className={saved ? 'done' : ''}>
         <div className="perpl-step-head"><h2><span className="perpl-index">2</span> API key</h2>
           <a href={PERPL_DOCS_URL} target="_blank" rel="noreferrer">Enrollment and signing</a></div>
-        <p>First, open Perpl and connect the MetaMask wallet you will use here. Then come back and approve the trade key. A fill is a later <code>mt: 25</code> record, not the “accepted for forwarding” reply.</p>
+        <p>A fill is a later <code>mt: 25</code> record, not the “accepted for forwarding” reply.</p>
         {saved ? <div className="perpl-actions"><p>A key is saved for this browser session.</p><button type="button" className="btn btn-secondary" onClick={forgetKey}>Remove key</button></div>
           : <>
-            <div className="perpl-actions">
-              <a className={openedPerpl ? 'btn btn-secondary' : 'btn btn-primary'} href={PERPL_APP_URL} target="_blank" rel="noreferrer" onClick={() => { try { sessionStorage.setItem(OPENED, '1'); } catch { /* The visit still counts on this page. */ } setOpenedPerpl(true); }}>Open Perpl and connect this wallet</a>
-              <button type="button" className={openedPerpl ? 'btn btn-primary' : 'btn btn-secondary'} disabled={enrolling} onClick={() => void enroll()}>{enrolling ? 'Confirm in MetaMask…' : 'Create a trade key with MetaMask'}</button>
-            </div>
-            {!openedPerpl && <p>Open Perpl first. The key signature is the step after you return.</p>}
+            <ol className="perpl-substeps">
+              <li className={openedPerpl ? 'done' : ''}>
+                <h3><span className="perpl-index">1</span> Connect this wallet on Perpl</h3>
+                <p>Open Perpl and use the same MetaMask account you will use for the key.</p>
+                <div className="perpl-actions"><a className="btn btn-primary" href={PERPL_APP_URL} target="_blank" rel="noreferrer" onClick={() => { try { sessionStorage.setItem(OPENED, '1'); } catch { /* The visit still counts on this page. */ } setOpenedPerpl(true); }}>Open Perpl</a></div>
+              </li>
+              <li>
+                <h3><span className="perpl-index">2</span> Create the trade key</h3>
+                <p>Come back to this page and approve one signature in MetaMask.</p>
+                <div className="perpl-actions"><button type="button" className="btn btn-primary" disabled={enrolling} onClick={() => void enroll()}>{enrolling ? 'Confirm in MetaMask…' : 'Create a trade key with MetaMask'}</button></div>
+              </li>
+            </ol>
             {keyError && <p className="field-error" role="alert">{keyError}</p>}
             <details className="perpl-existing">
               <summary>Use an existing key</summary>
