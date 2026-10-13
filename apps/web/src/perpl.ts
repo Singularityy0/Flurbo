@@ -31,13 +31,25 @@ export type PerplMarket = {
 export type PerplContext = { instanceId: number; minimumDeposit: string; markets: PerplMarket[] };
 export type PerplAccount = { id: number; instanceId: number; forwarding: boolean; frozen: boolean; lastRequest: number; balance: string };
 export type PerplFill = { price?: number; size: number; txid?: string; block?: number };
+export const PERPL_ACTIONS = [
+  { id: 1, label: 'Open long' },
+  { id: 2, label: 'Open short' },
+  { id: 3, label: 'Close long' },
+  { id: 4, label: 'Close short' },
+  { id: 5, label: 'Cancel order' },
+  { id: 6, label: 'Add collateral' },
+  { id: 7, label: 'Change order' },
+] as const;
+export type PerplAction = (typeof PERPL_ACTIONS)[number]['id'];
+
 export type PerplOrder = {
   serial: number;
   requestId: number;
   marketId: number;
   accountId: number;
+  action: PerplAction;
   orderId?: number;
-  phase: 'sent' | 'admitted' | 'filled' | 'failed';
+  phase: 'sent' | 'admitted' | 'filled' | 'failed' | 'closed';
   gateway?: string;
   status?: number;
   reason?: number;
@@ -144,11 +156,47 @@ export async function apiKeySignIn(secret: Uint8Array, token: string, now = Date
   return { mt: 29, chain_id: PERPL_CHAIN_ID, api_key: token, timestamp, nonce, signature };
 }
 
-// Smallest order the exchange accepts: one scaled size unit, market, immediate-or-cancel.
-// lb 0 asks Perpl to apply the market's own order window. p 0 is a market order.
+export function scaleUnits(text: string, decimals: number) {
+  const trimmed = text.trim();
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 8 || !/^\d+(?:\.\d+)?$/.test(trimmed)) throw new Error('Enter a positive size for this market.');
+  const [whole = '0', frac = ''] = trimmed.split('.');
+  if (frac.length > decimals) throw new Error('That size has too many decimal places for this market.');
+  const scaled = BigInt(whole) * 10n ** BigInt(decimals) + BigInt((frac + '0'.repeat(decimals)).slice(0, decimals) || '0');
+  if (scaled < 1n || scaled > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Enter a positive size for this market.');
+  return Number(scaled);
+}
+
+export function collateralText(text: string) {
+  const amount = text.trim();
+  if (!/^(?:[1-9]\d{0,11}|0)(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) throw new Error('Enter a collateral amount in AUSD.');
+  return amount;
+}
+
+// lb 0 asks Perpl to apply the market's own order window. p 0 with fl 4 is a market IOC.
+// Cancel and collateral follow Perpl's documented frames: no size, and collateral carries `a`.
+export function orderRequest(input: { action: PerplAction; marketId: number; accountId: number; requestId: number; serial: number; leverage: number; size?: number; price?: number; orderId?: number; amount?: string }) {
+  for (const name of ['action', 'marketId', 'accountId', 'requestId', 'serial', 'leverage'] as const) {
+    if (!Number.isSafeInteger(input[name]) || input[name] <= 0) throw new Error(`Invalid ${name}.`);
+  }
+  if (!PERPL_ACTIONS.some(item => item.id === input.action)) throw new Error('Choose an order action.');
+  const base = { mt: 22 as const, sn: input.serial, rq: input.requestId, mkt: input.marketId, acc: input.accountId, t: input.action, lb: 0 };
+  if (input.action === 5) {
+    if (!Number.isSafeInteger(input.orderId) || input.orderId! <= 0) throw new Error('Enter the order id to cancel.');
+    return { ...base, oid: input.orderId, s: 0, fl: 0, lv: 0 };
+  }
+  if (input.action === 6) return { ...base, s: 0, fl: 0, lv: input.leverage, a: collateralText(input.amount ?? '') };
+  const size = input.size ?? 0;
+  const price = input.price ?? 0;
+  if (!Number.isSafeInteger(size) || size < 1 || !Number.isSafeInteger(price) || price < 0) throw new Error('Enter a positive size for this market.');
+  if (input.action === 7) {
+    if (!Number.isSafeInteger(input.orderId) || input.orderId! <= 0 || price < 1) throw new Error('A change needs the order id, a size, and a limit price.');
+    return { ...base, oid: input.orderId, p: price, s: size, fl: 0, lv: input.leverage };
+  }
+  return { ...base, p: price, s: size, fl: price === 0 ? 4 : 0, lv: input.leverage };
+}
+
 export function minimumLong(input: { marketId: number; accountId: number; requestId: number; serial: number; leverage: number }) {
-  for (const [name, value] of Object.entries(input)) if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`Invalid ${name}.`);
-  return { mt: 22, sn: input.serial, rq: input.requestId, mkt: input.marketId, acc: input.accountId, t: 1, p: 0, s: 1, fl: 4, lv: input.leverage, lb: 0 };
+  return orderRequest({ ...input, action: 1, size: 1, price: 0 });
 }
 
 export function emptyDesk(instanceId: number): PerplDesk {
@@ -212,7 +260,7 @@ export function applyFrame(desk: PerplDesk, value: unknown): PerplDesk {
     const stale = desk.lastSequence !== undefined && sequence !== null && sequence !== desk.lastSequence + 1;
     return { ...desk, head: head ?? desk.head, stale: desk.stale || stale, lastSequence: !stale && sequence !== null ? sequence : desk.lastSequence };
   }
-  if (!desk.order || desk.order.phase === 'filled' || desk.order.phase === 'failed') return desk;
+  if (!desk.order || desk.order.phase === 'filled' || desk.order.phase === 'failed' || desk.order.phase === 'closed') return desk;
   if (kind === 3) {
     if (whole(frame.cid, 1) !== desk.order.serial) return desk;
     const status = record(frame.status);
@@ -230,8 +278,10 @@ export function applyFrame(desk: PerplDesk, value: unknown): PerplDesk {
       const orderId = whole(row?.oid, 1) ?? undefined;
       const status = whole(row?.st, 0) ?? undefined;
       const reason = whole(row?.sr, 0) ?? undefined;
-      const failed = status === 5 || status === 6 || status === 7;
-      const order = failed ? fail({ ...next.order, orderId, status, reason }, reason) : { ...next.order, orderId, status, reason };
+      const cancelDone = next.order.action === 5 && status === 5;
+      const failed = !cancelDone && (status === 5 || status === 6 || status === 7);
+      const order = cancelDone ? { ...next.order, orderId, status, reason, phase: 'closed' as const }
+        : failed ? fail({ ...next.order, orderId, status, reason }, reason) : { ...next.order, orderId, status, reason };
       const early = orderId ? next.earlyFills.find(fill => fill.oid === orderId) : undefined;
       next = {
         ...next,
@@ -267,6 +317,7 @@ export function orderOutcome(order: PerplOrder | null, stale: boolean) {
     const where = order.fill.txid ? ` Transaction ${order.fill.txid}.` : ' The fill did not include a transaction hash.';
     return { tone: 'ok' as const, text: `Filled on Perpl.${where}`, txid: order.fill.txid };
   }
+  if (order.phase === 'closed') return { tone: 'done' as const, text: 'Perpl canceled that order. This is not a fill.' };
   if (order.phase === 'failed') {
     const admitted = order.gateway === 'Accepted for forwarding.';
     const text = order.reason === 34 ? 'Order forwarding is off. Turn on one-click trading in the Perpl testnet app, then reconnect.'

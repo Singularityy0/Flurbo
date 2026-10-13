@@ -3,9 +3,9 @@ import { Link } from 'wouter';
 import { ArrowLeft } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import {
-  PERPL_APP_URL, PERPL_DOCS_URL, PERPL_KEYS_URL, apiKeySignIn, applyFrame, beginOrder, collateralAmount,
-  emptyDesk, formatScaled, minimumLong, nextRequestId, orderOutcome, parseApiSecret, parseApiToken,
-  parsePerplContext, tradeLeverage, type PerplContext, type PerplDesk,
+  PERPL_ACTIONS, PERPL_APP_URL, PERPL_DOCS_URL, PERPL_KEYS_URL, apiKeySignIn, applyFrame, beginOrder, collateralAmount,
+  emptyDesk, formatScaled, nextRequestId, orderOutcome, orderRequest, parseApiSecret, parseApiToken,
+  parsePerplContext, scaleUnits, tradeLeverage, type PerplAction, type PerplContext, type PerplDesk,
 } from '../perpl';
 import './perpl.css';
 
@@ -33,6 +33,11 @@ export default function Perpl() {
   const [desk, setDesk] = useState<PerplDesk | null>(null);
   const [link, setLink] = useState<LinkState>('off');
   const [streamError, setStreamError] = useState('');
+  const [action, setAction] = useState<PerplAction>(1);
+  const [sizeText, setSizeText] = useState('');
+  const [priceText, setPriceText] = useState('');
+  const [orderIdText, setOrderIdText] = useState('');
+  const [amountText, setAmountText] = useState('');
   const [review, setReview] = useState(false);
   const [waited, setWaited] = useState(false);
   const [confirmed, setConfirmed] = useState<{ text: string; txid?: string } | null>(null);
@@ -119,24 +124,44 @@ export default function Perpl() {
       else if (event.code !== 1000) setStreamError('The Perpl connection closed before a fill.');
     };
   }
+  function draft() {
+    if (!desk || !account || !market) throw new Error('Connect before placing an order.');
+    const leverage = tradeLeverage(market.initialMargin);
+    const requestId = nextRequestId(account.lastRequest, 0);
+    const serial = desk.serial + 1;
+    const sized = action !== 5 && action !== 6;
+    const size = sized ? scaleUnits(sizeText.trim() || formatScaled(1, market.sizeDecimals), market.sizeDecimals) : undefined;
+    const price = sized && priceText.trim() ? scaleUnits(priceText, market.priceDecimals) : 0;
+    const orderId = action === 5 || action === 7 ? Number(orderIdText) : undefined;
+    const frame = orderRequest({
+      action, marketId: market.id, accountId: account.id, requestId, serial, leverage,
+      size, price: sized ? price : undefined, orderId, amount: action === 6 ? amountText : undefined,
+    });
+    return { frame, requestId, serial };
+  }
+  function reviewOrder() {
+    try { draft(); setStreamError(''); setReview(true); }
+    catch (error) { setReview(false); setStreamError(error instanceof Error ? error.message : 'Check the order.'); }
+  }
   function place() {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN || !desk || !account || !market?.open || account.frozen || !account.forwarding || desk.stale || inFlight) return;
     try {
-      const leverage = tradeLeverage(market.initialMargin);
-      const requestId = nextRequestId(account.lastRequest, 0);
-      const serial = desk.serial + 1;
-      const frame = minimumLong({ marketId: market.id, accountId: account.id, requestId, serial, leverage });
-      setDesk(beginOrder(desk, { serial, requestId, marketId: market.id, accountId: account.id, phase: 'sent' }));
+      const { frame, requestId, serial } = draft();
+      setDesk(beginOrder(desk, { serial, requestId, marketId: market.id, accountId: account.id, action, phase: 'sent' }));
       socket.send(JSON.stringify(frame));
       setReview(false);
     } catch (error) { setStreamError(error instanceof Error ? error.message : 'The order could not be sent.'); }
   }
 
-  const minimum = market ? `${formatScaled(1, market.sizeDecimals)} ${market.symbol}` : '';
+  const actionLabel = PERPL_ACTIONS.find(item => item.id === action)?.label ?? 'Order';
+  const sized = action !== 5 && action !== 6;
+  const summary = !market ? '' : action === 5 ? `Cancel order ${orderIdText.trim() || '…'} on ${market.symbol}.`
+    : action === 6 ? `Add ${amountText.trim() || '…'} AUSD of position collateral on ${market.symbol}. This is not a fill.`
+    : `${actionLabel} ${sizeText.trim() || formatScaled(1, market.sizeDecimals)} ${market.symbol} as a ${priceText.trim() ? `limit at ${priceText.trim()}` : 'market order'} at 1x.`;
   return <main id="main" className="page page-task perpl-page" tabIndex={-1}>
     <PageHeader back={<Link href="/markets" className="link-back"><ArrowLeft size={16} strokeWidth={1.75} /> Back to markets</Link>}
-      title="Perpl testnet" lead="Place one Monad testnet perpetual and wait for Perpl’s fill record. A Flurbo pool trade does not confirm it." />
+      title="Perpl testnet" lead="Open, close, cancel, or change a Monad testnet perpetual and wait for Perpl’s record. A Flurbo pool trade does not confirm it." />
     <p className="callout">Perpl has not approved key enrollment from this site. Create the key on Perpl, then paste it here. The private key stays in this browser session. This server only relays messages that are already signed.</p>
     <ol className="perpl-steps">
       <li className={context ? 'done' : ''}>
@@ -177,20 +202,40 @@ export default function Perpl() {
       </li>
       <li>
         <div className="perpl-step-head"><h2><span className="perpl-index">4</span> Order and fill</h2></div>
-        <p>The order is the minimum size, a market buy (long), immediate-or-cancel, at 1x. “Accepted for forwarding” only means Perpl took the request. The trade counts when a fill arrives, including its transaction when Perpl sends one.</p>
-        <label className="field">Market
-          <select value={marketId || ''} onChange={event => { setMarketId(Number(event.target.value)); setReview(false); }} disabled={!context}>
-            {(context?.markets ?? []).filter(item => item.open).map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}
-          </select>
-        </label>
+        <p>Choose the action, then review it. A blank size uses the market minimum. A blank price is a market order (immediate-or-cancel) at 1x; a price is a limit that rests until it fills, expires, or you cancel it. “Accepted for forwarding” only means Perpl took the request. A trade counts when a fill arrives. Cancel and added collateral are not fills.</p>
+        <div className="perpl-key">
+          <label className="field">Action
+            <select value={action} onChange={event => { setAction(Number(event.target.value) as PerplAction); setReview(false); }}>
+              {PERPL_ACTIONS.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
+          </label>
+          <label className="field">Market
+            <select value={marketId || ''} onChange={event => { setMarketId(Number(event.target.value)); setReview(false); }} disabled={!context}>
+              {(context?.markets ?? []).filter(item => item.open).map(item => <option key={item.id} value={item.id}>{item.symbol}</option>)}
+            </select>
+          </label>
+          {sized && <label className="field">Size{market ? ` (${market.symbol})` : ''}
+            <input value={sizeText} onChange={event => { setSizeText(event.target.value); setReview(false); }} inputMode="decimal" placeholder={market ? formatScaled(1, market.sizeDecimals) : ''} autoComplete="off" />
+          </label>}
+          {sized && <label className="field">Limit price
+            <input value={priceText} onChange={event => { setPriceText(event.target.value); setReview(false); }} inputMode="decimal" placeholder="Market if empty" autoComplete="off" />
+          </label>}
+          {(action === 5 || action === 7) && <label className="field">Order id
+            <input value={orderIdText} onChange={event => { setOrderIdText(event.target.value); setReview(false); }} inputMode="numeric" autoComplete="off" />
+          </label>}
+          {action === 6 && <label className="field">Collateral (AUSD)
+            <input value={amountText} onChange={event => { setAmountText(event.target.value); setReview(false); }} inputMode="decimal" autoComplete="off" />
+          </label>}
+        </div>
+        {desk?.order?.orderId ? <p>Last order id in this session: {desk.order.orderId}. Use it to cancel or change that order.</p> : null}
         <div className="perpl-actions">
-          {!review ? <button type="button" className="btn btn-primary" disabled={!market || link !== 'on' || !account || account.frozen || !account.forwarding || desk?.stale || inFlight} onClick={() => setReview(true)}>Review {minimum}</button>
+          {!review ? <button type="button" className="btn btn-primary" disabled={!market || link !== 'on' || !account || account.frozen || !account.forwarding || desk?.stale || inFlight} onClick={reviewOrder}>Review {actionLabel.toLowerCase()}</button>
             : <>
               <button type="button" className="btn btn-primary" disabled={link !== 'on' || !account || account.frozen || !account.forwarding || !!desk?.stale || inFlight} onClick={place}>Confirm testnet order</button>
-              <button type="button" className="btn btn-secondary" onClick={() => setReview(false)}>Cancel</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setReview(false)}>Back</button>
             </>}
         </div>
-        {review && market && <p>Confirm a long of {minimum} on {market.symbol}. This uses test AUSD on Monad testnet.</p>}
+        {review && market && <p>Confirm: {summary} This uses test AUSD on Monad testnet.</p>}
         {outcome && <p className={`perpl-outcome callout ${outcome.tone === 'ok' ? 'callout-attention' : outcome.tone === 'bad' ? 'callout-danger' : ''}`} role="status">{outcome.text}{outcome.tone === 'ok' && outcome.txid && <> <a href={`https://testnet.monadscan.com/tx/${outcome.txid}`} target="_blank" rel="noreferrer">View transaction</a></>}</p>}
         {!outcome && confirmed && <p className="perpl-outcome callout callout-attention" role="status">{confirmed.text}{confirmed.txid && <> <a href={`https://testnet.monadscan.com/tx/${confirmed.txid}`} target="_blank" rel="noreferrer">View transaction</a></>}</p>}
         {waited && inFlight && <p role="status">No fill has arrived yet. This is not a confirmed trade.</p>}

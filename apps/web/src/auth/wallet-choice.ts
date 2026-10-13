@@ -1,5 +1,5 @@
 import { isMetaMask } from '../../../dashboard/metamask.mjs';
-import { inFlurboApp } from './native-app.ts';
+import { phoneUsesMetaMaskApp } from './native-app.ts';
 export type BrowserWallet = { name: string; provider: { request(args: {method: string; params?: unknown[]}): Promise<unknown> } };
 
 export function discoverWallets(receive: (wallet: BrowserWallet) => void) {
@@ -16,8 +16,8 @@ export function discoverWallets(receive: (wallet: BrowserWallet) => void) {
   window.dispatchEvent(new Event('eip6963:requestProvider'));
   const injected = (window as unknown as {ethereum?: BrowserWallet['provider']}).ethereum;
   if (!seen.size && isMetaMask(injected)) add({ name: 'MetaMask', provider: injected! });
-  // The installed app has no browser extension. Offer MetaMask through the phone's MetaMask app instead.
+  // A phone has no extension. The installed app and a phone browser both open the MetaMask app.
   let cancelled = false;
-  if (!seen.size && inFlurboApp()) void import('./mobile-metamask.ts').then(mod => { if (!cancelled) add({ name: 'MetaMask', provider: mod.mobileMetaMask() }); }).catch(() => undefined);
+  if (!seen.size && phoneUsesMetaMaskApp()) void import('./mobile-metamask.ts').then(mod => { if (!cancelled) add({ name: 'MetaMask', provider: mod.mobileMetaMask() }); }).catch(() => undefined);
   return () => { cancelled = true; window.removeEventListener('eip6963:announceProvider', announced); };
 }

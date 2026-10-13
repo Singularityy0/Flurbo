@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { inFlurboApp } from '../src/auth/native-app.ts';
+import { inFlurboApp, phoneUsesMetaMaskApp } from '../src/auth/native-app.ts';
 import { metamaskOpenUrl, metamaskSessionAddress, walletTransaction } from '../src/auth/mobile-wallet.ts';
 
 const session = {
@@ -10,8 +10,12 @@ const session = {
   namespaces: { eip155: { accounts: ['eip155:10143:0x' + 'ab'.repeat(20)], methods: ['eth_sendTransaction', 'personal_sign'], events: ['accountsChanged'] } },
 };
 
-test('the native shell is the only place the mobile wallet is offered', () => {
+test('the shell and a phone browser open the MetaMask app; a desktop browser does not', () => {
   assert.equal(inFlurboApp(), false);
+  assert.equal(phoneUsesMetaMaskApp('Mozilla/5.0'), false);
+  assert.equal(phoneUsesMetaMaskApp('Mozilla/5.0 (Linux; Android 14) FlurboNative'), true);
+  assert.equal(phoneUsesMetaMaskApp('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'), true);
+  assert.equal(inFlurboApp('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'), false);
 });
 
 test('a MetaMask Monad session yields its one account, and other wallets do not', () => {
@@ -31,4 +35,5 @@ test('a trade must be a zero-value Monad transaction from the connected account'
 test('MetaMask opens on its own link, with the pairing URI when connecting', () => {
   assert.equal(metamaskOpenUrl(), 'https://metamask.app.link/');
   assert.equal(metamaskOpenUrl('wc:abc'), 'https://metamask.app.link/wc?uri=wc%3Aabc');
+  assert.equal(metamaskOpenUrl('wc:abc', 'Mozilla/5.0 (Linux; Android 14) FlurboNative'), 'intent://metamask.app.link/wc?uri=wc%3Aabc#Intent;scheme=https;package=io.metamask;S.browser_fallback_url=https%3A%2F%2Fmetamask.app.link%2Fwc%3Furi%3Dwc%253Aabc;end');
 });
