@@ -37,7 +37,7 @@ export function localApi({ hosts = ['localhost:18767', '127.0.0.1:18767'], store
     const m=svc.manifest;
     for(const a of [m.pool,m.resolver,m.publication?.creator,m.challengePolicy?.authority,...(m.publication?.reviewers||[]).map(r=>r.address)])if(typeof a==='string')reservedWallets.add(a.toLowerCase());
   }
-  const signInRequired=hosted||!!(previewAccess||applications);
+  const signInRequired=!!(previewAccess||applications);
   const authorizeHolder=holderAuthorizer(challengeOptions);
   const priceArchives=new WeakMap();
   // Agents: account-isolated profiles, paper trading and user-approved proposals. Never a signer.
