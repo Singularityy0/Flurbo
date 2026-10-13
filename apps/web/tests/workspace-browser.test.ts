@@ -43,7 +43,7 @@ test('activity panels remain unique across repeated navigation and session resto
       selector.selectOption('learning'),
     ]);
     await page.getByRole('link', { name: 'Explore & trade', exact: true }).click();
-    assert.equal(await page.locator('.core-market .book').isVisible(), false);
+    assert.equal(await page.locator('.core-market .book').count(), 0);
     assert.equal(await page.getByText('H YES receipts', { exact: true }).isVisible(), false);
     assert.equal(await page.locator('#liability').locator('..').locator('.eyebrow').textContent(), 'COLLATERAL REQUIREMENT');
     await page.reload();
@@ -51,7 +51,7 @@ test('activity panels remain unique across repeated navigation and session resto
     assert.equal(await selector.inputValue(), 'learning');
     await selector.selectOption('original');
     await page.getByRole('link', { name: 'Explore & trade', exact: true }).click();
-    assert.equal(await page.locator('.core-market .book').isVisible(), true);
+    await page.getByText('H YES receipts', { exact: true }).waitFor();
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

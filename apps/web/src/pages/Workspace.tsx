@@ -71,7 +71,8 @@ function CoreMarket({ account, panel, market, onBusy }: { account: string | null
       advanced.before(main.querySelector('#' + id)!);
     }
     if (market === 'learning') {
-      (main.querySelector('.book') as HTMLElement).style.display = 'none';
+      const book = main.querySelector('.book');
+      if (book instanceof HTMLElement) book.style.display = 'none';
       (main.querySelector('.advanced-action') as HTMLElement).style.display = 'none';
       const requirement = main.querySelector('#liability')!.parentElement!;
       requirement.querySelector('.eyebrow')!.textContent = 'COLLATERAL REQUIREMENT';
