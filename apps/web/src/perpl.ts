@@ -68,6 +68,7 @@ export type PerplDesk = {
   serial: number;
   stale: boolean;
   lastSequence?: number;
+  listed: boolean;
   order: PerplOrder | null;
   earlyFills: EarlyFill[];
 };
@@ -318,7 +319,7 @@ export function minimumLong(input: { marketId: number; accountId: number; reques
 }
 
 export function emptyDesk(instanceId: number): PerplDesk {
-  return { instanceId, accounts: [], head: 0, serial: 0, stale: false, order: null, earlyFills: [] };
+  return { instanceId, accounts: [], head: 0, serial: 0, stale: false, listed: false, order: null, earlyFills: [] };
 }
 
 // A reconnect must not forget an order that Perpl has already admitted. The fill can arrive on the next socket.
@@ -329,14 +330,21 @@ export function resumeDesk(previous: PerplDesk | null, instanceId: number): Perp
   return { ...fresh, accounts: previous.accounts, serial: previous.serial, order, earlyFills: previous.earlyFills };
 }
 
+function flag(value: unknown) {
+  return value === true || value === 1 ? true : value === false || value === 0 ? false : null;
+}
+
 function accountFrom(value: unknown, instanceId: number): PerplAccount | null {
   const row = record(value);
   const id = whole(row?.id, 1);
   const instance = whole(row?.in, 1);
   const lastRequest = whole(row?.lfr, 0);
-  if (!row || id === null || instance === null || lastRequest === null || instance !== instanceId || typeof row.fw !== 'boolean' || typeof row.fr !== 'boolean') return null;
-  if (typeof row.b !== 'string' || !/^[0-9]{1,40}$/.test(row.b)) return null;
-  return { id, instanceId: instance, forwarding: row.fw, frozen: row.fr, lastRequest, balance: row.b };
+  const forwarding = flag(row?.fw);
+  const frozen = flag(row?.fr);
+  const balance = typeof row?.b === 'string' ? row.b : typeof row?.b === 'number' && Number.isSafeInteger(row.b) && row.b >= 0 ? String(row.b) : '';
+  if (!row || id === null || instance === null || lastRequest === null || instance !== instanceId || forwarding === null || frozen === null) return null;
+  if (!/^[0-9]{1,40}$/.test(balance)) return null;
+  return { id, instanceId: instance, forwarding, frozen, lastRequest, balance };
 }
 
 function keepProgress(previous: PerplAccount | undefined, next: PerplAccount): PerplAccount {
@@ -381,7 +389,7 @@ export function applyFrame(desk: PerplDesk, value: unknown): PerplDesk {
     const accounts = rows.map(row => accountFrom(row, desk.instanceId)).filter((row): row is PerplAccount => row !== null)
       .map(row => keepProgress(desk.accounts.find(account => account.id === row.id), row));
     const sequence = whole(frame.sn, 0);
-    return { ...desk, accounts, lastSequence: sequence ?? desk.lastSequence };
+    return { ...desk, accounts, listed: true, lastSequence: sequence ?? desk.lastSequence };
   }
   if (kind === 21) {
     const next = accountFrom(frame, desk.instanceId);

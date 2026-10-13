@@ -46,6 +46,7 @@ export default function Perpl() {
   const [amountText, setAmountText] = useState('');
   const [review, setReview] = useState(false);
   const [waited, setWaited] = useState(false);
+  const [accountWait, setAccountWait] = useState(false);
   const [confirmed, setConfirmed] = useState<{ text: string; txid?: string } | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const deskRef = useRef<PerplDesk | null>(null);
@@ -53,6 +54,7 @@ export default function Perpl() {
   const reconnects = useRef(0);
   deskRef.current = desk;
   const account = desk?.accounts[0];
+  const accountHasBalance = !!account && /^\d+$/.test(account.balance) && BigInt(account.balance) > 0n;
   const market = context?.markets.find(item => item.id === marketId) ?? null;
   const outcome = desk ? orderOutcome(desk.order, desk.stale) : null;
   const inFlight = desk?.order?.phase === 'sent' || desk?.order?.phase === 'admitted';
@@ -75,6 +77,11 @@ export default function Perpl() {
     setMarketId(current => context.markets.some(item => item.id === current && item.open) ? current : context.markets.find(item => item.open)?.id ?? 0);
   }, [context]);
   useEffect(() => { if (outcome?.tone === 'ok') setConfirmed({ text: outcome.text, txid: outcome.txid }); }, [outcome?.tone, outcome?.text, outcome?.txid]);
+  useEffect(() => {
+    if (link !== 'on' || account || desk?.listed) return;
+    const timer = setTimeout(() => setAccountWait(true), 12_000);
+    return () => { clearTimeout(timer); setAccountWait(false); };
+  }, [link, account, desk?.listed]);
   useEffect(() => {
     if (!inFlight) return;
     const timer = setTimeout(() => setWaited(true), 30_000);
@@ -207,7 +214,7 @@ export default function Perpl() {
   function place() {
     const socket = socketRef.current;
     const chosen = reviewed.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN || !desk || !account || !market?.open || account.frozen || !account.forwarding || desk.stale || inFlight || !chosen) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !desk || !accountHasBalance || !account || !market?.open || account.frozen || !account.forwarding || desk.stale || inFlight || !chosen) return;
     try {
       const { frame, requestId, serial } = draft(chosen);
       setDesk(beginOrder(desk, { serial, requestId, marketId: market.id, accountId: account.id, action: chosen.action, phase: 'sent' }));
@@ -267,18 +274,20 @@ export default function Perpl() {
       </li>
       <li className={account ? 'done' : ''}>
         <div className="perpl-step-head"><h2><span className="perpl-index">3</span> Account</h2></div>
-        <p>The wallet visit does not open an exchange account. On that same Perpl page, deposit at least {context ? collateralAmount(context.minimumDeposit) : '…'} AUSD and turn on one-click trading, then connect here. <a href={PERPL_APP_URL} target="_blank" rel="noreferrer">Open Perpl</a></p>
+        <p>Connecting a wallet on Perpl does not create an exchange account. The exchange account holds your test AUSD and must have one-click trading turned on. Deposit at least 100 AUSD on Perpl, turn on one-click trading, then connect here. <a href={PERPL_APP_URL} target="_blank" rel="noreferrer">Open Perpl</a></p>
         <div className="perpl-actions">
           <button type="button" className="btn btn-primary" onClick={() => connect()} disabled={!saved || !context || link === 'connecting'}>{link === 'on' ? 'Reconnect' : link === 'connecting' ? 'Connecting…' : 'Connect'}</button>
         </div>
         {streamError && <p role="alert">{streamError}</p>}
-        {link === 'on' && !account && <p role="status">Connected. Waiting for the account snapshot.</p>}
+        {link === 'on' && !account && !desk?.listed && <p role="status">{accountWait ? 'Perpl has not sent an exchange account. Reconnect, or remove the key and create it again.' : 'The key is signed in. Perpl has not sent an exchange account yet.'}</p>}
+        {link === 'on' && !account && desk?.listed && <p role="alert">Perpl replied with no exchange account. There is nothing to trade yet. Deposit at least 100 AUSD on Perpl, turn on one-click trading, then reconnect.</p>}
         {account && <dl className="perpl-markets">
           <div><dt>Account</dt><dd>{account.id}</dd></div>
           <div><dt>Balance</dt><dd>{collateralAmount(account.balance) || '—'} AUSD</dd></div>
           <div><dt>One-click trading</dt><dd>{account.forwarding ? 'On' : 'Off'}</dd></div>
         </dl>}
         {account?.frozen && <p role="alert">This account is frozen, so an order cannot be sent.</p>}
+        {account && !accountHasBalance && <p role="alert">This exchange account has no AUSD balance yet. Deposit at least 100 AUSD on Perpl, then reconnect.</p>}
         {account && !account.forwarding && <p role="alert">Turn on one-click trading in Perpl, then reconnect. An order sent while it is off does not reach the chain.</p>}
       </li>
       <li>
@@ -311,11 +320,11 @@ export default function Perpl() {
         {desk?.order?.orderId ? <p>Last order id in this session: {desk.order.orderId}. Use it to cancel or change that order.</p> : null}
         <div className="perpl-actions">
           {!review ? <>
-            <button type="button" className="btn btn-primary" disabled={!market || link !== 'on' || !account || account.frozen || !account.forwarding || desk?.stale || inFlight} onClick={reviewFill}>Review the market fill</button>
-            <button type="button" className="btn btn-secondary" disabled={!market || link !== 'on' || !account || account.frozen || !account.forwarding || desk?.stale || inFlight} onClick={reviewOrder}>Review {actionLabel.toLowerCase()}</button>
+            <button type="button" className="btn btn-primary" disabled={!market || link !== 'on' || !accountHasBalance || account?.frozen || !account?.forwarding || desk?.stale || inFlight} onClick={reviewFill}>Review the market fill</button>
+            <button type="button" className="btn btn-secondary" disabled={!market || link !== 'on' || !accountHasBalance || account?.frozen || !account?.forwarding || desk?.stale || inFlight} onClick={reviewOrder}>Review {actionLabel.toLowerCase()}</button>
           </>
             : <>
-              <button type="button" className="btn btn-primary" disabled={link !== 'on' || !account || account.frozen || !account.forwarding || !!desk?.stale || inFlight} onClick={place}>Confirm testnet order</button>
+              <button type="button" className="btn btn-primary" disabled={link !== 'on' || !accountHasBalance || account?.frozen || !account?.forwarding || !!desk?.stale || inFlight} onClick={place}>Confirm testnet order</button>
               <button type="button" className="btn btn-secondary" onClick={() => setReview(false)}>Back</button>
             </>}
         </div>
