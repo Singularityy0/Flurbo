@@ -24,3 +24,9 @@
 .perpl-chart-controls select { background:#192a24; color:#eef4ee; padding:8px; border:1px solid #526659; }
 .perpl-chart-controls [role=group] { display:flex; gap:6px; }
 @media(max-width:640px) { .perpl-intelligence { padding:16px; } .perpl-metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+.perpl-history {display:grid;gap:18px;min-width:0;border-top:1px solid #334540;padding-top:24px;}
+.perpl-history-chart {width:100%;max-height:240px;}
+.perpl-history input {background:#192a24;color:#eef4ee;border:1px solid #526659;padding:10px;max-width:100%;}
+.perpl-watch-row {display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0;}
+.perpl-watch-row span {overflow-wrap:anywhere;}

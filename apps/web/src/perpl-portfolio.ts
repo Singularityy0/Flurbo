@@ -3,8 +3,8 @@ export type Position = { id: number; account: number; market: number; side: 1 | 
 export type OpenOrder = { id: number; account: number; market: number; type: number; size: number; price: number; status: number };
 export type TradeFill = { key: string; account: number; market: number; type: number; size: number; price: number | null; fee: string; hash: string | null };
 export type AccountStats = { account: number; deposits: string; withdrawals: string; volume: string; fees: string; realized: string; winRate: number; trades: number };
-export type Portfolio = { wallet: string | null; positions: Position[]; orders: OpenOrder[]; fills: TradeFill[]; stats: AccountStats[]; positionsLoaded: boolean; ordersLoaded: boolean; updated: number | null };
-export const emptyPortfolio = (): Portfolio => ({ wallet: null, positions: [], orders: [], fills: [], stats: [], positionsLoaded: false, ordersLoaded: false, updated: null });
+export type Portfolio = { wallet: string | null; balances: {account:number;balance:string;locked:string|null}[]; positions: Position[]; orders: OpenOrder[]; fills: TradeFill[]; stats: AccountStats[]; positionsLoaded: boolean; ordersLoaded: boolean; updated: number | null };
+export const emptyPortfolio = (): Portfolio => ({ wallet: null, balances:[], positions: [], orders: [], fills: [], stats: [], positionsLoaded: false, ordersLoaded: false, updated: null });
 const obj = (value: unknown): Record<string, any> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : null;
 const num = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 const amount = (value: unknown): value is string => typeof value === 'string' && /^-?\d{1,40}$/.test(value);
@@ -13,6 +13,7 @@ function stats(value: unknown): AccountStats | null {
   if (!r || !num(r.id) || !num(r.wr) || !num(r.tt) || ![r.td,r.tw,r.tv,r.tf,r.trp].every(amount)) return null;
   return { account:r.id, deposits:r.td, withdrawals:r.tw, volume:r.tv, fees:r.tf, realized:r.trp, winRate:r.wr, trades:r.tt };
 }
+function balance(value:unknown){const r=obj(value);return r&&num(r.id)&&amount(r.b)?{account:r.id,balance:r.b,locked:amount(r.lb)?r.lb:null}:null;}
 function position(value: unknown): Position | null {
   const r=obj(value);
   if (!r || ![r.pid,r.acc,r.mkt,r.s,r.ep,r.lv,r.st].every(num) || !amount(r.c) || ![1,2].includes(r.sd)) return null;
@@ -20,15 +21,17 @@ function position(value: unknown): Position | null {
 }
 function order(value: unknown): OpenOrder | null {
   const r=obj(value);
-  if (!r || ![r.oid,r.acc,r.mkt,r.t,r.s,r.st].every(num) || (r.p !== undefined && !num(r.p))) return null;
-  return { id:r.oid, account:r.acc, market:r.mkt, type:r.t, size:r.s, price:r.p ?? 0, status:r.st };
+  const remaining=r&&num(r.os)&&num(r.fs)&&r.fs<=r.os?r.os-r.fs:r?.s;
+  if (!r || ![r.oid,r.acc,r.mkt,r.t,remaining,r.st].every(num) || (r.p !== undefined && !num(r.p))) return null;
+  return { id:r.oid, account:r.acc, market:r.mkt, type:r.t, size:remaining, price:r.p ?? 0, status:r.st };
 }
 function merge<T extends {id:number;account:number;market:number}>(rows:T[], row:T) {
   return [...rows.filter(old=>old.id!==row.id || old.account!==row.account || old.market!==row.market),row];
 }
 export function portfolioFrame(previous: Portfolio, value: unknown, now=Date.now()): Portfolio {
   const f=obj(value); if (!f) return previous;
-  if (f.mt===19) return { ...previous, wallet:typeof f.addr==='string' && /^0x[0-9a-f]{40}$/i.test(f.addr)?f.addr:null, stats:Array.isArray(f.sts)?f.sts.map(stats).filter((r:AccountStats|null):r is AccountStats=>r!==null):[],updated:now };
+  if (f.mt===19) return { ...previous, wallet:typeof f.addr==='string' && /^0x[0-9a-f]{40}$/i.test(f.addr)?f.addr:null, balances:Array.isArray(f.as)?f.as.map(balance).filter((r):r is NonNullable<ReturnType<typeof balance>>=>r!==null):[], stats:Array.isArray(f.sts)?f.sts.map(stats).filter((r:AccountStats|null):r is AccountStats=>r!==null):[],updated:now };
+  if (f.mt===21) {const b=balance(f);return b?{...previous,balances:[...previous.balances.filter(r=>r.account!==b.account),b],updated:now}:previous;}
   if (f.mt===28) { const row=stats(f); return row?{...previous,stats:[...previous.stats.filter(s=>s.account!==row.account),row],updated:now}:previous; }
   if ([26,27].includes(f.mt) && Array.isArray(f.d)) {
     let rows=f.mt===26?[]:previous.positions;

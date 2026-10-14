@@ -19,7 +19,7 @@ test('Perpl portfolio shows snapshots, close review, protocol view and mobile wi
           if(f.mt===29)setTimeout(()=>{
             const frames=[{mt:19,addr:owner,sn:1,as:[{id:3,in:12,fw:true,fr:false,lfr:1,b:'100000000'}],sts:[{id:3,td:'100000000',tw:'0',tv:'1000000',tf:'100',trp:'-100',wr:5000,tt:2}]},
             {mt:26,d:[{pid:4,acc:3,mkt:16,s:100,ep:1000,lv:100,c:'10000000',st:1,sd:1}]},
-            {mt:23,d:[{oid:9,acc:3,mkt:16,t:1,s:100,p:1000,st:2}]},
+            {mt:23,d:[{oid:9,acc:3,mkt:16,t:1,os:100,fs:40,p:1000,st:3}]},
             {mt:25,d:[{oid:9,acc:3,mkt:16,t:1,s:100,p:1000,f:'100',at:{b:1,tx:1,l:1,txid:'0x'+'cd'.repeat(32)}}]}];
             frames.forEach(frame=>this.onmessage?.({data:JSON.stringify(frame)}));
           },20);
@@ -33,7 +33,14 @@ test('Perpl portfolio shows snapshots, close review, protocol view and mobile wi
       if(p==='/api/auth/session')return route.fulfill({json:{session:{address:owner,method:'passkey',expiresAt:Date.now()+3600000}}});
       if(p==='/api/account/access')return route.fulfill({json:{approved:true,testingTools:false}});
       if(p==='/api/perpl/context')return route.fulfill({json:{chain:{chain_id:10143},instances:[{id:12,address:'0x1964c32f0be608e7d29302aff5e61268e72080cc',collateral_token_id:1,min_account_open_amount:'100000000'}],tokens:[{id:1,address:'0xa9012a055bd4e0edff8ce09f960291c09d5322dc',decimals:6,symbol:'AUSD'}],markets:[{id:16,instance_id:12,symbol:'MON',order_ttl_blocks:20,state:{mrk:1100,dva:'1000000',oi:100,tvl:'100000000'},config:{is_open:true,price_decimals:1,size_decimals:2,initial_margin:1500}}]}});
-      if(p.includes('/candles/'))return route.fulfill({json:{d:[{t:Date.now()-3600000,c:1000,v:'1000000'},{t:Date.now(),c:1100,v:'1000000'}]}});
+      if(p.includes('/v1/trading/')){
+        assert.ok(route.request().headers()['x-api-signature']);
+        if(p.includes('/portfolio/'))return route.fulfill({json:{chart:[{t:1000,v:'100000000'},{t:2000,v:'90000000'}]}});
+        if(p.endsWith('/position-history'))return route.fulfill({json:{np:'',d:[{acc:3,mkt:16,pid:4,sr:13,dpnl:'10000000',fnd:'0',fee:'1000000',at:{t:3600000,b:2,tx:0,l:0},ots:{t:0}}]}});
+        if(p.endsWith('/account-history'))return route.fulfill({json:{np:'',d:[{id:3,et:1,a:'100000000',b:'100000000',at:{t:1000,b:1,tx:0,l:0}}]}});
+        return route.fulfill({json:{np:'',d:[{acc:3,mkt:16,oid:9,t:1,s:100,p:1000,f:'100',at:{t:1000,b:1,tx:0,l:1}}]}});
+      }
+      if(p.includes('/candles/'))return route.fulfill({json:{d:[{t:Date.now()-3600000,c:1000,v:'1000000',n:1},{t:Date.now(),c:1100,v:'1000000',n:1}]}});
       if(p.startsWith('/api/'))return route.fulfill({status:404,json:{error:'unused fixture'}});
       const f=p.startsWith('/assets/')?p.slice(1):'index.html';
       return route.fulfill({body:await readFile(new URL('../dist/'+f,import.meta.url)),contentType:f.endsWith('.js')?'text/javascript':f.endsWith('.css')?'text/css':f.endsWith('.woff2')?'font/woff2':f.endsWith('.woff')?'font/woff':'text/html'});
@@ -44,6 +51,11 @@ test('Perpl portfolio shows snapshots, close review, protocol view and mobile wi
     const panel=page.getByRole('region',{name:'Perpl portfolio and protocol'});
     await panel.getByRole('button',{name:'Review close',exact:true}).waitFor();
     assert.match(await panel.innerText(),/Long/);assert.match(await panel.innerText(),/100/);
+    await panel.getByText('History loaded to the oldest available record.',{exact:false}).waitFor();
+    await panel.getByRole('img',{name:'Equity curve',exact:true}).waitFor();
+    await panel.getByRole('button',{name:'Save wallet summary',exact:true}).click();
+    await panel.getByRole('checkbox').check();
+    assert.match(await panel.innerText(),/9.00/);
     await panel.getByRole('button',{name:'Review close',exact:true}).click();
     assert.equal(await page.getByRole('combobox',{name:/^Action/}).inputValue(),'3');
     assert.equal(await page.getByLabel('Size (MON)',{exact:true}).inputValue(),'1');

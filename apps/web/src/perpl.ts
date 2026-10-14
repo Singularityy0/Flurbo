@@ -30,6 +30,8 @@ export type PerplMarket = {
   sizeDecimals: number;
   orderTtlBlocks: number;
   initialMargin: number;
+  fundingRate?: number;
+  fundingInterval?: number;
   dailyVolume?: string;
   openInterest?: number;
   tvl?: string;
@@ -103,6 +105,8 @@ export function parsePerplContext(value: unknown): PerplContext {
     if (!market || id === null || mark === null || priceDecimals === null || priceDecimals > 8 || sizeDecimals === null || sizeDecimals > 8
       || orderTtlBlocks === null || initialMargin === null || typeof config?.is_open !== 'boolean' || !/^[A-Z0-9]{1,12}$/.test(String(market.symbol ?? ''))) throw new Error('Invalid Perpl market');
     return { id, symbol: String(market.symbol), name: `${market.symbol} perpetual`, open: config.is_open, mark, priceDecimals, sizeDecimals, orderTtlBlocks, initialMargin,
+      fundingRate: typeof record(market.funding)?.rate === 'number' && Number.isSafeInteger(record(market.funding)?.rate) ? record(market.funding)!.rate as number : undefined,
+      fundingInterval: whole(market.funding_interval_sec,1) ?? undefined,
       dailyVolume: typeof state?.dva === 'string' && /^\d{1,40}$/.test(state.dva) ? state.dva : undefined,
       openInterest: whole(state?.oi,0) ?? undefined,
       tvl: typeof state?.tvl === 'string' && /^\d{1,40}$/.test(state.tvl) ? state.tvl : undefined };
