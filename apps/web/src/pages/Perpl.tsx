@@ -362,7 +362,7 @@ export default function Perpl() {
         {waited && inFlight && <p role="status">No fill has arrived yet. This is not a confirmed trade.</p>}
       </li>
     </ol>
-    {context && <PerplPortfolio portfolio={portfolio} context={context} connected={link==='on'} stale={!!desk?.stale} refreshed={refreshed} onClose={position=>{
+    {context && <PerplPortfolio apiKey={saved} portfolio={portfolio} context={context} connected={link==='on'} stale={!!desk?.stale} refreshed={refreshed} onClose={position=>{
       setSelectedAccount(position.account);setMarketId(position.market);setAction(position.side===1?3:4);
       const m=context.markets.find(m=>m.id===position.market);
       setSizeText(m?formatScaled(position.size,m.sizeDecimals):'');setPriceText('');setReview(false);

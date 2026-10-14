@@ -31,3 +31,8 @@ test('account stats are isolated and malformed positions do not produce invented
   state=portfolioFrame(state,{mt:28,...s,trp:'3'});assert.equal(state.stats.length,1);assert.equal(state.stats[0].realized,'3');
   state=portfolioFrame(state,{mt:26,d:[{...p,ep:'oops'}]});assert.equal(state.positions.length,0);
 });
+
+test('official partially filled orders retain only remaining size',()=>{
+ const state=portfolioFrame(emptyPortfolio(),{mt:23,d:[{oid:9,acc:3,mkt:16,t:1,os:100,fs:40,p:1000,st:3}]});
+ assert.equal(state.orders[0].size,60);
+});
