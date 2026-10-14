@@ -1,0 +1,26 @@
+.perpl-intelligence { background:#101b19; color:#eef4ee; border:1px solid #334540; border-radius:12px; padding:24px; display:grid; gap:18px; min-width:0; }
+.perpl-intelligence header { display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; align-items:center; }
+.perpl-intelligence h2,.perpl-intelligence h3 { margin:0; color:#eef4ee; }
+.perpl-intelligence p,.perpl-intelligence small,.perpl-intelligence header>span { color:#adbbb5; margin:0; }
+.perpl-intelligence .eyebrow { color:#d9f76d; }
+.perpl-view-switch { display:flex; gap:8px; }
+.perpl-intelligence button { background:#1c3029; border:1px solid #526659; border-radius:6px; color:#eef4ee; padding:9px 14px; cursor:pointer; }
+.perpl-intelligence button[aria-pressed=true] { background:#d9f76d; color:#14271d; border-color:#d9f76d; }
+.perpl-intelligence button:disabled { opacity:.5; cursor:default; }
+.perpl-intelligence button:focus-visible,.perpl-intelligence a:focus-visible { outline:2px solid #d9f76d; outline-offset:3px; }
+.perpl-metric-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.perpl-metric-grid>div { display:grid; gap:8px; background:#192a24; padding:16px; border-radius:8px; }
+.perpl-metric-grid strong { font-size:23px; overflow-wrap:anywhere; }
+.perpl-table-scroll { overflow-x:auto; max-width:100%; }
+.perpl-intelligence table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.perpl-intelligence th,.perpl-intelligence td { text-align:left; padding:12px; border-bottom:1px solid #334540; }
+.perpl-intelligence th { color:#adbbb5; font-size:12px; font-weight:500; }
+.perpl-intelligence a { color:#d9f76d; }
+.perpl-wallet-address { overflow-wrap:anywhere; font-family:var(--font-num); }
+.perpl-data-note { font-size:12px; line-height:1.5; }
+.perpl-chart { min-width:0; display:grid; gap:12px; }
+.perpl-chart svg { display:block; width:100%; max-height:240px; }
+.perpl-chart-controls { display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+.perpl-chart-controls select { background:#192a24; color:#eef4ee; padding:8px; border:1px solid #526659; }
+.perpl-chart-controls [role=group] { display:flex; gap:6px; }
+@media(max-width:640px) { .perpl-intelligence { padding:16px; } .perpl-metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }

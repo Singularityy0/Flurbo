@@ -11,6 +11,8 @@ import {
 } from '../perpl';
 import './perpl.css';
 import { tradingSocketUrl, wireTradingSocket } from '../perpl-connection';
+import { emptyPortfolio, portfolioFrame } from '../perpl-portfolio';
+import PerplPortfolio from './PerplPortfolio';
 
 const STORAGE = 'flurbo.perpl.testnet.v1';
 const OPENED = 'flurbo.perpl.opened';
@@ -38,6 +40,9 @@ export default function Perpl() {
   const [saved, setSaved] = useState<Saved | null>(null);
   const [marketId, setMarketId] = useState(0);
   const [desk, setDesk] = useState<PerplDesk | null>(null);
+  const [portfolio, setPortfolio] = useState(emptyPortfolio);
+  const [refreshed, setRefreshed] = useState<number|null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<number|null>(null);
   const [link, setLink] = useState<LinkState>('off');
   const [streamError, setStreamError] = useState('');
   const [action, setAction] = useState<PerplAction>(1);
@@ -55,7 +60,7 @@ export default function Perpl() {
   const reconnects = useRef(0);
   const stopConnection = useRef<() => void>(() => {});
   deskRef.current = desk;
-  const account = desk?.accounts[0];
+  const account = desk?.accounts.find(account=>account.id===selectedAccount) ?? desk?.accounts[0];
   const accountHasBalance = !!account && /^\d+$/.test(account.balance) && BigInt(account.balance) > 0n;
   const market = context?.markets.find(item => item.id === marketId) ?? null;
   const outcome = desk ? orderOutcome(desk.order, desk.stale) : null;
@@ -70,10 +75,23 @@ export default function Perpl() {
         if (!response.ok) throw new Error(response.status === 401 ? 'Sign in again to load Perpl markets.' : 'Perpl market data is unavailable. Try again shortly.');
         return parsePerplContext(await response.json());
       })
-      .then(value => { setContext(value); setDesk(emptyDesk(value.instanceId)); setContextError(''); })
+      .then(value => { setContext(value); setDesk(emptyDesk(value.instanceId)); setRefreshed(Date.now()); setContextError(''); })
       .catch(error => { if (!controller.signal.aborted) setContextError(error instanceof Error ? error.message : 'Perpl market data is unavailable. Try again shortly.'); });
     return () => controller.abort();
   }, []);
+  useEffect(() => {
+    const controller=new AbortController();
+    let busy=false;
+    const timer=setInterval(()=>{
+      if(busy||document.visibilityState==='hidden')return;
+      busy=true;
+      void fetch('/api/perpl/context',{credentials:'same-origin',signal:controller.signal})
+        .then(async response=>{if(!response.ok)throw new Error('Market refresh failed');return parsePerplContext(await response.json());})
+        .then(value=>{setContext(current=>current?.instanceId===value.instanceId?value:current);setRefreshed(Date.now());})
+        .catch(()=>{/* Keep the last snapshot and its timestamp. */}).finally(()=>{busy=false;});
+    },30_000);
+    return()=>{clearInterval(timer);controller.abort();};
+  },[]);
   useEffect(() => {
     if (!context) return;
     setMarketId(current => context.markets.some(item => item.id === current && item.open) ? current : context.markets.find(item => item.open)?.id ?? 0);
@@ -149,6 +167,7 @@ export default function Perpl() {
     previous?.close();
     sessionStorage.removeItem(STORAGE);
     setSaved(null); setLink('off'); setReview(false); setStreamError(''); setConfirmed(null);
+    setPortfolio(emptyPortfolio()); setSelectedAccount(null);
     if (context) setDesk(emptyDesk(context.instanceId));
   }
   function connect(preserve = false) {
@@ -161,12 +180,13 @@ export default function Perpl() {
     if (!preserve) reconnects.current = 0;
     const next = preserve ? resumeDesk(deskRef.current, context.instanceId) : emptyDesk(context.instanceId);
     setDesk(next);
+    setPortfolio(emptyPortfolio());
     const socket = new WebSocket(tradingSocketUrl(location));
     socketRef.current = socket;
     const key = saved;
     stopConnection.current = wireTradingSocket(socket, key, {
       ready: () => { if (socketRef.current === socket) setLink('on'); },
-      frame: frame => { if (socketRef.current === socket) setDesk(current => current ? applyFrame(current, frame) : current); },
+      frame: frame => { if (socketRef.current === socket) { setDesk(current => current ? applyFrame(current, frame) : current); setPortfolio(current=>portfolioFrame(current,frame)); } },
       error: message => { if (socketRef.current === socket) { setStreamError(message); setLink('off'); } },
     });
     socket.onclose = event => {
@@ -342,5 +362,11 @@ export default function Perpl() {
         {waited && inFlight && <p role="status">No fill has arrived yet. This is not a confirmed trade.</p>}
       </li>
     </ol>
+    {context && <PerplPortfolio portfolio={portfolio} context={context} connected={link==='on'} stale={!!desk?.stale} refreshed={refreshed} onClose={position=>{
+      setSelectedAccount(position.account);setMarketId(position.market);setAction(position.side===1?3:4);
+      const m=context.markets.find(m=>m.id===position.market);
+      setSizeText(m?formatScaled(position.size,m.sizeDecimals):'');setPriceText('');setReview(false);
+      document.querySelector('.perpl-steps > li:last-child')?.scrollIntoView({behavior:'smooth',block:'start'});
+    }}/>}
   </main>;
 }
