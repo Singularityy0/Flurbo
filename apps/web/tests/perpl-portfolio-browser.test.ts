@@ -39,6 +39,7 @@ test('Perpl portfolio shows snapshots, close review, protocol view and mobile wi
       return route.fulfill({body:await readFile(new URL('../dist/'+f,import.meta.url)),contentType:f.endsWith('.js')?'text/javascript':f.endsWith('.css')?'text/css':f.endsWith('.woff2')?'font/woff2':f.endsWith('.woff')?'font/woff':'text/html'});
     });
     await page.goto('https://flurbo.singu.online/perpl');
+    assert.ok(await page.locator('main.perpl-page').evaluate((el:HTMLElement)=>el.getBoundingClientRect().width>1200),'Perpl uses the desktop viewport instead of the narrow task column');
     await page.getByRole('button',{name:'Connect',exact:true}).click();
     const panel=page.getByRole('region',{name:'Perpl portfolio and protocol'});
     await panel.getByRole('button',{name:'Review close',exact:true}).waitFor();
