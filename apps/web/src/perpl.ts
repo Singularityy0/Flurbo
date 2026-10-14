@@ -30,6 +30,9 @@ export type PerplMarket = {
   sizeDecimals: number;
   orderTtlBlocks: number;
   initialMargin: number;
+  dailyVolume?: string;
+  openInterest?: number;
+  tvl?: string;
 };
 export type PerplContext = { instanceId: number; minimumDeposit: string; markets: PerplMarket[] };
 export type PerplAccount = { id: number; instanceId: number; forwarding: boolean; frozen: boolean; lastRequest: number; balance: string };
@@ -99,7 +102,10 @@ export function parsePerplContext(value: unknown): PerplContext {
     const initialMargin = whole(config?.initial_margin, 1);
     if (!market || id === null || mark === null || priceDecimals === null || priceDecimals > 8 || sizeDecimals === null || sizeDecimals > 8
       || orderTtlBlocks === null || initialMargin === null || typeof config?.is_open !== 'boolean' || !/^[A-Z0-9]{1,12}$/.test(String(market.symbol ?? ''))) throw new Error('Invalid Perpl market');
-    return { id, symbol: String(market.symbol), name: `${market.symbol} perpetual`, open: config.is_open, mark, priceDecimals, sizeDecimals, orderTtlBlocks, initialMargin };
+    return { id, symbol: String(market.symbol), name: `${market.symbol} perpetual`, open: config.is_open, mark, priceDecimals, sizeDecimals, orderTtlBlocks, initialMargin,
+      dailyVolume: typeof state?.dva === 'string' && /^\d{1,40}$/.test(state.dva) ? state.dva : undefined,
+      openInterest: whole(state?.oi,0) ?? undefined,
+      tvl: typeof state?.tvl === 'string' && /^\d{1,40}$/.test(state.tvl) ? state.tvl : undefined };
   });
   if (!markets.length || markets.length > 100 || new Set(markets.map(item => item.id)).size !== markets.length) throw new Error('Invalid market list');
   return { instanceId, minimumDeposit: String(instance.min_account_open_amount), markets };
