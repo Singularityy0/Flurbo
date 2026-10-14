@@ -250,7 +250,7 @@ export default function Perpl() {
   const summary = !market ? '' : action === 5 ? `Cancel order ${orderIdText.trim() || '…'} on ${market.symbol}.`
     : action === 6 ? `Add ${amountText.trim() || '…'} AUSD of position collateral on ${market.symbol}. This is not a fill.`
     : `${actionLabel} ${sizeText.trim() || formatScaled(1, market.sizeDecimals)} ${market.symbol} as a ${priceText.trim() ? `limit at ${priceText.trim()}` : 'market order'} at 1x.`;
-  return <main id="main" className="page page-task perpl-page" tabIndex={-1}>
+  return <main id="main" className="page perpl-page" tabIndex={-1}>
     <PageHeader back={<Link href="/markets" className="link-back"><ArrowLeft size={16} strokeWidth={1.75} /> Back to markets</Link>}
       title="Perpl testnet" lead="Open, close, cancel, or change a Monad testnet perpetual and wait for Perpl’s record. A Flurbo pool trade does not confirm it." />
     <p className="callout">Connect the MetaMask wallet on Perpl, then create the trade key here. Those are two separate steps. The private key stays in this browser session.</p>
