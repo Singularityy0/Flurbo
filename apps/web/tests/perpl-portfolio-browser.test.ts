@@ -15,7 +15,7 @@ test('Perpl portfolio shows snapshots, close review, protocol view and mobile wi
       class Socket {
         static OPEN=1;readyState=0;onopen:any;onmessage:any;onclose:any;onerror:any;
         constructor(){setTimeout(()=>{this.readyState=1;this.onopen?.();},20);}
-        send(text:string){const f=JSON.parse(text);if(f.mt===22)(window as any).__sentOrders++;
+        send(text:string){const f=JSON.parse(text);if(f.mt===22){(window as any).__sentOrders++;(window as any).__lastOrder=f;}
           if(f.mt===29)setTimeout(()=>{
             const frames=[{mt:19,addr:owner,sn:1,as:[{id:3,in:12,fw:true,fr:false,lfr:1,b:'100000000'}],sts:[{id:3,td:'100000000',tw:'0',tv:'1000000',tf:'100',trp:'-100',wr:5000,tt:2}]},
             {mt:26,d:[{pid:4,acc:3,mkt:16,s:100,ep:1000,lv:100,c:'10000000',st:1,sd:1}]},
@@ -60,6 +60,31 @@ test('Perpl portfolio shows snapshots, close review, protocol view and mobile wi
     assert.equal(await page.getByRole('combobox',{name:/^Action/}).inputValue(),'3');
     assert.equal(await page.getByLabel('Size (MON)',{exact:true}).inputValue(),'1');
     assert.equal(await page.evaluate(()=>(window as any).__sentOrders),0);
+    const action=page.getByRole('combobox',{name:/^Action/});
+    await action.selectOption('2');
+    await page.getByLabel('Size (MON)',{exact:true}).fill('2');
+    await page.getByLabel('Limit price',{exact:true}).fill('105');
+    await page.getByRole('button',{name:'Review open short',exact:true}).click();
+    assert.equal(await action.inputValue(),'2');
+    assert.match(await page.locator('main').innerText(),/Confirm: Open short 2 MON as a limit at 105/);
+    await page.getByRole('button',{name:'Back',exact:true}).click();
+    // Every action preserves its own selection through the review boundary.
+    for(const [id,label] of [['1','open long'],['3','close long'],['4','close short'],['5','cancel order'],['6','add collateral'],['7','change order']]){
+      await action.selectOption(id);
+      if(id==='5'||id==='7')await page.getByLabel('Order id',{exact:true}).fill('9');
+      if(id==='6')await page.getByLabel('Collateral (AUSD)',{exact:true}).fill('1');
+      await page.getByRole('button',{name:'Review '+label,exact:true}).click();
+      await page.getByRole('button',{name:'Confirm testnet order',exact:true}).waitFor();
+      assert.equal(await action.inputValue(),id);
+      await page.getByRole('button',{name:'Back',exact:true}).click();
+    }
+    await action.selectOption('2');
+    await page.getByRole('button',{name:'Review open short',exact:true}).click();
+    await page.getByRole('button',{name:'Confirm testnet order',exact:true}).click();
+    assert.equal(await page.evaluate(()=>(window as any).__lastOrder.t),2);
+    assert.equal(await page.evaluate(()=>(window as any).__lastOrder.s),200);
+    assert.equal(await page.evaluate(()=>(window as any).__lastOrder.p),1050);
+    assert.equal(await page.evaluate(()=>(window as any).__sentOrders),1);
     await panel.getByRole('button',{name:'Protocol',exact:true}).click();
     await panel.getByRole('img',{name:/MON closing prices/}).waitFor();
     await panel.getByRole('button',{name:'7d',exact:true}).click();
