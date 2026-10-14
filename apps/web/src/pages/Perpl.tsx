@@ -226,12 +226,6 @@ export default function Perpl() {
     try { draft(); reviewed.current = { action, sizeText, priceText }; setStreamError(''); setReview(true); }
     catch (error) { reviewed.current = null; setReview(false); setStreamError(error instanceof Error ? error.message : 'Check the order.'); }
   }
-  function reviewFill() {
-    const marketOrder = { action: 1 as PerplAction, sizeText: '', priceText: '' };
-    setAction(1); setSizeText(''); setPriceText(''); setOrderIdText(''); setAmountText('');
-    try { draft(marketOrder); reviewed.current = marketOrder; setStreamError(''); setReview(true); }
-    catch (error) { reviewed.current = null; setReview(false); setStreamError(error instanceof Error ? error.message : 'Check the order.'); }
-  }
   function place() {
     const socket = socketRef.current;
     const chosen = reviewed.current;
@@ -348,8 +342,7 @@ export default function Perpl() {
         {desk?.order?.orderId ? <p>Last order id in this session: {desk.order.orderId}. Use it to cancel or change that order.</p> : null}
         <div className="perpl-actions">
           {!review ? <>
-            <button type="button" className="btn btn-primary" disabled={!market || link !== 'on' || !accountHasBalance || account?.frozen || !account?.forwarding || desk?.stale || inFlight} onClick={reviewFill}>Review the market fill</button>
-            <button type="button" className="btn btn-secondary" disabled={!market || link !== 'on' || !accountHasBalance || account?.frozen || !account?.forwarding || desk?.stale || inFlight} onClick={reviewOrder}>Review {actionLabel.toLowerCase()}</button>
+            <button type="button" className="btn btn-primary" disabled={!market || link !== 'on' || !accountHasBalance || account?.frozen || !account?.forwarding || desk?.stale || inFlight} onClick={reviewOrder}>Review {actionLabel.toLowerCase()}</button>
           </>
             : <>
               <button type="button" className="btn btn-primary" disabled={link !== 'on' || !accountHasBalance || account?.frozen || !account?.forwarding || !!desk?.stale || inFlight} onClick={place}>Confirm testnet order</button>
