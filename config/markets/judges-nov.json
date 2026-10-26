@@ -1,0 +1,495 @@
+{
+  "schema": "flurbo.market-batch.v1",
+  "defaults": {
+    "assertionPeriod": 43200,
+    "challengePeriod": 3600,
+    "votingPeriod": 3600,
+    "bond": "1",
+    "settlement": "auto"
+  },
+  "pools": [
+    {
+      "id": "judge-majors",
+      "title": "Majors ladder to 4 Nov",
+      "label": "Majors ladder (4 Nov)",
+      "closesAt": "2026-11-04T18:00:00Z",
+      "b": "100",
+      "rules": [
+        {
+          "eventId": "jm-eth-2250",
+          "question": "Will the Chainlink ETH/USD feed on Monad mainnet report at least 2250 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+          "source": {
+            "id": "chainlink-eth-usd-monad",
+            "publisher": "Chainlink price feed on Monad mainnet",
+            "urls": [
+              "https://rpc.monad.xyz/"
+            ],
+            "adapter": "evm-rpc.v1",
+            "reader": {
+              "chainId": 143,
+              "at": "2026-11-05T00:00:00Z",
+              "metric": "call",
+              "call": {
+                "to": "0x1B1414782B859871781bA3E4B0979b9ca57A0A04",
+                "data": "0x50d25bcd",
+                "returns": "int256"
+              },
+              "scale": 8,
+              "finalitySeconds": 60
+            }
+          },
+          "observation": {
+            "series": "chainlink-eth-usd-latest-answer",
+            "period": "2026-11-05T00:00:00Z",
+            "unit": "USD"
+          },
+          "decision": {
+            "type": "number",
+            "operator": "gte",
+            "value": "2250"
+          },
+          "window": {
+            "opens": "2026-11-05T00:05:00Z",
+            "closes": "2026-11-05T04:05:00Z"
+          }
+        },
+        {
+          "eventId": "jm-eth-2400",
+          "question": "Will the Chainlink ETH/USD feed on Monad mainnet report at least 2400 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+          "source": {
+            "id": "chainlink-eth-usd-monad",
+            "publisher": "Chainlink price feed on Monad mainnet",
+            "urls": [
+              "https://rpc.monad.xyz/"
+            ],
+            "adapter": "evm-rpc.v1",
+            "reader": {
+              "chainId": 143,
+              "at": "2026-11-05T00:00:00Z",
+              "metric": "call",
+              "call": {
+                "to": "0x1B1414782B859871781bA3E4B0979b9ca57A0A04",
+                "data": "0x50d25bcd",
+                "returns": "int256"
+              },
+              "scale": 8,
+              "finalitySeconds": 60
+            }
+          },
+          "observation": {
+            "series": "chainlink-eth-usd-latest-answer",
+            "period": "2026-11-05T00:00:00Z",
+            "unit": "USD"
+          },
+          "decision": {
+            "type": "number",
+            "operator": "gte",
+            "value": "2400"
+          },
+          "window": {
+            "opens": "2026-11-05T00:05:00Z",
+            "closes": "2026-11-05T04:05:00Z"
+          }
+        },
+        {
+          "eventId": "jm-btc-78000",
+          "question": "Will the Chainlink BTC/USD feed on Monad mainnet report at least 78000 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+          "source": {
+            "id": "chainlink-btc-usd-monad",
+            "publisher": "Chainlink price feed on Monad mainnet",
+            "urls": [
+              "https://rpc.monad.xyz/"
+            ],
+            "adapter": "evm-rpc.v1",
+            "reader": {
+              "chainId": 143,
+              "at": "2026-11-05T00:00:00Z",
+              "metric": "call",
+              "call": {
+                "to": "0xc1d4C3331635184fA4C3c22fb92211B2Ac9E0546",
+                "data": "0x50d25bcd",
+                "returns": "int256"
+              },
+              "scale": 8,
+              "finalitySeconds": 60
+            }
+          },
+          "observation": {
+            "series": "chainlink-btc-usd-latest-answer",
+            "period": "2026-11-05T00:00:00Z",
+            "unit": "USD"
+          },
+          "decision": {
+            "type": "number",
+            "operator": "gte",
+            "value": "78000"
+          },
+          "window": {
+            "opens": "2026-11-05T00:05:00Z",
+            "closes": "2026-11-05T04:05:00Z"
+          }
+        },
+        {
+          "eventId": "jm-btc-82500",
+          "question": "Will the Chainlink BTC/USD feed on Monad mainnet report at least 82500 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+          "source": {
+            "id": "chainlink-btc-usd-monad",
+            "publisher": "Chainlink price feed on Monad mainnet",
+            "urls": [
+              "https://rpc.monad.xyz/"
+            ],
+            "adapter": "evm-rpc.v1",
+            "reader": {
+              "chainId": 143,
+              "at": "2026-11-05T00:00:00Z",
+              "metric": "call",
+              "call": {
+                "to": "0xc1d4C3331635184fA4C3c22fb92211B2Ac9E0546",
+                "data": "0x50d25bcd",
+                "returns": "int256"
+              },
+              "scale": 8,
+              "finalitySeconds": 60
+            }
+          },
+          "observation": {
+            "series": "chainlink-btc-usd-latest-answer",
+            "period": "2026-11-05T00:00:00Z",
+            "unit": "USD"
+          },
+          "decision": {
+            "type": "number",
+            "operator": "gte",
+            "value": "82500"
+          },
+          "window": {
+            "opens": "2026-11-05T00:05:00Z",
+            "closes": "2026-11-05T04:05:00Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "judge-alts",
+      "title": "Alts ladder to 4 Nov",
+      "label": "Alts ladder (4 Nov)",
+      "closesAt": "2026-11-04T18:00:00Z",
+      "b": "100",
+      "rules": [
+        {
+          "eventId": "ja-mon-0210",
+          "question": "Will the Chainlink MON/USD feed on Monad mainnet report at least 0.0210 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+          "source": {
+            "id": "chainlink-mon-usd-monad",
+            "publisher": "Chainlink price feed on Monad mainnet",
+            "urls": [
+              "https://rpc.monad.xyz/"
+            ],
+            "adapter": "evm-rpc.v1",
+            "reader": {
+              "chainId": 143,
+              "at": "2026-11-05T00:00:00Z",
+              "metric": "call",
+              "call": {
+                "to": "0xBcD78f76005B7515837af6b50c7C52BCf73822fb",
+                "data": "0x50d25bcd",
+                "returns": "int256"
+              },
+              "scale": 8,
+              "finalitySeconds": 60
+            }
+          },
+          "observation": {
+            "series": "chainlink-mon-usd-latest-answer",
+            "period": "2026-11-05T00:00:00Z",
+            "unit": "USD"
+          },
+          "decision": {
+            "type": "number",
+            "operator": "gte",
+            "value": "0.0210"
+          },
+          "window": {
+            "opens": "2026-11-05T00:05:00Z",
+            "closes": "2026-11-05T04:05:00Z"
+          }
+        },
+        {
+          "eventId": "ja-mon-0226",
+          "question": "Will the Chainlink MON/USD feed on Monad mainnet report at least 0.0226 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+          "source": {
+            "id": "chainlink-mon-usd-monad",
+            "publisher": "Chainlink price feed on Monad mainnet",
+            "urls": [
+              "https://rpc.monad.xyz/"
+            ],
+            "adapter": "evm-rpc.v1",
+            "reader": {
+              "chainId": 143,
+              "at": "2026-11-05T00:00:00Z",
+              "metric": "call",
+              "call": {
+                "to": "0xBcD78f76005B7515837af6b50c7C52BCf73822fb",
+                "data": "0x50d25bcd",
+                "returns": "int256"
+              },
+              "scale": 8,
+              "finalitySeconds": 60
+            }
+          },
+          "observation": {
+            "series": "chainlink-mon-usd-latest-answer",
+            "period": "2026-11-05T00:00:00Z",
+            "unit": "USD"
+          },
+          "decision": {
+            "type": "number",
+            "operator": "gte",
+            "value": "0.0226"
+          },
+          "window": {
+            "opens": "2026-11-05T00:05:00Z",
+            "closes": "2026-11-05T04:05:00Z"
+          }
+        },
+        {
+          "eventId": "ja-sol-98",
+          "question": "Will the Chainlink SOL/USD feed on Monad mainnet report at least 98 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+          "source": {
+            "id": "chainlink-sol-usd-monad",
+            "publisher": "Chainlink price feed on Monad mainnet",
+            "urls": [
+              "https://rpc.monad.xyz/"
+            ],
+            "adapter": "evm-rpc.v1",
+            "reader": {
+              "chainId": 143,
+              "at": "2026-11-05T00:00:00Z",
+              "metric": "call",
+              "call": {
+                "to": "0x16F8008c3e89f62e5e2b909Ce70999370D38F4F2",
+                "data": "0x50d25bcd",
+                "returns": "int256"
+              },
+              "scale": 8,
+              "finalitySeconds": 60
+            }
+          },
+          "observation": {
+            "series": "chainlink-sol-usd-latest-answer",
+            "period": "2026-11-05T00:00:00Z",
+            "unit": "USD"
+          },
+          "decision": {
+            "type": "number",
+            "operator": "gte",
+            "value": "98"
+          },
+          "window": {
+            "opens": "2026-11-05T00:05:00Z",
+            "closes": "2026-11-05T04:05:00Z"
+          }
+        },
+        {
+          "eventId": "ja-sol-105",
+          "question": "Will the Chainlink SOL/USD feed on Monad mainnet report at least 105 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+          "source": {
+            "id": "chainlink-sol-usd-monad",
+            "publisher": "Chainlink price feed on Monad mainnet",
+            "urls": [
+              "https://rpc.monad.xyz/"
+            ],
+            "adapter": "evm-rpc.v1",
+            "reader": {
+              "chainId": 143,
+              "at": "2026-11-05T00:00:00Z",
+              "metric": "call",
+              "call": {
+                "to": "0x16F8008c3e89f62e5e2b909Ce70999370D38F4F2",
+                "data": "0x50d25bcd",
+                "returns": "int256"
+              },
+              "scale": 8,
+              "finalitySeconds": 60
+            }
+          },
+          "observation": {
+            "series": "chainlink-sol-usd-latest-answer",
+            "period": "2026-11-05T00:00:00Z",
+            "unit": "USD"
+          },
+          "decision": {
+            "type": "number",
+            "operator": "gte",
+            "value": "105"
+          },
+          "window": {
+            "opens": "2026-11-05T00:05:00Z",
+            "closes": "2026-11-05T04:05:00Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "judge-sprint",
+      "title": "Sprint to 29 Oct",
+      "label": "Sprint (29 Oct)",
+      "closesAt": "2026-10-29T18:00:00Z",
+      "b": "100",
+      "rules": [
+        {
+          "eventId": "js-btc-80000",
+          "question": "Will the Chainlink BTC/USD feed on Monad mainnet report at least 80000 USD (latestAnswer) at the first block at or after 00:00 UTC on 30 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+          "source": {
+            "id": "chainlink-btc-usd-monad",
+            "publisher": "Chainlink price feed on Monad mainnet",
+            "urls": [
+              "https://rpc.monad.xyz/"
+            ],
+            "adapter": "evm-rpc.v1",
+            "reader": {
+              "chainId": 143,
+              "at": "2026-10-30T00:00:00Z",
+              "metric": "call",
+              "call": {
+                "to": "0xc1d4C3331635184fA4C3c22fb92211B2Ac9E0546",
+                "data": "0x50d25bcd",
+                "returns": "int256"
+              },
+              "scale": 8,
+              "finalitySeconds": 60
+            }
+          },
+          "observation": {
+            "series": "chainlink-btc-usd-latest-answer",
+            "period": "2026-10-30T00:00:00Z",
+            "unit": "USD"
+          },
+          "decision": {
+            "type": "number",
+            "operator": "gte",
+            "value": "80000"
+          },
+          "window": {
+            "opens": "2026-10-30T00:05:00Z",
+            "closes": "2026-10-30T04:05:00Z"
+          }
+        },
+        {
+          "eventId": "js-eth-2300",
+          "question": "Will the Chainlink ETH/USD feed on Monad mainnet report at least 2300 USD (latestAnswer) at the first block at or after 00:00 UTC on 30 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+          "source": {
+            "id": "chainlink-eth-usd-monad",
+            "publisher": "Chainlink price feed on Monad mainnet",
+            "urls": [
+              "https://rpc.monad.xyz/"
+            ],
+            "adapter": "evm-rpc.v1",
+            "reader": {
+              "chainId": 143,
+              "at": "2026-10-30T00:00:00Z",
+              "metric": "call",
+              "call": {
+                "to": "0x1B1414782B859871781bA3E4B0979b9ca57A0A04",
+                "data": "0x50d25bcd",
+                "returns": "int256"
+              },
+              "scale": 8,
+              "finalitySeconds": 60
+            }
+          },
+          "observation": {
+            "series": "chainlink-eth-usd-latest-answer",
+            "period": "2026-10-30T00:00:00Z",
+            "unit": "USD"
+          },
+          "decision": {
+            "type": "number",
+            "operator": "gte",
+            "value": "2300"
+          },
+          "window": {
+            "opens": "2026-10-30T00:05:00Z",
+            "closes": "2026-10-30T04:05:00Z"
+          }
+        },
+        {
+          "eventId": "js-sol-100",
+          "question": "Will the Chainlink SOL/USD feed on Monad mainnet report at least 100 USD (latestAnswer) at the first block at or after 00:00 UTC on 30 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+          "source": {
+            "id": "chainlink-sol-usd-monad",
+            "publisher": "Chainlink price feed on Monad mainnet",
+            "urls": [
+              "https://rpc.monad.xyz/"
+            ],
+            "adapter": "evm-rpc.v1",
+            "reader": {
+              "chainId": 143,
+              "at": "2026-10-30T00:00:00Z",
+              "metric": "call",
+              "call": {
+                "to": "0x16F8008c3e89f62e5e2b909Ce70999370D38F4F2",
+                "data": "0x50d25bcd",
+                "returns": "int256"
+              },
+              "scale": 8,
+              "finalitySeconds": 60
+            }
+          },
+          "observation": {
+            "series": "chainlink-sol-usd-latest-answer",
+            "period": "2026-10-30T00:00:00Z",
+            "unit": "USD"
+          },
+          "decision": {
+            "type": "number",
+            "operator": "gte",
+            "value": "100"
+          },
+          "window": {
+            "opens": "2026-10-30T00:05:00Z",
+            "closes": "2026-10-30T04:05:00Z"
+          }
+        },
+        {
+          "eventId": "js-mon-0218",
+          "question": "Will the Chainlink MON/USD feed on Monad mainnet report at least 0.0218 USD (latestAnswer) at the first block at or after 00:00 UTC on 30 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+          "source": {
+            "id": "chainlink-mon-usd-monad",
+            "publisher": "Chainlink price feed on Monad mainnet",
+            "urls": [
+              "https://rpc.monad.xyz/"
+            ],
+            "adapter": "evm-rpc.v1",
+            "reader": {
+              "chainId": 143,
+              "at": "2026-10-30T00:00:00Z",
+              "metric": "call",
+              "call": {
+                "to": "0xBcD78f76005B7515837af6b50c7C52BCf73822fb",
+                "data": "0x50d25bcd",
+                "returns": "int256"
+              },
+              "scale": 8,
+              "finalitySeconds": 60
+            }
+          },
+          "observation": {
+            "series": "chainlink-mon-usd-latest-answer",
+            "period": "2026-10-30T00:00:00Z",
+            "unit": "USD"
+          },
+          "decision": {
+            "type": "number",
+            "operator": "gte",
+            "value": "0.0218"
+          },
+          "window": {
+            "opens": "2026-10-30T00:05:00Z",
+            "closes": "2026-10-30T04:05:00Z"
+          }
+        }
+      ]
+    }
+  ]
+}

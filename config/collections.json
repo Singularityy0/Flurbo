@@ -1,6 +1,6 @@
 {
   "schema": "flurbo.collections.v1",
-  "featured": "0xc0f8d422a18fdf4fafd1fab07bfd68eb961cf7a6",
+  "featured": "0x1c68f9c0c2670725e3c636b79c5e3044f397feb2",
   "pilotSettlement": "finish-only",
   "collections": [
     {
@@ -2345,6 +2345,975 @@
           "0xc33b2ff18810e7e3b7ec4ccfc81bee904929a4c9",
           "0x471d7c2e05df212fcf36f3bf3be6bd1a0fb39e94",
           "0x9e05e487eab6cdabc0d8859ad59955bbc9890964"
+        ],
+        "notice": "Compiled code and reviewed configuration verified at one snapshot. Named panel trust, test assets only. Kuru pairs and authenticated CRE delivery are not established by this manifest."
+      }
+    },
+    {
+      "label": "Majors ladder (4 Nov)",
+      "settlement": "auto",
+      "status": "active",
+      "manifest": {
+        "schema": "flurbo.pilot-manifest.v1",
+        "status": "verified_pilot_snapshot",
+        "chainId": 10143,
+        "pool": "0x1c68f9c0c2670725e3c636b79c5e3044f397feb2",
+        "resolver": "0xd9fd7938a7f3b631a7815ab64e2176bb39335458",
+        "rulesHash": "0x3fa9fcbb2e67835b336dff124f070a786792515be353ee2fdc4f0e5bc8ad7380",
+        "draftHash": "0x0dff6486e8a8a685b5b6c7e0b1c34530ebbfbd6546ae27ee11a3cb595331950f",
+        "publication": {
+          "schema": "flurbo.pilot-publication.v1",
+          "mode": "deterministic-source-v1",
+          "settlementRules": [
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "jm-eth-2250",
+              "question": "Will the Chainlink ETH/USD feed on Monad mainnet report at least 2250 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-eth-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1793836800,
+                  "metric": "call",
+                  "call": {
+                    "to": "0x1B1414782B859871781bA3E4B0979b9ca57A0A04",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-eth-usd-latest-answer",
+                "period": "2026-11-05T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "2250"
+              },
+              "timing": {
+                "scheduledAt": 1793837100,
+                "publicationCutoff": 1793851500,
+                "correctionCutoff": 1793851500,
+                "observationEndsAt": 1793851500,
+                "assertionPeriod": 43200,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "jm-eth-2400",
+              "question": "Will the Chainlink ETH/USD feed on Monad mainnet report at least 2400 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-eth-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1793836800,
+                  "metric": "call",
+                  "call": {
+                    "to": "0x1B1414782B859871781bA3E4B0979b9ca57A0A04",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-eth-usd-latest-answer",
+                "period": "2026-11-05T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "2400"
+              },
+              "timing": {
+                "scheduledAt": 1793837100,
+                "publicationCutoff": 1793851500,
+                "correctionCutoff": 1793851500,
+                "observationEndsAt": 1793851500,
+                "assertionPeriod": 43200,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "jm-btc-78000",
+              "question": "Will the Chainlink BTC/USD feed on Monad mainnet report at least 78000 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-btc-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1793836800,
+                  "metric": "call",
+                  "call": {
+                    "to": "0xc1d4C3331635184fA4C3c22fb92211B2Ac9E0546",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-btc-usd-latest-answer",
+                "period": "2026-11-05T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "78000"
+              },
+              "timing": {
+                "scheduledAt": 1793837100,
+                "publicationCutoff": 1793851500,
+                "correctionCutoff": 1793851500,
+                "observationEndsAt": 1793851500,
+                "assertionPeriod": 43200,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "jm-btc-82500",
+              "question": "Will the Chainlink BTC/USD feed on Monad mainnet report at least 82500 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-btc-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1793836800,
+                  "metric": "call",
+                  "call": {
+                    "to": "0xc1d4C3331635184fA4C3c22fb92211B2Ac9E0546",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-btc-usd-latest-answer",
+                "period": "2026-11-05T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "82500"
+              },
+              "timing": {
+                "scheduledAt": 1793837100,
+                "publicationCutoff": 1793851500,
+                "correctionCutoff": 1793851500,
+                "observationEndsAt": 1793851500,
+                "assertionPeriod": 43200,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            }
+          ],
+          "creator": "0xf1fea08ebba92ed342acc5639db312c3694bc391",
+          "draft": {
+            "schema": "flurbo.event-draft.v1",
+            "status": "draft",
+            "chainId": 10143,
+            "clusterId": "judge-majors-1793815200",
+            "title": "Majors ladder to 4 Nov",
+            "closesAt": 1793815200,
+            "events": [
+              {
+                "id": "jm-eth-2250",
+                "question": "Will the Chainlink ETH/USD feed on Monad mainnet report at least 2250 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"2250\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"2250\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1793837100,
+                "observationEndsAt": 1793851500,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:a7f2b27a3e248a668c32109f599f650b151b4a03088d1540a314c9338a873bba",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-eth-usd-monad; series chainlink-eth-usd-latest-answer; period 2026-11-05T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1793837100; publication cutoff 1793851500; correction cutoff and observation end 1793851500. Assertion window 43200; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "jm-eth-2400",
+                "question": "Will the Chainlink ETH/USD feed on Monad mainnet report at least 2400 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"2400\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"2400\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1793837100,
+                "observationEndsAt": 1793851500,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:19e905be6c38f1c938712fd590693ccab39c81995485bea10fa1abdd5b0376e2",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-eth-usd-monad; series chainlink-eth-usd-latest-answer; period 2026-11-05T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1793837100; publication cutoff 1793851500; correction cutoff and observation end 1793851500. Assertion window 43200; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "jm-btc-78000",
+                "question": "Will the Chainlink BTC/USD feed on Monad mainnet report at least 78000 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"78000\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"78000\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1793837100,
+                "observationEndsAt": 1793851500,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:5db393157fdb81678efe8d54c1d6893d6c2863aabfcf8f2dd7015564fd507a47",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-btc-usd-monad; series chainlink-btc-usd-latest-answer; period 2026-11-05T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1793837100; publication cutoff 1793851500; correction cutoff and observation end 1793851500. Assertion window 43200; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "jm-btc-82500",
+                "question": "Will the Chainlink BTC/USD feed on Monad mainnet report at least 82500 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"82500\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"82500\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1793837100,
+                "observationEndsAt": 1793851500,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:e4cf6956cb014bf3e1ae6d2bc91c4e3479c826d6723c66f80e453cee35439e3f",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-btc-usd-monad; series chainlink-btc-usd-latest-answer; period 2026-11-05T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1793837100; publication cutoff 1793851500; correction cutoff and observation end 1793851500. Assertion window 43200; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              }
+            ],
+            "exceptionPolicy": "Valid event outcomes stay fixed. Each void event receives equal YES and NO weight, independently of other void events. Each claim pays its average truth-table payout across compatible states, rounded down to test AUSD atoms on each redemption. This is not a refund of purchase cost. Missing evidence, unresolved ambiguity and reviewer nonresponse produce VOID under the fixed deadlines. No creator override or reviewer replacement is permitted.",
+            "disputeModel": "reviewer-panel",
+            "disputePolicy": "Operator-run testnet alpha. All reviewer wallets are controlled by the creator (0xf1fea08ebba92ed342acc5639db312c3694bc391). These wallets are not independent reviewers. The operator can determine disputed outcomes through the voting quorum. Named testnet reviewer panel: Operator test reviewer 1 (0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201), Operator test reviewer 2 (0x41c28b86170b5ec7b261d954e0185fca348b19a4), Operator test reviewer 3 (0x555d165001f60103c9429dbb15bf764caa8ae538). Quorum 2 of 3 matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: 1000000 atoms each. Assertion window: 43200 seconds after observation end. Challenge window: 3600 seconds after assertion. Vote window: 3600 seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted."
+          },
+          "reviewers": [
+            {
+              "name": "Operator test reviewer 1",
+              "address": "0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201"
+            },
+            {
+              "name": "Operator test reviewer 2",
+              "address": "0x41c28b86170b5ec7b261d954e0185fca348b19a4"
+            },
+            {
+              "name": "Operator test reviewer 3",
+              "address": "0x555d165001f60103c9429dbb15bf764caa8ae538"
+            }
+          ],
+          "reviewerControl": "single-operator",
+          "independentReviewersConfirmed": false,
+          "rulesReviewed": true,
+          "bondAtoms": "1000000",
+          "assertionPeriod": 43200,
+          "challengePeriod": 3600,
+          "votingPeriod": 3600
+        },
+        "configHash": "0x2042285140e44539f9f2f48d11c91f928d23a823cf393ee39d72fb1a1b9e8076",
+        "verifiedBlock": "74317159",
+        "verifiedBlockHash": "0x50a1c2f7e63e6387faf7347f77609c5453133c0c6977fb6031e6f911f82cbbee",
+        "verifiedTimestamp": 1792998382,
+        "codeHashes": {
+          "0x1c68f9c0c2670725e3c636b79c5e3044f397feb2": "0x79cd391c93814463ca864ab7de3cb92b65327fed6879add6643fd15d0ea87921",
+          "0xd9fd7938a7f3b631a7815ab64e2176bb39335458": "0x2028bd3170ee9a23433167040d54b88e38720390984960dc76833a62b1c52051",
+          "0xde4db3672496917f5d5653afb71da67641212a8b": "0x1c745983843d2cad54683709f89172094076beb19d9608f7f627a8c1fcf6e838",
+          "0xe6b37bc961fda208dbb80a6d5c1a9ea0d55dc7c3": "0x73715ec2ca1a01299d97001e3435d55621a82e8ff12cde08e853d9c68ea0189f",
+          "0x47ef353535f2c6a2f9cc39820a7d9c3200af0db9": "0x0c1e762334b4ac8b74b569d255182bed286f4ac204b54d0512056f31fe46db80",
+          "0x4e3f0aeb2d8cdee30250fb9319ee6abf3e1e73d9": "0xa3bd70124740c82e515f38efbf1b1948221793f831b4c11f344cc66b51ace559",
+          "0x97c8d17549f0a6a2866127d3b69933d816a64ee8": "0x077b21df8144d5db85e03e1ce5a1c1ce5df48aa19a5316a474a38c89364ebb09"
+        },
+        "receipts": [
+          "0xe6b37bc961fda208dbb80a6d5c1a9ea0d55dc7c3",
+          "0x47ef353535f2c6a2f9cc39820a7d9c3200af0db9",
+          "0x4e3f0aeb2d8cdee30250fb9319ee6abf3e1e73d9",
+          "0x97c8d17549f0a6a2866127d3b69933d816a64ee8"
+        ],
+        "notice": "Compiled code and reviewed configuration verified at one snapshot. Named panel trust, test assets only. Kuru pairs and authenticated CRE delivery are not established by this manifest."
+      }
+    },
+    {
+      "label": "Alts ladder (4 Nov)",
+      "settlement": "auto",
+      "status": "active",
+      "manifest": {
+        "schema": "flurbo.pilot-manifest.v1",
+        "status": "verified_pilot_snapshot",
+        "chainId": 10143,
+        "pool": "0x70346a57c19b9ee6f901adf8d91a1a7f7ac9c3e0",
+        "resolver": "0xfe0178464301e028783eb2478bb1451e61d60098",
+        "rulesHash": "0x8eeb7e0c06ce02ac44ce9563f624f06e94accb740882797eae1ac9f98ea8b4ed",
+        "draftHash": "0x3c367e493fcc4a6f1f4da79151ae163571a9257df867621ed72580653391b748",
+        "publication": {
+          "schema": "flurbo.pilot-publication.v1",
+          "mode": "deterministic-source-v1",
+          "settlementRules": [
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "ja-mon-0210",
+              "question": "Will the Chainlink MON/USD feed on Monad mainnet report at least 0.0210 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-mon-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1793836800,
+                  "metric": "call",
+                  "call": {
+                    "to": "0xBcD78f76005B7515837af6b50c7C52BCf73822fb",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-mon-usd-latest-answer",
+                "period": "2026-11-05T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "0.0210"
+              },
+              "timing": {
+                "scheduledAt": 1793837100,
+                "publicationCutoff": 1793851500,
+                "correctionCutoff": 1793851500,
+                "observationEndsAt": 1793851500,
+                "assertionPeriod": 43200,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "ja-mon-0226",
+              "question": "Will the Chainlink MON/USD feed on Monad mainnet report at least 0.0226 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-mon-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1793836800,
+                  "metric": "call",
+                  "call": {
+                    "to": "0xBcD78f76005B7515837af6b50c7C52BCf73822fb",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-mon-usd-latest-answer",
+                "period": "2026-11-05T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "0.0226"
+              },
+              "timing": {
+                "scheduledAt": 1793837100,
+                "publicationCutoff": 1793851500,
+                "correctionCutoff": 1793851500,
+                "observationEndsAt": 1793851500,
+                "assertionPeriod": 43200,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "ja-sol-98",
+              "question": "Will the Chainlink SOL/USD feed on Monad mainnet report at least 98 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-sol-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1793836800,
+                  "metric": "call",
+                  "call": {
+                    "to": "0x16F8008c3e89f62e5e2b909Ce70999370D38F4F2",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-sol-usd-latest-answer",
+                "period": "2026-11-05T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "98"
+              },
+              "timing": {
+                "scheduledAt": 1793837100,
+                "publicationCutoff": 1793851500,
+                "correctionCutoff": 1793851500,
+                "observationEndsAt": 1793851500,
+                "assertionPeriod": 43200,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "ja-sol-105",
+              "question": "Will the Chainlink SOL/USD feed on Monad mainnet report at least 105 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-sol-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1793836800,
+                  "metric": "call",
+                  "call": {
+                    "to": "0x16F8008c3e89f62e5e2b909Ce70999370D38F4F2",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-sol-usd-latest-answer",
+                "period": "2026-11-05T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "105"
+              },
+              "timing": {
+                "scheduledAt": 1793837100,
+                "publicationCutoff": 1793851500,
+                "correctionCutoff": 1793851500,
+                "observationEndsAt": 1793851500,
+                "assertionPeriod": 43200,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            }
+          ],
+          "creator": "0xf1fea08ebba92ed342acc5639db312c3694bc391",
+          "draft": {
+            "schema": "flurbo.event-draft.v1",
+            "status": "draft",
+            "chainId": 10143,
+            "clusterId": "judge-alts-1793815200",
+            "title": "Alts ladder to 4 Nov",
+            "closesAt": 1793815200,
+            "events": [
+              {
+                "id": "ja-mon-0210",
+                "question": "Will the Chainlink MON/USD feed on Monad mainnet report at least 0.0210 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"0.0210\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"0.0210\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1793837100,
+                "observationEndsAt": 1793851500,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:4440c58f7f35bb9ed3c1c5e25c50bbbb91bb64288c37ddd629290c6034b0cf30",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-mon-usd-monad; series chainlink-mon-usd-latest-answer; period 2026-11-05T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1793837100; publication cutoff 1793851500; correction cutoff and observation end 1793851500. Assertion window 43200; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "ja-mon-0226",
+                "question": "Will the Chainlink MON/USD feed on Monad mainnet report at least 0.0226 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"0.0226\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"0.0226\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1793837100,
+                "observationEndsAt": 1793851500,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:c462cc1c3cc694094ef84e4dbc52bcaf9b8f195e47de6560076a5569e91423d0",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-mon-usd-monad; series chainlink-mon-usd-latest-answer; period 2026-11-05T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1793837100; publication cutoff 1793851500; correction cutoff and observation end 1793851500. Assertion window 43200; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "ja-sol-98",
+                "question": "Will the Chainlink SOL/USD feed on Monad mainnet report at least 98 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"98\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"98\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1793837100,
+                "observationEndsAt": 1793851500,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:d7869d319de8d64035f2ce4d0bbcd89e2c2e2d742358977391e92e87dd517a2d",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-sol-usd-monad; series chainlink-sol-usd-latest-answer; period 2026-11-05T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1793837100; publication cutoff 1793851500; correction cutoff and observation end 1793851500. Assertion window 43200; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "ja-sol-105",
+                "question": "Will the Chainlink SOL/USD feed on Monad mainnet report at least 105 USD (latestAnswer) at the first block at or after 00:00 UTC on 5 November 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"105\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"105\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1793837100,
+                "observationEndsAt": 1793851500,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:485a59a5289a4638528659d53a82320b8ac8cd4cff1a53573643aeb52dc79d1e",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-sol-usd-monad; series chainlink-sol-usd-latest-answer; period 2026-11-05T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1793837100; publication cutoff 1793851500; correction cutoff and observation end 1793851500. Assertion window 43200; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              }
+            ],
+            "exceptionPolicy": "Valid event outcomes stay fixed. Each void event receives equal YES and NO weight, independently of other void events. Each claim pays its average truth-table payout across compatible states, rounded down to test AUSD atoms on each redemption. This is not a refund of purchase cost. Missing evidence, unresolved ambiguity and reviewer nonresponse produce VOID under the fixed deadlines. No creator override or reviewer replacement is permitted.",
+            "disputeModel": "reviewer-panel",
+            "disputePolicy": "Operator-run testnet alpha. All reviewer wallets are controlled by the creator (0xf1fea08ebba92ed342acc5639db312c3694bc391). These wallets are not independent reviewers. The operator can determine disputed outcomes through the voting quorum. Named testnet reviewer panel: Operator test reviewer 1 (0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201), Operator test reviewer 2 (0x41c28b86170b5ec7b261d954e0185fca348b19a4), Operator test reviewer 3 (0x555d165001f60103c9429dbb15bf764caa8ae538). Quorum 2 of 3 matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: 1000000 atoms each. Assertion window: 43200 seconds after observation end. Challenge window: 3600 seconds after assertion. Vote window: 3600 seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted."
+          },
+          "reviewers": [
+            {
+              "name": "Operator test reviewer 1",
+              "address": "0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201"
+            },
+            {
+              "name": "Operator test reviewer 2",
+              "address": "0x41c28b86170b5ec7b261d954e0185fca348b19a4"
+            },
+            {
+              "name": "Operator test reviewer 3",
+              "address": "0x555d165001f60103c9429dbb15bf764caa8ae538"
+            }
+          ],
+          "reviewerControl": "single-operator",
+          "independentReviewersConfirmed": false,
+          "rulesReviewed": true,
+          "bondAtoms": "1000000",
+          "assertionPeriod": 43200,
+          "challengePeriod": 3600,
+          "votingPeriod": 3600
+        },
+        "configHash": "0x9cb04ab69bdda147df93216b1d3c220cbedf3ea5c6c450c88bf8260e1aa3e54c",
+        "verifiedBlock": "74317213",
+        "verifiedBlockHash": "0x2ecf87ff4b0d58b16216d2567c08811f45dac2e7193b6f8d8d30d658cf4b6bd3",
+        "verifiedTimestamp": 1792998399,
+        "codeHashes": {
+          "0x70346a57c19b9ee6f901adf8d91a1a7f7ac9c3e0": "0xe11e3c31152251985b2c95bd8156fd9d18b185661adb5067d4aa8d1045a05d63",
+          "0xfe0178464301e028783eb2478bb1451e61d60098": "0xcd9b8b4b3ff857fea3274847108047b078d6c2202d43a9b2a2caf668a05fadee",
+          "0xa167aa3cffba1584770b59a66569a05ed2cd205d": "0x1c745983843d2cad54683709f89172094076beb19d9608f7f627a8c1fcf6e838",
+          "0x29f719bb7a4eaad0fbccdd1d4d7aa8af29461266": "0xd7621fadd1420a5b617d437e97ff89c56f43588d7be6c2aebd7e2b00a4691e2f",
+          "0x62d9644717fb79f07635441e59a94adea6ecad3f": "0xc4822f663e3a95a8b9535759ceaba304c1600846eedb1832f600b690b509b918",
+          "0x87cc4a05b41536c92ecef0e2b53d256a862e9fff": "0x6da4a97bd0b8ad27be975b46a70e0ead049b0dca6a0eaa5c7647bd93139d2b81",
+          "0xa6d9ddcbec04092049a9681bff7db4d87b4d4085": "0x46fcbc5022fde62684d14648b7ad14fa9096051d1652503fd53cb59f8266d494"
+        },
+        "receipts": [
+          "0x29f719bb7a4eaad0fbccdd1d4d7aa8af29461266",
+          "0x62d9644717fb79f07635441e59a94adea6ecad3f",
+          "0x87cc4a05b41536c92ecef0e2b53d256a862e9fff",
+          "0xa6d9ddcbec04092049a9681bff7db4d87b4d4085"
+        ],
+        "notice": "Compiled code and reviewed configuration verified at one snapshot. Named panel trust, test assets only. Kuru pairs and authenticated CRE delivery are not established by this manifest."
+      }
+    },
+    {
+      "label": "Sprint (29 Oct)",
+      "settlement": "auto",
+      "status": "active",
+      "manifest": {
+        "schema": "flurbo.pilot-manifest.v1",
+        "status": "verified_pilot_snapshot",
+        "chainId": 10143,
+        "pool": "0xbf2dcf7646ffba224a97ac26433e7b4ee342c995",
+        "resolver": "0x6d7980b3071687baf36178bb922e970cbcb2efd8",
+        "rulesHash": "0x29d99f7eb4c85a73a239fd90471be180f5916d2a62b7a111ec729813ceac8f84",
+        "draftHash": "0x3afc3b22d1fec9985b76f0325b5983cc358928cb6d49f9f9d7ca0d3d5e0ae525",
+        "publication": {
+          "schema": "flurbo.pilot-publication.v1",
+          "mode": "deterministic-source-v1",
+          "settlementRules": [
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "js-btc-80000",
+              "question": "Will the Chainlink BTC/USD feed on Monad mainnet report at least 80000 USD (latestAnswer) at the first block at or after 00:00 UTC on 30 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-btc-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1793318400,
+                  "metric": "call",
+                  "call": {
+                    "to": "0xc1d4C3331635184fA4C3c22fb92211B2Ac9E0546",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-btc-usd-latest-answer",
+                "period": "2026-10-30T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "80000"
+              },
+              "timing": {
+                "scheduledAt": 1793318700,
+                "publicationCutoff": 1793333100,
+                "correctionCutoff": 1793333100,
+                "observationEndsAt": 1793333100,
+                "assertionPeriod": 43200,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "js-eth-2300",
+              "question": "Will the Chainlink ETH/USD feed on Monad mainnet report at least 2300 USD (latestAnswer) at the first block at or after 00:00 UTC on 30 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-eth-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1793318400,
+                  "metric": "call",
+                  "call": {
+                    "to": "0x1B1414782B859871781bA3E4B0979b9ca57A0A04",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-eth-usd-latest-answer",
+                "period": "2026-10-30T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "2300"
+              },
+              "timing": {
+                "scheduledAt": 1793318700,
+                "publicationCutoff": 1793333100,
+                "correctionCutoff": 1793333100,
+                "observationEndsAt": 1793333100,
+                "assertionPeriod": 43200,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "js-sol-100",
+              "question": "Will the Chainlink SOL/USD feed on Monad mainnet report at least 100 USD (latestAnswer) at the first block at or after 00:00 UTC on 30 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-sol-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1793318400,
+                  "metric": "call",
+                  "call": {
+                    "to": "0x16F8008c3e89f62e5e2b909Ce70999370D38F4F2",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-sol-usd-latest-answer",
+                "period": "2026-10-30T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "100"
+              },
+              "timing": {
+                "scheduledAt": 1793318700,
+                "publicationCutoff": 1793333100,
+                "correctionCutoff": 1793333100,
+                "observationEndsAt": 1793333100,
+                "assertionPeriod": 43200,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            },
+            {
+              "schema": "flurbo.settlement-rule.v1",
+              "eventId": "js-mon-0218",
+              "question": "Will the Chainlink MON/USD feed on Monad mainnet report at least 0.0218 USD (latestAnswer) at the first block at or after 00:00 UTC on 30 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+              "source": {
+                "id": "chainlink-mon-usd-monad",
+                "publisher": "Chainlink price feed on Monad mainnet",
+                "urls": [
+                  "https://rpc.monad.xyz/"
+                ],
+                "adapter": "evm-rpc.v1",
+                "reader": {
+                  "chainId": 143,
+                  "at": 1793318400,
+                  "metric": "call",
+                  "call": {
+                    "to": "0xBcD78f76005B7515837af6b50c7C52BCf73822fb",
+                    "data": "0x50d25bcd",
+                    "returns": "int256"
+                  },
+                  "scale": 8,
+                  "finalitySeconds": 60
+                }
+              },
+              "observation": {
+                "series": "chainlink-mon-usd-latest-answer",
+                "period": "2026-10-30T00:00:00Z",
+                "unit": "USD"
+              },
+              "decision": {
+                "type": "number",
+                "operator": "gte",
+                "value": "0.0218"
+              },
+              "timing": {
+                "scheduledAt": 1793318700,
+                "publicationCutoff": 1793333100,
+                "correctionCutoff": 1793333100,
+                "observationEndsAt": 1793333100,
+                "assertionPeriod": 43200,
+                "challengePeriod": 3600,
+                "votingPeriod": 3600
+              },
+              "vintage": "first-observed-snapshot",
+              "missingPolicy": "resolver-timeout-void"
+            }
+          ],
+          "creator": "0xf1fea08ebba92ed342acc5639db312c3694bc391",
+          "draft": {
+            "schema": "flurbo.event-draft.v1",
+            "status": "draft",
+            "chainId": 10143,
+            "clusterId": "judge-sprint-1793296800",
+            "title": "Sprint to 29 Oct",
+            "closesAt": 1793296800,
+            "events": [
+              {
+                "id": "js-btc-80000",
+                "question": "Will the Chainlink BTC/USD feed on Monad mainnet report at least 80000 USD (latestAnswer) at the first block at or after 00:00 UTC on 30 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"80000\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"80000\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1793318700,
+                "observationEndsAt": 1793333100,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:c589051fe42b11f8575932b1c576665a5e8ed1d5dfb049ee54728edd005a6878",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-btc-usd-monad; series chainlink-btc-usd-latest-answer; period 2026-10-30T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1793318700; publication cutoff 1793333100; correction cutoff and observation end 1793333100. Assertion window 43200; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "js-eth-2300",
+                "question": "Will the Chainlink ETH/USD feed on Monad mainnet report at least 2300 USD (latestAnswer) at the first block at or after 00:00 UTC on 30 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"2300\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"2300\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1793318700,
+                "observationEndsAt": 1793333100,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:06d7be937f50ed9b70e20a934983bc80fc0879da21ba5d721c234ba1a5a52de8",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-eth-usd-monad; series chainlink-eth-usd-latest-answer; period 2026-10-30T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1793318700; publication cutoff 1793333100; correction cutoff and observation end 1793333100. Assertion window 43200; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "js-sol-100",
+                "question": "Will the Chainlink SOL/USD feed on Monad mainnet report at least 100 USD (latestAnswer) at the first block at or after 00:00 UTC on 30 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"100\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"100\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1793318700,
+                "observationEndsAt": 1793333100,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:559703c566ab4676d9d4f2eb2e1421ab445cbdaff92194e478a79aed300ff5c5",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-sol-usd-monad; series chainlink-sol-usd-latest-answer; period 2026-10-30T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1793318700; publication cutoff 1793333100; correction cutoff and observation end 1793333100. Assertion window 43200; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              },
+              {
+                "id": "js-mon-0218",
+                "question": "Will the Chainlink MON/USD feed on Monad mainnet report at least 0.0218 USD (latestAnswer) at the first block at or after 00:00 UTC on 30 October 2026, read from the public Monad RPC between 00:05 and 04:05 UTC?",
+                "yesRule": "YES if the valid source record selected by the committed rule satisfies number gte \"0.0218\". Missing or ambiguous evidence does not mean NO.",
+                "noRule": "NO if the valid source record selected by the committed rule does not satisfy number gte \"0.0218\". Missing or ambiguous evidence follows the committed VOID timeout.",
+                "observationStartsAt": 1793318700,
+                "observationEndsAt": 1793333100,
+                "source": {
+                  "publisher": "Chainlink price feed on Monad mainnet",
+                  "referenceUrl": "https://rpc.monad.xyz/",
+                  "recordId": "settlement-rule:sha256:5959fe8f70801e8bde6d80ad01be95aad9e51e730f7714e9c8e49ac0cd0176b9",
+                  "selectionRule": "Adapter evm-rpc.v1; source chainlink-mon-usd-monad; series chainlink-mon-usd-latest-answer; period 2026-10-30T00:00:00Z; unit USD. Only the exact URLs and record-selection rules in the committed settlement rule are accepted.",
+                  "finalityRule": "UTC seconds: observation start 1793318700; publication cutoff 1793333100; correction cutoff and observation end 1793333100. Assertion window 43200; challenge window 3600; voting window 3600. All transitions require transactions.",
+                  "revisionRule": "Vintage first-observed-snapshot. Missing policy resolver-timeout-void. Source revisions and unavailable evidence follow the committed rule; the operator cannot change it after deployment."
+                }
+              }
+            ],
+            "exceptionPolicy": "Valid event outcomes stay fixed. Each void event receives equal YES and NO weight, independently of other void events. Each claim pays its average truth-table payout across compatible states, rounded down to test AUSD atoms on each redemption. This is not a refund of purchase cost. Missing evidence, unresolved ambiguity and reviewer nonresponse produce VOID under the fixed deadlines. No creator override or reviewer replacement is permitted.",
+            "disputeModel": "reviewer-panel",
+            "disputePolicy": "Operator-run testnet alpha. All reviewer wallets are controlled by the creator (0xf1fea08ebba92ed342acc5639db312c3694bc391). These wallets are not independent reviewers. The operator can determine disputed outcomes through the voting quorum. Named testnet reviewer panel: Operator test reviewer 1 (0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201), Operator test reviewer 2 (0x41c28b86170b5ec7b261d954e0185fca348b19a4), Operator test reviewer 3 (0x555d165001f60103c9429dbb15bf764caa8ae538). Quorum 2 of 3 matching votes. One test AUSD has 1000000 atoms. Assertion and dispute bond: 1000000 atoms each. Assertion window: 43200 seconds after observation end. Challenge window: 3600 seconds after assertion. Vote window: 3600 seconds after dispute. Reviewers cannot assert or dispute from their registered addresses. One vote per reviewer per event. Unchallenged assertions return their bond. A panel decision matching a party pays both bonds to that party. Third outcomes and voting timeouts return each party's own bond. Missing assertions and voting timeouts finalize VOID. Anyone may finalize elapsed deadlines and deliver all final results. Test bonds provide no economic security; panel members are explicitly trusted."
+          },
+          "reviewers": [
+            {
+              "name": "Operator test reviewer 1",
+              "address": "0x1fc63b1f8e89473b7bea3b44fc4936b8d9416201"
+            },
+            {
+              "name": "Operator test reviewer 2",
+              "address": "0x41c28b86170b5ec7b261d954e0185fca348b19a4"
+            },
+            {
+              "name": "Operator test reviewer 3",
+              "address": "0x555d165001f60103c9429dbb15bf764caa8ae538"
+            }
+          ],
+          "reviewerControl": "single-operator",
+          "independentReviewersConfirmed": false,
+          "rulesReviewed": true,
+          "bondAtoms": "1000000",
+          "assertionPeriod": 43200,
+          "challengePeriod": 3600,
+          "votingPeriod": 3600
+        },
+        "configHash": "0x872cb85e488d8b8d054df5c5ace7e57499ee1eafee0e45b91cfa311de5a79d51",
+        "verifiedBlock": "74317266",
+        "verifiedBlockHash": "0x0eaad17d75203a2aaae0351169b2fc02f3835474e59a37fba26544ad3cde7425",
+        "verifiedTimestamp": 1792998415,
+        "codeHashes": {
+          "0xbf2dcf7646ffba224a97ac26433e7b4ee342c995": "0xf080c0555d7177bae2a5aa105dd0bc0257f8ace709540e90da0baebcfc5f4eca",
+          "0x6d7980b3071687baf36178bb922e970cbcb2efd8": "0xde96356d3e8db467c6e0408987fc8cd36eacb347daf3024af8d1b32dbe77e75b",
+          "0xa6c6678dad27ddd837ad2085233ad63b29b9c60f": "0x1c745983843d2cad54683709f89172094076beb19d9608f7f627a8c1fcf6e838",
+          "0x40f4d9a802c9294c22522e4620081d3c735e5586": "0xa3a6f0d11fd0e540e1685882249f43765c2067fadca0a66d53bdb8dcd8177cf9",
+          "0x47413015ae0d7684549cf23f92844076ef39e842": "0x7db693ed2be08021c30322038819bbed8011a5269728f0e73ed9addc3aeac8e3",
+          "0x12acba0f20339ed98acbf14d203c230c03296486": "0x11ee2ac1659c3c5315349d9fd577f64996aac91f5f50d6ea64d8642eccb121ea",
+          "0x85b11bb9e3bb63ca645cd33e5c96a290189be547": "0x69f3956118b3c6177df2a252f20e1f7bdbafe4130b2456da203d96edb6bfd31f"
+        },
+        "receipts": [
+          "0x40f4d9a802c9294c22522e4620081d3c735e5586",
+          "0x47413015ae0d7684549cf23f92844076ef39e842",
+          "0x12acba0f20339ed98acbf14d203c230c03296486",
+          "0x85b11bb9e3bb63ca645cd33e5c96a290189be547"
         ],
         "notice": "Compiled code and reviewed configuration verified at one snapshot. Named panel trust, test assets only. Kuru pairs and authenticated CRE delivery are not established by this manifest."
       }
