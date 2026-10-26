@@ -30,8 +30,11 @@ chains:
       - name: PilotPool
         address:
           - "0x160647d16405f44989c56b83609a171247068dcc"
+          - "0x1c68f9c0c2670725e3c636b79c5e3044f397feb2"
+          - "0x70346a57c19b9ee6f901adf8d91a1a7f7ac9c3e0"
           - "0x939bd2bac6a163ed39a62152c759a0c2e7ccef57"
           - "0xb7b872e9372eaee17d8de9f4c82861f1aa673198"
+          - "0xbf2dcf7646ffba224a97ac26433e7b4ee342c995"
           - "0xc0f8d422a18fdf4fafd1fab07bfd68eb961cf7a6"
           - "0xc4409edbfb9e9d47167b028de22f0b0d6b630077"
           - "0xca8750ed5b6bba513925034fdf506b970ecc4823"
@@ -46,7 +49,10 @@ chains:
           - "0x37eff955633a76472f77b88629710432bccf1654"
           - "0x3809e24d12761fc5939abd43849c7258ea528d97"
           - "0x4f4cc5eec7b288b2cd8aaf89a556d76d67accd8c"
+          - "0x6d7980b3071687baf36178bb922e970cbcb2efd8"
+          - "0xd9fd7938a7f3b631a7815ab64e2176bb39335458"
           - "0xe747a8d1d42317edf6e6a68a05ffaf3b27dd8d56"
+          - "0xfe0178464301e028783eb2478bb1451e61d60098"
       - name: KuruMarket
         address:
           - "0xaf688e0f4ae836e9e51382a1216c80926f3ce99e"
